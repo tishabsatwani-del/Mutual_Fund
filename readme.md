@@ -9,47 +9,67 @@ install — just clone and run.
 
 ---
 
-## 🌐 Live web tool — "Live It", a Behavioral Investing Simulator
+## 🌐 Live web tool — "Two Doors, One Storm"
 
-A self-contained, **mobile-first** web experience. You press *Start*, your
-wealth line draws itself across the years like a time-lapse — calm and
-climbing — and then, at the journey's midpoint, the market falls 40%. The
-animation freezes and asks one question:
-
-> *"The market just fell 40%. The news is screaming. Your friends are selling.
-> What do you do?"*
-
-You choose — **Hold · Pause · Sell and buy back · Sell and wait** — the line
-resumes along your path next to a faint "ghost" of what staying calm would
-have done, and at the finish two numbers count up side by side. One caption
-lands the truth (e.g. *"Your one frightened decision cost ₹X. The market
-recovered without you."*).
+A self-contained, **mobile-first**, advanced **Monte Carlo behavioural
+investing simulator**. Two people invest the same money, in the same market.
+One chose a **Regular** plan (pays ~1%/yr more, but has a *relationship
+manager / MD* to call when life hits). One chose **Direct** (pays nothing
+extra, but faces every storm alone). The fee gap is small and steady. The
+behaviour gap is enormous. The tool dramatises one idea: **the only real
+variable is who is beside you when it falls.**
 
 > **Live link:** `https://tishabsatwani-del.github.io/Mutual_Fund/`
 > *(one-time setup: repo **Settings → Pages → Source = "GitHub Actions"**, then
 > merge to `main` — the included workflow deploys automatically.)*
 
-**How it works (all math is honest and auditable)**
+**Two scenarios, off one engine**
 
-- **Minimal inputs** — SIP (₹5k / ₹10k / ₹25k) and journey length
-  (15 / 20 / 30 yrs). The crash is fixed at the midpoint. Confusion is the enemy.
-- **Real unit accounting** — every month the SIP buys `units = SIP / NAV`. The
-  NAV starts at 100, grows at 1.0%/mo (Direct) or 0.917%/mo (Regular — the
-  commission gap), falls to 60% over 3 months at the midpoint, then recovers
-  *exactly* to trend by month +18. Selling and rebuying later forfeits units
-  for good — and the loss is modelled honestly, never clamped.
-- **Five paths, guaranteed ordering** — held-Direct > held-Regular ≈ paused >
-  sold-and-rebought > sold-and-waited. Staying invested even ends *slightly
-  richer* than a crash-free market, because the months below trend buy cheaper
-  units. Every rupee is computed live; nothing is hardcoded.
-- **Works offline, no CDN, no backend** — hand-rolled Canvas animation, instant
-  load, runs behind any firewall.
+- **The Crash** — *Live it.* Your wealth line (and your friend's, a step
+  below, the fee toll widening) climbs the years. At the midpoint a real,
+  named crash hits. Your side goes **silent**; her phone **rings** — her RM
+  talks her through it. You pick one of four behaviours (**Hold · Pause ·
+  Sell & buy back · Sell & wait**); her path plays on its own. Then two
+  corpora, two XIRRs, the fee she paid for, and the rupees your one decision
+  cost — with a verdict caption that resonates with the book chapter.
+- **The Emergency** — *The money, now.* Life demands a large sum fast. Alone,
+  fear says *take it all* and the SIP dies in one tap. Her RM says take exactly
+  what's needed — liquid first, then a little large-cap, **leave the down
+  mid-cap**, pause (don't cancel) the SIP. Watch the gap play to the horizon.
+  *Hardest mode:* the emergency lands during a market fall.
+
+**The maths — exact, auditable, never rigged**
+
+- **Real unit-level accounting** — every month `units = SIP / NAV`, value =
+  `units × NAV` (+ idle cash). Correct SIP timing (contribution at the start of
+  each month). Fees charged as the only difference: Direct net 12%/yr
+  (1.000%/mo), Regular net 11%/yr (0.9167%/mo) — the 1%/yr gap, compounded and
+  shown in rupees. **XIRR** from the actual monthly cash flows for every
+  investor.
+- **Monte Carlo** — *10,000 lifetimes.* 1,000–10,000 paths of 240 monthly
+  returns from a documented model (mean ≈ 12%/yr, vol ≈ 15–18%/yr) with **fat
+  tails** and **volatility clustering** (a two-state calm/stress regime, so deep
+  drawdowns arrive in clusters). Output is translated to **plain odds** — *"in
+  X of 10,000 futures the calm Direct investor finished ahead"* — never raw
+  percentiles, on a fan chart.
+- **Honest, not rigged** — across the paths, Direct can finish **above, equal
+  to, or below** Regular. You can set *both* investors' behaviour, including the
+  case where the guided friend panics and calm Direct wins. The tool never
+  claims one door is better — it proves the door was never the point.
+- **Real events (illustrative)** — COVID-19 2020 (~−38%), GFC 2008 (~−60%), the
+  2022 correction (~−18%), and the 2025–26 storm (~−14%, ending on uncertainty).
+  *Based on actual index drawdowns; exact figures vary by index and dates and
+  must be locked against real data before shipping.*
+- **Works offline, no CDN, no backend** — hand-rolled Canvas, instant load.
+
+> All outputs are illustrative **ranges of possibility, never predictions or
+> advice.** Educational tool — not investment advice.
 
 Try it locally:
 
 ```bash
 python -m http.server 8000    # then open http://localhost:8000
-node tests/test_simulator.js  # verify the deterministic engine + ordering
+node tests/test_simulator.js  # verify the engine: ordering, XIRR, MC calibration
 ```
 
 Files: `index.html`, `styles.css`, `app.js` (math engine + cinematic
