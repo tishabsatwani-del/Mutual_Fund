@@ -302,7 +302,29 @@ body {
 }
 .verdict-sub b { color: var(--ink); }
 
+/* Assumptions ride alongside the result too, not just the setup screen —
+ * the confidence of the verdict and its caveat should always travel together. */
+.result-assume { margin: -10px auto 22px; }
+
 .result-actions { display: flex; flex-direction: column; gap: 10px; }
+
+/* The social hook — "immediately sends to a friend" made literal. */
+.share-btn {
+  width: 100%;
+  padding: 15px;
+  border-radius: 14px;
+  border: 1px solid rgba(203, 178, 107, 0.4);
+  background: rgba(203, 178, 107, 0.08);
+  color: var(--gold);
+  font-size: 15px;
+  font-weight: 700;
+  font-family: var(--sans);
+  cursor: pointer;
+  transition: all .2s ease;
+}
+.share-btn:hover { background: rgba(203, 178, 107, 0.15); border-color: rgba(203, 178, 107, 0.6); transform: translateY(-1px); }
+.share-btn:active { transform: translateY(1px); }
+.share-btn.copied { color: var(--grow); border-color: rgba(52, 211, 153, 0.5); background: rgba(52, 211, 153, 0.1); }
 .ghost-btn {
   width: 100%;
   padding: 14px;
