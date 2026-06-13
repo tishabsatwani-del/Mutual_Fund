@@ -7,6 +7,44 @@ investment calculators (lumpsum, SIP, CAGR, XIRR).
 Everything uses only the Python standard library, so there is nothing to
 install — just clone and run.
 
+---
+
+## 🌐 Live web tool — "The Cost of Panic" SIP Crash Simulator
+
+A zero-dependency, **shareable** web simulator built on top of this library's
+math. Same SIP on every line, one market crash — **only your reaction to it
+changes** — and watch how panic-selling, staying out, or a quietly leaking
+expense ratio hands back crores.
+
+> **Live link:** `https://tishabsatwani-del.github.io/Mutual_Fund/`
+> *(one-time setup: repo **Settings → Pages → Source = "GitHub Actions"**, then
+> merge to `main` — the included workflow deploys automatically.)*
+
+**Why it's different**
+
+- **Behavior-gap framing** — it quantifies the *rupee cost of emotion* (panic
+  cost, expense-ratio toll), not just "money grows."
+- **Unit-accounting engine** — every reaction buys units at that month's NAV,
+  so selling and buying back later *naturally* forfeits the rebound.
+- **Fully shareable & reproducible** — every input is encoded in the URL hash,
+  so a link reproduces the *exact* scenario the sender saw, anywhere on Earth.
+- **Works offline, no CDN, no backend** — hand-rolled Canvas charts, instant
+  load, runs behind any firewall.
+- **Deterministic + Monte-Carlo** modes, real-event presets (2008, COVID,
+  Dot-com), and a global currency switcher (₹ lakh/crore, $, €, £, ¥…).
+
+Try it locally:
+
+```bash
+python -m http.server 8000   # then open http://localhost:8000
+node tests/test_simulator.js  # verify the simulation engine
+```
+
+Files: `index.html`, `styles.css`, `app.js` (engine + charts + URL state),
+`.github/workflows/pages.yml` (auto-deploy).
+
+---
+
 ## Features
 
 - **Fund & Holding models** — represent schemes (NAV, category) and the

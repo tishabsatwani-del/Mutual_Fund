@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>The Cost of Panic — SIP Crash Behavior Simulator</title>
+<meta name="description" content="Same SIP, one market crash. Only your reaction changes. See how panic-selling, staying out, and expense ratios quietly cost you crores — a live, shareable behavior-gap simulator." />
+<meta name="theme-color" content="#0b1220" />
+<!-- Open Graph: makes the shared link preview nicely anywhere -->
+<meta property="og:title" content="The Cost of Panic — SIP Crash Behavior Simulator" />
+<meta property="og:description" content="Same SIP, one crash. Only your reaction changes. See what panic really costs." />
+<meta property="og:type" content="website" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📉</text></svg>" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div class="bg-grid" aria-hidden="true"></div>
+
+<header class="hero">
+  <div class="wrap">
+    <p class="kicker">Behavior-gap simulator · works offline · shareable link</p>
+    <h1>The Cost of Panic</h1>
+    <p class="sub">
+      Same SIP on every line. One crash. <strong>Only your reaction to it changes.</strong>
+      Watch how a single frightened week — or a quietly leaking expense ratio — hands back a fortune.
+    </p>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- ============ CONTROLS ============ -->
+  <section class="panel controls" aria-label="Simulation inputs">
+    <div class="panel-head">
+      <h2>Your scenario</h2>
+      <div class="mode-toggle" role="tablist" aria-label="Simulation mode">
+        <button id="modeDet" class="mode-btn active" role="tab" aria-selected="true">Deterministic</button>
+        <button id="modeMc" class="mode-btn" role="tab" aria-selected="false">Monte&nbsp;Carlo</button>
+      </div>
+    </div>
+
+    <div class="presets" aria-label="Real-event presets">
+      <span class="presets-label">Real crashes:</span>
+      <button class="preset" data-preset="example">The Example (−40%)</button>
+      <button class="preset" data-preset="gfc2008">2008 GFC (−56%)</button>
+      <button class="preset" data-preset="covid2020">COVID 2020 (−38%)</button>
+      <button class="preset" data-preset="dotcom2000">Dot-com (−49%)</button>
+      <button class="preset" data-preset="mild2013">Mild dip (−15%)</button>
+    </div>
+
+    <div class="grid-inputs">
+      <label class="field">
+        <span class="field-label">Monthly SIP <em id="sipOut"></em></span>
+        <input type="range" id="sip" min="500" max="200000" step="500" value="10000" />
+        <input type="number" id="sipNum" min="0" step="500" value="10000" class="num" />
+      </label>
+
+      <label class="field">
+        <span class="field-label">Duration <em id="yrsOut"></em></span>
+        <input type="range" id="yrs" min="3" max="40" step="1" value="30" />
+        <input type="number" id="yrsNum" min="1" max="60" step="1" value="30" class="num" />
+      </label>
+
+      <label class="field">
+        <span class="field-label">Expected annual return <em id="retOut"></em></span>
+        <input type="range" id="ret" min="4" max="20" step="0.5" value="12" />
+        <input type="number" id="retNum" min="0" max="40" step="0.5" value="12" class="num" />
+      </label>
+
+      <label class="field">
+        <span class="field-label">Crash magnitude <em id="crashOut"></em></span>
+        <input type="range" id="crash" min="0" max="70" step="1" value="40" />
+        <input type="number" id="crashNum" min="0" max="90" step="1" value="40" class="num" />
+      </label>
+
+      <label class="field">
+        <span class="field-label">Crash hits in year <em id="cyOut"></em></span>
+        <input type="range" id="cy" min="1" max="39" step="1" value="15" />
+        <input type="number" id="cyNum" min="1" max="59" step="1" value="15" class="num" />
+      </label>
+
+      <label class="field">
+        <span class="field-label">Months down to the bottom <em id="cmOut"></em></span>
+        <input type="range" id="cm" min="1" max="36" step="1" value="6" />
+        <input type="number" id="cmNum" min="1" max="60" step="1" value="6" class="num" />
+      </label>
+
+      <label class="field">
+        <span class="field-label">Recovery takes <em id="rmOut"></em></span>
+        <input type="range" id="rm" min="1" max="84" step="1" value="18" />
+        <input type="number" id="rmNum" min="1" max="120" step="1" value="18" class="num" />
+      </label>
+
+      <label class="field">
+        <span class="field-label">Regular-plan expense ratio <em id="erOut"></em></span>
+        <input type="range" id="er" min="0" max="2.5" step="0.05" value="1" />
+        <input type="number" id="erNum" min="0" max="3" step="0.05" value="1" class="num" />
+      </label>
+
+      <label class="field">
+        <span class="field-label">Panic-sell happens <em id="psdOut"></em> into the crash</span>
+        <input type="range" id="psd" min="0" max="36" step="1" value="6" />
+        <input type="number" id="psdNum" min="0" max="60" step="1" value="6" class="num" />
+      </label>
+
+      <label class="field">
+        <span class="field-label">Sell &amp; stay out for <em id="outOut"></em></span>
+        <input type="range" id="out" min="1" max="120" step="1" value="24" />
+        <input type="number" id="outNum" min="1" max="240" step="1" value="24" class="num" />
+      </label>
+
+      <label class="field field-select">
+        <span class="field-label">Currency</span>
+        <select id="cur">
+          <option value="INR">₹ Indian Rupee (lakh / crore)</option>
+          <option value="USD">$ US Dollar</option>
+          <option value="EUR">€ Euro</option>
+          <option value="GBP">£ British Pound</option>
+          <option value="JPY">¥ Japanese Yen</option>
+          <option value="AED">د.إ UAE Dirham</option>
+        </select>
+      </label>
+
+      <label class="field field-select mc-only" hidden>
+        <span class="field-label">Monte Carlo: volatility <em id="volOut"></em> · paths <em id="pathsOut"></em></span>
+        <input type="range" id="vol" min="5" max="35" step="1" value="16" />
+        <input type="range" id="paths" min="100" max="3000" step="100" value="1000" />
+      </label>
+    </div>
+
+    <div class="actions">
+      <button id="copyLink" class="btn-primary">🔗 Copy shareable link</button>
+      <button id="reset" class="btn-ghost">Reset to the example</button>
+      <span id="warn" class="warn" role="status"></span>
+    </div>
+  </section>
+
+  <!-- ============ HEADLINE ============ -->
+  <section class="headline" id="headline" aria-live="polite"></section>
+
+  <!-- ============ CHART: growth over time ============ -->
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Same money. Different nerve.</h2>
+      <div id="legend" class="legend"></div>
+    </div>
+    <div class="chart-wrap">
+      <canvas id="lineChart" role="img" aria-label="Portfolio value over time for each reaction"></canvas>
+    </div>
+    <p class="chart-note" id="lineNote"></p>
+  </section>
+
+  <!-- ============ RESULT CARDS ============ -->
+  <section class="cards" id="cards" aria-label="Outcome per reaction"></section>
+
+  <!-- ============ CHART: final corpus bars ============ -->
+  <section class="panel">
+    <div class="panel-head"><h2>Where each reaction lands</h2></div>
+    <div class="chart-wrap bars">
+      <canvas id="barChart" role="img" aria-label="Final corpus per reaction"></canvas>
+    </div>
+  </section>
+
+  <section class="panel explain">
+    <h2>How this works</h2>
+    <p>
+      Every reaction below buys into the <strong>exact same market</strong> — the same monthly SIP, the same
+      single crash, the same recovery back to trend. We track it the honest way funds do: each month your
+      money buys <em>units</em> at that month's price (NAV). During a crash, units are cheap, so staying
+      invested quietly stockpiles them. The moment you sell and buy back later — at a higher price — you
+      simply own fewer units forever. That gap never closes. That is the <strong>behavior gap</strong>.
+    </p>
+    <p>
+      The <em>Regular plan</em> never sells, but a small expense ratio leaks out every year and compounds
+      into a surprisingly large "toll" over decades. Returns shown are money-weighted (XIRR). This is a
+      model for understanding behavior, <strong>not financial advice or a prediction</strong>.
+    </p>
+  </section>
+
+  <footer class="foot">
+    <p>Deterministic, offline-capable, and fully encoded in the link above — share it and the receiver sees the exact scenario you see. Built as a static page; no data leaves your browser.</p>
+  </footer>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
