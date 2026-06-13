@@ -17,8 +17,25 @@ changes** — and watch how panic-selling, staying out, or a quietly leaking
 expense ratio hands back crores.
 
 > **Live link:** `https://tishabsatwani-del.github.io/Mutual_Fund/`
-> *(one-time setup: repo **Settings → Pages → Source = "GitHub Actions"**, then
-> merge to `main` — the included workflow deploys automatically.)*
+
+**Turn the link on (one-time, ~10 seconds — repo owner only):**
+
+GitHub Pages must be switched on once before the public link works. Pick either:
+
+1. **GitHub Actions (recommended).** Repo **Settings → Pages → Build and
+   deployment → Source → "GitHub Actions"**. The bundled
+   `.github/workflows/pages.yml` then publishes the site on every push to
+   `main` (or run it manually from the **Actions** tab → *Deploy to GitHub
+   Pages* → *Run workflow*).
+2. **Deploy from a branch (zero-config).** Repo **Settings → Pages → Source →
+   "Deploy from a branch" → `main` / `/ (root)`**. The whole app is plain
+   static files at the repo root (with `.nojekyll`), so it serves as-is with no
+   workflow at all.
+
+Either way, the site appears at the link above within a minute and is then
+clickable from anywhere on Earth. *(Until Pages is enabled, the Actions deploy
+job is blocked at the `github-pages` environment gate — a settings step, not a
+code error.)*
 
 **Why it's different**
 
