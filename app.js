@@ -220,7 +220,7 @@ if (typeof document !== 'undefined') (function () {
   // ---- App state. ----
   const state = {
     sip: 10000, years: 15,
-    sim: null, choice: null,
+    sim: null, choice: null, lastResult: null,
     head: 0, phase: 'idle', phaseStart: null, raf: 0,
     yMax: 1,
   };
@@ -437,7 +437,51 @@ if (typeof document !== 'undefined') (function () {
     $('calmShort').textContent = '≈ ' + inrShort(calm);
 
     $('verdict').innerHTML = verdictFor(state.choice, yours, calm, sim);
+    state.lastResult = { choice: state.choice, yours, calm };  // remembered for sharing
+    const sb = $('shareBtn');
+    if (sb) { sb.classList.remove('copied'); sb.textContent = 'Send this to a friend'; }
     show($('result'));
+  }
+
+  // ---- Share the outcome — the whole point is that people pass it on. ----
+  // The line is built live from the actual rupees, so what you share is what
+  // you lived. Uses the native share sheet on phones, clipboard everywhere else.
+  function shareText() {
+    const r = state.lastResult;
+    if (!r) return '';
+    const url = location.href.split('#')[0];
+    if (r.choice === 'held') {
+      return 'I sat through a 40% market crash and did nothing — and finished with '
+        + inrShort(r.yours) + '. Nothing was exactly right. Could you hold your nerve?\n\nLive it: ' + url;
+    }
+    const cost = Math.max(0, Math.round(r.calm - r.yours));
+    return 'One frightened decision in a market crash cost me ' + inrShort(cost)
+      + '. The market recovered without me. Could you have held your nerve?\n\nLive it: ' + url;
+  }
+
+  async function shareResult() {
+    const text = shareText();
+    if (!text) return;
+    const btn = $('shareBtn');
+    // Native share sheet (mobile) — the smoothest "send to a friend".
+    if (navigator.share) {
+      try { await navigator.share({ title: 'Live It', text }); return; }
+      catch (e) { if (e && e.name === 'AbortError') return; }  // user dismissed — do nothing
+    }
+    // Fallback: copy to clipboard and confirm in place.
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta); ta.select();
+        document.execCommand('copy'); document.body.removeChild(ta);
+      }
+      if (btn) { btn.classList.add('copied'); btn.textContent = 'Copied — now paste it to a friend'; }
+    } catch (e) {
+      if (btn) btn.textContent = 'Press and hold to copy';
+    }
   }
 
   // The one caption that lands the truth. Cost is computed live, never typed in.
@@ -521,6 +565,7 @@ if (typeof document !== 'undefined') (function () {
     wireChips('sipChips', 'sip', Number);
     wireChips('yearChips', 'years', Number);
 
+    on('shareBtn', 'click', shareResult);
     on('allBtn', 'click', openAllPaths);
     on('allClose', 'click', () => hide($('allPaths')));
     on('changeBtn', 'click', () => { hide($('result')); hide($('stage')); show($('setup')); });
