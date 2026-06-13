@@ -3,14 +3,14 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-<title>Live It — A Behavioral Investing Simulator</title>
-<meta name="description" content="One market. One crash. The only variable is you. Live through a market crash mid-SIP, make the call your gut would make, and see — in rupees — what it costs." />
+<title>Two Doors, One Storm — A Behavioural Investing Simulator</title>
+<meta name="description" content="Two people, same money, same market. One went Regular — a relationship manager to call when life hits. One went Direct — alone. The fee gap is small. The behaviour gap is enormous. A Monte Carlo simulator that proves the door was never the point." />
 <meta name="theme-color" content="#05070b" />
-<meta property="og:title" content="Live It — A Behavioral Investing Simulator" />
-<meta property="og:description" content="One market, one crash. The only variable is you. See what a single frightened decision really costs." />
+<meta property="og:title" content="Two Doors, One Storm" />
+<meta property="og:description" content="The only real variable is who is beside you when it falls." />
 <meta property="og:type" content="website" />
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>" />
-<link rel="stylesheet" href="styles.css?v=20260613c" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚪</text></svg>" />
+<link rel="stylesheet" href="styles.css?v=20260613d" />
 </head>
 <body>
 <div id="app">
@@ -18,9 +18,17 @@
   <!-- ===================== SETUP ===================== -->
   <section id="setup" class="screen show">
     <div class="setup-inner">
-      <p class="kicker">A behavioral investing experience</p>
-      <h1 class="title">Live&nbsp;It</h1>
-      <p class="tagline">One market. One crash.<br />The only variable is&nbsp;you.</p>
+      <p class="kicker">A Monte Carlo behavioural simulator</p>
+      <h1 class="title">Two&nbsp;Doors,<br />One&nbsp;Storm</h1>
+      <p class="tagline">Same money. Same market.<br />The only variable is who is beside you<br />when it&nbsp;falls.</p>
+
+      <div class="chip-group">
+        <p class="chip-label">Choose the moment</p>
+        <div class="chip-row" id="scenarioChips">
+          <button class="chip on" data-val="crash">The Crash</button>
+          <button class="chip" data-val="emergency">The Emergency</button>
+        </div>
+      </div>
 
       <div class="chip-group">
         <p class="chip-label">Your monthly SIP</p>
@@ -31,26 +39,40 @@
         </div>
       </div>
 
-      <div class="chip-group">
-        <p class="chip-label">Your journey</p>
-        <div class="chip-row" id="yearChips">
-          <button class="chip on" data-val="15">15 years</button>
-          <button class="chip" data-val="20">20 years</button>
-          <button class="chip" data-val="30">30 years</button>
+      <div id="crashInputs" class="chip-group">
+        <p class="chip-label">Which storm do you live through?</p>
+        <div class="chip-row wrap" id="eventChips">
+          <button class="chip on" data-val="covid">COVID-19, 2020</button>
+          <button class="chip" data-val="gfc">2008 crisis</button>
+          <button class="chip" data-val="corr2022">2022 correction</button>
+          <button class="chip" data-val="now">2025–26, now</button>
         </div>
       </div>
 
-      <button id="startBtn" class="cta">Start your journey</button>
+      <div id="emergencyInputs" class="chip-group" hidden>
+        <p class="chip-label">The emergency</p>
+        <div class="chip-row wrap" id="emergencyChips">
+          <button class="chip on" data-val="icu">Mother in the ICU</button>
+          <button class="chip" data-val="layoff">The layoff</button>
+          <button class="chip" data-val="home">Family, back home</button>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="downturnToggle" />
+          <span>Hardest mode — the emergency lands during a market fall</span>
+        </label>
+      </div>
 
-      <p class="assume">Illustration, not a prediction. Assumes 12% / 11% returns and a 40% crash at the midpoint. Real results will differ.</p>
+      <button id="startBtn" class="cta">Live the crash</button>
+
+      <p class="assume">Horizon fixed at 20 years. Illustration, not a prediction: Direct 12% / Regular 11% net returns, real historical drawdowns, Monte Carlo ranges of possibility. Your real results will differ. The 1%/yr fee is the only fee difference; the guided investor's contact is a relationship manager (RM).</p>
     </div>
   </section>
 
-  <!-- ===================== STAGE ===================== -->
+  <!-- ===================== STAGE (Scenario A) ===================== -->
   <section id="stage" class="screen stage" hidden>
     <div class="hud">
       <div class="hud-top">
-        <span id="yearLabel" class="hud-year">Year 0 of 15</span>
+        <span id="yearLabel" class="hud-year">Year 0 of 20</span>
         <span id="invested" class="hud-invested">Invested ₹0</span>
       </div>
       <div class="hud-corpus">
@@ -60,68 +82,150 @@
       </div>
     </div>
     <div class="canvas-wrap">
-      <canvas id="stageCanvas" role="img" aria-label="Your wealth over time"></canvas>
+      <canvas id="stageCanvas" role="img" aria-label="Two wealth lines over time"></canvas>
     </div>
   </section>
 
-  <!-- ===================== DECISION ===================== -->
-  <div id="decision" class="overlay" hidden>
-    <div class="card decision-card">
-      <p class="shock">−40%</p>
-      <h2 class="dec-q">The market just fell 40%.</h2>
-      <p class="dec-loss" id="decLoss"></p>
-      <p class="dec-sub">The news is screaming. Your friends are selling. What do you do?</p>
-      <div class="choices" id="choices">
-        <button data-choice="held"><span class="c-main">Hold and keep investing</span></button>
-        <button data-choice="paused"><span class="c-main">Pause your SIP</span></button>
-        <button data-choice="soldBack"><span class="c-main">Sell everything, buy back when it's safe</span></button>
-        <button data-choice="stayedOut"><span class="c-main">Sell everything and wait it out</span></button>
+  <!-- ===================== THE SILENCE ===================== -->
+  <div id="silence" class="overlay silence" hidden>
+    <div class="sil-inner">
+      <p class="sil-pct">−<span id="silDepth">38</span>%</p>
+      <p class="sil-loss" id="silenceLoss"></p>
+      <p class="sil-quiet">No buzz. No call. No voice. Just you, a red number that won't stop, and a silence so complete you can hear the room. That was the deal. You went alone to save the fee.</p>
+    </div>
+  </div>
+
+  <!-- ===================== THE SPLIT ===================== -->
+  <div id="split" class="overlay split" hidden>
+    <div class="split-grid">
+      <div class="split-pane you-pane">
+        <p class="pane-cap">YOU — Direct. Alone.</p>
+        <p class="pane-sub">The choices wait in the dark. No one will pick for you.</p>
+        <div class="choices" id="youChoices">
+          <button data-choice="hold"><b>Hold</b><span>keep buying into the fear</span></button>
+          <button data-choice="pause"><b>Pause</b><span>stop, just till it's over</span></button>
+          <button data-choice="sellBack"><b>Sell</b><span>buy back when it's safe</span></button>
+          <button data-choice="sellWait"><b>Sell everything</b><span>make the bleeding stop</span></button>
+        </div>
       </div>
+      <div class="split-pane friend-pane">
+        <p class="pane-cap">YOUR FRIEND — Regular. The call.</p>
+        <div class="friend-canvas-wrap"><canvas id="friendCanvas" aria-label="Your friend's steadying line"></canvas></div>
+        <p class="pane-quote">"Saans le. Maine yeh chaar baar dekha hai. Har baar market wapas aaya. Kuch mat bech. Bas chalne de."</p>
+        <p class="pane-foot">Her relationship manager. Behind the voice, every past storm — red, then green. She isn't smarter than you. She just wasn't alone.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== SELL-AS-RELIEF ===================== -->
+  <div id="relief" class="overlay relief" hidden>
+    <div class="relief-inner">
+      <p class="relief-word">The falling stops.</p>
+      <p class="relief-sub">Your shoulders drop. For one perfect moment, it feels like the smartest thing you've ever done.</p>
     </div>
   </div>
 
   <!-- ===================== RESULT ===================== -->
   <div id="result" class="overlay" hidden>
     <div class="card result-card">
+      <h2 class="res-title" id="resTitle">YOU vs YOUR FRIEND</h2>
       <div class="result-cols">
         <div class="rcol">
-          <span class="rcap">Your path</span>
-          <span id="yourFinal" class="rval">₹0</span>
-          <span id="yourShort" class="rshort"></span>
-          <span id="yourLabel" class="rlabel"></span>
+          <span class="rcap" id="youLabel">YOU · Direct</span>
+          <span id="youFinal" class="rval">₹0</span>
+          <span id="youShort" class="rshort"></span>
         </div>
-        <div class="rcol calm">
-          <span class="rcap">If you'd stayed calm</span>
-          <span id="calmFinal" class="rval">₹0</span>
-          <span id="calmShort" class="rshort"></span>
-          <span class="rlabel">Held and kept investing</span>
+        <div class="rcol friend">
+          <span class="rcap" id="friendLabelR">YOUR FRIEND · Regular</span>
+          <span id="friendFinal" class="rval">₹0</span>
+          <span id="friendShort" class="rshort"></span>
         </div>
       </div>
+      <div class="ledger" id="ledger"></div>
       <p id="verdict" class="verdict"></p>
+      <p class="disclaimer">Illustration, not a prediction. 12% / 11% net returns; a real historical drawdown; every figure computed live from the cash flows. Your real results will differ.</p>
       <div class="result-actions">
         <button id="replayBtn" class="cta">Live it again — choose differently</button>
-        <button id="allBtn" class="ghost-btn">See every path</button>
+        <button id="gridBtn" class="ghost-btn">See every outcome</button>
+        <button id="monteBtn" class="ghost-btn">10,000 lifetimes</button>
         <button id="changeBtn" class="ghost-btn">Change inputs</button>
       </div>
     </div>
   </div>
 
-  <!-- ===================== EVERY PATH ===================== -->
-  <div id="allPaths" class="overlay" hidden>
-    <div class="card all-card">
-      <h2 class="all-title">Every path, same market</h2>
-      <div class="all-canvas-wrap">
-        <canvas id="allCanvas" role="img" aria-label="All five paths overlaid"></canvas>
-      </div>
-      <div id="allLegend" class="all-legend"></div>
-      <button id="allClose" class="ghost-btn">Back</button>
+  <!-- ===================== EVERY OUTCOME (grid) ===================== -->
+  <div id="grid" class="overlay" hidden>
+    <div class="card wide-card">
+      <h2 class="all-title">Every outcome, same market</h2>
+      <p class="all-sub">Your behaviour (Direct) against hers (Regular). Direct can finish above, equal to, or below Regular — honestly.</p>
+      <div id="gridBody" class="grid-body"></div>
+      <p class="disclaimer">Single chosen storm; 20 years; live unit-level maths. Illustrative, not advice.</p>
+      <button id="gridClose" class="ghost-btn">Back</button>
     </div>
   </div>
+
+  <!-- ===================== 10,000 LIFETIMES (Monte Carlo) ===================== -->
+  <div id="monte" class="overlay" hidden>
+    <div class="card wide-card">
+      <h2 class="all-title">10,000 lifetimes</h2>
+      <p class="all-sub">Thousands of simulated markets — real-style fat tails and volatility clustering. Each investor follows one policy across every future.</p>
+      <div class="mc-controls">
+        <label>YOU · Direct
+          <select id="youPolicy">
+            <option value="panic">Sell when it falls hard (alone)</option>
+            <option value="hold">Hold through everything</option>
+          </select>
+        </label>
+        <label>FRIEND · Regular
+          <select id="friendPolicy">
+            <option value="hold">Hold (the RM keeps her in)</option>
+            <option value="panic">Sell when it falls hard</option>
+          </select>
+        </label>
+        <label>Futures
+          <select id="mcPaths">
+            <option value="1000">1,000</option>
+            <option value="2000" selected>2,000</option>
+            <option value="5000">5,000</option>
+            <option value="10000">10,000</option>
+          </select>
+        </label>
+        <button id="runMcBtn" class="ghost-btn run">Run</button>
+      </div>
+      <div class="fan-wrap"><canvas id="fanCanvas" aria-label="Distribution of outcomes for both investors"></canvas></div>
+      <div id="mcOdds" class="mc-odds"></div>
+      <p class="all-cite">Evidence the default reflects: guided investors stay invested far longer — AMFI–CRISIL, ~21% of guided equity money is still invested after five years, versus under 8% for direct. You can still set the Regular investor to panic and watch calm Direct win.</p>
+      <p class="disclaimer">Documented parametric model (mean ≈ 12%/yr, vol ≈ 15–18%/yr) — lock against real Indian index history before shipping. Odds are ranges of possibility, never predictions.</p>
+      <button id="monteClose" class="ghost-btn">Back</button>
+    </div>
+  </div>
+
+  <!-- ===================== EMERGENCY (Scenario B) ===================== -->
+  <section id="emergency" class="screen emergency" hidden>
+    <div class="em-scroll">
+      <p class="kicker">The money, now.</p>
+      <h2 class="em-title" id="emTitle"></h2>
+      <p class="em-line" id="emLine"></p>
+      <div class="em-split">
+        <div class="em-pane you" id="emYou"></div>
+        <div class="em-pane friend" id="emFriend"></div>
+      </div>
+      <p class="verdict" id="emVerdict"></p>
+      <p class="em-honest" id="emHonest"></p>
+      <p class="disclaimer">Portfolio: liquid + large-cap + mid/small-cap, eight years of SIP. Every rupee computed live. Illustration, not advice.</p>
+      <div class="result-actions">
+        <button id="emReplay" class="cta">See it again</button>
+        <button id="emGridBtn" class="ghost-btn">See every outcome (crash)</button>
+        <button id="emMonteBtn" class="ghost-btn">10,000 lifetimes</button>
+        <button id="emChangeBtn" class="ghost-btn">Change inputs</button>
+      </div>
+    </div>
+  </section>
 
 </div>
 
 <footer class="global-foot">Educational tool — not investment advice.</footer>
 
-<script src="app.js?v=20260613c"></script>
+<script src="app.js?v=20260613d"></script>
 </body>
 </html>
