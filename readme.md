@@ -9,39 +9,51 @@ install — just clone and run.
 
 ---
 
-## 🌐 Live web tool — "The Cost of Panic" SIP Crash Simulator
+## 🌐 Live web tool — "Live It", a Behavioral Investing Simulator
 
-A zero-dependency, **shareable** web simulator built on top of this library's
-math. Same SIP on every line, one market crash — **only your reaction to it
-changes** — and watch how panic-selling, staying out, or a quietly leaking
-expense ratio hands back crores.
+A self-contained, **mobile-first** web experience. You press *Start*, your
+wealth line draws itself across the years like a time-lapse — calm and
+climbing — and then, at the journey's midpoint, the market falls 40%. The
+animation freezes and asks one question:
+
+> *"The market just fell 40%. The news is screaming. Your friends are selling.
+> What do you do?"*
+
+You choose — **Hold · Pause · Sell and buy back · Sell and wait** — the line
+resumes along your path next to a faint "ghost" of what staying calm would
+have done, and at the finish two numbers count up side by side. One caption
+lands the truth (e.g. *"Your one frightened decision cost ₹X. The market
+recovered without you."*).
 
 > **Live link:** `https://tishabsatwani-del.github.io/Mutual_Fund/`
 > *(one-time setup: repo **Settings → Pages → Source = "GitHub Actions"**, then
 > merge to `main` — the included workflow deploys automatically.)*
 
-**Why it's different**
+**How it works (all math is honest and auditable)**
 
-- **Behavior-gap framing** — it quantifies the *rupee cost of emotion* (panic
-  cost, expense-ratio toll), not just "money grows."
-- **Unit-accounting engine** — every reaction buys units at that month's NAV,
-  so selling and buying back later *naturally* forfeits the rebound.
-- **Fully shareable & reproducible** — every input is encoded in the URL hash,
-  so a link reproduces the *exact* scenario the sender saw, anywhere on Earth.
-- **Works offline, no CDN, no backend** — hand-rolled Canvas charts, instant
+- **Minimal inputs** — SIP (₹5k / ₹10k / ₹25k) and journey length
+  (15 / 20 / 30 yrs). The crash is fixed at the midpoint. Confusion is the enemy.
+- **Real unit accounting** — every month the SIP buys `units = SIP / NAV`. The
+  NAV starts at 100, grows at 1.0%/mo (Direct) or 0.917%/mo (Regular — the
+  commission gap), falls to 60% over 3 months at the midpoint, then recovers
+  *exactly* to trend by month +18. Selling and rebuying later forfeits units
+  for good — and the loss is modelled honestly, never clamped.
+- **Five paths, guaranteed ordering** — held-Direct > held-Regular ≈ paused >
+  sold-and-rebought > sold-and-waited. Staying invested even ends *slightly
+  richer* than a crash-free market, because the months below trend buy cheaper
+  units. Every rupee is computed live; nothing is hardcoded.
+- **Works offline, no CDN, no backend** — hand-rolled Canvas animation, instant
   load, runs behind any firewall.
-- **Deterministic + Monte-Carlo** modes, real-event presets (2008, COVID,
-  Dot-com), and a global currency switcher (₹ lakh/crore, $, €, £, ¥…).
 
 Try it locally:
 
 ```bash
-python -m http.server 8000   # then open http://localhost:8000
-node tests/test_simulator.js  # verify the simulation engine
+python -m http.server 8000    # then open http://localhost:8000
+node tests/test_simulator.js  # verify the deterministic engine + ordering
 ```
 
-Files: `index.html`, `styles.css`, `app.js` (engine + charts + URL state),
-`.github/workflows/pages.yml` (auto-deploy).
+Files: `index.html`, `styles.css`, `app.js` (math engine + cinematic
+experience), `.github/workflows/pages.yml` (auto-deploy).
 
 ---
 
