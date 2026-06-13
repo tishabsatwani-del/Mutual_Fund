@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Mutual Fund Calculator</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --card: #1e293b;
+    --accent: #38bdf8;
+    --accent2: #34d399;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --border: #334155;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: linear-gradient(160deg, #0f172a, #111827);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 24px 16px 60px;
+  }
+  h1 { text-align: center; font-weight: 700; margin: 8px 0 4px; }
+  .subtitle { text-align: center; color: var(--muted); margin-bottom: 28px; }
+  .wrap { max-width: 760px; margin: 0 auto; }
+  .tabs { display: flex; gap: 8px; justify-content: center; margin-bottom: 20px; flex-wrap: wrap; }
+  .tab {
+    padding: 8px 18px; border-radius: 999px; border: 1px solid var(--border);
+    background: transparent; color: var(--muted); cursor: pointer; font-size: 15px;
+    transition: .15s;
+  }
+  .tab.active { background: var(--accent); color: #04293f; border-color: var(--accent); font-weight: 600; }
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 16px;
+    padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,.35);
+  }
+  .panel { display: none; }
+  .panel.active { display: block; }
+  label { display: block; font-size: 14px; color: var(--muted); margin: 14px 0 6px; }
+  input[type="number"] {
+    width: 100%; padding: 11px 12px; border-radius: 10px; border: 1px solid var(--border);
+    background: #0f172a; color: var(--text); font-size: 16px;
+  }
+  input[type="range"] { width: 100%; accent-color: var(--accent); }
+  .row { display: flex; gap: 16px; flex-wrap: wrap; }
+  .row > div { flex: 1; min-width: 180px; }
+  .result {
+    margin-top: 22px; padding: 18px; border-radius: 12px;
+    background: linear-gradient(135deg, rgba(56,189,248,.12), rgba(52,211,153,.12));
+    border: 1px solid var(--border);
+  }
+  .result .big { font-size: 30px; font-weight: 700; color: var(--accent2); }
+  .result .line { display: flex; justify-content: space-between; margin: 6px 0; font-size: 15px; }
+  .result .line span:last-child { font-weight: 600; }
+  .muted { color: var(--muted); }
+  footer { text-align: center; color: var(--muted); font-size: 13px; margin-top: 28px; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>📈 Mutual Fund Calculator</h1>
+  <div class="subtitle">SIP · Lumpsum · CAGR — estimate how your investments grow</div>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="sip">SIP</button>
+    <button class="tab" data-tab="lumpsum">Lumpsum</button>
+    <button class="tab" data-tab="cagr">CAGR / Returns</button>
+  </div>
+
+  <div class="card">
+    <!-- SIP -->
+    <div class="panel active" id="sip">
+      <label>Monthly investment (₹)</label>
+      <input type="number" id="sipAmount" value="5000" min="0" step="500" />
+      <div class="row">
+        <div>
+          <label>Expected return (% p.a.)</label>
+          <input type="number" id="sipRate" value="12" min="0" step="0.5" />
+        </div>
+        <div>
+          <label>Duration (years)</label>
+          <input type="number" id="sipYears" value="15" min="1" step="1" />
+        </div>
+      </div>
+      <div class="result" id="sipResult"></div>
+    </div>
+
+    <!-- Lumpsum -->
+    <div class="panel" id="lumpsum">
+      <label>One-time investment (₹)</label>
+      <input type="number" id="lsAmount" value="100000" min="0" step="1000" />
+      <div class="row">
+        <div>
+          <label>Expected return (% p.a.)</label>
+          <input type="number" id="lsRate" value="12" min="0" step="0.5" />
+        </div>
+        <div>
+          <label>Duration (years)</label>
+          <input type="number" id="lsYears" value="10" min="1" step="1" />
+        </div>
+      </div>
+      <div class="result" id="lsResult"></div>
+    </div>
+
+    <!-- CAGR -->
+    <div class="panel" id="cagr">
+      <label>Amount invested (₹)</label>
+      <input type="number" id="cgInvested" value="100000" min="1" step="1000" />
+      <div class="row">
+        <div>
+          <label>Current / final value (₹)</label>
+          <input type="number" id="cgCurrent" value="200000" min="0" step="1000" />
+        </div>
+        <div>
+          <label>Holding period (years)</label>
+          <input type="number" id="cgYears" value="5" min="0.1" step="0.5" />
+        </div>
+      </div>
+      <div class="result" id="cgResult"></div>
+    </div>
+  </div>
+
+  <footer>Educational estimates only — actual mutual fund returns vary and are not guaranteed.</footer>
+</div>
+
+<script>
+  // ----- formatting helpers -----
+  const inr = n => "₹" + Math.round(n).toLocaleString("en-IN");
+  const pct = f => (f * 100).toFixed(2) + "%";
+
+  // ----- math (mirrors the Python toolkit) -----
+  function sipFutureValue(monthly, annualRate, years) {
+    const months = Math.round(years * 12);
+    const r = annualRate / 12;
+    if (r === 0) return monthly * months;
+    const growth = Math.pow(1 + r, months);
+    return monthly * ((growth - 1) / r) * (1 + r); // annuity-due
+  }
+  function lumpsumFutureValue(p, annualRate, years) {
+    return p * Math.pow(1 + annualRate, years);
+  }
+  function cagr(invested, current, years) {
+    return Math.pow(current / invested, 1 / years) - 1;
+  }
+
+  // ----- renderers -----
+  function renderSip() {
+    const amt = +document.getElementById("sipAmount").value;
+    const rate = +document.getElementById("sipRate").value / 100;
+    const yrs = +document.getElementById("sipYears").value;
+    const invested = amt * Math.round(yrs * 12);
+    const fv = sipFutureValue(amt, rate, yrs);
+    document.getElementById("sipResult").innerHTML = `
+      <div class="muted">Estimated future value</div>
+      <div class="big">${inr(fv)}</div>
+      <div class="line"><span>Total invested</span><span>${inr(invested)}</span></div>
+      <div class="line"><span>Estimated gains</span><span>${inr(fv - invested)}</span></div>
+      <div class="line"><span>Wealth multiple</span><span>${(fv / invested).toFixed(2)}×</span></div>`;
+  }
+  function renderLumpsum() {
+    const amt = +document.getElementById("lsAmount").value;
+    const rate = +document.getElementById("lsRate").value / 100;
+    const yrs = +document.getElementById("lsYears").value;
+    const fv = lumpsumFutureValue(amt, rate, yrs);
+    document.getElementById("lsResult").innerHTML = `
+      <div class="muted">Estimated future value</div>
+      <div class="big">${inr(fv)}</div>
+      <div class="line"><span>Invested</span><span>${inr(amt)}</span></div>
+      <div class="line"><span>Estimated gains</span><span>${inr(fv - amt)}</span></div>
+      <div class="line"><span>Wealth multiple</span><span>${(fv / amt).toFixed(2)}×</span></div>`;
+  }
+  function renderCagr() {
+    const inv = +document.getElementById("cgInvested").value;
+    const cur = +document.getElementById("cgCurrent").value;
+    const yrs = +document.getElementById("cgYears").value;
+    const g = cagr(inv, cur, yrs);
+    const abs = (cur - inv) / inv;
+    document.getElementById("cgResult").innerHTML = `
+      <div class="muted">Compound Annual Growth Rate (CAGR)</div>
+      <div class="big">${pct(g)}</div>
+      <div class="line"><span>Absolute return</span><span>${pct(abs)}</span></div>
+      <div class="line"><span>Total gain</span><span>${inr(cur - inv)}</span></div>`;
+  }
+
+  function renderAll() { renderSip(); renderLumpsum(); renderCagr(); }
+
+  // ----- wiring -----
+  document.querySelectorAll(".tab").forEach(tab => {
+    tab.addEventListener("click", () => {
+      document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+      document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
+      tab.classList.add("active");
+      document.getElementById(tab.dataset.tab).classList.add("active");
+    });
+  });
+  document.querySelectorAll("input").forEach(i => i.addEventListener("input", renderAll));
+  renderAll();
+</script>
+</body>
+</html>
