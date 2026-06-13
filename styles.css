@@ -200,6 +200,17 @@ body {
 .stage.crashing .hud-value { color: var(--cool); }
 @keyframes cool { from { opacity: 0; } to { opacity: 1; } }
 
+/* A brief, restrained shudder as the line plunges — tension, not theatrics. */
+.stage.crashing .canvas-wrap { animation: shudder .7s ease both; }
+@keyframes shudder {
+  0%   { transform: translateX(0); }
+  18%  { transform: translateX(-3px); }
+  38%  { transform: translateX(3px); }
+  58%  { transform: translateX(-2px); }
+  78%  { transform: translateX(2px); }
+  100% { transform: translateX(0); }
+}
+
 /* ===================== OVERLAYS ===================== */
 .overlay {
   position: fixed;
@@ -238,6 +249,14 @@ body {
   text-shadow: 0 0 30px rgba(111, 134, 201, 0.5);
 }
 .dec-q { font-size: 24px; font-weight: 700; margin: 8px 0 10px; letter-spacing: -.01em; }
+.dec-loss {
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--ink);
+  margin: 0 0 14px;
+}
+.dec-loss b { font-family: var(--num); font-weight: 700; color: var(--cool); }
+.dec-loss-sub { display: block; margin-top: 4px; font-size: 13px; color: var(--muted); }
 .dec-sub { color: var(--muted); font-size: 14.5px; line-height: 1.5; margin-bottom: 22px; }
 .choices { display: grid; gap: 10px; }
 .choices button {
