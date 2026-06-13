@@ -496,9 +496,15 @@ if (typeof document !== 'undefined') (function () {
     ).join('');
   }
 
-  // ---- Setup screen: chip selection. ----
+  // ---- Wiring helpers. Each guards a missing element so one bad lookup can
+  //      never abort the rest of the wiring (e.g. the Start button). ----
+  function on(id, type, fn) {
+    const el = $(id);
+    if (el) el.addEventListener(type, fn);
+  }
   function wireChips(containerId, key, parse) {
     const box = $(containerId);
+    if (!box) return;
     box.addEventListener('click', (ev) => {
       const btn = ev.target.closest('.chip');
       if (!btn) return;
@@ -508,16 +514,18 @@ if (typeof document !== 'undefined') (function () {
   }
 
   function boot() {
+    // Start first — it is the one control that must always work.
+    on('startBtn', 'click', startJourney);
+    on('replayBtn', 'click', startJourney);
+
     wireChips('sipChips', 'sip', Number);
     wireChips('yearChips', 'years', Number);
 
-    $('startBtn').addEventListener('click', startJourney);
-    $('replayBtn').addEventListener('click', startJourney);
-    $('allBtn').addEventListener('click', openAllPaths);
-    $('allClose').addEventListener('click', () => hide($('allPaths')));
-    $('changeBtn').addEventListener('click', () => { hide($('result')); hide($('stage')); show($('setup')); });
+    on('allBtn', 'click', openAllPaths);
+    on('allClose', 'click', () => hide($('allPaths')));
+    on('changeBtn', 'click', () => { hide($('result')); hide($('stage')); show($('setup')); });
 
-    $('choices').addEventListener('click', (ev) => {
+    on('choices', 'click', (ev) => {
       const btn = ev.target.closest('button[data-choice]');
       if (btn) choose(btn.dataset.choice);
     });
