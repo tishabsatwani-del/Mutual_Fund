@@ -22,6 +22,7 @@ const FIELDS = {
   er:    { def: 1,     min: 0,   max: 3   },   // regular-plan expense ratio %
   psd:   { def: 6,     min: 0,   max: 60  },   // panic-sell delay into crash (months)
   out:   { def: 24,    min: 1,   max: 240 },   // sell & stay out (months)
+  dip:   { def: 2,     min: 1,   max: 5   },   // dip-buyer's SIP multiplier while down
   cur:   { def: 'INR' },                       // currency
   mode:  { def: 'det' },                        // 'det' | 'mc'
   vol:   { def: 16,    min: 1,   max: 60  },   // MC annual volatility %
@@ -29,9 +30,11 @@ const FIELDS = {
   seed:  { def: 42,    min: 0,   max: 1e9 },   // MC random seed
 };
 
-/* the four reactions — same money, same market, different nerve */
+/* the five reactions — same market, different nerve.
+ * panic → patience → courage, from the one who fled to the one who leaned in */
 const SCEN = [
   { key: 'direct',   name: 'Direct · never touched',          color: '#34d399' },
+  { key: 'dip',      name: 'Direct · bought the dip',         color: '#38bdf8' },
   { key: 'regular',  name: 'Regular · never touched',         color: '#fbbf24' },
   { key: 'soldback', name: 'Sold in the crash, bought back',  color: '#fb923c' },
   { key: 'out',      name: 'Sold & stayed out',               color: '#f87171' },
@@ -133,17 +136,21 @@ function applyExpense(nav, erPct) {
 
 /* --------------------------- the unit engine ----------------------------- */
 /* Runs one investor's behavior over a NAV series.
- * sellMonth / rebuyMonth are internal unit moves (NOT external cashflows). */
-function runPath(nav, N, sip, sellMonth, rebuyMonth) {
+ * sellMonth / rebuyMonth are internal unit moves (NOT external cashflows).
+ * dip (optional) = { mult, start, end }: contribute sip*mult while start<=t<end —
+ * the dip-buyer pours extra real money in at depressed prices (more invested). */
+function runPath(nav, N, sip, sellMonth, rebuyMonth, dip) {
   let units = 0, cash = 0, invested = 0, inMarket = true;
   const series = new Float64Array(N + 1);
   for (let t = 0; t <= N; t++) {
     if (t === sellMonth) { cash += units * nav[t]; units = 0; inMarket = false; }
     if (t === rebuyMonth) { units += cash / nav[t]; cash = 0; inMarket = true; }
     if (t < N) {                       // beginning-of-month contribution (annuity-due)
-      invested += sip;
-      if (inMarket) units += sip / nav[t];
-      else cash += sip;                // parked at 0% while on the sidelines
+      let contrib = sip;
+      if (dip && t >= dip.start && t < dip.end) contrib = sip * dip.mult;
+      invested += contrib;
+      if (inMarket) units += contrib / nav[t];
+      else cash += contrib;            // parked at 0% while on the sidelines
     }
     series[t] = units * nav[t] + cash;
   }
@@ -192,8 +199,13 @@ function computeScenarios(navDirect, navRegular, s, ctx, ev) {
   const N = ctx.N;
   // no crash ⇒ nothing to panic about ⇒ no one sells (clean baseline)
   const sell = s.crash > 0 ? ev.sellMonth : null;
+  // the dip-buyer leans in only when there's an actual dip to buy
+  const dipWin = s.crash > 0
+    ? { mult: s.dip, start: ctx.crashStart, end: Math.min(ctx.recovered, N) }
+    : null;
   return {
     direct:   runPath(navDirect,  N, s.sip, null, null),
+    dip:      runPath(navDirect,  N, s.sip, null, null, dipWin),
     regular:  runPath(navRegular, N, s.sip, null, null),
     soldback: runPath(navDirect,  N, s.sip, sell, s.crash > 0 ? ev.rebuyAfterRecovery : null),
     out:      runPath(navDirect,  N, s.sip, sell, s.crash > 0 ? ev.reentryAfterOut : null),
@@ -268,8 +280,8 @@ function simulateMonteCarlo(s) {
   const ctx = buildNav(s);
   const ev = eventMonths(s, ctx);
   const P = Math.round(s.paths);
-  const finals = { direct: [], regular: [], soldback: [], out: [] };
-  let bestMedianPathSeed = seedForPath(s.seed, 0);
+  const finals = {};
+  for (const sc of SCEN) finals[sc.key] = [];
 
   for (let i = 0; i < P; i++) {
     const seed = seedForPath(s.seed, i);
@@ -312,11 +324,11 @@ function simulateMonteCarlo(s) {
 function render(s, sim) {
   const cur = s.cur;
   const d = sim.scen;
-  const best = d.direct.final;
 
-  /* ---- headline cards ---- */
+  /* ---- headline cards: panic → patience → courage ---- */
   const expenseToll = d.direct.final - d.regular.final;
   const panicCost = d.direct.final - d.out.final;
+  const dipReward = d.dip.final - d.direct.final;
   const headline = document.getElementById('headline');
   headline.innerHTML = `
     <div class="hl-card good">
@@ -324,14 +336,19 @@ function render(s, sim) {
       <div class="big">${fmtCompact(d.direct.final, cur)}</div>
       <div class="desc">Kept buying straight through the crash. This is the bar everything else is measured against.</div>
     </div>
+    <div class="hl-card win">
+      <div class="label">The courage bonus</div>
+      <div class="big">+${fmtCompact(dipReward, cur)}</div>
+      <div class="desc">Earned <em>above</em> the benchmark by pouring ${s.dip}× the SIP in while units were cheap — its money-weighted return rose to ${(d.dip.xirr * 100).toFixed(1)}% vs ${(d.direct.xirr * 100).toFixed(1)}%.</div>
+    </div>
     <div class="hl-card bad">
       <div class="label">The panic cost</div>
-      <div class="big">${fmtCompact(panicCost, cur)}</div>
+      <div class="big">−${fmtCompact(panicCost, cur)}</div>
       <div class="desc">Handed back by selling and sitting out ${Math.round(s.out)} months — one frightened decision, ${fmtCompact(panicCost, cur)} gone.</div>
     </div>
     <div class="hl-card">
       <div class="label">The expense-ratio toll</div>
-      <div class="big">${fmtCompact(expenseToll, cur)}</div>
+      <div class="big">−${fmtCompact(expenseToll, cur)}</div>
       <div class="desc">Lost without ever selling — just ${s.er}%/yr quietly leaking from the Regular plan, compounding for ${Math.round(s.yrs)} years.</div>
     </div>`;
 
@@ -345,15 +362,20 @@ function render(s, sim) {
     .sort((x, y) => y.r.final - x.r.final);
   const TAGS = {
     direct: 'Stayed fully invested, kept buying through it.',
+    dip: `Stayed in and poured ${s.dip}× the SIP in while the market was down.`,
     regular: `Stayed in — but ${s.er}%/yr leaked out every year.`,
     soldback: 'One frightened week, bought back only after it recovered.',
     out: `Sold near the bottom and stayed on the sidelines ${Math.round(s.out)} months.`,
   };
+  const bench = d.direct.final;   // "staying invested" is the line everything is measured against
   document.getElementById('cards').innerHTML = ranked.map((x, i) => {
-    const gap = best - x.r.final;
-    const isBest = x.sc.key === 'direct';
+    const diff = x.r.final - bench;
     const rangeRow = sim.mode === 'mc'
       ? `<div class="row"><span>Likely range (P10–P90)</span><strong>${fmtCompact(x.r.p10, cur)} – ${fmtCompact(x.r.p90, cur)}</strong></div>` : '';
+    let gapHtml;
+    if (x.sc.key === 'direct') gapHtml = '<div class="gap best">★ The benchmark — stayed fully invested</div>';
+    else if (diff >= 0) gapHtml = `<div class="gap win">+ ${fmtCompact(diff, cur)} vs staying invested</div>`;
+    else gapHtml = `<div class="gap loss">− ${fmtCompact(-diff, cur)} vs staying invested</div>`;
     return `<div class="card" style="border-top-color:${x.sc.color}">
       <div class="rank">#${i + 1}</div>
       <h3>${x.sc.name}</h3>
@@ -363,7 +385,7 @@ function render(s, sim) {
       <div class="row"><span>Invested</span><strong>${fmtCompact(x.r.invested, cur)}</strong></div>
       <div class="row"><span>Return (XIRR)</span><strong>${(x.r.xirr * 100).toFixed(1)}%</strong></div>
       ${rangeRow}
-      <div class="gap ${isBest ? 'best' : 'loss'}">${isBest ? '★ The benchmark' : '− ' + fmtCompact(gap, cur) + ' vs staying invested'}</div>
+      ${gapHtml}
     </div>`;
   }).join('');
 
@@ -375,8 +397,68 @@ function render(s, sim) {
         : `Same money, same market — the lines split only because the investors reacted differently.`);
 
   /* ---- charts ---- */
+  CUR = { s, sim };               // snapshot for the animator (Play button)
   drawLineChart(s, sim);
   drawBarChart(s, sim);
+}
+
+/* ============================== ANIMATION ================================ */
+/* "Play the journey" — reveal the whole horizon month-by-month so you watch
+ * the lines climb, the crash bite, and the dip-buyer pull ahead, live. */
+let CUR = null;                                   // { s, sim } latest render
+const anim = { playing: false, raf: null, startTs: 0, dur: 7000 };
+
+function setPlayBtn(playing) {
+  const b = document.getElementById('playBtn');
+  if (!b) return;
+  b.textContent = playing ? '■ Stop' : '▶ Play the 30-year journey';
+  b.classList.toggle('playing', playing);
+}
+
+function updateTicker(s, sim, upto) {
+  const N = sim.ctx.N;
+  const UP = clamp(Math.floor(upto), 0, N);
+  const el = document.getElementById('ticker');
+  if (!el) return;
+  const rows = SCEN.map(sc =>
+    `<div class="trow"><span class="tdot" style="background:${sc.color}"></span>` +
+    `<span class="tname">${sc.name}</span>` +
+    `<span class="tval">${fmtCompact(sim.scen[sc.key].series[UP], s.cur)}</span></div>`
+  ).join('');
+  el.innerHTML = `<div class="tyear">Year ${(UP / 12).toFixed(1)}</div>${rows}`;
+}
+
+function animFrame(ts) {
+  if (!anim.playing || !CUR) return;
+  if (!anim.startTs) anim.startTs = ts;
+  const N = CUR.sim.ctx.N;
+  const t = ((ts - anim.startTs) / anim.dur) * N;
+  if (t >= N) {                                   // arrived at the finish line
+    drawLineChart(CUR.s, CUR.sim, N);
+    updateTicker(CUR.s, CUR.sim, N);
+    anim.playing = false; anim.raf = null; setPlayBtn(false);
+    setTimeout(() => { const e = document.getElementById('ticker'); if (e && !anim.playing) e.hidden = true; }, 1800);
+    return;
+  }
+  drawLineChart(CUR.s, CUR.sim, t);
+  updateTicker(CUR.s, CUR.sim, t);
+  anim.raf = requestAnimationFrame(animFrame);
+}
+
+function playAnim() {
+  if (!CUR) return;
+  anim.playing = true; anim.startTs = 0;
+  const tk = document.getElementById('ticker'); if (tk) tk.hidden = false;
+  setPlayBtn(true);
+  anim.raf = requestAnimationFrame(animFrame);
+}
+
+function stopAnim() {
+  anim.playing = false;
+  if (anim.raf) cancelAnimationFrame(anim.raf);
+  anim.raf = null;
+  setPlayBtn(false);
+  const tk = document.getElementById('ticker'); if (tk) tk.hidden = true;
 }
 
 /* ----------------------------- line chart -------------------------------- */
@@ -390,11 +472,12 @@ function setupCanvas(canvas) {
   return { ctx, w: rect.width, h: rect.height };
 }
 
-function drawLineChart(s, sim) {
+function drawLineChart(s, sim, upto) {
   const canvas = document.getElementById('lineChart');
   const { ctx, w, h } = setupCanvas(canvas);
   ctx.clearRect(0, 0, w, h);
   const N = sim.ctx.N;
+  const UP = (upto == null) ? N : clamp(Math.floor(upto), 0, N);   // animation playhead
   const mL = 64, mR = 16, mT = 16, mB = 34;
   const plotW = w - mL - mR, plotH = h - mT - mB;
 
@@ -444,13 +527,24 @@ function drawLineChart(s, sim) {
   for (let t = 0; t <= N; t++) { const px = x(t), py = y(invested[t]); t === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py); }
   ctx.stroke(); ctx.setLineDash([]);
 
-  // scenario lines
+  // scenario lines (revealed up to the playhead during animation)
   ctx.lineWidth = 2.4; ctx.lineJoin = 'round';
   for (const sc of SCEN) {
     const ser = sim.scen[sc.key].series;
     ctx.strokeStyle = sc.color; ctx.beginPath();
-    for (let t = 0; t <= N; t++) { const px = x(t), py = y(ser[t]); t === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py); }
+    for (let t = 0; t <= UP; t++) { const px = x(t), py = y(ser[t]); t === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py); }
     ctx.stroke();
+    if (UP < N) {                                  // leading dot at the playhead
+      ctx.fillStyle = sc.color; ctx.beginPath();
+      ctx.arc(x(UP), y(ser[UP]), 3.6, 0, 2 * Math.PI); ctx.fill();
+    }
+  }
+
+  // moving playhead
+  if (UP < N) {
+    ctx.strokeStyle = 'rgba(255,255,255,.45)'; ctx.setLineDash([2, 3]);
+    ctx.beginPath(); ctx.moveTo(x(UP), mT); ctx.lineTo(x(UP), mT + plotH); ctx.stroke();
+    ctx.setLineDash([]);
   }
 }
 
@@ -545,7 +639,7 @@ let STATE;
 function getStateFromInputs() {
   const s = { ...STATE };
   // read numeric/select inputs by id
-  ['sip','yrs','ret','crash','cy','cm','rm','er','psd','out','vol','paths','seed'].forEach(k => {
+  ['sip','yrs','ret','crash','cy','cm','rm','er','psd','out','dip','vol','paths','seed'].forEach(k => {
     const el = document.getElementById(k);
     if (el) s[k] = clamp(Number(el.value), FIELDS[k].min, FIELDS[k].max);
   });
@@ -555,7 +649,7 @@ function getStateFromInputs() {
 }
 
 function syncInputsFromState(s) {
-  for (const k of ['sip','yrs','ret','crash','cy','cm','rm','er','psd','out','vol','paths','seed']) {
+  for (const k of ['sip','yrs','ret','crash','cy','cm','rm','er','psd','out','dip','vol','paths','seed']) {
     const el = document.getElementById(k); const num = document.getElementById(k + 'Num');
     if (el) el.value = s[k];
     if (num) num.value = s[k];
@@ -583,6 +677,7 @@ function updateLabels(s) {
   set('erOut', s.er + '%/yr');
   set('psdOut', Math.round(s.psd) + ' mo');
   set('outOut', Math.round(s.out) + ' mo');
+  set('dipOut', s.dip + '× SIP');
   set('volOut', s.vol + '%');
   set('pathsOut', Math.round(s.paths));
 }
@@ -597,6 +692,7 @@ function checkWarnings(s) {
 
 let rafId = null;
 function recompute(updateInputsToo) {
+  if (anim.playing) stopAnim();          // editing inputs ends any running playback
   STATE = getStateFromInputs();
   if (updateInputsToo) syncInputsFromState(STATE);
   else updateLabels(STATE);
@@ -617,7 +713,7 @@ function init() {
   syncInputsFromState(STATE);
 
   // link range <-> number pairs
-  ['sip','yrs','ret','crash','cy','cm','rm','er','psd','out'].forEach(k => {
+  ['sip','yrs','ret','crash','cy','cm','rm','er','psd','out','dip'].forEach(k => {
     const range = document.getElementById(k), num = document.getElementById(k + 'Num');
     if (range) range.addEventListener('input', () => { if (num) num.value = range.value; debouncedRecompute(); });
     if (num) num.addEventListener('input', () => {
@@ -644,6 +740,13 @@ function init() {
   // mode toggle
   document.getElementById('modeDet').addEventListener('click', () => { STATE.mode = 'det'; syncInputsFromState(STATE); recompute(false); });
   document.getElementById('modeMc').addEventListener('click', () => { STATE.mode = 'mc'; syncInputsFromState(STATE); recompute(false); });
+
+  // play / stop the animated journey
+  const playBtn = document.getElementById('playBtn');
+  if (playBtn) playBtn.addEventListener('click', () => {
+    if (anim.playing) { stopAnim(); drawLineChart(CUR.s, CUR.sim); }
+    else playAnim();
+  });
 
   // copy link
   document.getElementById('copyLink').addEventListener('click', async () => {

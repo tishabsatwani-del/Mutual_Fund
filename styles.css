@@ -131,16 +131,41 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; border-radius
 }
 .hl-card.bad { border-left-color: var(--bad); }
 .hl-card.good { border-left-color: var(--good); }
+.hl-card.win { border-left-color: var(--c-dip); }
+.hl-card .desc em { color: var(--accent); font-style: normal; }
 .hl-card .label { color: var(--muted); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
 .hl-card .big { font-size: clamp(26px, 5vw, 40px); font-weight: 800; letter-spacing: -.02em; margin: 6px 0 4px; line-height: 1; }
 .hl-card .desc { color: var(--muted); font-size: 13px; }
+
+/* ---------- play button ---------- */
+.btn-play {
+  border: 1px solid var(--c-dip); background: rgba(56,189,248,.12); color: var(--c-dip);
+  padding: 8px 16px; border-radius: 999px; font-weight: 700; font-size: 13px; cursor: pointer;
+  transition: .15s; white-space: nowrap;
+}
+.btn-play:hover { background: rgba(56,189,248,.22); transform: translateY(-1px); }
+.btn-play.playing { background: var(--c-dip); color: #04222b; }
 
 /* ---------- charts ---------- */
 .chart-wrap { position: relative; width: 100%; height: 380px; }
 .chart-wrap.bars { height: 300px; }
 canvas { width: 100%; height: 100%; display: block; }
 .chart-note { color: var(--muted); font-size: 13px; margin: 12px 0 0; }
-.legend { display: flex; flex-wrap: wrap; gap: 14px; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; margin: 2px 0 16px; }
+
+/* ---------- live ticker (during playback) ---------- */
+.ticker {
+  position: absolute; top: 12px; right: 12px; min-width: 188px;
+  background: rgba(11,18,32,.82); backdrop-filter: blur(6px);
+  border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px;
+  box-shadow: var(--shadow); pointer-events: none; font-size: 12px;
+}
+.ticker .tyear { font-weight: 800; color: var(--ink); margin-bottom: 6px; font-size: 13px; letter-spacing: -.01em; }
+.ticker .trow { display: flex; align-items: center; gap: 7px; line-height: 1.7; }
+.ticker .tdot { width: 9px; height: 9px; border-radius: 3px; flex: 0 0 auto; }
+.ticker .tname { color: var(--muted); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ticker .tval { color: var(--ink); font-weight: 700; font-variant-numeric: tabular-nums; }
+@media (max-width: 560px) { .ticker { min-width: 150px; font-size: 11px; top: 8px; right: 8px; } }
 .legend .item { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: var(--muted); font-weight: 600; }
 .legend .swatch { width: 12px; height: 12px; border-radius: 4px; }
 
@@ -160,6 +185,7 @@ canvas { width: 100%; height: 100%; display: block; }
 .card .gap { margin-top: 12px; font-size: 13px; font-weight: 700; }
 .card .gap.loss { color: var(--bad); }
 .card .gap.best { color: var(--good); }
+.card .gap.win { color: var(--c-dip); }
 
 /* ---------- explain / footer ---------- */
 .explain p { color: var(--muted); max-width: 75ch; }

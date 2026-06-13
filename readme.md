@@ -47,6 +47,11 @@ code error.)*
   so a link reproduces the *exact* scenario the sender saw, anywhere on Earth.
 - **Works offline, no CDN, no backend** — hand-rolled Canvas charts, instant
   load, runs behind any firewall.
+- **The full emotional arc — panic → patience → courage** — five doors on one
+  market, including a *"bought the dip"* investor who deploys extra cash while
+  units are cheap and finishes *above* the benchmark at a *higher* return.
+- **"Play the journey"** — animate the whole 30-year horizon month-by-month and
+  watch the lines climb, the crash bite, and the dip-buyer pull ahead, live.
 - **Deterministic + Monte-Carlo** modes, real-event presets (2008, COVID,
   Dot-com), and a global currency switcher (₹ lakh/crore, $, €, £, ¥…).
 

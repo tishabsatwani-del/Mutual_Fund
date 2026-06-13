@@ -109,6 +109,12 @@
         <input type="number" id="outNum" min="1" max="240" step="1" value="24" class="num" />
       </label>
 
+      <label class="field">
+        <span class="field-label">Bought the dip: invest <em id="dipOut"></em> while down</span>
+        <input type="range" id="dip" min="1" max="5" step="0.5" value="2" />
+        <input type="number" id="dipNum" min="1" max="5" step="0.5" value="2" class="num" />
+      </label>
+
       <label class="field field-select">
         <span class="field-label">Currency</span>
         <select id="cur">
@@ -142,10 +148,12 @@
   <section class="panel">
     <div class="panel-head">
       <h2>Same money. Different nerve.</h2>
-      <div id="legend" class="legend"></div>
+      <button id="playBtn" class="btn-play" type="button">▶ Play the 30-year journey</button>
     </div>
+    <div id="legend" class="legend"></div>
     <div class="chart-wrap">
       <canvas id="lineChart" role="img" aria-label="Portfolio value over time for each reaction"></canvas>
+      <div id="ticker" class="ticker" aria-live="off" hidden></div>
     </div>
     <p class="chart-note" id="lineNote"></p>
   </section>
@@ -169,6 +177,12 @@
       money buys <em>units</em> at that month's price (NAV). During a crash, units are cheap, so staying
       invested quietly stockpiles them. The moment you sell and buy back later — at a higher price — you
       simply own fewer units forever. That gap never closes. That is the <strong>behavior gap</strong>.
+    </p>
+    <p>
+      The <em>dip-buyer</em> does the opposite of panic: still Direct, still never sells — but pours extra
+      money in <em>while the market is below trend</em>, so those rupees buy the cheapest units of the whole
+      journey and ride the full recovery. That's why it finishes <strong>above</strong> the benchmark and at a
+      <em>higher</em> money-weighted return, not just a bigger deposit. The arc runs panic → patience → courage.
     </p>
     <p>
       The <em>Regular plan</em> never sells, but a small expense ratio leaks out every year and compounds

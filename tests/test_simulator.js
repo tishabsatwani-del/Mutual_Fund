@@ -12,12 +12,12 @@ function ok(name, cond, extra = '') {
 const cr = v => (v / 1e7).toFixed(2) + ' Cr';
 
 const ex = { sip: 10000, yrs: 30, ret: 12, crash: 40, cy: 15, cm: 6, rm: 18,
-  er: 1, psd: 6, out: 24, cur: 'INR', mode: 'det', vol: 16, paths: 1000, seed: 42 };
+  er: 1, psd: 6, out: 24, dip: 2, cur: 'INR', mode: 'det', vol: 16, paths: 1000, seed: 42 };
 
-console.log('\nExample scenario (₹10k/mo, 30y, 12%, −40% crash in yr15):');
+console.log('\nExample scenario (₹10k/mo, 30y, 12%, −40% crash in yr15, dip 2×):');
 const sim = simulateDeterministic(ex);
 const d = sim.scen;
-for (const k of ['direct', 'regular', 'soldback', 'out'])
+for (const k of ['dip', 'direct', 'regular', 'soldback', 'out'])
   console.log(`    ${k.padEnd(9)} ${cr(d[k].final)}   XIRR ${(d[k].xirr * 100).toFixed(1)}%`);
 
 console.log('\nChecks:');
@@ -40,6 +40,17 @@ ok('Direct > sold-back (rebound forfeited)', d.direct.final > d.soldback.final);
 ok('sold-back > stayed-out', d.soldback.final > d.out.final);
 ok('stayed-out can fall below Regular (the example punchline)',
   d.out.final < d.regular.final, '(out=' + cr(d.out.final) + ' vs reg=' + cr(d.regular.final) + ')');
+
+// 3b. the courage door: bought-the-dip beats the benchmark on BOTH corpus and
+//     money-weighted return (extra rupees deployed cheap, not just more deposited)
+ok('bought-the-dip > Direct corpus (beats the benchmark)', d.dip.final > d.direct.final,
+  '(dip=' + cr(d.dip.final) + ' vs direct=' + cr(d.direct.final) + ')');
+ok('bought-the-dip deployed more capital', d.dip.invested > d.direct.invested);
+ok('bought-the-dip XIRR > Direct XIRR (the extra rupees worked harder)',
+  d.dip.xirr > d.direct.xirr,
+  '(dip=' + (d.dip.xirr * 100).toFixed(2) + '% vs direct=' + (d.direct.xirr * 100).toFixed(2) + '%)');
+ok('dip=1 ⇒ dip-buyer == Direct (no extra deployed)',
+  Math.abs(simulateDeterministic({ ...ex, dip: 1 }).scen.dip.final - d.direct.final) < 1);
 
 // 4. edge: crash=0 ⇒ nobody panics ⇒ direct/soldback/out identical (er=0 ⇒ +regular)
 const flat = simulateDeterministic({ ...ex, crash: 0, er: 0 });
