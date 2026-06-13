@@ -32,11 +32,14 @@ variable is who is beside you when it falls.**
   Sell & buy back · Sell & wait**); her path plays on its own. Then two
   corpora, two XIRRs, the fee she paid for, and the rupees your one decision
   cost — with a verdict caption that resonates with the book chapter.
-- **The Emergency** — *The money, now.* Life demands a large sum fast. Alone,
-  fear says *take it all* and the SIP dies in one tap. Her RM says take exactly
-  what's needed — liquid first, then a little large-cap, **leave the down
-  mid-cap**, pause (don't cancel) the SIP. Watch the gap play to the horizon.
-  *Hardest mode:* the emergency lands during a market fall.
+- **The Emergency** — *The money, now.* A **staged, interactive** ordeal:
+  you've quietly built a corpus across three sleeves; then life strikes —
+  **hospitalisation/ICU, a business loss, a pandemic (COVID), or war
+  (Iran–USA / India–Pakistan)** — and *you* must choose how to raise the cash:
+  redeem everything (panic), take only what you need, sell the fallen fund, or
+  kill the SIP. Then her RM makes the call she can make. Watch the gap play to
+  the horizon. Pandemics and wars arrive *with* a market crash (the hardest,
+  most realistic case); any emergency can be forced into that mode.
 
 **The maths — exact, auditable, never rigged**
 
@@ -57,9 +60,11 @@ variable is who is beside you when it falls.**
   case where the guided friend panics and calm Direct wins. The tool never
   claims one door is better — it proves the door was never the point.
 - **Real events (illustrative)** — COVID-19 2020 (~−38%), GFC 2008 (~−60%), the
-  2022 correction (~−18%), and the 2025–26 storm (~−14%, ending on uncertainty).
-  *Based on actual index drawdowns; exact figures vary by index and dates and
-  must be locked against real data before shipping.*
+  2022 correction (~−18%), and the Iran–USA War 2025 (~−16%, ending on
+  uncertainty). Each run **varies** the exact depth (±3 pts) and the year the
+  storm strikes (7–9 years in), so no two lifetimes are identical. *Based on
+  actual index drawdowns; exact figures vary by index and dates and must be
+  locked against real data before shipping.*
 - **Works offline, no CDN, no backend** — hand-rolled Canvas, instant load.
 
 > All outputs are illustrative **ranges of possibility, never predictions or

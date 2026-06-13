@@ -131,7 +131,26 @@ for (const evId of Object.keys(E.EVENTS)) {
       (sim.friend.final - sim.you.final) > 4 * (sim.directSmart.final - sim.friend.final));
     ok(`[em ${downturn}] surgical took exactly the need (mid-cap left untouched)`,
       Math.abs(sim.friend.took - sim.need) < 1, `(took ${L(sim.friend.took)} need ${L(sim.need)})`);
+
+    // The four user choices, all as Direct, must order sensibly:
+    // surgical (best) > {sipKill, sellLosers} > panic (worst).
+    const four = {};
+    for (const r of ['panic', 'surgical', 'sellLosers', 'sipKill'])
+      four[r] = E.runEmergency(10000, 'icu', r, downturn).you.final;
+    ok(`[em ${downturn}] surgical is the best of the four choices`,
+      four.surgical > four.sipKill && four.surgical > four.sellLosers && four.surgical > four.panic,
+      `(surg ${L(four.surgical)} kill ${L(four.sipKill)} losers ${L(four.sellLosers)} panic ${L(four.panic)})`);
+    ok(`[em ${downturn}] panic is the worst of the four choices`,
+      four.panic < four.sipKill && four.panic < four.sellLosers);
+    ok(`[em ${downturn}] cancelling the SIP forfeits 12 years of contributions`,
+      four.sipKill < four.surgical * 0.85);
   }
+
+  // crashLinked emergencies (pandemic, war) force the hardest mode on.
+  const pan = E.runEmergency(10000, 'pandemic', 'panic', false);
+  ok('pandemic is crash-linked (downturn forced on)', pan.downturn === true);
+  const war = E.runEmergency(10000, 'war', 'surgical', false);
+  ok('war is crash-linked (downturn forced on)', war.downturn === true);
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`);

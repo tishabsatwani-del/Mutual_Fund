@@ -46,6 +46,7 @@ const FEE_GAP_MONTHLY = DIRECT_MONTHLY - REGULAR_MONTHLY; // 0.0008333 = 1%/yr
 
 const HORIZON_YEARS = 20;          // fixed: long enough for the fee to compound
 const HORIZON_MONTHS = HORIZON_YEARS * 12; // 240
+const CRASH_START_MONTH = 96;      // the storm hits 8 years in (matches the story)
 
 /* ---- Real market events (Section 5). -----------------------------------
  * Implemented as smooth geometric curves whose DEPTH, FALL and RECOVERY
@@ -68,10 +69,10 @@ const EVENTS = {
     depth: 0.18, fallMonths: 8, recoveryMonths: 12, ongoing: false,
     character: 'The moderate one.',
   },
-  now: {
-    id: 'now', name: "The one you're living through (geopolitics & oil), 2025–26",
-    depth: 0.14, fallMonths: 6, recoveryMonths: 14, ongoing: true,
-    character: "Ends on uncertainty — because that's the real decision: you never know, in the moment, which kind it will become.",
+  iranUsa: {
+    id: 'iranUsa', name: 'Iran–USA War, 2025',
+    depth: 0.16, fallMonths: 5, recoveryMonths: 13, ongoing: true,
+    character: "The one you're living through. It ends on uncertainty — in the moment you never know how far it falls, or when it turns.",
   },
 };
 
@@ -262,9 +263,20 @@ function peakRegainMonth(nav) {
  * Produces both doors (Direct + Regular) under all four behaviours, plus the
  * crash-free control, so every comparison the UI needs is a pure lookup.
  */
-function runSinglePath(sip, eventId) {
-  const ev = EVENTS[eventId] || EVENTS.covid;
-  const N = HORIZON_MONTHS, S = N / 2; // event at the midpoint (year 10)
+function runSinglePath(sip, eventId, vary) {
+  const base = EVENTS[eventId] || EVENTS.covid;
+  const N = HORIZON_MONTHS;
+  // Every run can feel unique: when `vary` is set we jitter the depth (±3 pts)
+  // and the year the storm strikes (7–9 years in), within honest, illustrative
+  // bounds. The corpus and the headline drawdown then differ run to run, the
+  // way real life never repeats exactly. Tests call without `vary` for exact,
+  // reproducible numbers.
+  let S = CRASH_START_MONTH, depth = base.depth;
+  if (vary) {
+    S = 84 + Math.floor(Math.random() * 25);                 // months 84..108 (yrs 7–9)
+    depth = Math.min(0.85, Math.max(0.05, base.depth + (Math.random() - 0.5) * 0.06));
+  }
+  const ev = Object.assign({}, base, { depth });
 
   const navDirect  = buildEventNav(DIRECT_MONTHLY,  N, ev, S);
   const navRegular = buildEventNav(REGULAR_MONTHLY, N, ev, S);
@@ -290,7 +302,7 @@ function runSinglePath(sip, eventId) {
   const directNoCrash = simHold(buildTrendNav(DIRECT_MONTHLY, N), N, sip).final;
 
   return {
-    mode: 'single', ev, sip, years: HORIZON_YEARS, N, S,
+    mode: 'single', ev, sip, years: HORIZON_YEARS, N, S, startYears: S / 12,
     navDirect, navRegular, direct, regular,
     feeSavingRupees, directNoCrash,
   };
@@ -435,26 +447,39 @@ function distribution(finals) {
  * sum, fast. The question is not "do I panic-sell" but "how do I raise this
  * cash without destroying my future." We model a portfolio split across a
  * liquid sleeve, large-cap and mid/small-cap, an emergency that strikes at
- * month `S`, and two responses applied to EITHER door:
- *   • PANIC    — redeem everything (far more than needed); the SIP dies.
- *   • SURGICAL — take exactly the emergency: liquid first, then large-cap,
- *                leave the (down) mid-cap; pause the SIP 3 months, then
- *                resume. The rest stays invested and keeps compounding.
- * We let either investor make either call, so the honest point lands:
- * "the solo investor under stress usually can't, and that's where guidance
- * earns its fee," not "Regular always wins."
+ * month `S`, and FOUR responses the user actually chooses between:
+ *   • PANIC       — redeem everything (far more than needed); the SIP dies.
+ *   • SURGICAL    — take exactly the need: liquid first, then large-cap, LEAVE
+ *                   the (down) mid-cap; pause the SIP 3 months, then resume.
+ *   • SELL_LOSERS — take the need from the fallen mid-cap first ("cut the
+ *                   loss"), locking the loss in a downturn; SIP keeps running.
+ *   • SIP_KILL    — take the need safely, but cancel the SIP forever ("I can't
+ *                   afford to keep investing"): you forfeit 12 more years of
+ *                   contributions and their compounding.
+ * Either door can make any call, so the honest point lands: the solo investor
+ * under stress usually can't make the surgical call, and that is where the
+ * guidance earns its fee — not "Regular always wins."
  * ===================================================================== */
 
 /* The emergency is sized as a FRACTION of the corpus you've built, so it is
  * always a meaningful — and coverable — shock whatever the SIP, and so the
  * RM's "leave the mid-cap, take liquid first" guidance can genuinely be
  * honoured (the need never exceeds the liquid + large-cap sleeves). The rupee
- * figure is shown live; the narrative (the ICU bill, the layoff runway) is in
- * the experience layer. */
+ * figure is shown live. `crashLinked` emergencies (a pandemic, a war) inherently
+ * arrive with a falling market — the hardest, most realistic case. */
 const EMERGENCIES = {
-  icu:    { id: 'icu',    name: 'Your mother in the ICU',        fraction: 0.50 },
-  layoff: { id: 'layoff', name: 'The layoff',                    fraction: 0.42 },
-  home:   { id: 'home',   name: 'A family emergency back home',  fraction: 0.32 },
+  icu:      { id: 'icu',      name: 'Hospitalisation — the ICU',      fraction: 0.50, crashLinked: false },
+  business: { id: 'business', name: 'A sudden business loss',         fraction: 0.55, crashLinked: false },
+  pandemic: { id: 'pandemic', name: 'Pandemic — COVID strikes',       fraction: 0.42, crashLinked: true },
+  war:      { id: 'war',      name: 'War — Iran–USA / India–Pakistan', fraction: 0.45, crashLinked: true },
+};
+
+/* How each response draws the cash and what it does to the SIP. */
+const EM_RESPONSES = {
+  panic:      { sellAll: true,  killSIP: true,  pauseMonths: 0, order: ['liquid', 'largeCap', 'midSmall'] },
+  surgical:   { sellAll: false, killSIP: false, pauseMonths: 3, order: ['liquid', 'largeCap', 'midSmall'] },
+  sellLosers: { sellAll: false, killSIP: false, pauseMonths: 0, order: ['midSmall', 'largeCap', 'liquid'] },
+  sipKill:    { sellAll: false, killSIP: true,  pauseMonths: 0, order: ['liquid', 'largeCap', 'midSmall'] },
 };
 
 // Portfolio sleeves: fractions of the SIP and their growth character.
@@ -507,69 +532,67 @@ function simEmergency(sip, feeDrag, response, need, S, downturn) {
   }
   const valueAt = (m) => Object.keys(units).reduce((s, k) => s + units[k] * navs[k][m], 0);
   const corpusAtEmergency = valueAt(S);
+  // Sleeve breakdown at the emergency, captured BEFORE any redemption (drives
+  // the intro screen so the user sees exactly what they're choosing from).
+  const sleeveValues = {};
+  for (const k in units) sleeveValues[k] = units[k] * navs[k][S];
 
-  let resumeMonth, took = 0;
-  if (response === 'panic') {
-    // Fear's one instruction: take it all, be safe. Redeem everything; the
-    // SIP dies. The leftover cash sits idle (no growth, no re-entry).
+  const cfg = EM_RESPONSES[response] || EM_RESPONSES.surgical;
+  let took = 0, idleCash = 0;
+
+  if (cfg.sellAll) {
+    // Fear's one instruction: take it all, be safe. The leftover sits idle.
     took = corpusAtEmergency;
-    let cash = corpusAtEmergency - need;
+    idleCash = Math.max(corpusAtEmergency - need, 0);
     for (const k in units) units[k] = 0;
-    return {
-      response, corpusAtEmergency, took, need,
-      final: Math.max(cash, 0), sipSurvived: false,
-      xirr: xirrFromSIP(sip, S + 1, corpusAtEmergency), // return up to the day it died
-    };
+  } else {
+    // Take EXACTLY `need`, drawing sleeves in the response's order.
+    let remaining = need;
+    for (const sleeve of cfg.order) {
+      if (remaining <= 0) break;
+      const avail = units[sleeve] * navs[sleeve][S];
+      const draw = Math.min(avail, remaining);
+      units[sleeve] -= draw / navs[sleeve][S];
+      remaining -= draw;
+    }
+    took = need - Math.max(remaining, 0);
   }
 
-  // SURGICAL: take EXACTLY `need`. Liquid first, then large-cap. Leave the
-  // (down) mid-cap untouched. Pause the SIP 3 months, then resume.
-  let remaining = need;
-  for (const order of ['liquid', 'largeCap']) {
-    if (remaining <= 0) break;
-    const avail = units[order] * navs[order][S];
-    const draw = Math.min(avail, remaining);
-    units[order] -= draw / navs[order][S];
-    remaining -= draw;
-  }
-  if (remaining > 0) { // only if liquid + large-cap could not cover it
-    const avail = units.midSmall * navs.midSmall[S];
-    const draw = Math.min(avail, remaining);
-    units.midSmall -= draw / navs.midSmall[S]; remaining -= draw;
-  }
-  took = need - Math.max(remaining, 0);
-  resumeMonth = S + 4; // paused 3 months, resume after
-
+  const resumeMonth = cfg.killSIP ? Infinity : S + 1 + cfg.pauseMonths;
   const flows = [];
   for (let m = 0; m <= S; m++) if (m < N) flows.push({ t: m / 12, amount: -sip });
   for (let m = S + 1; m < N; m++) {
-    if (m < resumeMonth) continue;                // paused
+    if (m < resumeMonth) continue;                // paused or cancelled
     for (const key in SLEEVES) units[key] += (sip * SLEEVES[key].weight) / navs[key][m];
     flows.push({ t: m / 12, amount: -sip });
   }
-  const final = valueAt(N);
+  const final = valueAt(N) + idleCash;            // idleCash only for panic
   flows.push({ t: S / 12, amount: need });        // the emergency, paid out
   flows.push({ t: N / 12, amount: final });       // what's left at the horizon
-  return { response, corpusAtEmergency, took, need, final, sipSurvived: true, xirr: xirr(flows) };
+  return {
+    response, corpusAtEmergency, sleeveValues, took, need, final,
+    sipSurvived: !cfg.killSIP, idleCash, xirr: xirr(flows),
+  };
 }
 
 /** The full Scenario-B comparison: YOU (Direct, response of your choice) vs
  *  YOUR FRIEND (Regular, surgical via the RM call). */
 function runEmergency(sip, emergencyId, youResponse, downturn) {
   const em = EMERGENCIES[emergencyId] || EMERGENCIES.icu;
-  const S = 8 * 12; // eight years in
+  const S = CRASH_START_MONTH; // eight years in
+  const hard = downturn || em.crashLinked; // pandemics/wars arrive with a crash
   // Size the emergency off the calm (no-downturn) corpus, rounded to a clean
   // lakh, so the figure is stable whether or not the market is also falling.
   const probe = simEmergency(sip, 0, 'panic', 0, S, false);
   const need = Math.max(100000, Math.round(em.fraction * probe.corpusAtEmergency / 1e5) * 1e5);
 
-  const you = simEmergency(sip, 0, youResponse, need, S, downturn);
-  const friend = simEmergency(sip, FEE_GAP_MONTHLY, 'surgical', need, S, downturn);
+  const you = youResponse ? simEmergency(sip, 0, youResponse, need, S, hard) : null;
+  const friend = simEmergency(sip, FEE_GAP_MONTHLY, 'surgical', need, S, hard);
   // A Direct investor who DOES make the smart call — kept honest, so the
   // lesson is "alone you usually can't," not "the door decides it". (Such an
   // investor even edges ahead of the friend — they also saved the fee.)
-  const directSmart = simEmergency(sip, 0, 'surgical', need, S, downturn);
-  return { mode: 'emergency', em, sip, years: HORIZON_YEARS, S, downturn, need, you, friend, directSmart };
+  const directSmart = simEmergency(sip, 0, 'surgical', need, S, hard);
+  return { mode: 'emergency', em, sip, years: HORIZON_YEARS, S, startYears: S / 12, downturn: hard, need, youResponse, you, friend, directSmart };
 }
 
 /* ---- Node export for the test harness; harmless in the browser. -------- */
@@ -579,12 +602,17 @@ if (typeof module !== 'undefined' && module.exports) {
     buildEventNav, buildTrendNav, xirr, xirrFromSIP,
     simHold, simPause, simSell, peakRegainMonth, runSinglePath,
     genMarketReturns, navFromReturns, simPolicyPath, runMonteCarlo, distribution,
-    EMERGENCIES, SLEEVES, simEmergency, runEmergency, MC_POLICIES,
+    EMERGENCIES, EM_RESPONSES, SLEEVES, simEmergency, runEmergency, MC_POLICIES,
+    CRASH_START_MONTH,
   };
 }
 
 /* =====================================================================
  * 2. THE EXPERIENCE  (browser only)
+ * ---------------------------------------------------------------------
+ * Premium, cinematic, mobile-first. The power lives in stillness and timing.
+ * Crucially, the heavy beats DO NOT auto-advance — the user taps to move on,
+ * so nothing important ever flashes past before it can be read or felt.
  * ===================================================================== */
 if (typeof document !== 'undefined') (function () {
   'use strict';
@@ -603,12 +631,14 @@ if (typeof document !== 'undefined') (function () {
     return inr(v);
   }
   const pct = (r) => (r * 100).toFixed(1) + '%';
+  const yearsWord = (y) => { const r = Math.round(y); return r + (r === 1 ? ' year' : ' years'); };
 
   // ---- DOM helpers. ----
   const $ = (id) => document.getElementById(id);
   const show = (el) => { if (!el) return; el.hidden = false; requestAnimationFrame(() => el.classList.add('show')); };
   const hide = (el) => { if (!el) return; el.classList.remove('show'); el.hidden = true; };
   const setHTML = (id, html) => { const el = $(id); if (el) el.innerHTML = html; };
+  const setText = (id, t) => { const el = $(id); if (el) el.textContent = t; };
   const easeInOut = (p) => p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
   const reduceMotion = typeof matchMedia === 'function'
     && matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -620,20 +650,21 @@ if (typeof document !== 'undefined') (function () {
     pause: '#5b9cf0', sellBack: '#a78bfa', sellWait: '#f06b6b',
   };
   const BEHAVIOURS = {
-    hold:     { label: 'Hold',                       color: COL.direct },
-    pause:    { label: 'Pause the SIP',              color: COL.pause },
-    sellBack: { label: 'Sell, buy back when safe',   color: COL.sellBack },
-    sellWait: { label: 'Sell everything, wait',      color: COL.sellWait },
+    hold:     { label: 'Held',                       color: COL.direct },
+    pause:    { label: 'Paused the SIP',             color: COL.pause },
+    sellBack: { label: 'Sold, bought back',          color: COL.sellBack },
+    sellWait: { label: 'Sold and waited',            color: COL.sellWait },
+  };
+  const EM_LABEL = {
+    panic: 'redeemed everything', surgical: 'took only what you needed',
+    sellLosers: 'sold the fallen fund', sipKill: 'stopped the SIP',
   };
 
   // ---- App state. ----
   const state = {
-    scenario: 'crash',          // 'crash' | 'emergency'
-    sip: 10000,
-    eventId: 'covid',
-    emergencyId: 'icu',
-    downturn: false,
-    sim: null, choice: null,
+    scenario: 'crash', sip: 10000, eventId: 'covid',
+    emergencyId: 'icu', downturn: false,
+    sim: null, choice: null, emResponse: null, emCtx: null, mc: null,
     head: 0, phase: 'idle', phaseStart: null, raf: 0, yMax: 1,
   };
 
@@ -669,7 +700,7 @@ if (typeof document !== 'undefined') (function () {
     return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
   }
   function drawLines(c, w, h, N, yMax, lines, head, pad) {
-    const p = pad || { l: 16, r: 16, t: 24, b: 22 };
+    const p = pad || { l: 18, r: 18, t: 26, b: 24 };
     const X = (m) => p.l + (m / N) * (w - p.l - p.r);
     const Y = (v) => (h - p.b) - (v / yMax) * (h - p.t - p.b);
     c.clearRect(0, 0, w, h);
@@ -694,7 +725,7 @@ if (typeof document !== 'undefined') (function () {
       c.strokeStyle = line.color; c.lineWidth = line.width || 2;
       c.lineJoin = 'round'; c.lineCap = 'round';
       if (line.dash) c.setLineDash(line.dash);
-      if (line.glow) { c.shadowColor = line.color; c.shadowBlur = 12; }
+      if (line.glow) { c.shadowColor = line.color; c.shadowBlur = 14; }
       c.beginPath();
       for (let i = 0; i < pts.length; i++) {
         const [m, v] = pts[i];
@@ -703,33 +734,30 @@ if (typeof document !== 'undefined') (function () {
       c.stroke(); c.restore();
       if (line.dot) {
         const [m, v] = pts[pts.length - 1];
-        c.save(); c.shadowColor = line.color; c.shadowBlur = 16; c.fillStyle = line.color;
-        c.beginPath(); c.arc(X(m), Y(v), 4, 0, Math.PI * 2); c.fill(); c.restore();
+        c.save(); c.shadowColor = line.color; c.shadowBlur = 18; c.fillStyle = line.color;
+        c.beginPath(); c.arc(X(m), Y(v), 5, 0, Math.PI * 2); c.fill(); c.restore();
       }
     }
   }
 
   /* ===================================================================
-   * 2b. SCENARIO A — "The Crash": the climb, the fall, the silence,
-   *     the split (YOU choose / YOUR FRIEND gets the call), divergence.
+   * 2b. SCENARIO A — "The Crash": climb (with a clear year counter),
+   *     the fall, the SILENCE (tap to continue), the SPLIT (you choose /
+   *     her call), sell-as-relief (tap to continue), divergence, result.
    * =================================================================== */
-  const stageCanvas = () => $('stageCanvas');
-
   function renderStage() {
-    const cv = stageCanvas(); if (!cv) return;
+    const cv = $('stageCanvas'); if (!cv) return;
     const { w, h, c } = fitCanvas(cv);
     const sim = state.sim, N = sim.N;
     const pre = state.phase === 'climb' || state.phase === 'crash';
-    // Before the choice we show both doors climbing: Direct just above
-    // Regular, the fee toll widening — shown accruing before anything dramatic.
     let lines, front;
     if (pre) {
       const crashing = state.phase === 'crash';
       const d = sim.direct.hold.value, r = sim.regular.hold.value;
       front = d;
       lines = [
-        { values: r, color: crashing ? hexFill(COL.cool, 0.9) : COL.regular, width: 2, alpha: 0.85 },
-        { values: d, color: crashing ? COL.cool : COL.direct, width: 3, glow: true, dot: true,
+        { values: r, color: crashing ? hexFill(COL.cool, 0.9) : COL.regular, width: 2.4, alpha: 0.85 },
+        { values: d, color: crashing ? COL.cool : COL.direct, width: 3.4, glow: true, dot: true,
           fill: crashing ? hexFill(COL.cool, 0.16) : hexFill(COL.direct, 0.16) },
       ];
     } else {
@@ -737,27 +765,29 @@ if (typeof document !== 'undefined') (function () {
       const calm = sim.direct.hold;
       front = yours.value;
       lines = [
-        { values: calm.value, color: COL.ghost, width: 2, alpha: 0.4, dash: [5, 6] },
-        { values: yours.value, color: BEHAVIOURS[state.choice].color, width: 3, glow: true, dot: true,
+        { values: calm.value, color: COL.ghost, width: 2.2, alpha: 0.4, dash: [5, 6] },
+        { values: yours.value, color: BEHAVIOURS[state.choice].color, width: 3.4, glow: true, dot: true,
           fill: hexFill(BEHAVIOURS[state.choice].color, 0.16) },
       ];
     }
     drawLines(c, w, h, N, state.yMax, lines, state.head);
 
     const corpus = valueAt(front, state.head);
-    $('corpus').textContent = inr(corpus);
-    $('corpusShort').textContent = '≈ ' + inrShort(corpus);
+    setText('corpus', inr(corpus));
+    setText('corpusShort', '≈ ' + inrShort(corpus));
     const months = Math.min(Math.floor(state.head), N);
-    $('yearLabel').textContent = 'Year ' + Math.min(Math.floor(state.head / 12), sim.years) + ' of ' + sim.years;
-    $('invested').textContent = 'Invested ' + inrShort(state.sip * months);
+    setText('yearLabel', 'Year ' + Math.min(Math.floor(state.head / 12), sim.years) + ' of ' + sim.years);
+    setText('invested', 'Invested ' + inrShort(state.sip * months));
   }
 
-  const CLIMB_MS   = reduceMotion ? 200 : 4600;
-  const CRASH_MS   = reduceMotion ? 150 : 2200;
-  const DIVERGE_MS = reduceMotion ? 200 : 5200;
+  // Slower, deliberate timing — there is room to breathe and watch the years
+  // pile up before anything dramatic happens.
+  const CLIMB_MS   = reduceMotion ? 200 : 7000;
+  const CRASH_MS   = reduceMotion ? 150 : 3200;
+  const DIVERGE_MS = reduceMotion ? 200 : 6000;
 
   function tensionCue() {
-    if (!reduceMotion && typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate([18, 60, 28]);
+    if (!reduceMotion && typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate([20, 70, 30]);
   }
 
   function loop(ts) {
@@ -769,7 +799,15 @@ if (typeof document !== 'undefined') (function () {
       const p = Math.min(e / CLIMB_MS, 1);
       state.head = S * easeInOut(p);
       renderStage();
-      if (p >= 1) { state.phase = 'crash'; state.phaseStart = null; $('stage').classList.add('crashing'); tensionCue(); }
+      // A gentle floating badge marks the years passing, so it's unmistakable
+      // how long the money has been growing before the storm.
+      const yr = Math.floor(state.head / 12);
+      const badge = $('climbBadge');
+      if (badge) {
+        if (p < 0.97) { badge.hidden = false; badge.textContent = 'Year ' + yr + ' · all calm'; }
+        else badge.hidden = true;
+      }
+      if (p >= 1) { state.phase = 'crash'; state.phaseStart = null; $('stage').classList.add('crashing'); if (badge) badge.hidden = true; tensionCue(); }
       state.raf = requestAnimationFrame(loop);
     } else if (state.phase === 'crash') {
       const p = Math.min(e / CRASH_MS, 1);
@@ -787,46 +825,37 @@ if (typeof document !== 'undefined') (function () {
   }
 
   function startCrash() {
-    state.sim = runSinglePath(state.sip, state.eventId);
+    state.sim = runSinglePath(state.sip, state.eventId, true); // vary -> unique run
     state.choice = null; state.head = 0; state.phase = 'climb'; state.phaseStart = null;
     state.yMax = state.sim.direct.hold.final * 1.08;
     $('stage').classList.remove('crashing');
     hideAllOverlays();
-    hide($('setup'));
+    hide($('setup')); hide($('emergency'));
     show($('stage'));
     cancelAnimationFrame(state.raf);
     state.raf = requestAnimationFrame(loop);
   }
 
-  // The silence beat: total stillness on YOUR side, the red number the only
-  // thing trembling. Held one beat longer than is comfortable, then the split.
+  // The silence beat — now a card that STAYS until the user is ready. Big type,
+  // the years invested, the rupees gone, and a single button to continue.
   function enterSilence() {
     const sim = state.sim;
-    const depthEl = $('silDepth');
-    if (depthEl) depthEl.textContent = Math.round(sim.ev.depth * 100);
+    setText('silDepth', Math.round(sim.ev.depth * 100));
+    setText('silYears', 'You invested for ' + yearsWord(sim.startYears) + ' — ' + inrShort(state.sip * sim.S) + ' of your own money — before this.');
     const peak = sim.direct.hold.value[sim.S];
     const bottom = sim.direct.hold.value[sim.navDirect._bottom];
     setHTML('silenceLoss',
       'Your <b>' + inrShort(peak) + '</b> is now <b>' + inrShort(bottom) + '</b>'
-      + '<span class="sil-sub">' + inrShort(peak - bottom) + ' gone. And your side has gone silent.</span>');
+      + '<span class="sil-sub">' + inrShort(peak - bottom) + ' gone, on paper, in ' + sim.ev.name + '.</span>');
     show($('silence'));
-    const wait = reduceMotion ? 250 : 3200;
-    setTimeout(openSplit, wait);
   }
 
   function openSplit() {
     hide($('silence'));
-    const sim = state.sim;
-    // FRIEND (Regular) holds, talked through it by the RM. Render her steady
-    // line in the split panel.
     renderFriendPanel();
     show($('split'));
-    if (!reduceMotion) {
-      // Calm physically washes into her side after the call lands.
-      setTimeout(() => { const s = $('split'); if (s) s.classList.add('called'); }, 900);
-    } else {
-      const s = $('split'); if (s) s.classList.add('called');
-    }
+    const wash = () => { const s = $('split'); if (s) s.classList.add('called'); };
+    if (reduceMotion) wash(); else setTimeout(wash, 1100);
   }
 
   function renderFriendPanel() {
@@ -835,7 +864,7 @@ if (typeof document !== 'undefined') (function () {
     const { w, h, c } = fitCanvas(cv);
     const r = sim.regular.hold.value;
     drawLines(c, w, h, N, state.yMax, [
-      { values: r, color: COL.regular, width: 2.6, glow: true, dot: true, fill: hexFill(COL.regular, 0.14) },
+      { values: r, color: COL.regular, width: 2.8, glow: true, dot: true, fill: hexFill(COL.regular, 0.14) },
     ], sim.navRegular._healed, { l: 10, r: 10, t: 14, b: 14 });
   }
 
@@ -844,42 +873,36 @@ if (typeof document !== 'undefined') (function () {
     const s = $('split'); if (s) s.classList.remove('called');
     hide($('split'));
     $('stage').classList.remove('crashing');
-    // Sell-as-relief: if they sold, let calm flood in for one beat before cost.
-    if ((choice === 'sellBack' || choice === 'sellWait') && !reduceMotion) {
-      show($('relief'));
-      setTimeout(() => { hide($('relief')); beginDiverge(); }, 1500);
-    } else {
-      beginDiverge();
-    }
+    // Sell-as-relief: the seductive calm, then a tap to face the cost.
+    if (choice === 'sellBack' || choice === 'sellWait') show($('relief'));
+    else beginDiverge();
   }
   function beginDiverge() {
+    hide($('relief'));
     show($('stage'));
     state.phase = 'diverge'; state.phaseStart = null;
+    cancelAnimationFrame(state.raf);
     state.raf = requestAnimationFrame(loop);
   }
 
-  /* ===================================================================
-   * 2c. RESULT — YOU vs YOUR FRIEND. Two corpora, two XIRRs, fee saved
-   *     vs behaviour cost, and the verdict caption (Section 11).
-   * =================================================================== */
+  /* ---- RESULT — YOU vs YOUR FRIEND. ---- */
   function openResult() {
     const sim = state.sim;
     const yours = sim.direct[state.choice];
-    const friend = sim.regular.hold;        // she held, talked through by the RM
-    const calmDirect = sim.direct.hold;     // what staying calm alone would have done
+    const friend = sim.regular.hold;
+    const calmDirect = sim.direct.hold;
 
-    setHTML('resTitle', state.scenario === 'crash' ? 'YOU vs YOUR FRIEND' : 'YOU vs YOUR FRIEND');
-    $('youLabel').textContent = 'YOU · Direct · ' + BEHAVIOURS[state.choice].label;
-    $('friendLabelR').textContent = 'YOUR FRIEND · Regular · Held (the RM call)';
+    setText('youLabel', 'YOU · Direct · ' + BEHAVIOURS[state.choice].label);
+    setText('friendLabelR', 'YOUR FRIEND · Regular · Held (the RM call)');
     $('youFinal').style.color = BEHAVIOURS[state.choice].color;
 
-    countUp($('youFinal'), yours.final, 1400, inr);
-    countUp($('friendFinal'), friend.final, 1400, inr);
-    $('youShort').textContent = '≈ ' + inrShort(yours.final) + '  ·  XIRR ' + pct(yours.xirr);
-    $('friendShort').textContent = '≈ ' + inrShort(friend.final) + '  ·  XIRR ' + pct(friend.xirr);
+    countUp($('youFinal'), yours.final, 1500, inr);
+    countUp($('friendFinal'), friend.final, 1500, inr);
+    setText('youShort', '≈ ' + inrShort(yours.final) + '  ·  XIRR ' + pct(yours.xirr));
+    setText('friendShort', '≈ ' + inrShort(friend.final) + '  ·  XIRR ' + pct(friend.xirr));
 
-    const feeSaved = sim.feeSavingRupees;          // Direct's structural fee edge
-    const behaviourCost = calmDirect.final - yours.final; // gap to the calm path
+    const feeSaved = sim.feeSavingRupees;
+    const behaviourCost = calmDirect.final - yours.final;
     setHTML('ledger',
       '<div class="led"><span>Direct saved you (the fee, compounded)</span><b class="good">' + inr(feeSaved) + '</b></div>'
       + '<div class="led"><span>Your decision in the crash cost you</span><b class="bad">' + inr(behaviourCost) + '</b></div>');
@@ -888,8 +911,6 @@ if (typeof document !== 'undefined') (function () {
     show($('result'));
   }
 
-  // Verdict captions resonant with the book chapter (Section 11). Every cost
-  // is computed live, never typed in.
   function verdictFor(choice, yours, friendFinal, sim) {
     const youHeld = choice === 'hold';
     const youAhead = yours >= friendFinal;
@@ -905,12 +926,9 @@ if (typeof document !== 'undefined') (function () {
         + 'She isn\'t smarter than you. She just wasn\'t alone.</span>';
     }
     if (!youHeld && youAhead) {
-      // Honest: even after panicking you can still edge her — the fee is real.
       return 'You blinked — and still edged ahead, because the fee gap is small and this storm was shallow.'
         + '<span class="verdict-sub">It won\'t always go this way. The deeper the fall, the more the one phone call is worth.</span>';
     }
-    // You held, she "held" but you finished behind — only possible via the fee
-    // when behaviour is identical: the door, doing exactly its small job.
     return 'Two calm investors. The only gap left was the fee.'
       + '<span class="verdict-sub">When nobody panics, the door is all that\'s left to decide it — and it decides it by a little.</span>';
   }
@@ -927,13 +945,9 @@ if (typeof document !== 'undefined') (function () {
   }
 
   /* ===================================================================
-   * 2d. "See every outcome" — the 4x4 grid (your choice x her choice),
-   *     so Direct-above, equal and below Regular are all visible at once,
-   *     plus the half/half hedge.
+   * 2c. "See every outcome" — the 4x4 grid + the half/half hedge.
    * =================================================================== */
   function openGrid() {
-    // The grid is always a single chosen storm. If we arrived here from the
-    // emergency scenario, state.sim won't be a single-path sim — build one.
     const sim = (state.sim && state.sim.mode === 'single')
       ? state.sim : runSinglePath(state.sip, state.eventId);
     const keys = ['hold', 'pause', 'sellBack', 'sellWait'];
@@ -951,8 +965,6 @@ if (typeof document !== 'undefined') (function () {
       html += '</tr>';
     }
     html += '</tbody></table>';
-
-    // The hedge: half Regular, half Direct, both holding — it lands in between.
     const halfHold = (sim.direct.hold.final + sim.regular.hold.final) / 2;
     html += '<p class="grid-note"><b>Green</b> = YOU (Direct) finish ahead · '
       + '<b>red</b> = your friend (Regular) finishes ahead · grey = a tie. '
@@ -964,24 +976,18 @@ if (typeof document !== 'undefined') (function () {
   }
 
   /* ===================================================================
-   * 2e. "10,000 lifetimes" — the Monte Carlo fan chart + plain-language
-   *     odds (never raw percentiles).
+   * 2d. "10,000 lifetimes" — Monte Carlo fan chart + plain odds.
    * =================================================================== */
-  function openMonte() {
-    show($('monte'));
-    runAndDrawMonte();
-  }
+  function openMonte() { show($('monte')); runAndDrawMonte(); }
   function runAndDrawMonte() {
     const youPolicy = $('youPolicy').value;
     const friendPolicy = $('friendPolicy').value;
     const nPaths = Number($('mcPaths').value) || 2000;
     setHTML('mcOdds', '<p class="mc-running">Simulating ' + nPaths.toLocaleString('en-IN') + ' futures…</p>');
-    // Defer so the "running" text paints before the (blocking) compute.
     setTimeout(() => {
       const mc = runMonteCarlo(state.sip, youPolicy, friendPolicy, nPaths, 20262026);
       state.mc = mc;
       drawFan(mc);
-      // Plain odds, scaled to a round "out of 10,000" the way the brief asks.
       const per10k = (n) => Math.round(n / mc.nPaths * 10000).toLocaleString('en-IN');
       const youName = mc.youPolicy.id === 'hold' ? 'calm Direct investor' : 'Direct investor who sells in the fall';
       const frName = mc.friendPolicy.id === 'hold' ? 'guided Regular investor (holds)' : 'Regular investor who sells in the fall';
@@ -1002,7 +1008,7 @@ if (typeof document !== 'undefined') (function () {
     const cv = $('fanCanvas'); if (!cv) return;
     const { w, h, c } = fitCanvas(cv);
     const yMax = Math.max(mc.you.p95, mc.friend.p95) * 1.05;
-    const p = { l: 12, r: 12, t: 16, b: 16 };
+    const p = { l: 12, r: 12, t: 16, b: 18 };
     const Y = (v) => (h - p.b) - (v / yMax) * (h - p.t - p.b);
     c.clearRect(0, 0, w, h);
     const band = (dist, color, x0, x1) => {
@@ -1010,73 +1016,146 @@ if (typeof document !== 'undefined') (function () {
       c.fillRect(x0, Y(dist.p95), x1 - x0, Y(dist.p05) - Y(dist.p95));
       c.fillStyle = hexFill(color, 0.30);
       c.fillRect(x0, Y(dist.p75), x1 - x0, Y(dist.p25) - Y(dist.p75));
-      c.strokeStyle = color; c.lineWidth = 2.4;
+      c.strokeStyle = color; c.lineWidth = 2.6;
       c.beginPath(); c.moveTo(x0, Y(dist.p50)); c.lineTo(x1, Y(dist.p50)); c.stroke();
     };
     const mid = w / 2;
     band(mc.you, COL.direct, p.l, mid - 6);
     band(mc.friend, COL.regular, mid + 6, w - p.r);
-    c.fillStyle = '#8a97a8'; c.font = '11px -apple-system, sans-serif'; c.textAlign = 'center';
-    c.fillText('YOU (Direct)', (p.l + mid) / 2, h - 3);
-    c.fillText('FRIEND (Regular)', (mid + w - p.r) / 2, h - 3);
+    c.fillStyle = '#9aa6b6'; c.font = '12px -apple-system, sans-serif'; c.textAlign = 'center';
+    c.fillText('YOU (Direct)', (p.l + mid) / 2, h - 4);
+    c.fillText('FRIEND (Regular)', (mid + w - p.r) / 2, h - 4);
   }
 
   /* ===================================================================
-   * 2f. SCENARIO B — "The money, now." (the emergency)
+   * 2e. SCENARIO B — "The money, now." — staged, interactive, gated.
+   *     emIntro -> emStrike -> emDecision (YOU choose) -> emCall -> result.
    * =================================================================== */
   function startEmergency() {
-    state.sim = runEmergency(state.sip, state.emergencyId, 'panic', state.downturn);
-    renderEmergency();
+    // Build context (corpus + sleeves + need) without committing a response.
+    const ctx = runEmergency(state.sip, state.emergencyId, null, state.downturn);
+    state.emCtx = ctx;
+    state.emResponse = null;
     hideAllOverlays();
     hide($('setup')); hide($('stage'));
+
+    setText('emIntroSip', state.sip.toLocaleString('en-IN'));
+    setText('emIntroCorpus', inr(ctx.directSmart.corpusAtEmergency));
+    const sv = ctx.directSmart.sleeveValues;
+    setHTML('emIntroSleeves',
+      sleeveRow('Liquid fund', sv.liquid, 'steady, safe — your buffer')
+      + sleeveRow('Large-cap', sv.largeCap, 'the core of your wealth')
+      + sleeveRow('Mid / small-cap', sv.midSmall, ctx.downturn ? 'highest growth — and right now, deepest in the red' : 'highest growth, highest swings'));
+    show($('emIntro'));
+  }
+  function sleeveRow(name, val, note) {
+    return '<div class="sleeve"><span class="sl-name">' + name + '</span>'
+      + '<span class="sl-val">' + inrShort(val) + '</span>'
+      + '<span class="sl-note">' + note + '</span></div>';
+  }
+
+  function emToStrike() {
+    hide($('emIntro'));
+    const ctx = state.emCtx, em = ctx.em, need = ctx.need;
+    const copy = {
+      icu: { tag: 'THE ICU', title: 'Your mother is in the ICU.', line: 'The hospital won\'t start until the deposit clears.',
+             pressure: 'Your phone is at 11%. A relative keeps calling. The number on the form doesn\'t care what the market is doing today.' },
+      business: { tag: 'BUSINESS LOSS', title: 'The business just took a hit.', line: 'A deal collapsed; suppliers must be paid this week or it all unwinds.',
+             pressure: 'There is no salary slip to fall back on. The money has to come from somewhere, and the only "somewhere" is the corpus you swore you\'d never touch.' },
+      pandemic: { tag: 'PANDEMIC', title: 'A pandemic hits. COVID.', line: 'Work has stopped, a hospital bill is due, and the market is in free-fall at the same time.',
+             pressure: 'Everything is red at once — your health, your income, your screen. Job losses cluster with crashes; hospitals don\'t wait for green markets.' },
+      war: { tag: 'WAR', title: 'War breaks out.', line: 'Iran–USA, India–Pakistan — and overnight you need cash for family, safety, the unknown.',
+             pressure: 'The headlines scream. Markets gap down. You have to raise money in the exact week selling hurts the most.' },
+    };
+    const cp = copy[em.id] || copy.icu;
+    setText('emStrikeTag', cp.tag);
+    setText('emStrikeTitle', cp.title);
+    setText('emStrikeLine', cp.line);
+    setText('emStrikeNeed', inrShort(need));
+    setText('emStrikePressure', cp.pressure);
+    show($('emStrike'));
+  }
+
+  function emToDecision() { hide($('emStrike')); show($('emDecision')); }
+
+  function emChoose(response) {
+    state.emResponse = response;
+    hide($('emDecision'));
+    setHTML('emCallNeed', inrShort(state.emCtx.need));
+    show($('emCall'));
+  }
+
+  function emToResult() {
+    hide($('emCall'));
+    const sim = runEmergency(state.sip, state.emergencyId, state.emResponse, state.downturn);
+    state.sim = sim;
+    renderEmergencyResult(sim);
     show($('emergency'));
   }
-  function renderEmergency() {
-    const sim = state.sim, em = sim.em, need = sim.need;
-    setHTML('emTitle', em.name);
-    const lines = {
-      icu: 'The hospital needs <b>' + inrShort(need) + '</b> by morning.',
-      layoff: 'Rent, EMIs, two kids — you need <b>' + inrShort(need) + '</b> to survive six months of nothing.',
-      home: "It can't wait — you need <b>" + inrShort(need) + '</b>, now.',
-    };
-    setHTML('emLine', (lines[em.id] || lines.icu) + (sim.downturn ? ' <span class="em-hard">And the market is falling.</span>' : ''));
 
-    // YOU (Direct, panic) — redeem everything, the SIP dies.
-    const you = sim.you, friend = sim.friend, smart = sim.directSmart;
+  function renderEmergencyResult(sim) {
+    const em = sim.em, need = sim.need, you = sim.you, friend = sim.friend, smart = sim.directSmart;
+    setText('emTitle', em.name);
+    setHTML('emLine', 'You needed <b>' + inrShort(need) + '</b>. You <b>' + EM_LABEL[sim.youResponse] + '</b>.'
+      + (sim.downturn ? ' <span class="em-hard">And the market was falling.</span>' : ''));
+
     setHTML('emYou',
-      '<p class="em-side-cap">YOU · Direct · alone, clock running</p>'
-      + '<p class="em-act">You redeem <b>everything</b> — ' + inrShort(you.took) + ', far more than the '
-      + inrShort(you.need) + ' you needed. The SIP you ran for eight years dies in one tap. No one told you there was a better way.</p>'
+      '<p class="em-side-cap">YOU · Direct · alone</p>'
+      + '<p class="em-act">' + youActionCopy(sim) + '</p>'
       + '<div class="em-num"><span>Worth at the horizon</span><b class="bad">' + inrShort(you.final) + '</b></div>'
-      + '<div class="em-num small"><span>XIRR · SIP</span><b>' + pct(you.xirr) + ' · ' + (you.sipSurvived ? 'survived' : 'cancelled') + '</b></div>');
+      + '<div class="em-num small"><span>XIRR · SIP</span><b>' + pct(you.xirr) + ' · ' + (you.sipSurvived ? 'kept' : 'cancelled') + '</b></div>');
 
     setHTML('emFriend',
-      '<p class="em-side-cap">YOUR FRIEND · Regular · she makes the call</p>'
-      + '<p class="em-act">"Saans le. We take exactly ' + inrShort(friend.need) + ', not a rupee more — liquid first, then a little large-cap. '
-      + 'Leave the mid-cap, it\'s down. Pause the SIP three months, don\'t cancel it. The rest stays invested."</p>'
+      '<p class="em-side-cap">YOUR FRIEND · Regular · she called</p>'
+      + '<p class="em-act">She took exactly ' + inrShort(friend.need) + ' — liquid first, then a little large-cap, left the mid-cap alone, paused the SIP three months. The rest stayed invested and kept compounding.</p>'
       + '<div class="em-num"><span>Worth at the horizon</span><b class="good">' + inrShort(friend.final) + '</b></div>'
-      + '<div class="em-num small"><span>XIRR · SIP</span><b>' + pct(friend.xirr) + ' · paused, then resumed</b></div>');
+      + '<div class="em-num small"><span>XIRR · SIP</span><b>' + pct(friend.xirr) + ' · paused, resumed</b></div>');
 
     const gap = friend.final - you.final;
-    setHTML('emVerdict',
-      'Same emergency, same ' + inrShort(need) + '. She took only the emergency. You took the emergency <b>and your future with it</b> — a gap of <b>' + inr(gap) + '</b> by year 20.'
-      + '<span class="verdict-sub">It was never that she was calmer. On the worst day, there was a number she could call — and you had only yourself, '
-      + 'making the biggest financial decision of your life at the worst possible moment to make it.</span>');
+    setHTML('emVerdict', emVerdictCopy(sim, gap));
 
-    // Kept honest: a Direct investor who DOES make the smart call would
-    // actually finish a touch AHEAD of the friend — they saved the fee too.
-    // So the door was never the point; making the call under stress was.
     setHTML('emHonest',
       'And if you, Direct, had made the same surgical call alone? You\'d have <b>' + inrShort(smart.final) + '</b> — even a hair '
       + (smart.final >= friend.final ? 'ahead of' : 'behind') + ' her, because you\'d have saved the fee too. '
-      + 'The door was never the point. The solo investor under stress usually can\'t make that call — <i>that</i> is what her fee bought.');
+      + 'The door was never the point. The hard part is making that call alone, under pressure — and that is what her fee bought.');
+  }
+
+  function youActionCopy(sim) {
+    const need = sim.need;
+    switch (sim.youResponse) {
+      case 'panic':
+        return 'You redeemed <b>everything</b> — ' + inrShort(sim.you.took) + ', far more than the ' + inrShort(need)
+          + ' you needed. The SIP you ran for eight years died in one tap. The extra cash now sits idle, earning nothing.';
+      case 'surgical':
+        return 'You did the hard thing almost no one does alone: took <b>exactly ' + inrShort(need)
+          + '</b> from the safe money, left the rest invested, paused the SIP briefly. Steady hands.';
+      case 'sellLosers':
+        return 'You sold the fund that had fallen to raise ' + inrShort(need) + ' — '
+          + (sim.downturn ? '<b>locking the loss for good</b> instead of letting it recover. ' : 'forfeiting its higher long-run growth. ')
+          + 'The SIP kept running, at least.';
+      case 'sipKill':
+        return 'You raised ' + inrShort(need) + ' carefully — but <b>cancelled the SIP</b>, sure you couldn\'t keep investing. '
+          + 'Twelve more years of contributions, and their compounding, gone.';
+      default: return '';
+    }
+  }
+  function emVerdictCopy(sim, gap) {
+    if (sim.youResponse === 'surgical') {
+      return 'You made the call most people can\'t make alone — and it barely cost you your future.'
+        + '<span class="verdict-sub">A gap of just <b>' + inr(Math.abs(gap)) + '</b> between you and the guided plan. '
+        + 'The lesson isn\'t the door — it\'s that under real pressure, almost no one does what you just did.</span>';
+    }
+    return 'Same emergency, same ' + inrShort(sim.need) + '. She took only the emergency. You took the emergency <b>and your future with it</b> — a gap of <b>' + inr(gap) + '</b> by year 20.'
+      + '<span class="verdict-sub">It was never that she was calmer. On the worst day, there was a number she could call — and you had only yourself, '
+      + 'making the biggest financial decision of your life at the worst possible moment to make it.</span>';
   }
 
   /* ===================================================================
-   * 2g. Wiring.
+   * 2f. Wiring.
    * =================================================================== */
   function hideAllOverlays() {
-    ['silence', 'split', 'relief', 'result', 'grid', 'monte', 'emergency'].forEach((id) => hide($(id)));
+    ['silence', 'split', 'relief', 'result', 'grid', 'monte',
+     'emIntro', 'emStrike', 'emDecision', 'emCall', 'emergency'].forEach((id) => hide($(id)));
   }
   function on(id, type, fn) { const el = $(id); if (el) el.addEventListener(type, fn); }
   function wireChips(containerId, key, parse) {
@@ -1090,19 +1169,15 @@ if (typeof document !== 'undefined') (function () {
   }
   function reflectScenario() {
     const crash = state.scenario === 'crash';
-    const a = $('crashInputs'), b = $('emergencyInputs');
-    if (a) a.hidden = !crash;
-    if (b) b.hidden = crash;
-    $('startBtn').textContent = crash ? 'Live the crash' : 'Face the emergency';
+    if ($('crashInputs')) $('crashInputs').hidden = !crash;
+    if ($('emergencyInputs')) $('emergencyInputs').hidden = crash;
+    setText('startBtn', crash ? 'Live the crash' : 'Live the emergency');
   }
-
-  function start() {
-    if (state.scenario === 'crash') startCrash(); else startEmergency();
-  }
+  function start() { if (state.scenario === 'crash') startCrash(); else startEmergency(); }
   function backToSetup() {
     cancelAnimationFrame(state.raf);
     hideAllOverlays();
-    hide($('stage'));
+    hide($('stage')); hide($('emergency'));
     show($('setup'));
   }
 
@@ -1114,25 +1189,35 @@ if (typeof document !== 'undefined') (function () {
     wireChips('emergencyChips', 'emergencyId', null);
     on('downturnToggle', 'change', (e) => { state.downturn = e.target.checked; });
 
-    // Result actions.
+    // Crash beats (tap to continue — nothing flashes past).
+    on('silenceContinue', 'click', openSplit);
+    on('reliefContinue', 'click', beginDiverge);
+    on('youChoices', 'click', (ev) => {
+      const btn = ev.target.closest('button[data-choice]');
+      if (btn) choose(btn.dataset.choice);
+    });
+
+    // Crash result actions.
     on('replayBtn', 'click', () => { if (state.scenario === 'crash') startCrash(); else startEmergency(); });
     on('gridBtn', 'click', openGrid);
     on('monteBtn', 'click', openMonte);
     on('changeBtn', 'click', backToSetup);
     on('gridClose', 'click', () => hide($('grid')));
     on('monteClose', 'click', () => hide($('monte')));
+    on('runMcBtn', 'click', runAndDrawMonte);
+
+    // Emergency staged flow.
+    on('emIntroBtn', 'click', emToStrike);
+    on('emStrikeBtn', 'click', emToDecision);
+    on('emChoices', 'click', (ev) => {
+      const btn = ev.target.closest('button[data-choice]');
+      if (btn) emChoose(btn.dataset.choice);
+    });
+    on('emCallBtn', 'click', emToResult);
     on('emReplay', 'click', startEmergency);
     on('emGridBtn', 'click', openGrid);
     on('emMonteBtn', 'click', openMonte);
     on('emChangeBtn', 'click', backToSetup);
-
-    on('runMcBtn', 'click', runAndDrawMonte);
-
-    // The four choices in the split.
-    on('youChoices', 'click', (ev) => {
-      const btn = ev.target.closest('button[data-choice]');
-      if (btn) choose(btn.dataset.choice);
-    });
 
     window.addEventListener('resize', () => {
       if (!state.sim) return;

@@ -10,7 +10,7 @@
 <meta property="og:description" content="The only real variable is who is beside you when it falls." />
 <meta property="og:type" content="website" />
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚪</text></svg>" />
-<link rel="stylesheet" href="styles.css?v=20260613d" />
+<link rel="stylesheet" href="styles.css?v=20260613e" />
 </head>
 <body>
 <div id="app">
@@ -45,20 +45,21 @@
           <button class="chip on" data-val="covid">COVID-19, 2020</button>
           <button class="chip" data-val="gfc">2008 crisis</button>
           <button class="chip" data-val="corr2022">2022 correction</button>
-          <button class="chip" data-val="now">2025–26, now</button>
+          <button class="chip" data-val="iranUsa">Iran–USA War</button>
         </div>
       </div>
 
       <div id="emergencyInputs" class="chip-group" hidden>
-        <p class="chip-label">The emergency</p>
+        <p class="chip-label">What life throws at you</p>
         <div class="chip-row wrap" id="emergencyChips">
-          <button class="chip on" data-val="icu">Mother in the ICU</button>
-          <button class="chip" data-val="layoff">The layoff</button>
-          <button class="chip" data-val="home">Family, back home</button>
+          <button class="chip on" data-val="icu">Hospitalisation / ICU</button>
+          <button class="chip" data-val="business">Business loss</button>
+          <button class="chip" data-val="pandemic">Pandemic — COVID</button>
+          <button class="chip" data-val="war">War</button>
         </div>
         <label class="toggle">
           <input type="checkbox" id="downturnToggle" />
-          <span>Hardest mode — the emergency lands during a market fall</span>
+          <span>Hardest mode — the emergency lands during a market fall<br /><i>(a pandemic or war forces this on anyway)</i></span>
         </label>
       </div>
 
@@ -83,15 +84,19 @@
     </div>
     <div class="canvas-wrap">
       <canvas id="stageCanvas" role="img" aria-label="Two wealth lines over time"></canvas>
+      <div id="climbBadge" class="climb-badge" hidden></div>
     </div>
   </section>
 
-  <!-- ===================== THE SILENCE ===================== -->
+  <!-- ===================== THE SILENCE (tap to continue) ===================== -->
   <div id="silence" class="overlay silence" hidden>
     <div class="sil-inner">
+      <p class="sil-tag">The market just cracked.</p>
       <p class="sil-pct">−<span id="silDepth">38</span>%</p>
+      <p class="sil-years" id="silYears"></p>
       <p class="sil-loss" id="silenceLoss"></p>
-      <p class="sil-quiet">No buzz. No call. No voice. Just you, a red number that won't stop, and a silence so complete you can hear the room. That was the deal. You went alone to save the fee.</p>
+      <p class="sil-quiet">No buzz. No call. No voice. Just you, a red number that won't stop, and a silence so complete you can hear the room. That was the deal — you went alone to save the fee.</p>
+      <button id="silenceContinue" class="cta crash-cta">Sit in it… then face the choice →</button>
     </div>
   </div>
 
@@ -100,10 +105,10 @@
     <div class="split-grid">
       <div class="split-pane you-pane">
         <p class="pane-cap">YOU — Direct. Alone.</p>
-        <p class="pane-sub">The choices wait in the dark. No one will pick for you.</p>
+        <p class="pane-sub">The choices wait in the dark. No one will pick for you. Take your time — there's no clock here, only the fear.</p>
         <div class="choices" id="youChoices">
           <button data-choice="hold"><b>Hold</b><span>keep buying into the fear</span></button>
-          <button data-choice="pause"><b>Pause</b><span>stop, just till it's over</span></button>
+          <button data-choice="pause"><b>Pause the SIP</b><span>stop, just till it's over</span></button>
           <button data-choice="sellBack"><b>Sell</b><span>buy back when it's safe</span></button>
           <button data-choice="sellWait"><b>Sell everything</b><span>make the bleeding stop</span></button>
         </div>
@@ -117,11 +122,13 @@
     </div>
   </div>
 
-  <!-- ===================== SELL-AS-RELIEF ===================== -->
+  <!-- ===================== SELL-AS-RELIEF (tap to continue) ===================== -->
   <div id="relief" class="overlay relief" hidden>
     <div class="relief-inner">
       <p class="relief-word">The falling stops.</p>
-      <p class="relief-sub">Your shoulders drop. For one perfect moment, it feels like the smartest thing you've ever done.</p>
+      <p class="relief-sub">The red freezes. Your shoulders drop. For one perfect moment, it feels like the smartest thing you've ever done.</p>
+      <p class="relief-warn">But the market doesn't know you sold. And it isn't done.</p>
+      <button id="reliefContinue" class="cta crash-cta">See where this leaves you →</button>
     </div>
   </div>
 
@@ -200,10 +207,61 @@
     </div>
   </div>
 
-  <!-- ===================== EMERGENCY (Scenario B) ===================== -->
+  <!-- ===================== EMERGENCY — interactive, staged ===================== -->
+
+  <!-- B1: you've built something -->
+  <div id="emIntro" class="overlay em-stage" hidden>
+    <div class="card em-card">
+      <p class="kicker">Eight years in.</p>
+      <h2 class="em-head">You built this, quietly, month after month.</h2>
+      <p class="em-body">₹<span id="emIntroSip"></span> every month, for eight years, never missed. You never planned to touch it. Today it's worth:</p>
+      <p class="em-corpus" id="emIntroCorpus">₹0</p>
+      <div class="em-sleeves" id="emIntroSleeves"></div>
+      <button id="emIntroBtn" class="cta">Then the phone rings →</button>
+    </div>
+  </div>
+
+  <!-- B2: the emergency strikes -->
+  <div id="emStrike" class="overlay em-stage strike" hidden>
+    <div class="card em-card">
+      <p class="strike-tag" id="emStrikeTag">EMERGENCY</p>
+      <h2 class="em-head" id="emStrikeTitle"></h2>
+      <p class="em-strike-line" id="emStrikeLine"></p>
+      <p class="em-need-cap">The cash you need, now:</p>
+      <p class="em-need" id="emStrikeNeed">₹0</p>
+      <p class="em-body" id="emStrikePressure"></p>
+      <button id="emStrikeBtn" class="cta crash-cta">What do you do? →</button>
+    </div>
+  </div>
+
+  <!-- B3: YOUR decision, alone -->
+  <div id="emDecision" class="overlay em-stage" hidden>
+    <div class="card em-card">
+      <p class="pane-cap you-cap">YOU — Direct. Alone. The clock running.</p>
+      <p class="em-body">Your funds are right there in the app. No one to ask which to sell, or how much is "enough." Fear has one instruction: be safe. <b>What do you tap?</b></p>
+      <div class="choices em-choices" id="emChoices">
+        <button data-choice="panic"><b>Redeem everything</b><span>take it all out, just be safe</span></button>
+        <button data-choice="surgical"><b>Take only what you need</b><span>from the safe money first, leave the rest</span></button>
+        <button data-choice="sellLosers"><b>Sell the fund that's fallen</b><span>cut the loss, raise the cash there</span></button>
+        <button data-choice="sipKill"><b>Stop the SIP, sell a little</b><span>you can't afford to keep investing now</span></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- B4: her call -->
+  <div id="emCall" class="overlay em-stage" hidden>
+    <div class="card em-card friend-card">
+      <p class="pane-cap friend-cap">YOUR FRIEND — Regular. The call she can make.</p>
+      <p class="em-quote">"Saans le. You need <b id="emCallNeed">₹0</b> — we take exactly that, not a rupee more. From your liquid fund first, then a little large-cap. Leave the mid-cap — it's down, selling now turns a dip into a real loss. Pause the SIP three months, don't cancel it. The rest stays invested. This emergency is not going to cost you your future."</p>
+      <p class="em-body">She redeems what she needs. The rest keeps working. You had only yourself.</p>
+      <button id="emCallBtn" class="cta">See where it leaves you both →</button>
+    </div>
+  </div>
+
+  <!-- B5: the consequence -->
   <section id="emergency" class="screen emergency" hidden>
     <div class="em-scroll">
-      <p class="kicker">The money, now.</p>
+      <p class="kicker">Twenty years. Same emergency.</p>
       <h2 class="em-title" id="emTitle"></h2>
       <p class="em-line" id="emLine"></p>
       <div class="em-split">
@@ -214,7 +272,7 @@
       <p class="em-honest" id="emHonest"></p>
       <p class="disclaimer">Portfolio: liquid + large-cap + mid/small-cap, eight years of SIP. Every rupee computed live. Illustration, not advice.</p>
       <div class="result-actions">
-        <button id="emReplay" class="cta">See it again</button>
+        <button id="emReplay" class="cta">Face it again — choose differently</button>
         <button id="emGridBtn" class="ghost-btn">See every outcome (crash)</button>
         <button id="emMonteBtn" class="ghost-btn">10,000 lifetimes</button>
         <button id="emChangeBtn" class="ghost-btn">Change inputs</button>
@@ -226,6 +284,6 @@
 
 <footer class="global-foot">Educational tool — not investment advice.</footer>
 
-<script src="app.js?v=20260613d"></script>
+<script src="app.js?v=20260613e"></script>
 </body>
 </html>
