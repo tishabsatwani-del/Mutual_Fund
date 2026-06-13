@@ -459,38 +459,178 @@ if (typeof document !== 'undefined') (function () {
       + '. The market recovered without me. Could you have held your nerve?\n\nLive it: ' + url;
   }
 
-  async function shareResult() {
-    const text = shareText();
-    if (!text) return;
-    const btn = $('shareBtn');
-    // Native share sheet (mobile) — the smoothest "send to a friend".
-    if (navigator.share) {
-      try { await navigator.share({ title: 'Live It', text }); return; }
-      catch (e) { if (e && e.name === 'AbortError') return; }  // user dismissed — do nothing
+  /* ---- The shareable image card. A line of text gets skimmed; an image gets
+   * forwarded. We bake the verdict, both numbers, the divergence chart and the
+   * caveat into one 4:5 PNG (drawn entirely from the live sim) and hand it to
+   * the native share sheet — with a download-and-copy fallback on desktop. ---- */
+
+  const CARD_SANS = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+  const CARD_MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
+
+  // Letter-spaced caps (canvas has no letter-spacing); returns the end x.
+  function trackedText(c, text, x, y, tracking) {
+    let cx = x;
+    for (const ch of text) { c.fillText(ch, cx, y); cx += c.measureText(ch).width + tracking; }
+    return cx;
+  }
+  // Word-wrap within maxW; returns the y just below the last line drawn.
+  function wrapText(c, text, x, y, maxW, lh) {
+    let line = '';
+    for (const word of text.split(' ')) {
+      const test = line ? line + ' ' + word : word;
+      if (line && c.measureText(test).width > maxW) { c.fillText(line, x, y); line = word; y += lh; }
+      else line = test;
     }
-    // Fallback: copy to clipboard and confirm in place.
-    try {
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(text);
-      } else {
-        const ta = document.createElement('textarea');
-        ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
-        document.body.appendChild(ta); ta.select();
-        document.execCommand('copy'); document.body.removeChild(ta);
-      }
-      if (btn) { btn.classList.add('copied'); btn.textContent = 'Copied — now paste it to a friend'; }
-    } catch (e) {
-      if (btn) btn.textContent = 'Press and hold to copy';
-    }
+    if (line) { c.fillText(line, x, y); y += lh; }
+    return y;
+  }
+  function roundRect(c, x, y, w, h, r) {
+    c.beginPath();
+    c.moveTo(x + r, y);
+    c.arcTo(x + w, y, x + w, y + h, r);
+    c.arcTo(x + w, y + h, x, y + h, r);
+    c.arcTo(x, y + h, x, y, r);
+    c.arcTo(x, y, x + w, y, r);
+    c.closePath();
   }
 
-  // The one caption that lands the truth. Cost is computed live, never typed in.
-  function verdictFor(choice, yours, calm, sim) {
+  function drawCardStat(c, x, y, w, cap, val, color, label) {
+    c.fillStyle = 'rgba(255,255,255,0.03)'; roundRect(c, x, y, w, 172, 22); c.fill();
+    c.strokeStyle = 'rgba(255,255,255,0.09)'; c.lineWidth = 1.5; roundRect(c, x, y, w, 172, 22); c.stroke();
+    c.fillStyle = '#7c8a9c'; c.font = '700 20px ' + CARD_SANS;
+    trackedText(c, cap, x + 28, y + 48, 2);
+    c.fillStyle = color; c.font = '700 52px ' + CARD_MONO;
+    c.fillText(val, x + 28, y + 112);
+    c.fillStyle = '#8a97a8'; c.font = '400 21px ' + CARD_SANS;
+    c.fillText(label, x + 28, y + 150);
+  }
+
+  function drawCardSeries(c, vals, X, Y, color, lw, dash, alpha) {
+    c.save();
+    c.globalAlpha = alpha; c.strokeStyle = color; c.lineWidth = lw;
+    c.lineJoin = 'round'; c.lineCap = 'round'; if (dash) c.setLineDash(dash);
+    c.beginPath();
+    for (let m = 0; m < vals.length; m++) {
+      const px = X(m), py = Y(vals[m]);
+      if (m === 0) c.moveTo(px, py); else c.lineTo(px, py);
+    }
+    c.stroke(); c.restore();
+  }
+
+  function drawCardChart(c, x, y, w, h, sim, key) {
+    const N = sim.N;
+    let yMax = 0; for (const k in sim.paths) yMax = Math.max(yMax, sim.paths[k].final);
+    yMax *= 1.08;
+    const X = (m) => x + (m / N) * w;
+    const Y = (v) => (y + h) - (v / yMax) * h;
+    c.strokeStyle = 'rgba(255,255,255,0.06)'; c.lineWidth = 1;
+    for (let i = 0; i <= 3; i++) { const yy = y + i * h / 3; c.beginPath(); c.moveTo(x, yy); c.lineTo(x + w, yy); c.stroke(); }
+    // The crash, marked.
+    c.strokeStyle = 'rgba(111,134,201,0.4)'; c.setLineDash([6, 8]);
+    c.beginPath(); c.moveTo(X(sim.C), y); c.lineTo(X(sim.C), y + h); c.stroke(); c.setLineDash([]);
+    // Ghost (the calm path) behind the chosen reality.
+    drawCardSeries(c, sim.paths.directHeld.value, X, Y, '#cbb26b', 4, [8, 9], 0.5);
+    drawCardSeries(c, sim.paths[key].value, X, Y, PATHS[key].color, 6, null, 1);
+  }
+
+  // Render the full card to an offscreen canvas and return it.
+  function drawShareCard() {
+    const sim = state.sim, r = state.lastResult;
+    const key = CHOICE_TO_PATH[r.choice];
+    const W = 1080, H = 1350, PAD = 84;
+    const cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    c.textBaseline = 'alphabetic';
+
+    // The app's night-sky gradient.
+    const bg = c.createLinearGradient(0, 0, 0, H);
+    bg.addColorStop(0, '#0e1622'); bg.addColorStop(0.55, '#07090f'); bg.addColorStop(1, '#05070b');
+    c.fillStyle = bg; c.fillRect(0, 0, W, H);
+
+    c.fillStyle = '#7c8a9c'; c.font = '700 23px ' + CARD_SANS;
+    trackedText(c, 'LIVE IT — A BEHAVIORAL INVESTING SIMULATOR', PAD, 108, 3);
+
+    const v = verdictParts(r.choice, r.yours, r.calm, sim);
+    c.fillStyle = '#eef2f8'; c.font = '800 60px ' + CARD_SANS;
+    let y = wrapText(c, v.main, PAD, 206, W - PAD * 2, 70);
+    c.fillStyle = '#9aa6b6'; c.font = '400 30px ' + CARD_SANS;
+    y = wrapText(c, v.sub, PAD, y + 30, W - PAD * 2, 44);
+
+    const colY = y + 64, colW = (W - PAD * 2 - 40) / 2;
+    drawCardStat(c, PAD, colY, colW, 'YOUR PATH', inrShort(r.yours), PATHS[key].color, PATHS[key].label);
+    drawCardStat(c, PAD + colW + 40, colY, colW, "IF YOU'D STAYED CALM", inrShort(r.calm), '#cbb26b', 'Held and kept investing');
+
+    const chY = colY + 236;
+    drawCardChart(c, PAD, chY, W - PAD * 2, H - chY - 196, sim, key);
+
+    // The caveat travels with every share — confidence and disclaimer together.
+    c.fillStyle = '#5a6675'; c.font = '400 23px ' + CARD_SANS;
+    wrapText(c, 'Illustration, not a prediction. Assumes 12% / 11% returns and a 40% crash at the midpoint. Real results will differ.', PAD, H - 148, W - PAD * 2, 32);
+    c.fillStyle = '#48515f'; c.font = '600 22px ' + CARD_SANS;
+    c.fillText('Educational tool — not investment advice.', PAD, H - 58);
+
+    return cv;
+  }
+
+  function downloadBlob(blob, name) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  }
+  async function copyText(text) {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) { await navigator.clipboard.writeText(text); return true; }
+      const ta = document.createElement('textarea');
+      ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      const ok = document.execCommand('copy'); document.body.removeChild(ta); return ok;
+    } catch (e) { return false; }
+  }
+  function flashBtn(btn, msg) { if (btn) { btn.classList.add('copied'); btn.textContent = msg; } }
+
+  async function shareResult() {
+    if (!state.lastResult) return;
+    const btn = $('shareBtn');
+    const text = shareText();
+
+    // Build the image card (this is what actually gets forwarded).
+    let file = null;
+    try {
+      const cv = drawShareCard();
+      const blob = await new Promise((res) => cv.toBlob(res, 'image/png'));
+      if (blob) file = new File([blob], 'live-it.png', { type: 'image/png' });
+    } catch (e) { /* fall through to text-only sharing */ }
+
+    // Best: native share sheet with image + caption (Web Share Level 2).
+    if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file], text, title: 'Live It' }); return; }
+      catch (e) { if (e && e.name === 'AbortError') return; }  // dismissed — leave it be
+    }
+    // Next: native text-only share (older mobile).
+    if (navigator.share) {
+      try { await navigator.share({ title: 'Live It', text }); return; }
+      catch (e) { if (e && e.name === 'AbortError') return; }
+    }
+    // Desktop fallback: save the card image and copy the caption.
+    const copied = await copyText(text);
+    if (file) { downloadBlob(file, 'live-it.png'); flashBtn(btn, copied ? 'Image saved · caption copied' : 'Image saved'); }
+    else flashBtn(btn, copied ? 'Copied — now paste it to a friend' : 'Press and hold to copy');
+  }
+
+  // The one caption that lands the truth, as plain strings so BOTH the on-screen
+  // verdict and the shareable image card render the same words. Every rupee here
+  // is computed live from the simulation, never typed in.
+  function verdictParts(choice, yours, calm, sim) {
     if (choice === 'held') {
-      const surplus = calm - sim.directNoCrashFinal; // > 0: the crash made you richer
-      return 'You did nothing. Nothing was exactly right.'
-        + '<span class="verdict-sub">Staying invested even left you about <b>' + inrShort(Math.max(surplus, 0))
-        + '</b> ahead of a crash-free market — the months below trend bought you extra units.</span>';
+      const surplus = Math.max(calm - sim.directNoCrashFinal, 0); // the crash's quiet "gift"
+      return {
+        main: 'You did nothing. Nothing was exactly right.',
+        sub: 'Staying invested even left you about ' + inrShort(surplus)
+          + ' ahead of a crash-free market — the months below trend bought you extra units.',
+      };
     }
     const cost = calm - yours;
     let sub;
@@ -503,8 +643,15 @@ if (typeof document !== 'undefined') (function () {
       sub = 'The market recovered without you'
         + (yours < reg ? ' — you even finished below the higher-fee Regular plan.' : '.');
     }
-    return 'Your one frightened decision cost <b>' + inr(cost) + '</b>.'
-      + '<span class="verdict-sub">' + sub + '</span>';
+    return { main: 'Your one frightened decision cost ' + inr(cost) + '.', sub };
+  }
+
+  // Bold every rupee figure (₹1,23,456 or ₹3.56 Cr) for the on-screen verdict.
+  const boldRupees = (s) => s.replace(/₹[\d,]+(?:\.\d+)?(?: (?:L|Cr))?/g, '<b>$&</b>');
+
+  function verdictFor(choice, yours, calm, sim) {
+    const p = verdictParts(choice, yours, calm, sim);
+    return boldRupees(p.main) + '<span class="verdict-sub">' + boldRupees(p.sub) + '</span>';
   }
 
   function countUp(el, to, dur, fmt) {
