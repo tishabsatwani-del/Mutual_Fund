@@ -362,8 +362,22 @@ if (typeof document !== 'undefined') (function () {
     $('invested').textContent = 'Invested ' + inrShort(state.sip * monthsElapsed);
   }
 
-  // ---- Animation timeline. ----
-  const CLIMB_MS = 4200, CRASH_MS = 1900, DIVERGE_MS = 5200;
+  // ---- Animation timeline. Respect a user's reduced-motion preference by
+  //      compressing the cinematic beats to near-instant — the flow
+  //      (climb -> decision -> result) stays intact, the motion does not. ----
+  const reduceMotion = typeof matchMedia === 'function'
+    && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const CLIMB_MS   = reduceMotion ? 200 : 4200;
+  const CRASH_MS   = reduceMotion ? 150 : 1900;
+  const DIVERGE_MS = reduceMotion ? 200 : 5200;
+
+  // A quiet physical tension cue at the crash (mobile only; silently ignored
+  // where unsupported or unwanted).
+  function tensionCue() {
+    if (!reduceMotion && typeof navigator !== 'undefined' && navigator.vibrate) {
+      navigator.vibrate([18, 60, 28]);
+    }
+  }
 
   function loop(ts) {
     if (state.phaseStart == null) state.phaseStart = ts;
@@ -374,7 +388,7 @@ if (typeof document !== 'undefined') (function () {
       const p = Math.min(e / CLIMB_MS, 1);
       state.head = C * easeInOut(p);
       renderStage();
-      if (p >= 1) { state.phase = 'crash'; state.phaseStart = null; $('stage').classList.add('crashing'); }
+      if (p >= 1) { state.phase = 'crash'; state.phaseStart = null; $('stage').classList.add('crashing'); tensionCue(); }
       state.raf = requestAnimationFrame(loop);
 
     } else if (state.phase === 'crash') {
@@ -410,7 +424,19 @@ if (typeof document !== 'undefined') (function () {
     state.raf = requestAnimationFrame(loop);
   }
 
-  function openDecision() { show($('decision')); }
+  function openDecision() {
+    // Make the fall personal and concrete: the real corpus, peak -> trough.
+    // Both numbers are live from the sim (directHeld, the line on screen), so
+    // the gut-punch is honest — it's the paper loss the investor would actually
+    // be staring at on their statement at the bottom (month C+3).
+    const sim = state.sim;
+    const held = sim.paths.directHeld.value;
+    const peak = held[sim.C], bottom = held[sim.C + 3];
+    $('decLoss').innerHTML =
+      'Your <b>' + inrShort(peak) + '</b> is now <b>' + inrShort(bottom) + '</b>'
+      + '<span class="dec-loss-sub">— ' + inrShort(peak - bottom) + ' gone, on paper.</span>';
+    show($('decision'));
+  }
 
   function choose(choice) {
     state.choice = choice;
