@@ -1,32 +1,26 @@
 /* =====================================================================
  * "Two Doors, One Storm"
- * An advanced Monte Carlo behavioural investing simulator.
+ * An advanced, behaviour-driven Monte Carlo investing simulator.
  * ---------------------------------------------------------------------
- * Two people invest the same money, in the same market. One chose a
- * REGULAR plan (pays ~1%/yr more, but has a relationship manager / MD to
- * call when life hits). One chose DIRECT (pays nothing extra, but faces
- * every storm alone). The fee gap is small and steady. The behaviour gap
- * is enormous. The whole tool dramatises one idea: the only real variable
- * is who is beside you when it falls.
+ * Two people invest the same money, in the same market. One chose a REGULAR
+ * plan (pays ~1%/yr more, but has a relationship manager / MD to call when
+ * life hits). One chose DIRECT (pays nothing extra, but faces every storm
+ * alone). The fee gap is small and steady; the behaviour gap is enormous.
  *
- * This file has two clearly separated halves:
- *   1. THE MATH ENGINE  — deterministic where it can be, Monte Carlo where
- *      it must be. Dependency-free, auditable, and exported for Node so it
- *      can be unit-tested (tests/test_simulator.js). It uses REAL unit-level
- *      accounting (units x NAV every month), never bare percentages, with
- *      correct SIP cash-flow timing and an honest XIRR.
- *   2. THE EXPERIENCE   — the cinematic, mobile-first animation. Runs only
- *      in a browser; the engine half is untouched by it.
+ * Two clearly separated halves:
+ *   1. THE MATH ENGINE  — every figure is COMPUTED, never invented. Real
+ *      unit-level accounting (units x NAV each month), correct SIP cash-flow
+ *      timing, an exact XIRR (Newton-Raphson + bisection) and CAGR. The only
+ *      *inputs* are clearly-labelled assumptions: a 12%/11% effective annual
+ *      return (Direct/Regular — a 1%/yr expense-ratio gap) and drawdown
+ *      depths/durations drawn from real history. Node-exported and unit-tested.
+ *   2. THE EXPERIENCE   — the cinematic, mobile-first journey (browser only).
  *
- * INTEGRITY: every number on screen is reproducible from the functions
- * below — nothing is hardcoded, nothing is rigged. Across the paths it
- * simulates, the Direct investor can finish ABOVE, EQUAL TO, or BELOW the
- * Regular investor. We never force Regular to win. The door was never the
- * point — the behaviour in the one moment that matters is.
- *
- * All outputs are illustrative ranges of possibility, never predictions or
- * advice. The drawdown depths/durations and return assumptions are
- * approximate and must be locked against real index data before shipping.
+ * ACCURACY NOTE: rates are stored so the *effective annual CAGR* is exactly
+ * 12% / 11% (NOT a naive 1%/month, which would compound to 12.68%). The fee is
+ * a multiplicative monthly drag so Regular's CAGR is exactly 1 percentage point
+ * below Direct's, on every path. Outputs are illustrative ranges, never advice;
+ * lock drawdown figures against real index data before shipping.
  * ===================================================================== */
 'use strict';
 
@@ -34,50 +28,55 @@
  * 1. THE MATH ENGINE
  * ===================================================================== */
 
-/* ---- The only fee difference: 1% per year. ----------------------------
- * Direct  net 12%/yr -> 1.0000%/mo.   Regular net 11%/yr -> 0.9167%/mo.
- * Regular underperforms Direct by exactly 1%/yr in EVERY month — that is
- * the entire cost of the door, and we track its compounded rupee toll. */
+/* ---- The two doors differ by exactly 1 percentage point of annual CAGR. ----
+ * Effective annual returns are the assumption; the monthly rate is its 12th
+ * root, so (1+monthly)^12 == 1+annual EXACTLY. */
 const DIRECT_ANNUAL   = 0.12;
 const REGULAR_ANNUAL  = 0.11;
-const DIRECT_MONTHLY  = DIRECT_ANNUAL  / 12;   // 0.010000  (1.0000%/mo)
-const REGULAR_MONTHLY = REGULAR_ANNUAL / 12;   // 0.0091667 (0.9167%/mo)
-const FEE_GAP_MONTHLY = DIRECT_MONTHLY - REGULAR_MONTHLY; // 0.0008333 = 1%/yr
+const DIRECT_MONTHLY  = Math.pow(1 + DIRECT_ANNUAL,  1 / 12) - 1;   // ≈ 0.9489%/mo  -> 12.00%/yr
+const REGULAR_MONTHLY = Math.pow(1 + REGULAR_ANNUAL, 1 / 12) - 1;   // ≈ 0.8735%/mo  -> 11.00%/yr
+// Multiplicative monthly fee drag: applying it to ANY Direct path yields a path
+// whose CAGR is exactly 1 pt lower. (1+DIRECT_M)*FEE_FACTOR raised to 12 = 1.11.
+const FEE_FACTOR = Math.pow((1 + REGULAR_ANNUAL) / (1 + DIRECT_ANNUAL), 1 / 12);
 
-const HORIZON_YEARS = 20;          // fixed: long enough for the fee to compound
-const HORIZON_MONTHS = HORIZON_YEARS * 12; // 240
-const CRASH_START_MONTH = 96;      // the storm hits 8 years in (matches the story)
+const DEFAULT_YEARS = 20;
 
-/* ---- Real market events (Section 5). -----------------------------------
- * Implemented as smooth geometric curves whose DEPTH, FALL and RECOVERY
- * match the real episode. Figures are based on the actual index drawdowns
- * and are illustrative — exact numbers vary by index and dates, and must be
- * locked against real data before this carries a book's name. */
+/* ---- Market events. Depths/durations are illustrative, based on real index
+ * drawdowns; `what` explains, in plain words, what actually happened. -------- */
 const EVENTS = {
   covid: {
-    id: 'covid', name: 'COVID-19, 2020',
-    depth: 0.38, fallMonths: 1, recoveryMonths: 9, ongoing: false,
-    character: 'The fast one — panic was punished brutally; the rebound was nearly as fast as the crash.',
+    id: 'covid', name: 'COVID-19 crash, 2020', hypothetical: false,
+    depth: 0.38, fallMonths: 1, recoveryMonths: 9,
+    tag: 'The fast one',
+    what: 'A global pandemic shut the world economy almost overnight. Indian markets fell about 38% in barely a month — then, fuelled by stimulus, recovered most of it within months. Panic was punished brutally.',
   },
   gfc: {
-    id: 'gfc', name: 'Global Financial Crisis, 2008',
-    depth: 0.60, fallMonths: 14, recoveryMonths: 24, ongoing: false,
-    character: 'The deep, slow one — the panic "felt right" the longest.',
+    id: 'gfc', name: '2008 Financial Crisis', hypothetical: false,
+    depth: 0.60, fallMonths: 14, recoveryMonths: 24,
+    tag: 'The deep, slow one',
+    what: "US sub-prime home loans collapsed and Lehman Brothers — a giant investment bank — went bankrupt, freezing global credit. Indian indices fell about 60% over roughly 14 months. It was the deepest, slowest fall in modern memory, and the panic 'felt right' the longest.",
   },
   corr2022: {
-    id: 'corr2022', name: '2022 correction',
-    depth: 0.18, fallMonths: 8, recoveryMonths: 12, ongoing: false,
-    character: 'The moderate one.',
+    id: 'corr2022', name: '2022 correction', hypothetical: false,
+    depth: 0.18, fallMonths: 8, recoveryMonths: 12,
+    tag: 'The moderate one',
+    what: 'After COVID stimulus, inflation surged worldwide. Central banks raised interest rates sharply, foreign investors pulled money out of India, and the market drifted down about 18% through the year before steadying.',
   },
   iranUsa: {
-    id: 'iranUsa', name: 'Iran–USA War, 2025',
-    depth: 0.16, fallMonths: 5, recoveryMonths: 13, ongoing: true,
-    character: "The one you're living through. It ends on uncertainty — in the moment you never know how far it falls, or when it turns.",
+    id: 'iranUsa', name: 'Iran–USA war', hypothetical: true,
+    depth: 0.16, fallMonths: 5, recoveryMonths: 13,
+    tag: 'The oil shock (hypothetical)',
+    what: 'A hypothetical Gulf war: conflict spikes oil prices and rattles global markets — a fall of around 16%. Like all geopolitical shocks, it ends on uncertainty — in the moment, you never know how deep it goes or when it turns.',
+  },
+  indiaPak: {
+    id: 'indiaPak', name: 'India–Pakistan war', hypothetical: true,
+    depth: 0.10, fallMonths: 2, recoveryMonths: 5,
+    tag: 'The short scare (hypothetical)',
+    what: 'A hypothetical India–Pakistan flare-up. History is reassuring: past confrontations (Kargil 1999, Balakot 2019) caused only short, shallow dips of around 8–10% that markets recovered within weeks to months. The fear was always far bigger than the lasting damage.',
   },
 };
 
-/* ---- Seedable PRNG (mulberry32) so every Monte Carlo run is reproducible
- *      and auditable: same seed -> same 10,000 futures. ------------------ */
+/* ---- Seedable PRNG (mulberry32) + standard normal (Box–Muller). ---- */
 function mulberry32(seed) {
   let a = seed >>> 0;
   return function () {
@@ -87,7 +86,6 @@ function mulberry32(seed) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
-/** Standard normal via Box–Muller. */
 function gaussian(rng) {
   let u = 0, v = 0;
   while (u === 0) u = rng();
@@ -95,67 +93,13 @@ function gaussian(rng) {
   return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
 }
 
-/* =====================================================================
- * 1a. SINGLE-PATH ("LIVE IT") — a real, named crash you feel.
- * ===================================================================== */
+/* ---- Standard financial metrics (computed, never invented). ---- */
 
-/**
- * Build the NAV (price-per-unit) series for ONE plan around ONE real event.
- *
- * The series starts at 100, grows at `rate` every normal month, then at the
- * event's start month S:
- *   • Months S       -> S+fall      : NAV glides smoothly down to (1-depth)·peak
- *   • Months S+fall  -> S+fall+rec  : NAV glides back up to EXACTLY the level
- *                                     the undisturbed trend would have reached
- *                                     (full recovery to trend — no scar)
- *   • After that: normal monthly growth resumes, identical to a no-crash world.
- * Every move within a phase is geometric (a constant monthly factor), the
- * honest way prices move, and it reads as a smooth curve. An investor who
- * stays fully invested loses NOTHING to it and ends slightly richer (cheap
- * units bought in the dip) — we model that honestly and never clamp it.
- *
- * @param {number} rate   monthly growth rate (DIRECT_MONTHLY / REGULAR_MONTHLY)
- * @param {number} N      total months (240)
- * @param {object} ev     an EVENTS entry (depth, fallMonths, recoveryMonths)
- * @param {number} S      event start month (the horizon midpoint)
- */
-function buildEventNav(rate, N, ev, S) {
-  const fall = ev.fallMonths, rec = ev.recoveryMonths;
-  const bottom = S + fall, healed = S + fall + rec;
-  const nav = new Array(N + 1);
-  nav[0] = 100;
-  for (let t = 1; t <= N; t++) {
-    if (t <= S) {
-      nav[t] = nav[t - 1] * (1 + rate);              // calm pre-event climb
-    } else if (t <= bottom) {
-      const k = t - S;                               // 1..fall
-      nav[t] = nav[S] * Math.pow(1 - ev.depth, k / fall);
-    } else if (t <= healed) {
-      const start = nav[S] * (1 - ev.depth);         // the bottom
-      const target = nav[S] * Math.pow(1 + rate, fall + rec); // trend at `healed`
-      const k = t - bottom;                          // 1..rec
-      nav[t] = start * Math.pow(target / start, k / rec);
-    } else {
-      nav[t] = nav[t - 1] * (1 + rate);              // healed; back on trend
-    }
-  }
-  nav._S = S; nav._bottom = bottom; nav._healed = healed;
-  return nav;
-}
+/** CAGR — compound annual growth rate from a begin/end value over `years`. */
+function cagr(begin, end, years) { return Math.pow(end / begin, 1 / years) - 1; }
 
-/** A no-crash control (pure trend) — proves staying invested through a crash
- *  ends SLIGHTLY RICHER than a calm market (the cheap units below trend). */
-function buildTrendNav(rate, N) {
-  const nav = new Array(N + 1);
-  nav[0] = 100;
-  for (let t = 1; t <= N; t++) nav[t] = nav[t - 1] * (1 + rate);
-  return nav;
-}
-
-/* ---- XIRR (annualised internal rate of return) from monthly cash flows. --
- * Flows: contributions are NEGATIVE (money the investor puts in), the final
- * corpus is POSITIVE (money it is worth). Times are in YEARS. Newton–Raphson
- * with a bisection fallback so it always converges to a real root. */
+/** XIRR — annualised IRR of dated cash flows (years). Contributions negative,
+ *  final value positive. Newton-Raphson with a bisection fallback. */
 function xirr(flows, guess) {
   const npv = (r) => flows.reduce((s, f) => s + f.amount / Math.pow(1 + r, f.t), 0);
   const dnpv = (r) => flows.reduce((s, f) => s - f.t * f.amount / Math.pow(1 + r, f.t + 1), 0);
@@ -168,7 +112,6 @@ function xirr(flows, guess) {
     if (Math.abs(next - r) < 1e-10) return next;
     r = next;
   }
-  // Bisection fallback on a wide, safe bracket.
   let lo = -0.95, hi = 5, flo = npv(lo);
   for (let i = 0; i < 200; i++) {
     const mid = (lo + hi) / 2, fmid = npv(mid);
@@ -186,295 +129,224 @@ function xirrFromSIP(sip, N, finalValue) {
   return xirr(flows);
 }
 
-/** Wrap a value series into a full result object (final, invested, XIRR). */
+/* =====================================================================
+ * 1a. SINGLE-PATH ("LIVE IT") — a real, named crash at the exact midpoint.
+ * ===================================================================== */
+
+/**
+ * NAV (price-per-unit) series for one plan around one event.
+ * Starts at 100, grows at `rate` each calm month; at the event start S the
+ * price glides DOWN to (1-depth)·peak over `fallMonths`, then back UP to the
+ * EXACT undisturbed-trend level over `recoveryMonths` (no scar), then resumes
+ * normal growth. Geometric within each phase — the honest way prices move.
+ */
+function buildEventNav(rate, N, ev, S) {
+  const fall = ev.fallMonths, rec = ev.recoveryMonths;
+  const bottom = S + fall, healed = S + fall + rec;
+  const nav = new Array(N + 1);
+  nav[0] = 100;
+  for (let t = 1; t <= N; t++) {
+    if (t <= S)            nav[t] = nav[t - 1] * (1 + rate);
+    else if (t <= bottom)  nav[t] = nav[S] * Math.pow(1 - ev.depth, (t - S) / fall);
+    else if (t <= healed) {
+      const start = nav[S] * (1 - ev.depth);
+      const target = nav[S] * Math.pow(1 + rate, fall + rec);
+      nav[t] = start * Math.pow(target / start, (t - bottom) / rec);
+    } else                 nav[t] = nav[t - 1] * (1 + rate);
+  }
+  nav._S = S; nav._bottom = bottom; nav._healed = healed;
+  return nav;
+}
+
+/** No-crash control (pure trend) — proves staying invested through a crash
+ *  ends SLIGHTLY RICHER than a calm market (cheap units below trend). */
+function buildTrendNav(rate, N) {
+  const nav = new Array(N + 1);
+  nav[0] = 100;
+  for (let t = 1; t <= N; t++) nav[t] = nav[t - 1] * (1 + rate);
+  return nav;
+}
+
 function summarise(value, sip, N) {
   const final = value[N];
   return { value, final, invested: sip * N, xirr: xirrFromSIP(sip, N, final) };
 }
 
-/* ---- The four behaviours, each a real month-by-month sim on a NAV series.
- * Shared rules (apples to apples — only behaviour differs):
- *   • SIP invested at the START of each month; units = SIP / NAV[m].
- *   • Value[m] = units · NAV[m] + idle cash.
- *   • Money "set aside" while out sits as cash earning nothing and is
- *     deployed in full at re-entry, so every behaviour invests SIP·N total. */
-
-/** HOLD — keep every unit, keep the SIP running throughout. Buys cheap in
- *  the dip. The baseline discipline. */
+/* ---- The four behaviours (unit accounting; same total invested everywhere). */
 function simHold(nav, N, sip) {
-  let units = 0;
-  const value = new Array(N + 1);
-  for (let m = 0; m <= N; m++) {
-    if (m < N) units += sip / nav[m];
-    value[m] = units * nav[m];
-  }
+  let units = 0; const value = new Array(N + 1);
+  for (let m = 0; m <= N; m++) { if (m < N) units += sip / nav[m]; value[m] = units * nav[m]; }
   return summarise(value, sip, N);
 }
-
-/** PAUSE — keep units, STOP contributions during the fall + recovery, resume
- *  after. The paused SIP piles up as cash and is deployed in one lump at
- *  re-entry — having missed the cheapest units. */
 function simPause(nav, N, sip) {
-  const S = nav._S, healed = nav._healed, reentry = healed + 1;
-  let units = 0, cash = 0;
-  const value = new Array(N + 1);
+  const S = nav._S, reentry = nav._healed + 1;
+  let units = 0, cash = 0; const value = new Array(N + 1);
   for (let m = 0; m <= N; m++) {
     if (m < N) {
-      if (m < S)               units += sip / nav[m];
-      else if (m < reentry)    cash  += sip;                          // paused -> cash
-      else if (m === reentry)  { cash += sip; units += cash / nav[m]; cash = 0; }
-      else                     units += sip / nav[m];
+      if (m < S)              units += sip / nav[m];
+      else if (m < reentry)   cash += sip;
+      else if (m === reentry) { cash += sip; units += cash / nav[m]; cash = 0; }
+      else                    units += sip / nav[m];
     }
     value[m] = units * nav[m] + cash;
   }
   return summarise(value, sip, N);
 }
-
-/** SELL at the bottom, sit in cash, re-enter the whole pile at `reentry`,
- *  then resume buying. Used for both "buy back on recovery" (re-enter when
- *  NAV regains the pre-crash peak) and "wait it out" (a full year after it
- *  heals). Sold low, bought higher — permanent unit loss. */
 function simSell(nav, N, sip, reentry) {
   const bottom = nav._bottom;
-  let units = 0, cash = 0;
-  const value = new Array(N + 1);
+  let units = 0, cash = 0; const value = new Array(N + 1);
   for (let m = 0; m <= N; m++) {
     if (m < N) {
-      if (m < bottom)          units += sip / nav[m];
-      else if (m === bottom)   { cash += units * nav[m]; units = 0; cash += sip; } // sell all + SIP -> cash
-      else if (m < reentry)    cash += sip;
-      else if (m === reentry)  { cash += sip; units += cash / nav[m]; cash = 0; }  // re-enter everything
-      else                     units += sip / nav[m];
+      if (m < bottom)         units += sip / nav[m];
+      else if (m === bottom)  { cash += units * nav[m]; units = 0; cash += sip; }
+      else if (m < reentry)   cash += sip;
+      else if (m === reentry) { cash += sip; units += cash / nav[m]; cash = 0; }
+      else                    units += sip / nav[m];
     }
     value[m] = units * nav[m] + cash;
   }
   return summarise(value, sip, N);
 }
-
-/** First month at or after the bottom where NAV regains the pre-crash peak. */
 function peakRegainMonth(nav) {
   const peak = nav[nav._S];
   for (let m = nav._bottom; m < nav.length; m++) if (nav[m] >= peak) return m;
   return nav._healed;
 }
 
-/**
- * Run a complete single-path "Live it" simulation for one chosen event.
- * Produces both doors (Direct + Regular) under all four behaviours, plus the
- * crash-free control, so every comparison the UI needs is a pure lookup.
- */
-function runSinglePath(sip, eventId, vary) {
-  const base = EVENTS[eventId] || EVENTS.covid;
-  const N = HORIZON_MONTHS;
-  // Every run can feel unique: when `vary` is set we jitter the depth (±3 pts)
-  // and the year the storm strikes (7–9 years in), within honest, illustrative
-  // bounds. The corpus and the headline drawdown then differ run to run, the
-  // way real life never repeats exactly. Tests call without `vary` for exact,
-  // reproducible numbers.
-  let S = CRASH_START_MONTH, depth = base.depth;
-  if (vary) {
-    S = 84 + Math.floor(Math.random() * 25);                 // months 84..108 (yrs 7–9)
-    depth = Math.min(0.85, Math.max(0.05, base.depth + (Math.random() - 0.5) * 0.06));
-  }
-  const ev = Object.assign({}, base, { depth });
+/** Full single-path run. Crash at the EXACT midpoint of the chosen horizon. */
+function runSinglePath(sip, eventId, years) {
+  const ev = EVENTS[eventId] || EVENTS.covid;
+  const Y = years || DEFAULT_YEARS;
+  const N = Y * 12, S = Math.round(N / 2);   // standardized: midpoint
 
   const navDirect  = buildEventNav(DIRECT_MONTHLY,  N, ev, S);
   const navRegular = buildEventNav(REGULAR_MONTHLY, N, ev, S);
-  const reDirect  = peakRegainMonth(navDirect);
-  const reRegular = peakRegainMonth(navRegular);
-  const waitDirect  = navDirect._healed + 12;
-  const waitRegular = navRegular._healed + 12;
+  const reD = peakRegainMonth(navDirect),  reR = peakRegainMonth(navRegular);
+  const waitD = navDirect._healed + 12,    waitR = navRegular._healed + 12;
 
-  const behaviours = (nav, re, wait) => ({
-    hold:     simHold(nav, N, sip),
-    pause:    simPause(nav, N, sip),
-    sellBack: simSell(nav, N, sip, re),
-    sellWait: simSell(nav, N, sip, wait),
+  const behave = (nav, re, wait) => ({
+    hold: simHold(nav, N, sip), pause: simPause(nav, N, sip),
+    sellBack: simSell(nav, N, sip, re), sellWait: simSell(nav, N, sip, wait),
   });
+  const direct = behave(navDirect, reD, waitD);
+  const regular = behave(navRegular, reR, waitR);
 
-  const direct  = behaviours(navDirect,  reDirect,  waitDirect);
-  const regular = behaviours(navRegular, reRegular, waitRegular);
-
-  // The fee saving, in rupees, fully compounded: Direct-hold minus Regular-hold.
-  // This is the entire structural value of going Direct — and it is small.
-  const feeSavingRupees = direct.hold.final - regular.hold.final;
-  // Slightly-richer-than-calm gift (cheap units below trend).
+  const feeSavingRupees = direct.hold.final - regular.hold.final; // structural fee edge
   const directNoCrash = simHold(buildTrendNav(DIRECT_MONTHLY, N), N, sip).final;
+  // Index CAGR (the market itself) — exactly 12% for Direct as it heals to trend.
+  const indexCagr = cagr(navDirect[0], navDirect[N], Y);
 
   return {
-    mode: 'single', ev, sip, years: HORIZON_YEARS, N, S, startYears: S / 12,
+    mode: 'single', ev, sip, years: Y, N, S, crashYear: S / 12,
     navDirect, navRegular, direct, regular,
-    feeSavingRupees, directNoCrash,
+    feeSavingRupees, directNoCrash, indexCagr,
   };
 }
 
 /* =====================================================================
- * 1b. MONTE CARLO ("10,000 LIFETIMES") — the distribution.
- * ---------------------------------------------------------------------
- * Each path is 240 monthly market returns drawn from a documented model
- * (the parametric fallback the brief allows when real block-bootstrapped
- * history is not embedded): mean ≈ 12%/yr, volatility ≈ 15–18%/yr, with
- * FAT TAILS (occasional jumps) and VOLATILITY CLUSTERING (a two-state
- * calm/stress regime, so crashes arrive in runs, not as lone months).
- * Each investor follows a behavioural POLICY applied across all paths.
- * NOTE: lock this against real Indian index history before shipping.
+ * 1b. MONTE CARLO ("WAS IT LUCK?") — keep the rigorous engine; the UI shows
+ *     one plain line + a 100-dot grid, no jargon.
  * ===================================================================== */
-
-/** Generate one market path: monthly returns for the DIRECT investor (the
- *  Regular investor simply earns FEE_GAP_MONTHLY less every month). */
 function genMarketReturns(N, rng) {
-  // Base monthly drift set above the 12% target so the stress-regime negative
-  // drift pulls the realised mean back to ≈ 12%/yr.
-  const muM = Math.pow(1 + 0.137, 1 / 12) - 1;
+  const muM = Math.pow(1 + 0.137, 1 / 12) - 1; // base drift; stress drag pulls realised mean to ≈12%
   const r = new Array(N);
   let stress = false;
   for (let m = 0; m < N; m++) {
-    // Two-state regime -> volatility clustering. Calm is sticky; stress runs
-    // longer and meaner (negative drift), so deep drawdowns arrive in clusters
-    // the way real crashes do. Steady-state stress share ≈ 0.03/(0.03+0.18)
-    // ≈ 14% of months, enough that a 25–35% drawdown shows up in most 20-year
-    // lifetimes — matching India's roughly once-a-decade deep falls.
     if (stress) { if (rng() < 0.18) stress = false; }
     else        { if (rng() < 0.03) stress = true; }
     const volAnnual = stress ? 0.30 : 0.12;
     const volM = volAnnual / Math.sqrt(12);
     let z = gaussian(rng);
-    if (rng() < 0.02) z *= 2.0;                  // fat tail: rare large move
+    if (rng() < 0.02) z *= 2.0;                  // fat tail
     let ret = muM + volM * z;
     if (stress) ret -= 0.010;                    // crashes carry negative drift
     r[m] = ret;
   }
   return r;
 }
-
-/** Turn a Direct-return path into a NAV series for a given fee drag. */
-function navFromReturns(returns, N, feeDrag) {
-  const nav = new Array(N + 1);
-  nav[0] = 100;
-  for (let m = 1; m <= N; m++) nav[m] = nav[m - 1] * (1 + returns[m - 1] - feeDrag);
+/** Direct path -> NAV; `feeFactor` (≤1) applies the Regular fee multiplicatively. */
+function navFromReturns(returns, N, feeFactor) {
+  const f = feeFactor == null ? 1 : feeFactor;
+  const nav = new Array(N + 1); nav[0] = 100;
+  for (let m = 1; m <= N; m++) nav[m] = nav[m - 1] * (1 + returns[m - 1]) * f;
   return nav;
 }
-
-/* ---- Monte Carlo behavioural policies. -------------------------------- */
 const MC_POLICIES = {
-  hold:  { id: 'hold',  label: 'Hold through everything' },
-  // Sell to cash whenever drawdown from the running peak exceeds a threshold;
-  // re-enter only once NAV regains that prior peak (sold low, bought higher).
-  panic: { id: 'panic', label: 'Sell when it falls hard (alone)', drawdown: 0.25 },
+  hold:  { id: 'hold',  label: 'held through everything' },
+  panic: { id: 'panic', label: 'sold when it fell hard', drawdown: 0.25 },
 };
-
-/** Run ONE policy over ONE NAV series (real unit accounting). */
 function simPolicyPath(nav, N, sip, policy) {
-  let units = 0, cash = 0, peak = nav[0];
-  let out = false, reentryPeak = 0;
+  let units = 0, cash = 0, peak = nav[0], out = false, reentryPeak = 0;
   for (let m = 0; m < N; m++) {
     if (nav[m] > peak) peak = nav[m];
     if (policy.id === 'panic') {
-      if (!out && nav[m] < peak * (1 - policy.drawdown)) {
-        // Panic-sell everything to cash; remember the peak to wait for.
-        cash += units * nav[m]; units = 0; out = true; reentryPeak = peak;
-      } else if (out && nav[m] >= reentryPeak) {
-        // Market regained the prior peak — re-enter the whole pile.
-        units += cash / nav[m]; cash = 0; out = false;
-      }
+      if (!out && nav[m] < peak * (1 - policy.drawdown)) { cash += units * nav[m]; units = 0; out = true; reentryPeak = peak; }
+      else if (out && nav[m] >= reentryPeak) { units += cash / nav[m]; cash = 0; out = false; }
     }
-    // This month's SIP: into units if invested, into cash if sitting out.
     if (out) cash += sip; else units += sip / nav[m];
   }
   const final = units * nav[N] + cash;
   return { final, xirr: xirrFromSIP(sip, N, final) };
 }
-
-/**
- * Run the full Monte Carlo. For every path we evaluate BOTH investors under
- * their chosen policy on the SAME underlying market, then collect the
- * distribution of finals and the head-to-head odds.
- *
- * @param sip          monthly SIP
- * @param youPolicy    MC_POLICIES key for the Direct investor (YOU)
- * @param friendPolicy MC_POLICIES key for the Regular investor (YOUR FRIEND)
- * @param nPaths       1,000–10,000
- * @param seed         PRNG seed (reproducible)
- */
-function runMonteCarlo(sip, youPolicy, friendPolicy, nPaths, seed) {
-  const N = HORIZON_MONTHS;
+function runMonteCarlo(sip, youPolicy, friendPolicy, nPaths, seed, years) {
+  const N = (years || DEFAULT_YEARS) * 12;
   const rng = mulberry32(seed == null ? 12345 : seed);
   const youP = MC_POLICIES[youPolicy] || MC_POLICIES.hold;
   const friendP = MC_POLICIES[friendPolicy] || MC_POLICIES.hold;
-
-  const youFinals = new Float64Array(nPaths);
-  const friendFinals = new Float64Array(nPaths);
   let youAhead = 0, friendAhead = 0, tied = 0;
-
+  const youFinals = new Float64Array(nPaths), friendFinals = new Float64Array(nPaths);
   for (let i = 0; i < nPaths; i++) {
     const returns = genMarketReturns(N, rng);
-    const navDirect  = navFromReturns(returns, N, 0);              // YOU = Direct
-    const navRegular = navFromReturns(returns, N, FEE_GAP_MONTHLY); // FRIEND = Regular
-    const you = simPolicyPath(navDirect, N, sip, youP);
-    const friend = simPolicyPath(navRegular, N, sip, friendP);
-    youFinals[i] = you.final;
-    friendFinals[i] = friend.final;
-    const diff = you.final - friend.final;
-    const rel = Math.abs(diff) / Math.max(you.final, friend.final);
-    if (rel < 0.01) tied++;
-    else if (diff > 0) youAhead++;
-    else friendAhead++;
+    const navD = navFromReturns(returns, N, 1);            // YOU = Direct
+    const navR = navFromReturns(returns, N, FEE_FACTOR);   // FRIEND = Regular (1%/yr drag)
+    const you = simPolicyPath(navD, N, sip, youP);
+    const fr = simPolicyPath(navR, N, sip, friendP);
+    youFinals[i] = you.final; friendFinals[i] = fr.final;
+    const rel = Math.abs(you.final - fr.final) / Math.max(you.final, fr.final);
+    if (rel < 0.01) tied++; else if (you.final > fr.final) youAhead++; else friendAhead++;
   }
-
-  return {
-    mode: 'monte', sip, nPaths, youPolicy: youP, friendPolicy: friendP,
-    you: distribution(youFinals), friend: distribution(friendFinals),
-    youAhead, friendAhead, tied,
-  };
+  return { mode: 'monte', sip, nPaths, youPolicy: youP, friendPolicy: friendP,
+    you: distribution(youFinals), friend: distribution(friendFinals), youAhead, friendAhead, tied };
 }
-
-/** Summarise a finals array into percentile bands for a fan chart + medians. */
 function distribution(finals) {
   const sorted = Float64Array.from(finals).sort();
-  const n = sorted.length;
-  const q = (p) => sorted[Math.min(n - 1, Math.max(0, Math.floor(p * (n - 1))))];
-  return {
-    n, min: sorted[0], max: sorted[n - 1],
-    p05: q(0.05), p25: q(0.25), p50: q(0.50), p75: q(0.75), p95: q(0.95),
-    mean: sorted.reduce((s, v) => s + v, 0) / n,
-  };
+  const n = sorted.length, q = (p) => sorted[Math.min(n - 1, Math.max(0, Math.floor(p * (n - 1))))];
+  return { n, p05: q(0.05), p50: q(0.50), p95: q(0.95), mean: sorted.reduce((s, v) => s + v, 0) / n };
 }
 
 /* =====================================================================
  * 1c. SCENARIO B — "The money, now." (the emergency)
  * ---------------------------------------------------------------------
- * The market need not crash for the door to matter. Life demands a large
- * sum, fast. The question is not "do I panic-sell" but "how do I raise this
- * cash without destroying my future." We model a portfolio split across a
- * liquid sleeve, large-cap and mid/small-cap, an emergency that strikes at
- * month `S`, and FOUR responses the user actually chooses between:
- *   • PANIC       — redeem everything (far more than needed); the SIP dies.
- *   • SURGICAL    — take exactly the need: liquid first, then large-cap, LEAVE
- *                   the (down) mid-cap; pause the SIP 3 months, then resume.
- *   • SELL_LOSERS — take the need from the fallen mid-cap first ("cut the
- *                   loss"), locking the loss in a downturn; SIP keeps running.
- *   • SIP_KILL    — take the need safely, but cancel the SIP forever ("I can't
- *                   afford to keep investing"): you forfeit 12 more years of
- *                   contributions and their compounding.
- * Either door can make any call, so the honest point lands: the solo investor
- * under stress usually can't make the surgical call, and that is where the
- * guidance earns its fee — not "Regular always wins."
+ * A portfolio across a liquid sleeve, large-cap and mid/small-cap; an
+ * emergency of a user-chosen SEVERITY strikes at the midpoint. FOUR responses:
+ *   panic      — redeem everything (idle cash; SIP dies)
+ *   surgical   — take exactly the need, safest sleeve first, pause SIP 3 mo
+ *   sellLosers — take the need from the fallen sleeve first (locks the loss)
+ *   sipKill    — take the need safely, but cancel the SIP forever
+ * Either door can make any call. Effective sleeve returns are assumptions
+ * (6% / 12% / 15% CAGR); every rupee is computed.
  * ===================================================================== */
-
-/* The emergency is sized as a FRACTION of the corpus you've built, so it is
- * always a meaningful — and coverable — shock whatever the SIP, and so the
- * RM's "leave the mid-cap, take liquid first" guidance can genuinely be
- * honoured (the need never exceeds the liquid + large-cap sleeves). The rupee
- * figure is shown live. `crashLinked` emergencies (a pandemic, a war) inherently
- * arrive with a falling market — the hardest, most realistic case. */
 const EMERGENCIES = {
-  icu:      { id: 'icu',      name: 'Hospitalisation — the ICU',      fraction: 0.50, crashLinked: false },
-  business: { id: 'business', name: 'A sudden business loss',         fraction: 0.55, crashLinked: false },
-  pandemic: { id: 'pandemic', name: 'Pandemic — COVID strikes',       fraction: 0.42, crashLinked: true },
-  war:      { id: 'war',      name: 'War — Iran–USA / India–Pakistan', fraction: 0.45, crashLinked: true },
+  icu:      { id: 'icu',      name: 'Hospitalisation / ICU',         crashLinked: false,
+              what: 'A family member is in intensive care; the hospital needs a large deposit before treatment continues.' },
+  business: { id: 'business', name: 'Business loss',                 crashLinked: false,
+              what: 'A deal collapses; suppliers and salaries must be paid this month or the business unwinds.' },
+  pandemic: { id: 'pandemic', name: 'Pandemic — COVID',              crashLinked: true,
+              what: 'A pandemic stops your income and lands a hospital bill — while the market is crashing at the same time.' },
+  war:      { id: 'war',      name: 'War (Iran–USA / India–Pakistan)', crashLinked: true,
+              what: 'Conflict erupts; you need cash for family and safety in the exact week markets gap down.' },
 };
-
-/* How each response draws the cash and what it does to the SIP. */
+// Severity = fraction of the corpus the emergency demands (user choice).
+const SEVERITY = {
+  minor:  { id: 'minor',  label: 'Manageable',  fraction: 0.30 },
+  major:  { id: 'major',  label: 'Serious',     fraction: 0.55 },
+  severe: { id: 'severe', label: 'Devastating', fraction: 0.80 },
+};
+const SLEEVES = {
+  liquid:   { label: 'Liquid fund',   weight: 0.15, annual: 0.06 },
+  largeCap: { label: 'Large-cap',     weight: 0.50, annual: 0.12 },
+  midSmall: { label: 'Mid / small-cap', weight: 0.35, annual: 0.15 },
+};
 const EM_RESPONSES = {
   panic:      { sellAll: true,  killSIP: true,  pauseMonths: 0, order: ['liquid', 'largeCap', 'midSmall'] },
   surgical:   { sellAll: false, killSIP: false, pauseMonths: 3, order: ['liquid', 'largeCap', 'midSmall'] },
@@ -482,145 +354,107 @@ const EM_RESPONSES = {
   sipKill:    { sellAll: false, killSIP: true,  pauseMonths: 0, order: ['liquid', 'largeCap', 'midSmall'] },
 };
 
-// Portfolio sleeves: fractions of the SIP and their growth character.
-const SLEEVES = {
-  liquid:   { label: 'Liquid fund',   weight: 0.15, monthly: 0.005 },  // ~6%/yr, steady
-  largeCap: { label: 'Large-cap',     weight: 0.50, monthly: DIRECT_MONTHLY },
-  midSmall: { label: 'Mid/small-cap', weight: 0.35, monthly: 0.0115 }, // higher mean, hit hardest in the dip
-};
-
-/**
- * Build the three sleeves up to the emergency month, optionally inside a
- * downturn (hardest mode), then play each response to the 20-year horizon.
- *
- * @param sip       monthly SIP
- * @param feeDrag   0 for Direct, FEE_GAP_MONTHLY for Regular
- * @param response  'panic' | 'surgical'
- * @param need      rupees required now
- * @param S         emergency month
- * @param downturn  if true, the emergency lands inside a market drop
- */
-function simEmergency(sip, feeDrag, response, need, S, downturn) {
-  const N = HORIZON_MONTHS;
-  // Per-sleeve NAVs. In "hardest mode" the equity sleeves are mid-fall at S
-  // (mid/small-cap deepest), so selling them locks a real loss.
+function simEmergency(sip, feeFactor, response, need, S, downturn, N) {
+  const ff = feeFactor == null ? 1 : feeFactor;
+  // Per-sleeve NAVs (effective-annual growth; fee applied multiplicatively).
   const navs = {};
   for (const key in SLEEVES) {
     const s = SLEEVES[key];
+    const mRate = Math.pow(1 + s.annual, 1 / 12) - 1;
     const nav = new Array(N + 1); nav[0] = 100;
     const isEquity = key !== 'liquid';
     const depth = key === 'midSmall' ? 0.30 : key === 'largeCap' ? 0.20 : 0;
-    const bottom = S, fall = 6, recover = 12;
+    const bottom = S, fall = 6, recover = 12, start = bottom - fall;
     for (let t = 1; t <= N; t++) {
-      if (!downturn || !isEquity) { nav[t] = nav[t - 1] * (1 + s.monthly - feeDrag); continue; }
-      const start = bottom - fall;
-      if (t <= start)            nav[t] = nav[t - 1] * (1 + s.monthly - feeDrag);
+      if (!downturn || !isEquity) { nav[t] = nav[t - 1] * (1 + mRate) * ff; continue; }
+      if (t <= start)            nav[t] = nav[t - 1] * (1 + mRate) * ff;
       else if (t <= bottom)      nav[t] = nav[start] * Math.pow(1 - depth, (t - start) / fall);
       else if (t <= bottom + recover) {
         const lo = nav[start] * (1 - depth);
-        const target = nav[start] * Math.pow(1 + s.monthly - feeDrag, fall + recover);
+        const target = nav[start] * Math.pow((1 + mRate) * ff, fall + recover);
         nav[t] = lo * Math.pow(target / lo, (t - bottom) / recover);
-      } else nav[t] = nav[t - 1] * (1 + s.monthly - feeDrag);
+      } else nav[t] = nav[t - 1] * (1 + mRate) * ff;
     }
     navs[key] = nav;
   }
-
-  // Accumulate units in each sleeve via SIP up to (and including) month S.
   const units = { liquid: 0, largeCap: 0, midSmall: 0 };
-  for (let m = 0; m <= S; m++) {
-    if (m < N) for (const key in SLEEVES) units[key] += (sip * SLEEVES[key].weight) / navs[key][m];
-  }
+  for (let m = 0; m <= S; m++) if (m < N) for (const k in SLEEVES) units[k] += (sip * SLEEVES[k].weight) / navs[k][m];
   const valueAt = (m) => Object.keys(units).reduce((s, k) => s + units[k] * navs[k][m], 0);
   const corpusAtEmergency = valueAt(S);
-  // Sleeve breakdown at the emergency, captured BEFORE any redemption (drives
-  // the intro screen so the user sees exactly what they're choosing from).
   const sleeveValues = {};
   for (const k in units) sleeveValues[k] = units[k] * navs[k][S];
 
   const cfg = EM_RESPONSES[response] || EM_RESPONSES.surgical;
-  let took = 0, idleCash = 0;
-
+  let took = 0, idleCash = 0, shortfall = 0, fromMid = 0;
   if (cfg.sellAll) {
-    // Fear's one instruction: take it all, be safe. The leftover sits idle.
-    took = corpusAtEmergency;
-    idleCash = Math.max(corpusAtEmergency - need, 0);
+    took = corpusAtEmergency; idleCash = Math.max(corpusAtEmergency - need, 0);
     for (const k in units) units[k] = 0;
   } else {
-    // Take EXACTLY `need`, drawing sleeves in the response's order.
     let remaining = need;
     for (const sleeve of cfg.order) {
       if (remaining <= 0) break;
       const avail = units[sleeve] * navs[sleeve][S];
       const draw = Math.min(avail, remaining);
+      if (sleeve === 'midSmall') fromMid += draw;
       units[sleeve] -= draw / navs[sleeve][S];
       remaining -= draw;
     }
     took = need - Math.max(remaining, 0);
+    shortfall = Math.max(remaining, 0); // emergency exceeded the whole portfolio
   }
-
   const resumeMonth = cfg.killSIP ? Infinity : S + 1 + cfg.pauseMonths;
   const flows = [];
   for (let m = 0; m <= S; m++) if (m < N) flows.push({ t: m / 12, amount: -sip });
   for (let m = S + 1; m < N; m++) {
-    if (m < resumeMonth) continue;                // paused or cancelled
-    for (const key in SLEEVES) units[key] += (sip * SLEEVES[key].weight) / navs[key][m];
+    if (m < resumeMonth) continue;
+    for (const k in SLEEVES) units[k] += (sip * SLEEVES[k].weight) / navs[k][m];
     flows.push({ t: m / 12, amount: -sip });
   }
-  const final = valueAt(N) + idleCash;            // idleCash only for panic
-  flows.push({ t: S / 12, amount: need });        // the emergency, paid out
-  flows.push({ t: N / 12, amount: final });       // what's left at the horizon
-  return {
-    response, corpusAtEmergency, sleeveValues, took, need, final,
-    sipSurvived: !cfg.killSIP, idleCash, xirr: xirr(flows),
-  };
+  const final = valueAt(N) + idleCash;
+  flows.push({ t: S / 12, amount: took });
+  flows.push({ t: N / 12, amount: final });
+  return { response, corpusAtEmergency, sleeveValues, took, need, shortfall, fromMid, final,
+    sipSurvived: !cfg.killSIP, idleCash, xirr: xirr(flows) };
 }
 
-/** The full Scenario-B comparison: YOU (Direct, response of your choice) vs
- *  YOUR FRIEND (Regular, surgical via the RM call). */
-function runEmergency(sip, emergencyId, youResponse, downturn) {
+function runEmergency(sip, emergencyId, youResponse, downturn, years, severityId) {
   const em = EMERGENCIES[emergencyId] || EMERGENCIES.icu;
-  const S = CRASH_START_MONTH; // eight years in
-  const hard = downturn || em.crashLinked; // pandemics/wars arrive with a crash
-  // Size the emergency off the calm (no-downturn) corpus, rounded to a clean
-  // lakh, so the figure is stable whether or not the market is also falling.
-  const probe = simEmergency(sip, 0, 'panic', 0, S, false);
-  const need = Math.max(100000, Math.round(em.fraction * probe.corpusAtEmergency / 1e5) * 1e5);
-
-  const you = youResponse ? simEmergency(sip, 0, youResponse, need, S, hard) : null;
-  const friend = simEmergency(sip, FEE_GAP_MONTHLY, 'surgical', need, S, hard);
-  // A Direct investor who DOES make the smart call — kept honest, so the
-  // lesson is "alone you usually can't," not "the door decides it". (Such an
-  // investor even edges ahead of the friend — they also saved the fee.)
-  const directSmart = simEmergency(sip, 0, 'surgical', need, S, hard);
-  return { mode: 'emergency', em, sip, years: HORIZON_YEARS, S, startYears: S / 12, downturn: hard, need, youResponse, you, friend, directSmart };
+  const sev = SEVERITY[severityId] || SEVERITY.major;
+  const Y = years || DEFAULT_YEARS, N = Y * 12, S = Math.round(N / 2);
+  const hard = downturn || em.crashLinked;
+  const probe = simEmergency(sip, 1, 'panic', 0, S, false, N);
+  const need = Math.max(100000, Math.round(sev.fraction * probe.corpusAtEmergency / 1e5) * 1e5);
+  const you = youResponse ? simEmergency(sip, 1, youResponse, need, S, hard, N) : null;
+  const friend = simEmergency(sip, FEE_FACTOR, 'surgical', need, S, hard, N);
+  const directSmart = simEmergency(sip, 1, 'surgical', need, S, hard, N);
+  return { mode: 'emergency', em, sev, sip, years: Y, N, S, crashYear: S / 12,
+    downturn: hard, need, youResponse, you, friend, directSmart };
 }
 
-/* ---- Node export for the test harness; harmless in the browser. -------- */
+/* ---- Node export for the test harness; harmless in the browser. ---- */
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    DIRECT_MONTHLY, REGULAR_MONTHLY, FEE_GAP_MONTHLY, HORIZON_MONTHS, EVENTS,
-    buildEventNav, buildTrendNav, xirr, xirrFromSIP,
+    DIRECT_ANNUAL, REGULAR_ANNUAL, DIRECT_MONTHLY, REGULAR_MONTHLY, FEE_FACTOR, DEFAULT_YEARS, EVENTS,
+    cagr, xirr, xirrFromSIP, buildEventNav, buildTrendNav,
     simHold, simPause, simSell, peakRegainMonth, runSinglePath,
     genMarketReturns, navFromReturns, simPolicyPath, runMonteCarlo, distribution,
-    EMERGENCIES, EM_RESPONSES, SLEEVES, simEmergency, runEmergency, MC_POLICIES,
-    CRASH_START_MONTH,
+    EMERGENCIES, SEVERITY, EM_RESPONSES, SLEEVES, simEmergency, runEmergency, MC_POLICIES,
   };
 }
 
 /* =====================================================================
  * 2. THE EXPERIENCE  (browser only)
  * ---------------------------------------------------------------------
- * Premium, cinematic, mobile-first. The power lives in stillness and timing.
- * Crucially, the heavy beats DO NOT auto-advance — the user taps to move on,
- * so nothing important ever flashes past before it can be read or felt.
+ * One idea at a time. Heavy beats HOLD until the user taps. Big type. One
+ * headline number; the full maths is one tap away. Crash at the exact midpoint
+ * of the chosen horizon, told upfront so it never feels arbitrary.
  * ===================================================================== */
 if (typeof document !== 'undefined') (function () {
   'use strict';
 
-  /* ---- Number formatting (Indian grouping + lakh/crore short form). ---- */
+  /* ---- Formatting. ---- */
   function inr(v) {
-    const n = Math.round(v);
-    const s = Math.abs(n).toString();
+    const n = Math.round(v), s = Math.abs(n).toString();
     let last3 = s.slice(-3), rest = s.slice(0, -3);
     if (rest) rest = rest.replace(/\B(?=(\d{2})+(?!\d))/g, ',');
     return '₹' + (n < 0 ? '-' : '') + (rest ? rest + ',' + last3 : last3);
@@ -631,63 +465,44 @@ if (typeof document !== 'undefined') (function () {
     return inr(v);
   }
   const pct = (r) => (r * 100).toFixed(1) + '%';
-  const yearsWord = (y) => { const r = Math.round(y); return r + (r === 1 ? ' year' : ' years'); };
 
-  // ---- DOM helpers. ----
   const $ = (id) => document.getElementById(id);
   const show = (el) => { if (!el) return; el.hidden = false; requestAnimationFrame(() => el.classList.add('show')); };
   const hide = (el) => { if (!el) return; el.classList.remove('show'); el.hidden = true; };
-  const setHTML = (id, html) => { const el = $(id); if (el) el.innerHTML = html; };
+  const setHTML = (id, h) => { const el = $(id); if (el) el.innerHTML = h; };
   const setText = (id, t) => { const el = $(id); if (el) el.textContent = t; };
   const easeInOut = (p) => p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
-  const reduceMotion = typeof matchMedia === 'function'
-    && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const reduceMotion = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  // ---- Palette (mirrors styles.css). ----
-  const COL = {
-    direct: '#34d399', regular: '#e0a64a', crash: '#f06b6b',
-    cool: '#6f86c9', ghost: '#cbb26b',
-    pause: '#5b9cf0', sellBack: '#a78bfa', sellWait: '#f06b6b',
-  };
+  const COL = { direct: '#34d399', regular: '#e8b257', crash: '#f37070', cool: '#7e93d4', ghost: '#cbb26b',
+    pause: '#5b9cf0', sellBack: '#a78bfa', sellWait: '#f37070' };
   const BEHAVIOURS = {
-    hold:     { label: 'Held',                       color: COL.direct },
-    pause:    { label: 'Paused the SIP',             color: COL.pause },
-    sellBack: { label: 'Sold, bought back',          color: COL.sellBack },
-    sellWait: { label: 'Sold and waited',            color: COL.sellWait },
+    hold:     { label: 'Held',                     color: COL.direct },
+    pause:    { label: 'Paused the SIP',           color: COL.pause },
+    sellBack: { label: 'Sold, bought back',        color: COL.sellBack },
+    sellWait: { label: 'Sold and waited',          color: COL.sellWait },
   };
-  const EM_LABEL = {
-    panic: 'redeemed everything', surgical: 'took only what you needed',
-    sellLosers: 'sold the fallen fund', sipKill: 'stopped the SIP',
-  };
+  const EM_LABEL = { panic: 'redeemed everything', surgical: 'took only what you needed',
+    sellLosers: 'sold the fallen fund', sipKill: 'stopped the SIP' };
 
-  // ---- App state. ----
   const state = {
-    scenario: 'crash', sip: 10000, eventId: 'covid',
-    emergencyId: 'icu', downturn: false,
-    sim: null, choice: null, emResponse: null, emCtx: null, mc: null,
+    scenario: 'crash', years: 20, sip: 10000, eventId: 'covid',
+    emergencyId: 'icu', severity: 'major', downturn: false,
+    sim: null, choice: null, emResponse: null, emCtx: null,
     head: 0, phase: 'idle', phaseStart: null, raf: 0, yMax: 1,
   };
 
-  /* ===================================================================
-   * 2a. Canvas chart primitives.
-   * =================================================================== */
+  /* ===================== Canvas ===================== */
   function fitCanvas(cv) {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const r = cv.getBoundingClientRect();
-    cv.width = Math.max(1, Math.round(r.width * dpr));
-    cv.height = Math.max(1, Math.round(r.height * dpr));
-    const c = cv.getContext('2d');
-    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const dpr = Math.min(window.devicePixelRatio || 1, 2), r = cv.getBoundingClientRect();
+    cv.width = Math.max(1, Math.round(r.width * dpr)); cv.height = Math.max(1, Math.round(r.height * dpr));
+    const c = cv.getContext('2d'); c.setTransform(dpr, 0, 0, dpr, 0, 0);
     return { w: r.width, h: r.height, c };
   }
   function pointsUpTo(values, head) {
-    const pts = [];
-    const last = Math.min(Math.floor(head), values.length - 1);
+    const pts = [], last = Math.min(Math.floor(head), values.length - 1);
     for (let m = 0; m <= last; m++) pts.push([m, values[m]]);
-    if (last < values.length - 1 && head > last) {
-      const f = head - last;
-      pts.push([head, values[last] + (values[last + 1] - values[last]) * f]);
-    }
+    if (last < values.length - 1 && head > last) { const f = head - last; pts.push([head, values[last] + (values[last + 1] - values[last]) * f]); }
     return pts;
   }
   function valueAt(values, head) {
@@ -695,20 +510,13 @@ if (typeof document !== 'undefined') (function () {
     if (last >= values.length - 1) return values[values.length - 1];
     return values[last] + (values[last + 1] - values[last]) * (head - last);
   }
-  function hexFill(hex, a) {
-    const n = parseInt(hex.slice(1), 16);
-    return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
-  }
+  function hexFill(hex, a) { const n = parseInt(hex.slice(1), 16); return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')'; }
   function drawLines(c, w, h, N, yMax, lines, head, pad) {
     const p = pad || { l: 18, r: 18, t: 26, b: 24 };
-    const X = (m) => p.l + (m / N) * (w - p.l - p.r);
-    const Y = (v) => (h - p.b) - (v / yMax) * (h - p.t - p.b);
+    const X = (m) => p.l + (m / N) * (w - p.l - p.r), Y = (v) => (h - p.b) - (v / yMax) * (h - p.t - p.b);
     c.clearRect(0, 0, w, h);
     c.strokeStyle = 'rgba(255,255,255,0.06)'; c.lineWidth = 1;
-    for (let i = 0; i <= 3; i++) {
-      const yy = p.t + i * (h - p.t - p.b) / 3;
-      c.beginPath(); c.moveTo(p.l, yy); c.lineTo(w - p.r, yy); c.stroke();
-    }
+    for (let i = 0; i <= 3; i++) { const yy = p.t + i * (h - p.t - p.b) / 3; c.beginPath(); c.moveTo(p.l, yy); c.lineTo(w - p.r, yy); c.stroke(); }
     for (const line of lines) {
       const pts = pointsUpTo(line.values, head == null ? N : head);
       if (!pts.length) continue;
@@ -716,35 +524,18 @@ if (typeof document !== 'undefined') (function () {
         c.beginPath(); c.moveTo(X(pts[0][0]), h - p.b);
         for (const [m, v] of pts) c.lineTo(X(m), Y(v));
         c.lineTo(X(pts[pts.length - 1][0]), h - p.b); c.closePath();
-        const g = c.createLinearGradient(0, p.t, 0, h - p.b);
-        g.addColorStop(0, line.fill); g.addColorStop(1, 'rgba(0,0,0,0)');
-        c.fillStyle = g; c.fill();
+        const g = c.createLinearGradient(0, p.t, 0, h - p.b); g.addColorStop(0, line.fill); g.addColorStop(1, 'rgba(0,0,0,0)'); c.fillStyle = g; c.fill();
       }
-      c.save();
-      c.globalAlpha = line.alpha == null ? 1 : line.alpha;
-      c.strokeStyle = line.color; c.lineWidth = line.width || 2;
-      c.lineJoin = 'round'; c.lineCap = 'round';
-      if (line.dash) c.setLineDash(line.dash);
-      if (line.glow) { c.shadowColor = line.color; c.shadowBlur = 14; }
+      c.save(); c.globalAlpha = line.alpha == null ? 1 : line.alpha; c.strokeStyle = line.color; c.lineWidth = line.width || 2;
+      c.lineJoin = 'round'; c.lineCap = 'round'; if (line.dash) c.setLineDash(line.dash); if (line.glow) { c.shadowColor = line.color; c.shadowBlur = 14; }
       c.beginPath();
-      for (let i = 0; i < pts.length; i++) {
-        const [m, v] = pts[i];
-        if (i === 0) c.moveTo(X(m), Y(v)); else c.lineTo(X(m), Y(v));
-      }
+      for (let i = 0; i < pts.length; i++) { const [m, v] = pts[i]; if (i === 0) c.moveTo(X(m), Y(v)); else c.lineTo(X(m), Y(v)); }
       c.stroke(); c.restore();
-      if (line.dot) {
-        const [m, v] = pts[pts.length - 1];
-        c.save(); c.shadowColor = line.color; c.shadowBlur = 18; c.fillStyle = line.color;
-        c.beginPath(); c.arc(X(m), Y(v), 5, 0, Math.PI * 2); c.fill(); c.restore();
-      }
+      if (line.dot) { const [m, v] = pts[pts.length - 1]; c.save(); c.shadowColor = line.color; c.shadowBlur = 18; c.fillStyle = line.color; c.beginPath(); c.arc(X(m), Y(v), 5, 0, Math.PI * 2); c.fill(); c.restore(); }
     }
   }
 
-  /* ===================================================================
-   * 2b. SCENARIO A — "The Crash": climb (with a clear year counter),
-   *     the fall, the SILENCE (tap to continue), the SPLIT (you choose /
-   *     her call), sell-as-relief (tap to continue), divergence, result.
-   * =================================================================== */
+  /* ===================== SCENARIO A — the crash ===================== */
   function renderStage() {
     const cv = $('stageCanvas'); if (!cv) return;
     const { w, h, c } = fitCanvas(cv);
@@ -752,204 +543,192 @@ if (typeof document !== 'undefined') (function () {
     const pre = state.phase === 'climb' || state.phase === 'crash';
     let lines, front;
     if (pre) {
-      const crashing = state.phase === 'crash';
-      const d = sim.direct.hold.value, r = sim.regular.hold.value;
+      const crashing = state.phase === 'crash', d = sim.direct.hold.value, r = sim.regular.hold.value;
       front = d;
       lines = [
         { values: r, color: crashing ? hexFill(COL.cool, 0.9) : COL.regular, width: 2.4, alpha: 0.85 },
-        { values: d, color: crashing ? COL.cool : COL.direct, width: 3.4, glow: true, dot: true,
-          fill: crashing ? hexFill(COL.cool, 0.16) : hexFill(COL.direct, 0.16) },
+        { values: d, color: crashing ? COL.cool : COL.direct, width: 3.4, glow: true, dot: true, fill: crashing ? hexFill(COL.cool, 0.16) : hexFill(COL.direct, 0.16) },
       ];
     } else {
-      const yours = sim.direct[state.choice];
-      const calm = sim.direct.hold;
+      const yours = sim.direct[state.choice], calm = sim.direct.hold;
       front = yours.value;
       lines = [
         { values: calm.value, color: COL.ghost, width: 2.2, alpha: 0.4, dash: [5, 6] },
-        { values: yours.value, color: BEHAVIOURS[state.choice].color, width: 3.4, glow: true, dot: true,
-          fill: hexFill(BEHAVIOURS[state.choice].color, 0.16) },
+        { values: yours.value, color: BEHAVIOURS[state.choice].color, width: 3.4, glow: true, dot: true, fill: hexFill(BEHAVIOURS[state.choice].color, 0.16) },
       ];
     }
     drawLines(c, w, h, N, state.yMax, lines, state.head);
-
     const corpus = valueAt(front, state.head);
     setText('corpus', inr(corpus));
     setText('corpusShort', '≈ ' + inrShort(corpus));
     const months = Math.min(Math.floor(state.head), N);
-    setText('yearLabel', 'Year ' + Math.min(Math.floor(state.head / 12), sim.years) + ' of ' + sim.years);
+    setText('yearLabel', 'Year ' + Math.min(Math.floor(state.head / 12), sim.years) + ' / ' + sim.years);
     setText('invested', 'Invested ' + inrShort(state.sip * months));
+    const bar = $('climbProg'); if (bar) bar.style.width = Math.min(100, state.head / N * 100) + '%';
   }
 
-  // Slower, deliberate timing — there is room to breathe and watch the years
-  // pile up before anything dramatic happens.
-  const CLIMB_MS   = reduceMotion ? 200 : 7000;
-  const CRASH_MS   = reduceMotion ? 150 : 3200;
-  const DIVERGE_MS = reduceMotion ? 200 : 6000;
-
-  function tensionCue() {
-    if (!reduceMotion && typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate([20, 70, 30]);
-  }
+  const CLIMB_MS = reduceMotion ? 200 : 7000, CRASH_MS = reduceMotion ? 150 : 3200, DIVERGE_MS = reduceMotion ? 200 : 6000;
+  function tensionCue() { if (!reduceMotion && navigator.vibrate) navigator.vibrate([20, 70, 30]); }
 
   function loop(ts) {
     if (state.phaseStart == null) state.phaseStart = ts;
-    const e = ts - state.phaseStart;
-    const sim = state.sim, N = sim.N, S = sim.S;
-    const bottom = sim.navDirect._bottom;
+    const e = ts - state.phaseStart, sim = state.sim, N = sim.N, S = sim.S, bottom = sim.navDirect._bottom;
     if (state.phase === 'climb') {
-      const p = Math.min(e / CLIMB_MS, 1);
-      state.head = S * easeInOut(p);
-      renderStage();
-      // A gentle floating badge marks the years passing, so it's unmistakable
-      // how long the money has been growing before the storm.
-      const yr = Math.floor(state.head / 12);
-      const badge = $('climbBadge');
-      if (badge) {
-        if (p < 0.97) { badge.hidden = false; badge.textContent = 'Year ' + yr + ' · all calm'; }
-        else badge.hidden = true;
-      }
-      if (p >= 1) { state.phase = 'crash'; state.phaseStart = null; $('stage').classList.add('crashing'); if (badge) badge.hidden = true; tensionCue(); }
+      const p = Math.min(e / CLIMB_MS, 1); state.head = S * easeInOut(p); renderStage();
+      if (p >= 1) { state.phase = 'crash'; state.phaseStart = null; $('stage').classList.add('crashing'); tensionCue(); }
       state.raf = requestAnimationFrame(loop);
     } else if (state.phase === 'crash') {
-      const p = Math.min(e / CRASH_MS, 1);
-      state.head = S + (bottom - S) * p;
-      renderStage();
+      const p = Math.min(e / CRASH_MS, 1); state.head = S + (bottom - S) * p; renderStage();
       if (p >= 1) { cancelAnimationFrame(state.raf); enterSilence(); return; }
       state.raf = requestAnimationFrame(loop);
     } else if (state.phase === 'diverge') {
-      const p = Math.min(e / DIVERGE_MS, 1);
-      state.head = bottom + (N - bottom) * easeInOut(p);
-      renderStage();
+      const p = Math.min(e / DIVERGE_MS, 1); state.head = bottom + (N - bottom) * easeInOut(p); renderStage();
       if (p >= 1) { cancelAnimationFrame(state.raf); openResult(); return; }
       state.raf = requestAnimationFrame(loop);
     }
   }
 
   function startCrash() {
-    state.sim = runSinglePath(state.sip, state.eventId, true); // vary -> unique run
+    state.sim = runSinglePath(state.sip, state.eventId, state.years);
     state.choice = null; state.head = 0; state.phase = 'climb'; state.phaseStart = null;
     state.yMax = state.sim.direct.hold.final * 1.08;
+    const marker = $('climbMarker'); if (marker) marker.style.left = (state.sim.S / state.sim.N * 100) + '%';
     $('stage').classList.remove('crashing');
-    hideAllOverlays();
-    hide($('setup')); hide($('emergency'));
+    hideAllOverlays(); hide($('setup')); hide($('emergency'));
     show($('stage'));
-    cancelAnimationFrame(state.raf);
-    state.raf = requestAnimationFrame(loop);
+    cancelAnimationFrame(state.raf); state.raf = requestAnimationFrame(loop);
   }
 
-  // The silence beat — now a card that STAYS until the user is ready. Big type,
-  // the years invested, the rupees gone, and a single button to continue.
+  // Loss at a glance — big number, one before→after row, one line of context.
   function enterSilence() {
     const sim = state.sim;
+    const peak = sim.direct.hold.value[sim.S], bottom = sim.direct.hold.value[sim.navDirect._bottom];
     setText('silDepth', Math.round(sim.ev.depth * 100));
-    setText('silYears', 'You invested for ' + yearsWord(sim.startYears) + ' — ' + inrShort(state.sip * sim.S) + ' of your own money — before this.');
-    const peak = sim.direct.hold.value[sim.S];
-    const bottom = sim.direct.hold.value[sim.navDirect._bottom];
-    setHTML('silenceLoss',
-      'Your <b>' + inrShort(peak) + '</b> is now <b>' + inrShort(bottom) + '</b>'
-      + '<span class="sil-sub">' + inrShort(peak - bottom) + ' gone, on paper, in ' + sim.ev.name + '.</span>');
+    setText('silFrom', inrShort(peak)); setText('silTo', inrShort(bottom));
+    setText('silContext', sim.years / 2 + ' years of investing. Then ' + sim.ev.name + '.');
     show($('silence'));
   }
-
   function openSplit() {
-    hide($('silence'));
-    renderFriendPanel();
-    show($('split'));
+    hide($('silence')); renderFriendPanel(); show($('split'));
     const wash = () => { const s = $('split'); if (s) s.classList.add('called'); };
     if (reduceMotion) wash(); else setTimeout(wash, 1100);
   }
-
   function renderFriendPanel() {
     const cv = $('friendCanvas'); if (!cv) return;
-    const sim = state.sim, N = sim.N;
-    const { w, h, c } = fitCanvas(cv);
-    const r = sim.regular.hold.value;
-    drawLines(c, w, h, N, state.yMax, [
-      { values: r, color: COL.regular, width: 2.8, glow: true, dot: true, fill: hexFill(COL.regular, 0.14) },
-    ], sim.navRegular._healed, { l: 10, r: 10, t: 14, b: 14 });
+    const sim = state.sim, { w, h, c } = fitCanvas(cv);
+    drawLines(c, w, h, sim.N, state.yMax, [{ values: sim.regular.hold.value, color: COL.regular, width: 2.8, glow: true, dot: true, fill: hexFill(COL.regular, 0.14) }], sim.navRegular._healed, { l: 10, r: 10, t: 14, b: 14 });
   }
-
   function choose(choice) {
     state.choice = choice;
     const s = $('split'); if (s) s.classList.remove('called');
-    hide($('split'));
-    $('stage').classList.remove('crashing');
-    // Sell-as-relief: the seductive calm, then a tap to face the cost.
-    if (choice === 'sellBack' || choice === 'sellWait') show($('relief'));
-    else beginDiverge();
+    hide($('split')); $('stage').classList.remove('crashing');
+    if (choice === 'sellBack' || choice === 'sellWait') show($('relief')); else beginDiverge();
   }
   function beginDiverge() {
-    hide($('relief'));
-    show($('stage'));
+    hide($('relief')); show($('stage'));
     state.phase = 'diverge'; state.phaseStart = null;
-    cancelAnimationFrame(state.raf);
-    state.raf = requestAnimationFrame(loop);
+    cancelAnimationFrame(state.raf); state.raf = requestAnimationFrame(loop);
   }
 
-  /* ---- RESULT — YOU vs YOUR FRIEND. ---- */
+  /* ---- Result: ONE headline; maths one tap away. ---- */
   function openResult() {
-    const sim = state.sim;
-    const yours = sim.direct[state.choice];
-    const friend = sim.regular.hold;
-    const calmDirect = sim.direct.hold;
-
+    const sim = state.sim, yours = sim.direct[state.choice], friend = sim.regular.hold, calm = sim.direct.hold;
     setText('youLabel', 'YOU · Direct · ' + BEHAVIOURS[state.choice].label);
-    setText('friendLabelR', 'YOUR FRIEND · Regular · Held (the RM call)');
+    setText('friendLabelR', 'FRIEND · Regular · Held');
     $('youFinal').style.color = BEHAVIOURS[state.choice].color;
+    countUp($('youFinal'), yours.final, 1500, inrShort);
+    countUp($('friendFinal'), friend.final, 1500, inrShort);
 
-    countUp($('youFinal'), yours.final, 1500, inr);
-    countUp($('friendFinal'), friend.final, 1500, inr);
-    setText('youShort', '≈ ' + inrShort(yours.final) + '  ·  XIRR ' + pct(yours.xirr));
-    setText('friendShort', '≈ ' + inrShort(friend.final) + '  ·  XIRR ' + pct(friend.xirr));
-
-    const feeSaved = sim.feeSavingRupees;
-    const behaviourCost = calmDirect.final - yours.final;
-    setHTML('ledger',
-      '<div class="led"><span>Direct saved you (the fee, compounded)</span><b class="good">' + inr(feeSaved) + '</b></div>'
-      + '<div class="led"><span>Your decision in the crash cost you</span><b class="bad">' + inr(behaviourCost) + '</b></div>');
+    const diff = yours.final - friend.final;
+    if (diff >= 0) setHTML('gapLine', '<span class="good">You finished ' + inr(Math.abs(diff)) + ' ahead of your friend.</span>');
+    else setHTML('gapLine', '<span class="bad">You finished ' + inr(Math.abs(diff)) + ' behind your friend.</span>');
 
     setHTML('verdict', verdictFor(state.choice, yours.final, friend.final, sim));
+
+    // The maths panel (computed vs assumption, fully auditable).
+    const feeSaved = sim.feeSavingRupees, behaviourCost = calm.final - yours.final;
+    setHTML('mathsPanel',
+      mathsRows([
+        ['Total you invested (₹' + state.sip.toLocaleString('en-IN') + '×' + sim.N + ' months)', inr(yours.invested), 'computed'],
+        ['YOUR final corpus', inr(yours.final), 'computed'],
+        ['YOUR return (XIRR)', pct(yours.xirr), 'computed'],
+        ['Friend\'s final corpus', inr(friend.final), 'computed'],
+        ['Friend\'s return (XIRR)', pct(friend.xirr), 'computed'],
+        ['The market itself (CAGR)', pct(sim.indexCagr), 'computed'],
+        ['What the fee saved you (Direct vs Regular, both holding)', inr(feeSaved), 'computed'],
+        ['What your crash decision cost you (vs holding)', inr(behaviourCost), 'computed'],
+        ['Assumed returns', 'Direct 12% / Regular 11% a year', 'assumption'],
+        ['Assumed drawdown', '−' + Math.round(sim.ev.depth * 100) + '% over ' + sim.ev.fallMonths + ' mo, recover ' + sim.ev.recoveryMonths + ' mo', 'assumption'],
+      ]) + '<p class="maths-note">XIRR is the one annual rate that makes all your monthly investments add up to the final value — the correct return for a SIP. Every ₹ above is computed from the month-by-month units × NAV; only the two assumptions are inputs.</p>');
+    closeMaths('mathsPanel', 'mathsToggle');
     show($('result'));
   }
 
   function verdictFor(choice, yours, friendFinal, sim) {
-    const youHeld = choice === 'hold';
-    const youAhead = yours >= friendFinal;
-    if (youHeld && youAhead) {
-      const surplus = Math.max(sim.direct.hold.final - sim.directNoCrash, 0);
-      return 'You did nothing. She did nothing. You simply kept more — the door you chose finally paid off.'
-        + '<span class="verdict-sub">Staying invested even left you about <b>' + inrShort(surplus)
-        + '</b> ahead of a crash-free market — the months below trend bought cheaper units.</span>';
-    }
-    if (!youHeld && !youAhead) {
-      return 'You saved the fee and lost far more.'
-        + '<span class="verdict-sub">Her "expensive" plan bought the one thing that mattered: someone to stop her selling. '
-        + 'She isn\'t smarter than you. She just wasn\'t alone.</span>';
-    }
+    const youHeld = choice === 'hold', youAhead = yours >= friendFinal;
+    if (youHeld && youAhead)
+      return 'You both did nothing — and you kept more. The cheaper door quietly paid off.'
+        + '<span class="verdict-sub">Holding even beat a crash-free market by about <b>' + inrShort(Math.max(sim.direct.hold.final - sim.directNoCrash, 0)) + '</b>: the months below trend bought you cheaper units.</span>';
+    if (!youHeld && !youAhead)
+      return 'You saved the fee — and lost far more.'
+        + '<span class="verdict-sub">Her plan bought the one thing that mattered: a voice that said <i>don\'t sell</i>. She isn\'t smarter than you. She just wasn\'t alone.</span>';
     if (!youHeld && youAhead) {
-      return 'You blinked — and still edged ahead, because the fee gap is small and this storm was shallow.'
-        + '<span class="verdict-sub">It won\'t always go this way. The deeper the fall, the more the one phone call is worth.</span>';
+      // Concrete, computed "what a deeper crash would have done".
+      const gfc = runSinglePath(state.sip, 'gfc', state.years);
+      const deepCost = gfc.direct.hold.final - gfc.direct.sellWait.final;
+      return 'This fall was shallow, so blinking barely hurt — you even edged ahead.'
+        + '<span class="verdict-sub">Don\'t mistake that for skill. The same panic in a 2008-style crash would have cost you about <b>' + inrShort(deepCost) + '</b>.</span>';
     }
     return 'Two calm investors. The only gap left was the fee.'
-      + '<span class="verdict-sub">When nobody panics, the door is all that\'s left to decide it — and it decides it by a little.</span>';
+      + '<span class="verdict-sub">When nobody panics, the door decides it — by a little.</span>';
   }
 
   function countUp(el, to, dur, fmt) {
     if (!el) return;
     if (reduceMotion) { el.textContent = fmt(to); return; }
     const start = performance.now();
-    (function step(t) {
-      const p = Math.min((t - start) / dur, 1);
-      el.textContent = fmt(to * (1 - Math.pow(1 - p, 3)));
-      if (p < 1) requestAnimationFrame(step);
-    })(performance.now());
+    (function step(t) { const p = Math.min((t - start) / dur, 1); el.textContent = fmt(to * (1 - Math.pow(1 - p, 3))); if (p < 1) requestAnimationFrame(step); })(performance.now());
   }
 
-  /* ===================================================================
-   * 2c. "See every outcome" — the 4x4 grid + the half/half hedge.
-   * =================================================================== */
+  /* ---- Maths panel helpers (reused by both scenarios). ---- */
+  function mathsRows(rows) {
+    return '<div class="maths-rows">' + rows.map((r) =>
+      '<div class="maths-row"><span class="mr-label">' + r[0] + '</span><span class="mr-val">' + r[1]
+      + '</span><span class="mr-tag ' + r[2] + '">' + (r[2] === 'computed' ? 'computed' : 'assumption') + '</span></div>').join('') + '</div>';
+  }
+  function closeMaths(panelId, toggleId) { const p = $(panelId), t = $(toggleId); if (p) p.hidden = true; if (t) t.textContent = 'See the maths ▾'; }
+  function wireMaths(toggleId, panelId) {
+    on(toggleId, 'click', () => { const p = $(panelId), t = $(toggleId); if (!p) return; p.hidden = !p.hidden; t.textContent = p.hidden ? 'See the maths ▾' : 'Hide the maths ▴'; });
+  }
+
+  /* ===================== "Was it luck?" (simplified Monte Carlo) ===================== */
+  function openLuck() {
+    show($('luck'));
+    setHTML('luckBody', '<p class="mc-running">Replaying 1,000 lifetimes…</p>');
+    setTimeout(() => {
+      const N = 1000;
+      const held = runMonteCarlo(state.sip, 'hold', 'hold', N, 4242, state.years);
+      const sold = runMonteCarlo(state.sip, 'panic', 'hold', N, 4242, state.years);
+      const heldPct = Math.round(held.youAhead / N * 100);
+      const soldPct = Math.round(sold.youAhead / N * 100);
+      setHTML('luckBody',
+        '<p class="luck-intro">We replayed your 20 years across <b>1,000 random markets</b> — booms, crashes, fat tails and all. How often did YOU (Direct) beat your guided friend (Regular, who always holds)?</p>'
+        + luckRow('If you HOLD through every crash', heldPct, COL.direct,
+            'Holding wasn\'t luck — it came out ahead in <b>' + heldPct + ' of 100</b> futures (the fee you saved, compounding).')
+        + luckRow('If you SELL when it falls hard', soldPct, COL.crash,
+            'Selling in the fall beat your guided friend in only <b>' + soldPct + ' of 100</b>. The other ' + (100 - soldPct) + ' times, the phone call she had was worth more than the fee you saved.')
+        + '<p class="luck-foot">Same money, same markets — the only difference is behaviour. That\'s the whole point.</p>');
+    }, 30);
+  }
+  function luckRow(title, greenPct, color, caption) {
+    let dots = '';
+    for (let i = 0; i < 100; i++) dots += '<span class="dot' + (i < greenPct ? ' on' : '') + '" style="' + (i < greenPct ? 'background:' + color : '') + '"></span>';
+    return '<div class="luck-block"><p class="luck-title">' + title + '</p><div class="dot-grid">' + dots + '</div><p class="luck-cap">' + caption + '</p></div>';
+  }
+
+  /* ===================== Every outcome (grid) ===================== */
   function openGrid() {
-    const sim = (state.sim && state.sim.mode === 'single')
-      ? state.sim : runSinglePath(state.sip, state.eventId);
+    const sim = (state.sim && state.sim.mode === 'single') ? state.sim : runSinglePath(state.sip, state.eventId, state.years);
     const keys = ['hold', 'pause', 'sellBack', 'sellWait'];
     let html = '<table class="grid-tbl"><thead><tr><th class="corner">YOU ↓ / FRIEND →</th>';
     for (const fk of keys) html += '<th>' + BEHAVIOURS[fk].label + '</th>';
@@ -959,212 +738,107 @@ if (typeof document !== 'undefined') (function () {
       for (const fk of keys) {
         const you = sim.direct[yk].final, fr = sim.regular[fk].final;
         const cls = you > fr * 1.005 ? 'win' : you < fr * 0.995 ? 'lose' : 'tie';
-        html += '<td class="' + cls + '"><span class="cell-y">' + inrShort(you) + '</span>'
-          + '<span class="cell-f">vs ' + inrShort(fr) + '</span></td>';
+        html += '<td class="' + cls + '"><span class="cell-y">' + inrShort(you) + '</span><span class="cell-f">vs ' + inrShort(fr) + '</span></td>';
       }
       html += '</tr>';
     }
     html += '</tbody></table>';
-    const halfHold = (sim.direct.hold.final + sim.regular.hold.final) / 2;
-    html += '<p class="grid-note"><b>Green</b> = YOU (Direct) finish ahead · '
-      + '<b>red</b> = your friend (Regular) finishes ahead · grey = a tie. '
-      + 'The fee gap is small and steady; the behaviour gap is enormous.</p>'
-      + '<div class="hedge"><span>What if you split — half Regular, half Direct, both holding?</span>'
-      + '<b>' + inrShort(halfHold) + '</b><span class="hedge-sub">It lands right in between — the hedge does exactly what a hedge does.</span></div>';
-    setHTML('gridBody', html);
-    show($('grid'));
+    const half = (sim.direct.hold.final + sim.regular.hold.final) / 2;
+    html += '<p class="grid-note"><b style="color:' + COL.direct + '">Green</b> = YOU (Direct) ahead · <b style="color:' + COL.crash + '">red</b> = your friend (Regular) ahead. The fee gap is small; the behaviour gap is huge.</p>'
+      + '<div class="hedge"><span>Split half-Regular, half-Direct (both holding)?</span><b>' + inrShort(half) + '</b><span class="hedge-sub">It lands right in between — what a hedge does.</span></div>';
+    setHTML('gridBody', html); show($('grid'));
   }
 
-  /* ===================================================================
-   * 2d. "10,000 lifetimes" — Monte Carlo fan chart + plain odds.
-   * =================================================================== */
-  function openMonte() { show($('monte')); runAndDrawMonte(); }
-  function runAndDrawMonte() {
-    const youPolicy = $('youPolicy').value;
-    const friendPolicy = $('friendPolicy').value;
-    const nPaths = Number($('mcPaths').value) || 2000;
-    setHTML('mcOdds', '<p class="mc-running">Simulating ' + nPaths.toLocaleString('en-IN') + ' futures…</p>');
-    setTimeout(() => {
-      const mc = runMonteCarlo(state.sip, youPolicy, friendPolicy, nPaths, 20262026);
-      state.mc = mc;
-      drawFan(mc);
-      const per10k = (n) => Math.round(n / mc.nPaths * 10000).toLocaleString('en-IN');
-      const youName = mc.youPolicy.id === 'hold' ? 'calm Direct investor' : 'Direct investor who sells in the fall';
-      const frName = mc.friendPolicy.id === 'hold' ? 'guided Regular investor (holds)' : 'Regular investor who sells in the fall';
-      setHTML('mcOdds',
-        '<p class="mc-headline">In <b>' + per10k(mc.youAhead) + ' of 10,000 futures</b>, the ' + youName
-        + ' finished ahead of the ' + frName + '.</p>'
-        + '<div class="mc-stats">'
-        + '<div><span>YOU · Direct · ' + mc.youPolicy.label + '</span><b>median ' + inrShort(mc.you.p50) + '</b>'
-        + '<i>likely range ' + inrShort(mc.you.p05) + ' – ' + inrShort(mc.you.p95) + '</i></div>'
-        + '<div><span>FRIEND · Regular · ' + mc.friendPolicy.label + '</span><b>median ' + inrShort(mc.friend.p50) + '</b>'
-        + '<i>likely range ' + inrShort(mc.friend.p05) + ' – ' + inrShort(mc.friend.p95) + '</i></div>'
-        + '</div>'
-        + '<p class="mc-foot">Same market, same SIP, every month. Change either policy above to see the case where '
-        + 'the guided investor panics and the calm Direct investor wins — the door was never the point.</p>');
-    }, 30);
-  }
-  function drawFan(mc) {
-    const cv = $('fanCanvas'); if (!cv) return;
-    const { w, h, c } = fitCanvas(cv);
-    const yMax = Math.max(mc.you.p95, mc.friend.p95) * 1.05;
-    const p = { l: 12, r: 12, t: 16, b: 18 };
-    const Y = (v) => (h - p.b) - (v / yMax) * (h - p.t - p.b);
-    c.clearRect(0, 0, w, h);
-    const band = (dist, color, x0, x1) => {
-      c.fillStyle = hexFill(color, 0.16);
-      c.fillRect(x0, Y(dist.p95), x1 - x0, Y(dist.p05) - Y(dist.p95));
-      c.fillStyle = hexFill(color, 0.30);
-      c.fillRect(x0, Y(dist.p75), x1 - x0, Y(dist.p25) - Y(dist.p75));
-      c.strokeStyle = color; c.lineWidth = 2.6;
-      c.beginPath(); c.moveTo(x0, Y(dist.p50)); c.lineTo(x1, Y(dist.p50)); c.stroke();
-    };
-    const mid = w / 2;
-    band(mc.you, COL.direct, p.l, mid - 6);
-    band(mc.friend, COL.regular, mid + 6, w - p.r);
-    c.fillStyle = '#9aa6b6'; c.font = '12px -apple-system, sans-serif'; c.textAlign = 'center';
-    c.fillText('YOU (Direct)', (p.l + mid) / 2, h - 4);
-    c.fillText('FRIEND (Regular)', (mid + w - p.r) / 2, h - 4);
-  }
-
-  /* ===================================================================
-   * 2e. SCENARIO B — "The money, now." — staged, interactive, gated.
-   *     emIntro -> emStrike -> emDecision (YOU choose) -> emCall -> result.
-   * =================================================================== */
+  /* ===================== SCENARIO B — the emergency ===================== */
   function startEmergency() {
-    // Build context (corpus + sleeves + need) without committing a response.
-    const ctx = runEmergency(state.sip, state.emergencyId, null, state.downturn);
-    state.emCtx = ctx;
-    state.emResponse = null;
-    hideAllOverlays();
-    hide($('setup')); hide($('stage'));
-
+    const ctx = runEmergency(state.sip, state.emergencyId, null, state.downturn, state.years, state.severity);
+    state.emCtx = ctx; state.emResponse = null;
+    hideAllOverlays(); hide($('setup')); hide($('stage'));
     setText('emIntroSip', state.sip.toLocaleString('en-IN'));
+    setText('emIntroYears', ctx.crashYear);
     setText('emIntroCorpus', inr(ctx.directSmart.corpusAtEmergency));
     const sv = ctx.directSmart.sleeveValues;
     setHTML('emIntroSleeves',
-      sleeveRow('Liquid fund', sv.liquid, 'steady, safe — your buffer')
+      sleeveRow('Liquid fund', sv.liquid, 'safe, steady — your buffer')
       + sleeveRow('Large-cap', sv.largeCap, 'the core of your wealth')
-      + sleeveRow('Mid / small-cap', sv.midSmall, ctx.downturn ? 'highest growth — and right now, deepest in the red' : 'highest growth, highest swings'));
+      + sleeveRow('Mid / small-cap', sv.midSmall, ctx.downturn ? 'highest growth — and right now, deep in the red' : 'highest growth, biggest swings'));
     show($('emIntro'));
   }
   function sleeveRow(name, val, note) {
-    return '<div class="sleeve"><span class="sl-name">' + name + '</span>'
-      + '<span class="sl-val">' + inrShort(val) + '</span>'
-      + '<span class="sl-note">' + note + '</span></div>';
+    return '<div class="sleeve"><span class="sl-name">' + name + '</span><span class="sl-val">' + inrShort(val) + '</span><span class="sl-note">' + note + '</span></div>';
   }
-
   function emToStrike() {
     hide($('emIntro'));
-    const ctx = state.emCtx, em = ctx.em, need = ctx.need;
+    const ctx = state.emCtx, em = ctx.em;
     const copy = {
-      icu: { tag: 'THE ICU', title: 'Your mother is in the ICU.', line: 'The hospital won\'t start until the deposit clears.',
-             pressure: 'Your phone is at 11%. A relative keeps calling. The number on the form doesn\'t care what the market is doing today.' },
-      business: { tag: 'BUSINESS LOSS', title: 'The business just took a hit.', line: 'A deal collapsed; suppliers must be paid this week or it all unwinds.',
-             pressure: 'There is no salary slip to fall back on. The money has to come from somewhere, and the only "somewhere" is the corpus you swore you\'d never touch.' },
-      pandemic: { tag: 'PANDEMIC', title: 'A pandemic hits. COVID.', line: 'Work has stopped, a hospital bill is due, and the market is in free-fall at the same time.',
-             pressure: 'Everything is red at once — your health, your income, your screen. Job losses cluster with crashes; hospitals don\'t wait for green markets.' },
-      war: { tag: 'WAR', title: 'War breaks out.', line: 'Iran–USA, India–Pakistan — and overnight you need cash for family, safety, the unknown.',
-             pressure: 'The headlines scream. Markets gap down. You have to raise money in the exact week selling hurts the most.' },
+      icu: { tag: 'HOSPITALISATION', title: 'A family member is in the ICU.', pressure: 'The hospital won\'t continue until the deposit clears. Your phone is at 11%. Relatives keep calling. The form doesn\'t care what the market is doing today.' },
+      business: { tag: 'BUSINESS LOSS', title: 'The business just took a hit.', pressure: 'A deal collapsed; suppliers and salaries are due this week. There\'s no salary slip to fall back on — the money has to come from the corpus you swore you\'d never touch.' },
+      pandemic: { tag: 'PANDEMIC', title: 'A pandemic hits. COVID.', pressure: 'Your income stops, a hospital bill arrives, and the market is in free-fall — all at once. Job losses cluster with crashes; hospitals don\'t wait for green markets.' },
+      war: { tag: 'WAR', title: 'War breaks out.', pressure: 'You need cash for family and safety in the exact week markets gap down. The headlines scream; selling now hurts most.' },
     };
     const cp = copy[em.id] || copy.icu;
     setText('emStrikeTag', cp.tag);
     setText('emStrikeTitle', cp.title);
-    setText('emStrikeLine', cp.line);
-    setText('emStrikeNeed', inrShort(need));
+    setText('emStrikeWhat', em.what);
+    setText('emStrikeNeed', inrShort(ctx.need));
     setText('emStrikePressure', cp.pressure);
     show($('emStrike'));
   }
-
   function emToDecision() { hide($('emStrike')); show($('emDecision')); }
-
-  function emChoose(response) {
-    state.emResponse = response;
-    hide($('emDecision'));
-    setHTML('emCallNeed', inrShort(state.emCtx.need));
-    show($('emCall'));
-  }
-
+  function emChoose(r) { state.emResponse = r; hide($('emDecision')); setText('emCallNeed', inrShort(state.emCtx.need)); show($('emCall')); }
   function emToResult() {
     hide($('emCall'));
-    const sim = runEmergency(state.sip, state.emergencyId, state.emResponse, state.downturn);
-    state.sim = sim;
-    renderEmergencyResult(sim);
-    show($('emergency'));
+    const sim = runEmergency(state.sip, state.emergencyId, state.emResponse, state.downturn, state.years, state.severity);
+    state.sim = sim; renderEmergencyResult(sim); show($('emergency'));
   }
-
   function renderEmergencyResult(sim) {
     const em = sim.em, need = sim.need, you = sim.you, friend = sim.friend, smart = sim.directSmart;
     setText('emTitle', em.name);
-    setHTML('emLine', 'You needed <b>' + inrShort(need) + '</b>. You <b>' + EM_LABEL[sim.youResponse] + '</b>.'
-      + (sim.downturn ? ' <span class="em-hard">And the market was falling.</span>' : ''));
+    setHTML('emLine', 'You needed <b>' + inrShort(need) + '</b>. You <b>' + EM_LABEL[sim.youResponse] + '</b>.' + (sim.downturn ? ' <span class="em-hard">And the market was falling.</span>' : ''));
+    setText('emYouLabel', 'YOU · Direct · alone');
+    setText('emFriendLabel', 'FRIEND · Regular · she called');
+    countUp($('emYouFinal'), you.final, 1400, inrShort);
+    countUp($('emFriendFinal'), friend.final, 1400, inrShort);
+    const diff = friend.final - you.final;
+    setHTML('emGapLine', diff > 0 ? '<span class="bad">You ended ' + inr(diff) + ' behind your friend — same emergency, same rupees out.</span>' : '<span class="good">You matched her — the call almost no one makes alone.</span>');
+    setHTML('emVerdict', emVerdictCopy(sim, diff));
+    setHTML('emHonest', 'A disciplined Direct investor making the same call would have <b>' + inrShort(smart.final) + '</b> — even a hair ' + (smart.final >= friend.final ? 'ahead of' : 'behind') + ' her (they saved the fee too). The door was never the point — making this call alone, under pressure, is the hard part. That\'s what her fee bought.');
 
-    setHTML('emYou',
-      '<p class="em-side-cap">YOU · Direct · alone</p>'
-      + '<p class="em-act">' + youActionCopy(sim) + '</p>'
-      + '<div class="em-num"><span>Worth at the horizon</span><b class="bad">' + inrShort(you.final) + '</b></div>'
-      + '<div class="em-num small"><span>XIRR · SIP</span><b>' + pct(you.xirr) + ' · ' + (you.sipSurvived ? 'kept' : 'cancelled') + '</b></div>');
-
-    setHTML('emFriend',
-      '<p class="em-side-cap">YOUR FRIEND · Regular · she called</p>'
-      + '<p class="em-act">She took exactly ' + inrShort(friend.need) + ' — liquid first, then a little large-cap, left the mid-cap alone, paused the SIP three months. The rest stayed invested and kept compounding.</p>'
-      + '<div class="em-num"><span>Worth at the horizon</span><b class="good">' + inrShort(friend.final) + '</b></div>'
-      + '<div class="em-num small"><span>XIRR · SIP</span><b>' + pct(friend.xirr) + ' · paused, resumed</b></div>');
-
-    const gap = friend.final - you.final;
-    setHTML('emVerdict', emVerdictCopy(sim, gap));
-
-    setHTML('emHonest',
-      'And if you, Direct, had made the same surgical call alone? You\'d have <b>' + inrShort(smart.final) + '</b> — even a hair '
-      + (smart.final >= friend.final ? 'ahead of' : 'behind') + ' her, because you\'d have saved the fee too. '
-      + 'The door was never the point. The hard part is making that call alone, under pressure — and that is what her fee bought.');
-  }
-
-  function youActionCopy(sim) {
-    const need = sim.need;
-    switch (sim.youResponse) {
-      case 'panic':
-        return 'You redeemed <b>everything</b> — ' + inrShort(sim.you.took) + ', far more than the ' + inrShort(need)
-          + ' you needed. The SIP you ran for eight years died in one tap. The extra cash now sits idle, earning nothing.';
-      case 'surgical':
-        return 'You did the hard thing almost no one does alone: took <b>exactly ' + inrShort(need)
-          + '</b> from the safe money, left the rest invested, paused the SIP briefly. Steady hands.';
-      case 'sellLosers':
-        return 'You sold the fund that had fallen to raise ' + inrShort(need) + ' — '
-          + (sim.downturn ? '<b>locking the loss for good</b> instead of letting it recover. ' : 'forfeiting its higher long-run growth. ')
-          + 'The SIP kept running, at least.';
-      case 'sipKill':
-        return 'You raised ' + inrShort(need) + ' carefully — but <b>cancelled the SIP</b>, sure you couldn\'t keep investing. '
-          + 'Twelve more years of contributions, and their compounding, gone.';
-      default: return '';
-    }
+    setHTML('emMathsPanel',
+      mathsRows([
+        ['Corpus when it struck (' + sim.crashYear + ' years in)', inr(you.corpusAtEmergency), 'computed'],
+        ['Emergency you had to raise', inr(need), 'computed'],
+        ['You took out', inr(you.took) + (you.idleCash > 0 ? ' (₹' + Math.round(you.idleCash).toLocaleString('en-IN') + ' left idle)' : ''), 'computed'],
+        ['Friend took out', inr(friend.took), 'computed'],
+        ['YOUR corpus at year ' + sim.years, inr(you.final), 'computed'],
+        ['YOUR return (XIRR)', pct(you.xirr), 'computed'],
+        ['Friend\'s corpus at year ' + sim.years, inr(friend.final), 'computed'],
+        ['Friend\'s return (XIRR)', pct(friend.xirr), 'computed'],
+        ['Sleeve returns', 'Liquid 6% · Large-cap 12% · Mid/small 15% a year', 'assumption'],
+        ['Emergency size', sim.sev.label + ' (' + Math.round(need / you.corpusAtEmergency * 100) + '% of your corpus)', 'assumption'],
+      ]) + '<p class="maths-note">Every rupee is computed from month-by-month units × NAV across three funds; XIRR is solved from the real dated cash flows. Only the return assumptions and the emergency size you chose are inputs.</p>');
+    closeMaths('emMathsPanel', 'emMathsToggle');
   }
   function emVerdictCopy(sim, gap) {
-    if (sim.youResponse === 'surgical') {
+    if (sim.youResponse === 'surgical')
       return 'You made the call most people can\'t make alone — and it barely cost you your future.'
-        + '<span class="verdict-sub">A gap of just <b>' + inr(Math.abs(gap)) + '</b> between you and the guided plan. '
-        + 'The lesson isn\'t the door — it\'s that under real pressure, almost no one does what you just did.</span>';
-    }
-    return 'Same emergency, same ' + inrShort(sim.need) + '. She took only the emergency. You took the emergency <b>and your future with it</b> — a gap of <b>' + inr(gap) + '</b> by year 20.'
-      + '<span class="verdict-sub">It was never that she was calmer. On the worst day, there was a number she could call — and you had only yourself, '
-      + 'making the biggest financial decision of your life at the worst possible moment to make it.</span>';
+        + '<span class="verdict-sub">Just <b>' + inr(Math.abs(gap)) + '</b> between you and the guided plan. The lesson isn\'t the door — it\'s that under real pressure, almost no one does what you just did.</span>';
+    return 'Same emergency, same ' + inrShort(sim.need) + '. She took only the emergency. You took the emergency <b>and your future with it</b> — ' + inr(gap) + ' gone by year ' + sim.years + '.'
+      + '<span class="verdict-sub">It was never that she was calmer. On the worst day there was a number she could call — and you had only yourself, at the worst possible moment to decide.</span>';
   }
 
-  /* ===================================================================
-   * 2f. Wiring.
-   * =================================================================== */
+  /* ===================== Wiring ===================== */
   function hideAllOverlays() {
-    ['silence', 'split', 'relief', 'result', 'grid', 'monte',
-     'emIntro', 'emStrike', 'emDecision', 'emCall', 'emergency'].forEach((id) => hide($(id)));
+    ['silence', 'split', 'relief', 'result', 'luck', 'grid', 'emIntro', 'emStrike', 'emDecision', 'emCall', 'emergency'].forEach((id) => hide($(id)));
   }
   function on(id, type, fn) { const el = $(id); if (el) el.addEventListener(type, fn); }
-  function wireChips(containerId, key, parse) {
+  function wireChips(containerId, key, parse, after) {
     const box = $(containerId); if (!box) return;
     box.addEventListener('click', (ev) => {
       const btn = ev.target.closest('.chip'); if (!btn) return;
       [...box.querySelectorAll('.chip')].forEach((b) => b.classList.toggle('on', b === btn));
       state[key] = parse ? parse(btn.dataset.val) : btn.dataset.val;
-      if (containerId === 'scenarioChips') reflectScenario();
+      if (after) after();
     });
   }
   function reflectScenario() {
@@ -1172,63 +846,61 @@ if (typeof document !== 'undefined') (function () {
     if ($('crashInputs')) $('crashInputs').hidden = !crash;
     if ($('emergencyInputs')) $('emergencyInputs').hidden = crash;
     setText('startBtn', crash ? 'Live the crash' : 'Live the emergency');
+    updateHints();
+  }
+  function updateHints() {
+    const cy = state.years / 2;
+    if (state.scenario === 'crash') {
+      const ev = EVENTS[state.eventId];
+      setHTML('eventDesc', '<b>' + ev.tag + '.</b> ' + ev.what);
+      setText('crashTiming', 'You invest for ' + state.years + ' years. The crash hits at year ' + cy + '.');
+    } else {
+      const em = EMERGENCIES[state.emergencyId];
+      setHTML('emergencyDesc', em.what + (em.crashLinked ? ' <i>(arrives with a market crash)</i>' : ''));
+      setText('emTiming', 'You invest for ' + state.years + ' years. The emergency strikes at year ' + cy + '.');
+    }
   }
   function start() { if (state.scenario === 'crash') startCrash(); else startEmergency(); }
-  function backToSetup() {
-    cancelAnimationFrame(state.raf);
-    hideAllOverlays();
-    hide($('stage')); hide($('emergency'));
-    show($('setup'));
-  }
+  function backToSetup() { cancelAnimationFrame(state.raf); hideAllOverlays(); hide($('stage')); hide($('emergency')); show($('setup')); }
 
   function boot() {
     on('startBtn', 'click', start);
-    wireChips('scenarioChips', 'scenario', null);
+    wireChips('scenarioChips', 'scenario', null, reflectScenario);
+    wireChips('durationChips', 'years', Number, updateHints);
     wireChips('sipChips', 'sip', Number);
-    wireChips('eventChips', 'eventId', null);
-    wireChips('emergencyChips', 'emergencyId', null);
+    wireChips('eventChips', 'eventId', null, updateHints);
+    wireChips('emergencyChips', 'emergencyId', null, updateHints);
+    wireChips('severityChips', 'severity', null);
     on('downturnToggle', 'change', (e) => { state.downturn = e.target.checked; });
 
-    // Crash beats (tap to continue — nothing flashes past).
     on('silenceContinue', 'click', openSplit);
     on('reliefContinue', 'click', beginDiverge);
-    on('youChoices', 'click', (ev) => {
-      const btn = ev.target.closest('button[data-choice]');
-      if (btn) choose(btn.dataset.choice);
-    });
+    on('youChoices', 'click', (ev) => { const b = ev.target.closest('button[data-choice]'); if (b) choose(b.dataset.choice); });
 
-    // Crash result actions.
-    on('replayBtn', 'click', () => { if (state.scenario === 'crash') startCrash(); else startEmergency(); });
+    on('replayBtn', 'click', () => start());
+    on('luckBtn', 'click', openLuck);
+    on('luckClose', 'click', () => hide($('luck')));
     on('gridBtn', 'click', openGrid);
-    on('monteBtn', 'click', openMonte);
-    on('changeBtn', 'click', backToSetup);
     on('gridClose', 'click', () => hide($('grid')));
-    on('monteClose', 'click', () => hide($('monte')));
-    on('runMcBtn', 'click', runAndDrawMonte);
+    on('changeBtn', 'click', backToSetup);
+    wireMaths('mathsToggle', 'mathsPanel');
 
-    // Emergency staged flow.
     on('emIntroBtn', 'click', emToStrike);
     on('emStrikeBtn', 'click', emToDecision);
-    on('emChoices', 'click', (ev) => {
-      const btn = ev.target.closest('button[data-choice]');
-      if (btn) emChoose(btn.dataset.choice);
-    });
+    on('emChoices', 'click', (ev) => { const b = ev.target.closest('button[data-choice]'); if (b) emChoose(b.dataset.choice); });
     on('emCallBtn', 'click', emToResult);
     on('emReplay', 'click', startEmergency);
+    on('emLuckBtn', 'click', openLuck);
     on('emGridBtn', 'click', openGrid);
-    on('emMonteBtn', 'click', openMonte);
     on('emChangeBtn', 'click', backToSetup);
+    wireMaths('emMathsToggle', 'emMathsPanel');
 
     window.addEventListener('resize', () => {
       if (!state.sim) return;
       if ($('stage') && !$('stage').hidden) renderStage();
       if ($('split') && !$('split').hidden) renderFriendPanel();
-      if ($('monte') && !$('monte').hidden && state.mc) drawFan(state.mc);
     });
-
     reflectScenario();
   }
-
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
-  else boot();
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
 })();

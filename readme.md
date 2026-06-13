@@ -11,64 +11,72 @@ install — just clone and run.
 
 ## 🌐 Live web tool — "Two Doors, One Storm"
 
-A self-contained, **mobile-first**, advanced **Monte Carlo behavioural
-investing simulator**. Two people invest the same money, in the same market.
-One chose a **Regular** plan (pays ~1%/yr more, but has a *relationship
-manager / MD* to call when life hits). One chose **Direct** (pays nothing
-extra, but faces every storm alone). The fee gap is small and steady. The
-behaviour gap is enormous. The tool dramatises one idea: **the only real
-variable is who is beside you when it falls.**
+A self-contained, **mobile-first**, **behaviour-driven** investing simulator.
+Two people invest the same money, in the same market. One chose a **Regular**
+plan (pays ~1%/yr more, but has a *relationship manager / MD* to call when life
+hits). One chose **Direct** (pays nothing extra, but faces every storm alone).
+The fee gap is small and steady. The behaviour gap is enormous. The tool
+dramatises one idea: **the only real variable is who is beside you when it
+falls.**
 
 > **Live link:** `https://tishabsatwani-del.github.io/Mutual_Fund/`
 > *(one-time setup: repo **Settings → Pages → Source = "GitHub Actions"**, then
 > merge to `main` — the included workflow deploys automatically.)*
 
+**Setup, in order:** pick the **scenario** (crash *or* emergency — two very
+different situations), the **duration** (15 / 20 / 30 years), the **SIP**
+(₹5,000 / ₹10,000 / ₹20,000 / ₹50,000), then the specific event. The crash
+always hits at the **exact midpoint** (30y → year 15, 20y → year 10), stated
+upfront so it's never a surprise.
+
 **Two scenarios, off one engine**
 
-- **The Crash** — *Live it.* Your wealth line (and your friend's, a step
-  below, the fee toll widening) climbs the years. At the midpoint a real,
-  named crash hits. Your side goes **silent**; her phone **rings** — her RM
-  talks her through it. You pick one of four behaviours (**Hold · Pause ·
-  Sell & buy back · Sell & wait**); her path plays on its own. Then two
-  corpora, two XIRRs, the fee she paid for, and the rupees your one decision
-  cost — with a verdict caption that resonates with the book chapter.
+- **The Crash** — *Live it.* Both wealth lines climb the years (a clear "Year
+  N / 20" progress bar marks the crash ahead). At the midpoint a real, named
+  crash hits — **COVID-19, the 2008 crisis, the 2022 correction, an Iran–USA
+  war, or an India–Pakistan war** — each with a plain-language explanation of
+  what actually happened. Your side goes **silent** (the loss shown at a
+  glance: a big −X% and `₹before ▸ ₹after`); her phone **rings**. Every heavy
+  beat **holds until you tap** — nothing flashes past. You pick one of four
+  behaviours; then one headline (YOU vs FRIEND) and a "See the maths" panel.
 - **The Emergency** — *The money, now.* A **staged, interactive** ordeal:
   you've quietly built a corpus across three sleeves; then life strikes —
-  **hospitalisation/ICU, a business loss, a pandemic (COVID), or war
-  (Iran–USA / India–Pakistan)** — and *you* must choose how to raise the cash:
-  redeem everything (panic), take only what you need, sell the fallen fund, or
-  kill the SIP. Then her RM makes the call she can make. Watch the gap play to
-  the horizon. Pandemics and wars arrive *with* a market crash (the hardest,
-  most realistic case); any emergency can be forced into that mode.
+  **hospitalisation/ICU, a business loss, a pandemic (COVID), or war** — at a
+  **severity you choose** (Manageable / Serious / Devastating). *You* must
+  decide how to raise the cash: redeem everything, take only what you need,
+  sell the fallen fund, or kill the SIP. Then her RM makes the call she can
+  make. Pandemics and wars arrive *with* a market crash.
 
 **The maths — exact, auditable, never rigged**
 
+- **Correct rates.** Returns are stored so the *effective annual CAGR* is
+  **exactly 12% (Direct) / 11% (Regular)** — the monthly rate is the 12th root,
+  not a naive 1%/month (which would compound to 12.68%). The fee is a
+  multiplicative monthly drag, so Regular's CAGR is exactly 1 point lower on
+  every path.
 - **Real unit-level accounting** — every month `units = SIP / NAV`, value =
-  `units × NAV` (+ idle cash). Correct SIP timing (contribution at the start of
-  each month). Fees charged as the only difference: Direct net 12%/yr
-  (1.000%/mo), Regular net 11%/yr (0.9167%/mo) — the 1%/yr gap, compounded and
-  shown in rupees. **XIRR** from the actual monthly cash flows for every
-  investor.
-- **Monte Carlo** — *10,000 lifetimes.* 1,000–10,000 paths of 240 monthly
-  returns from a documented model (mean ≈ 12%/yr, vol ≈ 15–18%/yr) with **fat
-  tails** and **volatility clustering** (a two-state calm/stress regime, so deep
-  drawdowns arrive in clusters). Output is translated to **plain odds** — *"in
-  X of 10,000 futures the calm Direct investor finished ahead"* — never raw
-  percentiles, on a fan chart.
-- **Honest, not rigged** — across the paths, Direct can finish **above, equal
-  to, or below** Regular. You can set *both* investors' behaviour, including the
-  case where the guided friend panics and calm Direct wins. The tool never
-  claims one door is better — it proves the door was never the point.
-- **Real events (illustrative)** — COVID-19 2020 (~−38%), GFC 2008 (~−60%), the
-  2022 correction (~−18%), and the Iran–USA War 2025 (~−16%, ending on
-  uncertainty). Each run **varies** the exact depth (±3 pts) and the year the
-  storm strikes (7–9 years in), so no two lifetimes are identical. *Based on
-  actual index drawdowns; exact figures vary by index and dates and must be
-  locked against real data before shipping.*
+  `units × NAV` (+ idle cash), with correct start-of-month SIP timing. **XIRR**
+  (Newton–Raphson + bisection) and **CAGR** computed from the actual cash flows.
+- **Computed vs assumption.** Every figure is labelled: results (corpus, XIRR,
+  CAGR, fee cost) are **computed live**; only the returns and the
+  drawdown/emergency size are **inputs**. Nothing is invented.
+- **"Was it luck?"** — the rigorous Monte Carlo engine (1,000 paths; mean ≈
+  12%/yr, vol ≈ 15–18%/yr, fat tails + clustered crashes) reduced to one plain
+  line and a **100-dot grid**: *"Held through every crash → ahead in X of 100
+  futures; sold in the fall → ahead in only Y of 100."*
+- **Honest, not rigged** — across paths, Direct can finish **above, equal to,
+  or below** Regular. The tool never claims one door is better — it proves the
+  door was never the point.
+- **Real events (illustrative)** — COVID-19 2020 (~−38%), 2008 GFC (~−60%), the
+  2022 correction (~−18%), an Iran–USA war (~−16%), an India–Pakistan war
+  (~−10%, historically short and shallow). *Based on actual index drawdowns;
+  exact figures vary by index and dates and must be locked against real data
+  before shipping.*
 - **Works offline, no CDN, no backend** — hand-rolled Canvas, instant load.
 
 > All outputs are illustrative **ranges of possibility, never predictions or
 > advice.** Educational tool — not investment advice.
+
 
 Try it locally:
 
