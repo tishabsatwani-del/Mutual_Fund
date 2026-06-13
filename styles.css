@@ -18,6 +18,11 @@
 
 * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 
+/* The hidden attribute must always win — .stage and .overlay set display:flex,
+ * which would otherwise override [hidden] and leave invisible full-screen
+ * layers on top of the page swallowing every click (incl. "Start"). */
+[hidden] { display: none !important; }
+
 html, body { height: 100%; }
 
 body {
