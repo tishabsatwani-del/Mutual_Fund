@@ -10,7 +10,7 @@
 <meta property="og:description" content="You say you won't panic. Prove it." />
 <meta property="og:type" content="website" />
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚪</text></svg>" />
-<link rel="stylesheet" href="styles.css?v=20260614e" />
+<link rel="stylesheet" href="styles.css?v=20260614f" />
 </head>
 <body>
 <div id="grain" aria-hidden="true"></div>
@@ -46,6 +46,7 @@
         <h2 class="wq">How long will you invest?</h2>
         <button class="opt chip-opt" data-val="15">15 years</button>
         <button class="opt chip-opt" data-val="20">20 years</button>
+        <button class="opt chip-opt" data-val="25">25 years</button>
         <button class="opt chip-opt" data-val="30">30 years</button>
       </div>
 
@@ -132,29 +133,32 @@
     </div>
   </div>
 
-  <!-- ===================== THE SPLIT ===================== -->
-  <div id="split" class="overlay split" hidden>
-    <div class="split-grid">
-      <div class="split-pane you-pane">
-        <p class="pane-cap">YOU — Direct. Alone.</p>
-        <p class="pane-sub">No one will pick for you. Only the fear.</p>
-        <div class="choices" id="youChoices">
-          <button data-choice="hold"><b>Hold</b><span>keep buying the fear</span></button>
-          <button data-choice="pause"><b>Pause the SIP</b><span>stop till it's over</span></button>
-          <button data-choice="sellBack"><b>Sell</b><span>buy back when it's safe</span></button>
-          <button data-choice="sellWait"><b>Sell everything</b><span>make it stop</span></button>
-        </div>
+  <!-- ===================== YOUR DECISION — alone, no influence ===================== -->
+  <div id="youDecision" class="overlay decide" hidden>
+    <div class="decide-inner">
+      <p class="decide-cap">YOU — Direct. Alone.</p>
+      <p class="decide-sub">No one is here to tell you what to do. No call. Just you, the red, and the silence. <b>What do you do?</b></p>
+      <div class="choices big-choices" id="youChoices">
+        <button data-choice="hold"><b>Hold</b><span>keep buying into the fear</span></button>
+        <button data-choice="pause"><b>Pause the SIP</b><span>stop investing till it's over</span></button>
+        <button data-choice="sellBack"><b>Sell, buy back later</b><span>get to safety, return when calm</span></button>
+        <button data-choice="sellWait"><b>Sell everything</b><span>make the bleeding stop</span></button>
       </div>
-      <div class="split-pane friend-pane">
-        <p class="pane-cap">YOUR FRIEND — Regular.</p>
-        <div class="rm-call">
-          <div class="rm-avatar">RM<span class="rm-ring"></span></div>
-          <div class="rm-meta"><span class="rm-name">Relationship Manager</span><span class="rm-status">● on the call</span></div>
-        </div>
-        <p class="pane-quote">"Don't sell. I mean it. I sat with people through 2008 and 2020 — the ones who sold here never caught up. We're not touching it. Go for a walk. Call me tomorrow."</p>
-        <div class="friend-canvas-wrap"><canvas id="friendCanvas" aria-label="Your friend's steadying line"></canvas></div>
-        <p class="pane-foot">She isn't smarter than you. She just wasn't alone.</p>
+    </div>
+  </div>
+
+  <!-- ===================== FRIEND REVEALED — the call (shown AFTER you decide) ===================== -->
+  <div id="friendReveal" class="overlay reveal" hidden>
+    <div class="reveal-inner">
+      <p class="reveal-tag">Meanwhile, your friend — on the Regular plan…</p>
+      <div class="rm-call">
+        <div class="rm-avatar">RM<span class="rm-ring"></span></div>
+        <div class="rm-meta"><span class="rm-name">Relationship Manager</span><span class="rm-status">● incoming call</span></div>
       </div>
+      <p class="reveal-quote">"Don't sell. I mean it. I sat with people through 2008 and 2020 — the ones who sold here never caught up. We're not touching it. Go for a walk. Call me tomorrow."</p>
+      <div class="friend-canvas-wrap"><canvas id="friendCanvas" aria-label="Your friend's steadying line"></canvas></div>
+      <p class="reveal-foot">She held. She isn't smarter than you — she just had a number to call.</p>
+      <button id="friendRevealBtn" class="cta">See how it ends →</button>
     </div>
   </div>
 
@@ -215,9 +219,9 @@
   <!-- ===================== EMERGENCY — staged ===================== -->
   <div id="emIntro" class="overlay em-stage" hidden>
     <div class="card em-card">
-      <p class="kicker"><span id="emIntroYears">10</span> years in.</p>
+      <p class="em-years"><b id="emIntroYears">10</b> years in.</p>
       <h2 class="em-head">You built this, month after month.</h2>
-      <p class="em-body">₹<span id="emIntroSip"></span> a month. Today it's worth:</p>
+      <p class="em-body">₹<span id="emIntroSip"></span> every month. You've put in <b id="emIntroInvested">₹0</b>. Today it's worth:</p>
       <p class="em-corpus" id="emIntroCorpus">₹0</p>
       <div class="em-sleeves" id="emIntroSleeves"></div>
       <button id="emIntroBtn" class="cta">Then life happens →</button>
@@ -291,6 +295,6 @@
 
 <div id="toast" class="toast" hidden></div>
 <footer class="global-foot">Educational tool — not investment advice.</footer>
-<script src="app.js?v=20260614e"></script>
+<script src="app.js?v=20260614f"></script>
 </body>
 </html>
