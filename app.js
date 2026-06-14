@@ -959,7 +959,8 @@ if (typeof document !== 'undefined') (function () {
     state.wizIndex = Math.max(0, Math.min(i, steps.length - 1));
     const name = steps[state.wizIndex];
     document.querySelectorAll('.wstep').forEach((el) => { el.hidden = el.id !== 'w_' + name; });
-    // reflect current value
+    // Returning to the doors: reset them to open/visible (no leftover swing).
+    if (name === 'scenario') document.querySelectorAll('#w_scenario .scn-card').forEach((c) => { c.classList.remove('chosen', 'dismiss'); c.classList.add('reveal-in'); });
     const key = WIZ_KEY[name], cur = String(state[key]);
     document.querySelectorAll('#w_' + name + ' .opt').forEach((b) => b.classList.toggle('on', b.dataset.val === cur));
     const back = $('wizBack'); if (back) back.hidden = state.wizIndex === 0;
@@ -970,8 +971,18 @@ if (typeof document !== 'undefined') (function () {
     if (btn) { document.querySelectorAll('#w_' + name + ' .opt').forEach((b) => b.classList.toggle('on', b === btn)); }
     const steps = wizSteps();
     const advance = () => { if (state.wizIndex >= steps.length - 1) wizLaunch(); else showWizStep(state.wizIndex + 1); };
-    // No narration on the situation-choice screens — just a brief beat so the
-    // selection registers, then move on.
+    // The DOOR you pick swings fully open, light floods, and you step through
+    // into the next screen.
+    if (name === 'scenario' && btn && !reduceMotion) {
+      btn.classList.add('chosen');
+      const other = [...document.querySelectorAll('#w_scenario .scn-card')].find((c) => c !== btn);
+      if (other) other.classList.add('dismiss');
+      Sound.whoosh();
+      const flash = $('doorFlash'); if (flash) { flash.classList.remove('show'); requestAnimationFrame(() => flash.classList.add('show')); setTimeout(() => flash.classList.remove('show'), 950); }
+      setTimeout(advance, 760);
+      return;
+    }
+    // Other steps: a brief beat so the selection registers, then move on.
     if (reduceMotion) advance(); else setTimeout(advance, 320);
   }
   function wizBack() { if (state.wizIndex > 0) showWizStep(state.wizIndex - 1); }
