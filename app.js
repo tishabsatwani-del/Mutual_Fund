@@ -919,8 +919,12 @@ if (typeof document !== 'undefined') (function () {
     function pick() {
       if (!ok) return null;
       const vs = window.speechSynthesis.getVoices() || [];
-      return vs.find((v) => /en[-_]?IN/i.test(v.lang)) || vs.find((v) => /en[-_]?GB/i.test(v.lang))
-        || vs.find((v) => /^en/i.test(v.lang)) || vs[0] || null;
+      // Prefer a LOCAL (on-device) English voice — network voices (common for
+      // "en-IN" on Android) have a multi-second cold start that makes the opening
+      // line arrive late. Local voices speak immediately.
+      const byLang = (arr) => arr.find((v) => /en[-_]?IN/i.test(v.lang)) || arr.find((v) => /en[-_]?GB/i.test(v.lang)) || arr.find((v) => /^en/i.test(v.lang));
+      const local = vs.filter((v) => v.localService);
+      return byLang(local) || byLang(vs) || local[0] || vs[0] || null;
     }
     if (ok) { try { window.speechSynthesis.onvoiceschanged = () => { picked = pick(); }; } catch (e) {} }
     function speak(text, opts, onEnd) {
