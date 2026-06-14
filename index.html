@@ -10,7 +10,7 @@
 <meta property="og:description" content="You say you won't panic. Prove it." />
 <meta property="og:type" content="website" />
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚪</text></svg>" />
-<link rel="stylesheet" href="styles.css?v=20260614j" />
+<link rel="stylesheet" href="styles.css?v=20260614k" />
 </head>
 <body>
 <div id="grain" aria-hidden="true"></div>
@@ -180,6 +180,7 @@
         <div class="rcol"><span class="rcap" id="youLabel">YOU</span><span id="youFinal" class="rval">₹0</span></div>
         <div class="rcol friend"><span class="rcap" id="friendLabelR">FRIEND</span><span id="friendFinal" class="rval">₹0</span></div>
       </div>
+      <div class="res-chart"><canvas id="resultCanvas" aria-label="Both journeys to the finish"></canvas></div>
       <p id="gapLine" class="gap-line"></p>
       <p id="verdict" class="verdict"></p>
       <p id="resonate" class="resonate"></p>
@@ -223,6 +224,7 @@
       <h2 class="em-head">You built this, month after month.</h2>
       <p class="em-body">₹<span id="emIntroSip"></span> every month. You've put in <b id="emIntroInvested">₹0</b>. Today it's worth:</p>
       <p class="em-corpus" id="emIntroCorpus">₹0</p>
+      <div class="em-donut-wrap"><canvas id="emDonut" aria-label="Portfolio allocation"></canvas></div>
       <div class="em-sleeves" id="emIntroSleeves"></div>
       <button id="emIntroBtn" class="cta">Then life happens →</button>
     </div>
@@ -274,6 +276,7 @@
         <div class="rcol"><span class="rcap" id="emYouLabel">YOU</span><span id="emYouFinal" class="rval">₹0</span></div>
         <div class="rcol steady"><span class="rcap" id="emFriendLabel">THE STEADY CALL</span><span id="emFriendFinal" class="rval">₹0</span></div>
       </div>
+      <div class="res-chart"><canvas id="emResultCanvas" aria-label="Both journeys to the finish"></canvas></div>
       <p id="emGapLine" class="gap-line"></p>
       <p class="verdict" id="emVerdict"></p>
       <button id="emMathsToggle" class="maths-toggle">See the maths ▾</button>
@@ -295,6 +298,6 @@
 
 <div id="toast" class="toast" hidden></div>
 <footer class="global-foot">Educational tool — not investment advice.</footer>
-<script src="app.js?v=20260614j"></script>
+<script src="app.js?v=20260614k"></script>
 </body>
 </html>

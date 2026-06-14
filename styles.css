@@ -197,6 +197,10 @@ body {
 .rcol.steady .rcap { color: var(--direct); }
 .rval { font-family: var(--num); font-size: clamp(24px, 7.5vw, 34px); font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
 .rcol.friend .rval { color: var(--regular); }
+.res-chart { position: relative; height: 150px; margin: 4px 0 14px; }
+.res-chart canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.em-donut-wrap { position: relative; width: 130px; height: 130px; margin: 0 auto 18px; }
+.em-donut-wrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 .gap-line { font-size: 17px; font-weight: 600; margin: 4px 0 14px; }
 .gap-line .good, .good { color: var(--direct); }
 .gap-line .bad, .bad { color: var(--crash); }
