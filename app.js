@@ -390,6 +390,7 @@ const SLEEVES = {
   largeCap: { label: 'Large-cap',     weight: 0.50, annual: 0.12 },
   midSmall: { label: 'Mid / small-cap', weight: 0.35, annual: 0.15 },
 };
+const SAVINGS_ANNUAL = 0.04; // where panic-redeemed cash realistically sits (a bank/FD)
 const EM_RESPONSES = {
   panic:      { sellAll: true,  killSIP: true,  pauseMonths: 0, order: ['liquid', 'largeCap', 'midSmall'] },
   surgical:   { sellAll: false, killSIP: false, pauseMonths: 3, order: ['liquid', 'largeCap', 'midSmall'] },
@@ -428,9 +429,10 @@ function simEmergency(sip, feeFactor, response, need, S, downturn, N) {
   for (const k in units) sleeveValues[k] = units[k] * navs[k][S];
 
   const cfg = EM_RESPONSES[response] || EM_RESPONSES.surgical;
-  let took = 0, idleCash = 0, shortfall = 0, fromMid = 0;
+  let took = 0, idleCash = 0, shortfall = 0, fromMid = 0, fromLiquid = 0;
   if (cfg.sellAll) {
     took = corpusAtEmergency; idleCash = Math.max(corpusAtEmergency - need, 0);
+    fromLiquid = sleeveValues.liquid; fromMid = sleeveValues.midSmall;
     for (const k in units) units[k] = 0;
   } else {
     let remaining = need;
@@ -439,6 +441,7 @@ function simEmergency(sip, feeFactor, response, need, S, downturn, N) {
       const avail = units[sleeve] * navs[sleeve][S];
       const draw = Math.min(avail, remaining);
       if (sleeve === 'midSmall') fromMid += draw;
+      if (sleeve === 'liquid') fromLiquid += draw;
       units[sleeve] -= draw / navs[sleeve][S];
       remaining -= draw;
     }
@@ -453,11 +456,13 @@ function simEmergency(sip, feeFactor, response, need, S, downturn, N) {
     for (const k in SLEEVES) units[k] += (sip * SLEEVES[k].weight) / navs[k][m];
     flows.push({ t: m / 12, amount: -sip });
   }
-  const final = valueAt(N) + idleCash;
+  // Panic-redeemed cash doesn't vanish — it realistically sits in a bank/FD.
+  const idleGrown = idleCash * Math.pow(1 + SAVINGS_ANNUAL, (N - S) / 12);
+  const final = valueAt(N) + idleGrown;
   flows.push({ t: S / 12, amount: took });
   flows.push({ t: N / 12, amount: final });
-  return { response, corpusAtEmergency, sleeveValues, took, need, shortfall, fromMid, final,
-    sipSurvived: !cfg.killSIP, idleCash, xirr: xirr(flows) };
+  return { response, corpusAtEmergency, sleeveValues, took, need, shortfall, fromMid, fromLiquid, final,
+    sipSurvived: !cfg.killSIP, idleCash, idleGrown, xirr: xirr(flows) };
 }
 
 function runEmergency(sip, emergencyId, youResponse, downturn, years, severityId) {
@@ -1127,9 +1132,9 @@ if (typeof document !== 'undefined') (function () {
     setText('emIntroCorpus', inr(ctx.directSmart.corpusAtEmergency));
     const sv = ctx.directSmart.sleeveValues;
     setHTML('emIntroSleeves',
-      sleeveRow('Liquid fund', sv.liquid, 'safe buffer')
-      + sleeveRow('Large-cap', sv.largeCap, 'your core')
-      + sleeveRow('Mid / small-cap', sv.midSmall, ctx.downturn ? 'down hard right now' : 'high growth'));
+      sleeveRow('Liquid fund', sv.liquid, 'your emergency buffer — reach here first')
+      + sleeveRow('Large-cap', sv.largeCap, 'the core of your future')
+      + sleeveRow('Mid / small-cap', sv.midSmall, ctx.downturn ? 'down hard right now — worst to sell' : 'highest growth — sell last'));
     show($('emIntro'));
   }
   function sleeveRow(name, val, note) { return '<div class="sleeve"><span class="sl-name">' + name + '</span><span class="sl-val">' + inrShort(val) + '</span><span class="sl-note">' + note + '</span></div>'; }
@@ -1150,10 +1155,12 @@ if (typeof document !== 'undefined') (function () {
     setText('emStrikeNeed', inrShort(ctx.need));
     setHTML('emStrikePressure', 'You never planned to touch your investments. Now you have to.');
     show($('emStrike'));
+    setTimeout(() => say('You need ' + amountWords(ctx.need) + ', now.', { rate: 0.92 }), 700);
   }
-  function emToDecision() { hide($('emStrike')); show($('emDecision')); }
+  function emToDecision() { hide($('emStrike')); show($('emDecision')); Sound.setHeart(92); } // the clock, running
   function emChoose(r) {
-    state.emResponse = r; hide($('emDecision')); setText('emCallNeed', inrShort(state.emCtx.need)); show($('emCall'));
+    state.emResponse = r; Sound.stopHeart(); Sound.tick();
+    hide($('emDecision')); setText('emCallNeed', inrShort(state.emCtx.need)); show($('emCall'));
     Sound.ring();
     setTimeout(() => say(RM_EM_LINE, { rate: 0.97 }), 1200);
   }
@@ -1189,18 +1196,28 @@ if (typeof document !== 'undefined') (function () {
     setHTML('emResonate', surgical
       ? 'It was never about being smart, or lucky. It was having a plan — and the nerve to follow it.'
       : 'The difference wasn\'t intelligence. It wasn\'t luck. It was having <b>someone to stop a temporary emergency from becoming a permanent setback</b>.');
-    setHTML('emHonest', 'Your friend on the Regular plan had exactly that — a number to call. She made this call and finished with <b>' + inrShort(friend.final) + '</b>, even after paying her 1% fee. The fee was never the point. Having the call — when you\'re alone and afraid — is.');
+    // One tight, layered line: fee isn't the point; the buffer + the call are.
+    setHTML('emHonest', 'Your friend on Regular finished with <b>' + inrShort(friend.final) + '</b> even after her 1% fee — so the fee was never the point. The real lesson: a deeper <b>emergency buffer</b>, and a steady hand to call, so a crisis never forces you to sell your future at the worst moment.');
+    // Sourcing detail teaches the sequencing without crowding the hero copy.
+    const drewMid = you.fromMid > 1;
+    const sourcing = sim.youResponse === 'panic'
+      ? 'sold everything — far more than the emergency'
+      : (drewMid ? 'had to dip into the mid-cap' : 'left the equity to keep compounding');
+    const steadySrc = smart.fromLiquid >= smart.need - 1 ? 'covered it entirely from the liquid buffer'
+      : 'took the liquid buffer first, then a little large-cap';
     setHTML('emMathsPanel', mathsRows([
       ['Corpus when it struck (year ' + sim.crashYear + ')', inr(you.corpusAtEmergency), 'computed'],
       ['Emergency to raise', inr(need), 'computed'],
-      ['You took out', inr(you.took) + (you.idleCash > 0 ? ' (₹' + Math.round(you.idleCash).toLocaleString('en-IN') + ' left idle)' : ''), 'computed'],
+      ['You took out', inr(you.took) + (you.idleCash > 0 ? ' (₹' + Math.round(you.idleGrown).toLocaleString('en-IN') + ' later, in a bank)' : '') + ' — ' + sourcing, 'computed'],
+      ['The steady call', steadySrc, 'computed'],
       ['YOU — at year ' + sim.years + ' (XIRR ' + pct(you.xirr) + ')', inr(you.final), 'computed'],
       ['A steady call — same door, surgical (XIRR ' + pct(smart.xirr) + ')', inr(smart.final), 'computed'],
       ['Your guided friend — Regular, after the 1% fee', inr(friend.final), 'computed'],
       ['Behaviour cost (you vs the steady call)', inr(gap), 'computed'],
       ['Sleeve returns', 'Liquid 6% · Large-cap 12% · Mid/small 15%', 'assumption'],
+      ['Idle cash earns', '4% a year (a bank / FD)', 'assumption'],
       ['Emergency size', sim.sev.label + ' (' + Math.round(need / you.corpusAtEmergency * 100) + '% of corpus)', 'assumption'],
-    ]) + '<p class="maths-note">The headline compares the same investor — only the behaviour differs — so the fee can\'t flatter either side. Every ₹ is computed from month-by-month units × NAV; only the returns and the emergency size are inputs.</p>');
+    ]) + '<p class="maths-note">The headline compares the same investor — only the behaviour differs — so the fee can\'t flatter either side. A veteran\'s footnote: for a short gap, an RM might suggest a <b>loan against the funds</b> rather than selling at all. Every ₹ is computed from month-by-month units × NAV; only the labelled assumptions are inputs.</p>');
     closeMaths('emMathsPanel', 'emMathsToggle');
   }
 
