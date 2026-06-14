@@ -43,30 +43,38 @@ const DEFAULT_YEARS = 20;
 
 /* ---- Market events. Depths/durations are illustrative, based on real index
  * drawdowns; `what` explains, in plain words, what actually happened. -------- */
+// Drawdown depth D, fall length F (months peak→trough), recovery R (months
+// trough→pre-crash level), anchored to Nifty 50 / Sensex history. APPROXIMATE —
+// lock to exact index data for the precise dates before any non-illustrative use.
+// Sources to verify against: NSE/BSE index history.
+//   COVID-19 2020: ~−38% (Jan–Mar 2020), trough ~Mar 2020, regained prior peak ~Nov 2020 (~8 mo).
+//   GFC 2008: ~−60% (Jan 2008–Mar 2009), regained prior peak ~late 2010 (~22 mo from trough).
+//   2022 correction: ~−18% (peaks Oct'21/early'22 to mid-2022), regained ~6 mo.
+//   War/geopolitical: ~−14% illustrative/ongoing, recovers ~8 mo (Kargil/Balakot/Gulf precedent).
 const EVENTS = {
   covid: {
     id: 'covid', name: 'COVID-19 crash, 2020', hypothetical: false,
-    depth: 0.38, fallMonths: 1, recoveryMonths: 9,
+    depth: 0.38, fallMonths: 1, recoveryMonths: 8,
     tag: 'The fast one',
-    what: 'The world stopped overnight. Markets fell ~38% in one month — then roared back. The fastest fall, and the fastest forgiveness.',
+    what: 'The world stopped overnight. Markets fell ~38% in one month — then regained their prior level within about eight. The fastest fall, and the fastest forgiveness.',
   },
   gfc: {
     id: 'gfc', name: 'Global Financial Crisis, 2008', hypothetical: false,
-    depth: 0.60, fallMonths: 14, recoveryMonths: 24,
+    depth: 0.60, fallMonths: 14, recoveryMonths: 22,
     tag: 'The deep, slow one',
-    what: 'Banks collapsed worldwide. Markets bled ~60% over 14 long months — the slow crash that made selling feel smart for over a year.',
+    what: 'Banks collapsed worldwide. Markets bled ~60% over 14 long months, then took roughly 22 more to climb back to their prior peak — the slow crash that made selling feel smart for over a year.',
   },
   corr2022: {
     id: 'corr2022', name: '2022 correction', hypothetical: false,
-    depth: 0.18, fallMonths: 8, recoveryMonths: 12,
+    depth: 0.18, fallMonths: 9, recoveryMonths: 6,
     tag: 'The slow ache',
-    what: 'Inflation and rising interest rates dragged markets down ~18% across the year. Not a catastrophe — just a long, dull ache that tested your patience.',
+    what: 'Inflation and rising interest rates dragged markets down ~18% over about nine months, then back to their prior level in roughly six. Not a catastrophe — just a long, dull ache that tested your patience.',
   },
   war: {
     id: 'war', name: 'War / geopolitical shock', hypothetical: true,
-    depth: 0.13, fallMonths: 3, recoveryMonths: 6,
+    depth: 0.14, fallMonths: 2, recoveryMonths: 8,
     tag: 'The headline scare',
-    what: 'War headlines, an oil shock, troops at the border. Markets dip on fear — history (Kargil, Balakot, the Gulf) says ~10–15%, then recover within months. The scare is bigger than the damage.',
+    what: 'War headlines, an oil shock, troops at the border. Markets dip on fear — history (Kargil, Balakot, the Gulf) says ~10–15%, regaining their level within months. Illustrative and ongoing; the scare is usually bigger than the damage.',
   },
   // 'drawn' is NOT a fixed event — it is generated live (see drawCrash) so it is
   // unique every run and can't be pattern-matched to history.
@@ -143,9 +151,12 @@ function xirrFromSIP(sip, N, finalValue) {
 /**
  * NAV (price-per-unit) series for one plan around one event.
  * Starts at 100, grows at `rate` each calm month; at the event start S the
- * price glides DOWN to (1-depth)·peak over `fallMonths`, then back UP to the
- * EXACT undisturbed-trend level over `recoveryMonths` (no scar), then resumes
- * normal growth. Geometric within each phase — the honest way prices move.
+ * price glides DOWN to (1-depth)·peak over `fallMonths`, then a recovery RALLY
+ * climbs from the trough back to the PRE-CRASH PEAK level over `recoveryMonths`
+ * (as real crashes do — they regain the prior high, not the imaginary "no-crash
+ * trend"), then resumes normal trend growth FROM that peak. The market therefore
+ * sits permanently a little below where an uninterrupted trend would have put it
+ * — the growth the round-trip consumed. Geometric within each phase.
  */
 function buildEventNav(rate, N, ev, S) {
   const fall = ev.fallMonths, rec = ev.recoveryMonths;
@@ -157,7 +168,7 @@ function buildEventNav(rate, N, ev, S) {
     else if (t <= bottom)  nav[t] = nav[S] * Math.pow(1 - ev.depth, (t - S) / fall);
     else if (t <= healed) {
       const start = nav[S] * (1 - ev.depth);
-      const target = nav[S] * Math.pow(1 + rate, fall + rec);
+      const target = nav[S]; // recovery returns to the PRE-CRASH PEAK, not the trend
       nav[t] = start * Math.pow(target / start, (t - bottom) / rec);
     } else                 nav[t] = nav[t - 1] * (1 + rate);
   }
@@ -256,7 +267,8 @@ function runSinglePath(sip, eventId, years) {
 
   const feeSavingRupees = direct.hold.final - regular.hold.final; // structural fee edge
   const directNoCrash = simHold(buildTrendNav(DIRECT_MONTHLY, N), N, sip).final;
-  // Index CAGR (the market itself) — exactly 12% for Direct as it heals to trend.
+  // Index CAGR (the market itself) — a little under 12% for Direct, because the
+  // crash regains the prior peak (not the trend), leaving a permanent gap.
   const indexCagr = cagr(navDirect[0], navDirect[N], Y);
 
   return {
@@ -1436,8 +1448,8 @@ if (typeof document !== 'undefined') (function () {
       ['What the fee saved you', inr(feeSaved), 'computed'],
       ['What your crash decision cost you', inr(behaviourCost), 'computed'],
       ['Assumed returns', 'Direct 12% / Regular 11% a year', 'assumption'],
-      ['Assumed drawdown', '−' + Math.round(sim.ev.depth * 100) + '% over ' + sim.ev.fallMonths + ' mo, recover ' + sim.ev.recoveryMonths + ' mo', 'assumption'],
-    ])) + '<p class="maths-note">XIRR is the one annual rate that makes your monthly investments equal the final value — the correct return for a SIP. Every ₹ is computed from month-by-month units × NAV; only the two assumptions are inputs.</p>');
+      ['Assumed crash', '−' + Math.round(sim.ev.depth * 100) + '% over ' + sim.ev.fallMonths + ' mo, then regains its prior level over ' + sim.ev.recoveryMonths + ' mo', 'assumption'],
+    ])) + '<p class="maths-note">The crash falls, then recovers to its <b>pre-crash level</b> over ' + sim.ev.recoveryMonths + ' months — as ' + sim.ev.name + ' did historically — and resumes trend growth from there (so the market ends a little under a no-crash 12%, the growth the round-trip consumed). XIRR is the one annual rate that makes your monthly investments equal the final value — the correct return for a SIP. Every ₹ is computed from month-by-month units × NAV; only the labelled assumptions are inputs.</p>');
     closeMaths('mathsPanel', 'mathsToggle');
     show($('result'));
     const a = { values: yours.value, color: BEHAVIOURS[state.choice].color, width: 3, glow: true, dot: true, texture: true };
@@ -1590,7 +1602,7 @@ if (typeof document !== 'undefined') (function () {
     } else if (step === 'reveal') { expScene('glow');
       html += '<p class="exp-prompt">One last thing.</p><div class="exp-grid"><button class="exp-btn wide" data-act="showline">Show me →</button></div><p class="exp-note" id="expNote"></p>';
     } else if (step === 'seal') { expScene('glow');
-      html += '<div class="lbeat door"><p>The <b>door</b> you chose moved a dial you don’t control — about <b>' + inrShort(e.door) + '</b>. The <b>lever</b> you held — and whether someone helped you hold it — moved the only one you do: about <b>' + inrShort(e.gap) + '</b>, roughly <b>' + e.ratio + '×</b> more.</p><p class="life-cta">You will live exactly one of these futures. You’re choosing it now.</p></div>'
+      html += '<div class="lbeat door"><p>The <b>door</b> you chose moved a dial you don’t control — about <b>' + inrShort(e.door) + '</b>. The <b>lever</b> you held — and whether someone helped you hold it — moved the only one you do: about <b>' + inrShort(e.gap) + '</b>, roughly <b>' + e.ratio + '×</b> more <span class="exp-dim">(in this run, at these inputs)</span>.</p><p class="life-cta">You will live exactly one of these futures. You’re choosing it now.</p></div>'
         + '<div class="exp-grid two"><button class="exp-btn" data-act="again">Live it again</button><button class="exp-btn" data-act="close">Done</button></div>';
     }
     setHTML('lifeBeats', html);

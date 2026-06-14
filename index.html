@@ -13,7 +13,7 @@
 <meta property="og:description" content="You say you won't panic. Prove it." />
 <meta property="og:type" content="website" />
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚪</text></svg>" />
-<link rel="stylesheet" href="styles.css?v=20260614ai" />
+<link rel="stylesheet" href="styles.css?v=20260614aj" />
 </head>
 <body>
 <noscript>
@@ -37,7 +37,7 @@
 <p>After a result, the visitor can run a Monte Carlo experiment of 10,000 possible futures, presented as a sequence of choices rather than a chart. The beats: <strong>(1)</strong> “If you could control one thing about your next 20 years, which?” — every option (the year the crash hits, how deep, which fund wins, the news) locks and refuses; only “your own nerve” can be chosen, because it is the only thing you control. <strong>(2)</strong> The visitor guesses how many people out of 100 actually hold through a crash, then meets the real figures (AMFI–CRISIL: about 8 in 100 who invest alone are still invested five years later, versus about 21 with a steady hand). <strong>(3)</strong> The visitor pulls a lever both ways — STAY invested vs RUN to cash — and watches 10,000 outcomes settle high (gold) or low (red, many below the “what you put in” line). <strong>(4)</strong> With their hand shaking in the crash, they choose to hold alone or reach for a steady hand — the steady hand being exactly what the fee buys. <strong>(5)</strong> They turn the wealth gap into years of their own life they would never have to work, at a monthly spend they pick. Then the closing truth: the door (the whole fee) moved the outcome a little; the lever they held — calm vs panic — moved it roughly 1.7× more.</p>
 
 <h2>The maths — exact, auditable, never fabricated</h2>
-<p>Returns are stored so the effective annual growth is exactly 12% for Direct and 11% for Regular (the monthly rate is the 12th root, not a naive 1%/month). The 1% fee is a multiplicative monthly drag. Every month, units = SIP ÷ NAV and value = units × NAV, with start-of-month SIP timing. XIRR (Newton–Raphson with a bisection fallback) and CAGR are computed from the actual cash flows. The Monte Carlo engine runs up to 10,000 paths with a mean of about 12%/yr, volatility about 15–18%/yr, fat tails and clustered crashes. Every result on screen is computed live; only the return assumptions and the historical drawdown sizes are inputs. The 8/21 persistence statistics are cited from AMFI–CRISIL; the “years of life” translation uses a clearly-labelled monthly-spend assumption.</p>
+<p>Returns are stored so the effective annual growth is exactly 12% for Direct and 11% for Regular (the monthly rate is the 12th root, not a naive 1%/month). The 1% fee is a multiplicative monthly drag. Every month, units = SIP ÷ NAV and value = units × NAV, with start-of-month SIP timing. XIRR (Newton–Raphson with a bisection fallback) and CAGR are computed from the actual cash flows. The Monte Carlo engine runs up to 10,000 paths with a mean of about 12%/yr, volatility about 15–18%/yr, fat tails and clustered crashes. Each historical crash is modelled in three phases anchored to real index history: a fall to (1−depth)×peak over the fall months, a recovery rally back to the pre-crash peak level over the recovery months (as the market actually did — it regains its prior high, not the imaginary no-crash trend), then a resumption of trend growth from that level — so a holder ends a little behind the no-crash baseline (the growth the round-trip consumed), and a panic-seller who exits at the bottom misses the rally. Every result on screen is computed live; only the return assumptions and the historical drawdown sizes/durations are inputs. The 8/21 persistence statistics are cited from AMFI–CRISIL; the “years of life” translation uses a clearly-labelled monthly-spend assumption.</p>
 
 <h2>Honest findings the tool surfaces</h2>
 <p>Staying calm wins the clear majority of the 10,000 futures, with a higher typical outcome and a better worst case; a panic-seller who sits in cash ends lower and less safe (its worst case falls below what was invested), but not “wider”. Over 20 years the behaviour gap is roughly 1.7× the entire fee gap — so the fee is real, but behaviour matters more — and the tool never claims one plan is universally better.</p>
@@ -47,7 +47,7 @@
 </noscript>
 <div id="grain" aria-hidden="true"></div>
 <button id="muteBtn" aria-label="Toggle sound">🔊</button>
-<div class="listen-hint" id="listenHint">The advisor is speaking…</div>
+<div class="listen-hint" id="listenHint">The MD is speaking…</div>
 <div id="doorFlash" class="door-flash" aria-hidden="true"></div>
 <div id="app">
 
@@ -355,6 +355,6 @@
 
 <div id="toast" class="toast" hidden></div>
 <footer class="global-foot">Educational tool — not investment advice.</footer>
-<script src="app.js?v=20260614ai"></script>
+<script src="app.js?v=20260614aj"></script>
 </body>
 </html>
