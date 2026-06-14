@@ -530,6 +530,17 @@ if (typeof document !== 'undefined') (function () {
   }
   // Speak text with finance terms pronounced correctly (SIP -> the full phrase).
   function say(text, opts) { Voice.speak(text.replace(/\bSIP\b/g, 'systematic investment plan'), opts); }
+  // Narrate AND lock interaction until it finishes — released on the first of
+  // {onend, onerror, timeout, mute, no-voice}, so it can never dead-end.
+  function narrate(text, opts, onDone) {
+    const spoken = text.replace(/\bSIP\b/g, 'systematic investment plan');
+    if (!Voice.available || !Voice.isEnabled()) { if (onDone) onDone(); return; }
+    document.body.classList.add('narrating');
+    let done = false;
+    const finish = () => { if (done) return; done = true; document.body.classList.remove('narrating'); if (onDone) onDone(); };
+    Voice.speak(spoken, opts, finish);
+    setTimeout(finish, Math.min(22000, 1800 + spoken.split(' ').length * 360));
+  }
   // Reveal a quote word-by-word, as if spoken live on the call.
   function revealQuote(id, text, startMs, perWord) {
     const el = $(id); if (!el) return;
@@ -542,7 +553,7 @@ if (typeof document !== 'undefined') (function () {
   // A realistic relationship-manager response: behavioural coaching that also
   // takes a genuine cash need seriously (not just "never sell").
   const RM_CRASH_LINE = "Okay — breathe. First, one honest question: do you actually need this money in the next year, or is this fear talking? If you genuinely need some, we'll plan exactly how much to take and from where. If you don't, we touch nothing today. We don't make a permanent decision on one red day. Sleep on it — call me in the morning.";
-  const RM_EM_LINE = "Right, this is real, so let's be calm and precise. We take exactly what the emergency needs — not a rupee more. Liquid fund first, then a little large-cap. We leave the fund that's down; selling it now turns a dip into a real loss. We pause the SIP for three months, we don't cancel it. The rest keeps working. This stays a setback, not a disaster.";
+  const RM_EM_LINE = "Stay calm. First, let's understand exactly how much you truly need. We'll build the withdrawal around that one number — we don't sell randomly and undo years of discipline. Take a breath. We handle this carefully, together, and your future stays intact.";
   // Make a rupee figure personal & exact: express it in the user's own SIP.
   function sipSpan(rupees) {
     const months = Math.abs(rupees) / state.sip, yrs = months / 12;
@@ -773,31 +784,37 @@ if (typeof document !== 'undefined') (function () {
     return { unlock, startPad, startRumble, stopRumble, impact, setHeart, stopHeart, silenceCut, stopPad, ring, tick, ui, whoosh, freeze, stinger, resolve, openSwell, strike, lossTone, stopAll, toggle, isOn };
   })();
 
-  /* ---- Voice narration (Web Speech API — built into the browser, no files). ---- */
+  /* ---- Voice narration (Web Speech API). Prefers a mature MALE English voice. ---- */
   const Voice = (function () {
     const ok = typeof window !== 'undefined' && 'speechSynthesis' in window;
     let enabled = true, picked = null;
+    const isMale = (n) => /\b(male|man)\b/i.test(n) || /(daniel|rishi|arthur|george|fred|alex|oliver|james|thomas|ravi|hemant|prabhat|aaron|guy|david|mark|microsoft (david|mark|guy|ravi)|google uk english male|google us english)/i.test(n);
+    const isFemale = (n) => /(female|woman|samantha|victoria|zira|heera|kalpana|veena|tessa|fiona|moira|karen|susan|catherine|serena|allison|ava|google uk english female)/i.test(n);
     function pick() {
       if (!ok) return null;
       const vs = window.speechSynthesis.getVoices() || [];
-      // Prefer a natural English voice; Indian English if present.
-      return vs.find((v) => /en[-_]?IN/i.test(v.lang)) || vs.find((v) => /en[-_]?GB/i.test(v.lang))
-        || vs.find((v) => /^en/i.test(v.lang)) || vs[0] || null;
+      const en = vs.filter((v) => /^en/i.test(v.lang));
+      const males = en.filter((v) => isMale(v.name) && !isFemale(v.name));
+      // Prefer Indian-English male, then UK, then any male, then any English not-female.
+      return males.find((v) => /en[-_]?IN/i.test(v.lang)) || males.find((v) => /en[-_]?GB/i.test(v.lang)) || males[0]
+        || en.find((v) => !isFemale(v.name)) || en[0] || vs[0] || null;
     }
     if (ok) { try { window.speechSynthesis.onvoiceschanged = () => { picked = pick(); }; } catch (e) {} }
-    function speak(text, opts) {
-      if (!ok || !enabled || !text) return;
+    function speak(text, opts, onEnd) {
+      if (!ok || !enabled || !text) { if (onEnd) onEnd(); return; }
       try {
         window.speechSynthesis.cancel();
         const u = new SpeechSynthesisUtterance(text);
         if (!picked) picked = pick(); if (picked) u.voice = picked;
-        u.rate = (opts && opts.rate) || 0.9; u.pitch = (opts && opts.pitch) || 1; u.volume = (opts && opts.volume) || 1;
+        u.rate = (opts && opts.rate) || 0.92; u.pitch = (opts && opts.pitch) || 0.82; u.volume = (opts && opts.volume) || 1; // lower pitch = older, authoritative
+        if (onEnd) { u.onend = onEnd; u.onerror = onEnd; }
         window.speechSynthesis.speak(u);
-      } catch (e) {}
+      } catch (e) { if (onEnd) onEnd(); }
     }
     function stop() { if (ok) try { window.speechSynthesis.cancel(); } catch (e) {} }
     function setEnabled(b) { enabled = b; if (!b) stop(); }
-    return { speak, stop, setEnabled, available: ok };
+    function isEnabled() { return enabled; }
+    return { speak, stop, setEnabled, isEnabled, available: ok };
   })();
   let introSpoken = false;
   function speakIntro() { if (introSpoken) return; introSpoken = true; Voice.speak('What do you want to face? A market crash… or a personal emergency?', { rate: 0.88 }); }
@@ -842,12 +859,16 @@ if (typeof document !== 'undefined') (function () {
     c.clearRect(0, 0, w, h);
     c.strokeStyle = 'rgba(255,255,255,0.06)'; c.lineWidth = 1;
     for (let i = 0; i <= 3; i++) { const yy = p.t + i * (h - p.t - p.b) / 3; c.beginPath(); c.moveTo(p.l, yy); c.lineTo(w - p.r, yy); c.stroke(); }
-    // Axis labels — make it read as a genuine financial chart.
+    // Axis labels — clearly visible, like a real financial chart. ₹ values sit
+    // on the right (clear of the line); year ticks run along the bottom.
     if (opts.axis) {
-      c.save(); c.fillStyle = 'rgba(255,255,255,0.34)'; c.font = '11px ' + 'var(--num)'.replace('var(--num)', 'ui-monospace, monospace'); c.textAlign = 'left';
-      for (let i = 0; i <= 3; i++) { const yy = p.t + i * (h - p.t - p.b) / 3; const val = yMax * (3 - i) / 3; c.fillText(inrShort(val), p.l + 2, yy - 4); }
-      const yrs = opts.axisYears || Math.round(N / 12); c.textAlign = 'center';
-      for (let yr = 0; yr <= yrs; yr += Math.max(1, Math.round(yrs / 4))) { const xx = X(yr * 12); c.fillText('Y' + yr, xx, h - p.b + 16); }
+      c.save();
+      c.font = '600 13px ui-monospace, "SF Mono", Menlo, monospace';
+      c.fillStyle = 'rgba(230,238,248,0.75)'; c.textAlign = 'right'; c.textBaseline = 'middle';
+      for (let i = 0; i <= 3; i++) { const yy = p.t + i * (h - p.t - p.b) / 3; const val = yMax * (3 - i) / 3; if (i < 3) c.fillText(inrShort(val), w - p.r - 4, yy + 9); }
+      c.fillStyle = 'rgba(230,238,248,0.6)'; c.textAlign = 'center'; c.textBaseline = 'alphabetic';
+      const yrs = opts.axisYears || Math.round(N / 12);
+      for (let yr = 0; yr <= yrs; yr += Math.max(1, Math.round(yrs / 4))) { const xx = X(yr * 12); c.fillText('Yr ' + yr, xx, h - p.b + 17); }
       c.restore();
     }
     // Divergence shading: fill the gap between two lines (the cost made visible).
@@ -898,7 +919,7 @@ if (typeof document !== 'undefined') (function () {
     const { w, h, c } = fitCanvas(cv);
     const yMax = Math.max(a.values[N], b.values[N], a.values[a.values.length - 1], b.values[b.values.length - 1]) * 1.08;
     const band = { a: a.values, b: b.values, color: hexFill(behind ? COL.crash : COL.direct, 0.16) };
-    drawLines(c, w, h, N, yMax, [b, a], N, { l: 16, r: 16, t: 16, b: 22 }, band, { axis: true, axisYears: years });
+    drawLines(c, w, h, N, yMax, [b, a], N, { l: 16, r: 16, t: 18, b: 30 }, band, { axis: true, axisYears: years });
   }
   // A premium allocation donut for the emergency intro.
   function drawDonut(canvasId, parts) {
@@ -934,11 +955,18 @@ if (typeof document !== 'undefined') (function () {
   function wizPick(name, val, btn) {
     state[WIZ_KEY[name]] = WIZ_NUM[name] ? Number(val) : val;
     if (btn) { document.querySelectorAll('#w_' + name + ' .opt').forEach((b) => b.classList.toggle('on', b === btn)); }
-    if (name === 'event') Voice.speak(EVENTS[val] ? EVENTS[val].name + '. ' + (EVENTS[val].tag || '') : 'A crash no one saw coming.');
     const steps = wizSteps();
     const advance = () => { if (state.wizIndex >= steps.length - 1) wizLaunch(); else showWizStep(state.wizIndex + 1); };
-    // Let the selection visibly register before moving on.
-    if (reduceMotion) advance(); else setTimeout(advance, 300);
+    // Choosing a storm or an emergency narrates its full context — and you can't
+    // move on until the voice finishes (so the lesson actually lands).
+    if (name === 'event') {
+      const ev = EVENTS[val] || drawCrash();
+      narrate(ev.name + '. ' + ev.what, { rate: 0.94 }, () => setTimeout(advance, 250));
+    } else if (name === 'emType') {
+      const em = EMERGENCIES[val] || EMERGENCIES.icu;
+      narrate(em.name + '. ' + em.what, { rate: 0.94 }, () => setTimeout(advance, 250));
+    } else if (reduceMotion) advance();
+    else setTimeout(advance, 300);
   }
   function wizBack() { if (state.wizIndex > 0) showWizStep(state.wizIndex - 1); }
   function wizLaunch() {
@@ -952,7 +980,7 @@ if (typeof document !== 'undefined') (function () {
     state.pledge = null;
     setText('pledgeYears', state.years);
     show($('pledge'));
-    Voice.speak('Sometime in your ' + state.years + ' years, a crash will come. Swear it now, while you are calm: when your savings are deep in the red, what will you do?', { rate: 0.92 });
+    narrate('Sometime in your ' + state.years + ' years, a crash will come. Swear it now, while you are calm. When your savings are deep in the red, what will you do?', { rate: 0.92 });
   }
   function makePledge(p) {
     state.pledge = p;
@@ -990,7 +1018,7 @@ if (typeof document !== 'undefined') (function () {
       const behind = yours.final < calm.final;
       band = { a: yours.value, b: calm.value, color: hexFill(behind ? COL.crash : COL.direct, 0.16) };
     }
-    drawLines(c, w, h, N, state.yMax, lines, state.head, null, band, { axis: true, axisYears: sim.years, glitch: state.phase === 'crash' });
+    drawLines(c, w, h, N, state.yMax, lines, state.head, { l: 18, r: 18, t: 28, b: 32 }, band, { axis: true, axisYears: sim.years, glitch: state.phase === 'crash' });
     drawEmbers(c, w, h);
     const corpus = valueAt(front, state.head), months = Math.min(Math.floor(state.head), N);
     // A soft tick + light haptic each year the climb passes — time, felt.
@@ -1066,8 +1094,7 @@ if (typeof document !== 'undefined') (function () {
     setText('silDepth', depth);
     setText('silFrom', inrShort(peak)); setText('silTo', inrShort(bottom));
     setText('silContext', (sim.crashYear % 1 ? sim.crashYear.toFixed(1) : sim.crashYear) + ' years in. ' + sim.ev.name + '.');
-    show($('silence'));
-    setTimeout(() => say('Your ' + amountWords(peak) + ' is now ' + amountWords(bottom) + '. Down ' + depth + ' percent.', { rate: 0.9 }), 700);
+    show($('silence')); // a visual beat — full-screen, no narration here
   }
   // Step 1: YOU decide ALONE — no friend, no voice, nothing to copy.
   function openYouDecision() { hide($('silence')); Sound.whoosh(); show($('youDecision')); }
@@ -1075,8 +1102,8 @@ if (typeof document !== 'undefined') (function () {
   function openFriendReveal() {
     renderFriendPanel(); show($('friendReveal'));
     Sound.whoosh(); Sound.ring(); Sound.setHeart(60); setTimeout(() => Sound.stopHeart(), 4500);
-    revealQuote('revealQuote', '"' + RM_CRASH_LINE + '"', 700, 150);
-    setTimeout(() => say(RM_CRASH_LINE, { rate: 0.96 }), 1500);
+    revealQuote('revealQuote', '"' + RM_CRASH_LINE + '"', 1600, 150);
+    setTimeout(() => narrate(RM_CRASH_LINE, { rate: 0.96 }), 1500); // locks "See how it ends" until he finishes
   }
   function renderFriendPanel() {
     const cv = $('friendCanvas'); if (!cv) return;
@@ -1364,9 +1391,8 @@ if (typeof document !== 'undefined') (function () {
     state.emResponse = r; Sound.stopHeart(); Sound.tick();
     hide($('emDecision')); show($('emCall'));
     Sound.whoosh(); Sound.ring();
-    const line = RM_EM_LINE.replace('exactly what the emergency needs', 'exactly ' + inrShort(state.emCtx.need));
-    revealQuote('emQuote', '"' + line + '"', 500, 140);
-    setTimeout(() => say(line, { rate: 0.97 }), 1200);
+    revealQuote('emQuote', '"' + RM_EM_LINE + '"', 1300, 150);
+    setTimeout(() => narrate(RM_EM_LINE, { rate: 0.96 }), 1200); // locks "See how it ends" until he finishes
   }
   function emToResult() {
     hide($('emCall')); Sound.whoosh(); Sound.resolve();
@@ -1434,16 +1460,18 @@ if (typeof document !== 'undefined') (function () {
   function backToSetup() { Sound.stopAll(); Voice.stop(); cancelAnimationFrame(state.raf); hideAllOverlays(); hide($('stage')); hide($('emergency')); state.wizIndex = 0; showWizStep(0); show($('setup')); }
 
   function boot() {
-    // Unlock audio + speak the opening line on the very first interaction
-    // (browsers block sound/speech until a gesture). Also try immediately.
-    const firstGesture = () => { Sound.unlock(); Sound.openSwell(); speakIntro(); document.removeEventListener('pointerdown', firstGesture); };
-    document.addEventListener('pointerdown', firstGesture, { once: true });
-    setTimeout(speakIntro, 350); // best-effort if autoplay is permitted
+    // The intro gate is the first gesture — it unlocks audio AND lets the
+    // opening question be narrated (autoplay-safe). The scenario cards stay
+    // locked until that narration finishes (body.narrating).
+    on('introBtn', 'click', () => {
+      Sound.unlock(); Sound.openSwell(); hide($('intro'));
+      setTimeout(() => narrate('What do you want to face? A market crash… or a personal emergency?', { rate: 0.9 }), 450);
+    });
     // Premium tactile feedback on every tap: a soft click + a light haptic.
     document.addEventListener('pointerdown', (e) => {
       if (e.target.closest('button') && e.target.id !== 'muteBtn') { Sound.ui(); if (navigator.vibrate) navigator.vibrate(8); }
     });
-    on('muteBtn', 'click', () => { const onNow = Sound.toggle(); Voice.setEnabled(onNow); const b = $('muteBtn'); if (b) b.textContent = onNow ? '🔊' : '🔇'; });
+    on('muteBtn', 'click', () => { const onNow = Sound.toggle(); Voice.setEnabled(onNow); if (!onNow) document.body.classList.remove('narrating'); const b = $('muteBtn'); if (b) b.textContent = onNow ? '🔊' : '🔇'; });
 
     // Wizard: each step is a group of .opt buttons.
     document.querySelectorAll('.wstep').forEach((step) => {
