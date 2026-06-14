@@ -10,7 +10,7 @@
 <meta property="og:description" content="You say you won't panic. Prove it." />
 <meta property="og:type" content="website" />
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚪</text></svg>" />
-<link rel="stylesheet" href="styles.css?v=20260614m" />
+<link rel="stylesheet" href="styles.css?v=20260614n" />
 </head>
 <body>
 <div id="grain" aria-hidden="true"></div>
@@ -161,14 +161,13 @@
 
   <!-- ===================== FRIEND REVEALED — the call (shown AFTER you decide) ===================== -->
   <div id="friendReveal" class="overlay scene reveal" hidden>
-    <div class="reveal-inner">
-      <p class="reveal-tag">Meanwhile, your friend — on the Regular plan…</p>
-      <div class="rm-call">
-        <div class="rm-avatar">RM<span class="rm-ring"></span></div>
-        <div class="rm-meta"><span class="rm-name">Relationship Manager</span><span class="rm-status">● incoming call</span></div>
-      </div>
-      <p class="reveal-quote" id="revealQuote"></p>
-      <div class="friend-canvas-wrap"><canvas id="friendCanvas" aria-label="Your friend's steadying line"></canvas></div>
+    <div class="reveal-inner call-screen">
+      <p class="call-context">Meanwhile, on the Regular plan — her phone rings.</p>
+      <div class="call-avatar"><span class="call-ring"></span><span class="call-ring r2"></span><span class="call-initials">RM</span></div>
+      <p class="call-name">Relationship Manager</p>
+      <p class="call-status">● on the call</p>
+      <div class="call-wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      <p class="call-caption reveal-quote" id="revealQuote"></p>
       <p class="reveal-foot">She held. She isn't smarter than you — she just had a number to call.</p>
       <button id="friendRevealBtn" class="cta">See how it ends →</button>
     </div>
@@ -268,13 +267,13 @@
   </div>
 
   <div id="emCall" class="overlay scene em-stage" hidden>
-    <div class="card em-card friend-card">
-      <div class="rm-call">
-        <div class="rm-avatar">RM<span class="rm-ring"></span></div>
-        <div class="rm-meta"><span class="rm-name">Relationship Manager</span><span class="rm-status">● on the call</span></div>
-      </div>
-      <p class="em-quote" id="emQuote"></p>
-      <p class="em-body">She took what she needed. The rest kept working. You faced it alone.</p>
+    <div class="card em-card call-screen">
+      <p class="call-context">You don't guess. You call your relationship manager.</p>
+      <div class="call-avatar"><span class="call-ring"></span><span class="call-ring r2"></span><span class="call-initials">RM</span></div>
+      <p class="call-name">Relationship Manager</p>
+      <p class="call-status">● on the call</p>
+      <div class="call-wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      <p class="call-caption em-quote" id="emQuote"></p>
       <button id="emCallBtn" class="cta">See where it leaves you both →</button>
     </div>
   </div>
@@ -310,6 +309,6 @@
 
 <div id="toast" class="toast" hidden></div>
 <footer class="global-foot">Educational tool — not investment advice.</footer>
-<script src="app.js?v=20260614m"></script>
+<script src="app.js?v=20260614n"></script>
 </body>
 </html>

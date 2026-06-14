@@ -1422,15 +1422,13 @@ if (typeof document !== 'undefined') (function () {
     setHTML('emGapLine', surgical
       ? '<span class="good">You matched the steady call — almost no one does this alone.</span>'
       : '<span class="bad">' + inr(gap) + ' less than one calm decision would have left you.</span>');
-    setHTML('emVerdict', surgical
-      ? 'You kept a temporary emergency temporary.<span class="verdict-sub">Most people, alone and afraid, reach for the wrong part of their savings. You didn\'t — that\'s the whole game.</span>'
-      : 'A temporary emergency just became a permanent setback.<span class="verdict-sub">The money was right there. Under pressure, alone, you took it from the wrong place — and ' + sipSpan(gap) + ' never came back.</span>');
-    // The clear, powerful line — prominent, not buried.
+    // Short verdict (one line) + the single HERO insight, big. Detail moves
+    // into the maths panel so the finish page stays clean and unmissable.
+    setHTML('emVerdict', surgical ? 'You kept a temporary emergency temporary.' : 'A temporary emergency just became a permanent setback.');
     setHTML('emResonate', surgical
-      ? 'It was never about being smart, or lucky. It was having a plan — and the nerve to follow it.'
-      : 'The difference wasn\'t intelligence. It wasn\'t luck. It was having <b>someone to stop a temporary emergency from becoming a permanent setback</b>.');
-    // One tight, layered line: fee isn't the point; the buffer + the call are.
-    setHTML('emHonest', 'Your friend on Regular finished with <b>' + inrShort(friend.final) + '</b> even after her 1% fee — so the fee was never the point. The real lesson: a deeper <b>emergency buffer</b>, and a steady hand to call, so a crisis never forces you to sell your future at the worst moment.');
+      ? 'It was never about being smart, or lucky.<br>It was having a plan — and the nerve to follow it.'
+      : 'The difference wasn\'t intelligence.<br>It wasn\'t luck.<br>It was having <b>someone to stop a temporary emergency from becoming a permanent one</b>.');
+    setHTML('emHonest', ''); // folded into the maths panel below
     // Sourcing detail teaches the sequencing without crowding the hero copy.
     const drewMid = you.fromMid > 1;
     const sourcing = sim.youResponse === 'panic'
@@ -1450,7 +1448,7 @@ if (typeof document !== 'undefined') (function () {
       ['Sleeve returns', 'Liquid 6% · Large-cap 12% · Mid/small 15%', 'assumption'],
       ['Idle cash earns', '4% a year (a bank / FD)', 'assumption'],
       ['Emergency size', sim.sev.label + ' (' + Math.round(need / you.corpusAtEmergency * 100) + '% of corpus)', 'assumption'],
-    ]) + '<p class="maths-note">The headline compares the same investor — only the behaviour differs — so the fee can\'t flatter either side. A veteran\'s footnote: for a short gap, an RM might suggest a <b>loan against the funds</b> rather than selling at all. Every ₹ is computed from month-by-month units × NAV; only the labelled assumptions are inputs.</p>');
+    ]) + '<p class="maths-note">Your friend on Regular finished with <b>' + inrShort(friend.final) + '</b> even after her 1% fee — the fee was never the point. The headline compares the same investor (only behaviour differs), so the fee can\'t flatter either side. A veteran\'s footnote: for a short gap, an RM might suggest a <b>loan against the funds</b> rather than selling at all. Every ₹ is computed from month-by-month units × NAV; only the labelled assumptions are inputs.</p>');
     closeMaths('emMathsPanel', 'emMathsToggle');
   }
 
