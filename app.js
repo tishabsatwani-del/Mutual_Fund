@@ -952,6 +952,10 @@ if (typeof document !== 'undefined') (function () {
       } catch (e) { return false; }
     }
     function stop() { if (ok) try { window.speechSynthesis.cancel(); } catch (e) {} }
+    // Warm the engine on the first touch so the opening line starts promptly
+    // (mobile speech has a cold-start delay on the first utterance).
+    let primed = false;
+    function prime() { if (!ok || !enabled || primed) return; primed = true; try { window.speechSynthesis.resume(); const u = new SpeechSynthesisUtterance(' '); u.volume = 0; u.rate = 2; window.speechSynthesis.speak(u); } catch (e) {} }
     function setEnabled(b) { enabled = b; if (!b) stop(); }
     function isEnabled() { return enabled; }
     // Speak ONE line and fire marks as the engine actually reaches each word
@@ -960,7 +964,10 @@ if (typeof document !== 'undefined') (function () {
     function speakSynced(text, marks, onEnd) {
       if (!ok || !enabled || !text) { if (onEnd) onEnd(); return false; }
       try {
-        window.speechSynthesis.cancel();
+        // No cancel() here: at the opening nothing is playing, and a cancel→speak
+        // sequence delays (sometimes drops) the first utterance on mobile. A
+        // resume() guards against an engine that loaded paused.
+        try { window.speechSynthesis.resume(); } catch (e) {}
         if (!picked) picked = pick();
         const u = new SpeechSynthesisUtterance(text);
         if (picked) u.voice = picked;
@@ -973,7 +980,7 @@ if (typeof document !== 'undefined') (function () {
         return true;
       } catch (e) { if (onEnd) onEnd(); return false; }
     }
-    return { speak, speakSequence, speakSynced, stop, setEnabled, isEnabled, available: ok };
+    return { speak, speakSequence, speakSynced, prime, stop, setEnabled, isEnabled, available: ok };
   })();
   let introSpoken = false;
   function speakIntro() { if (introSpoken) return; introSpoken = true; Voice.speak('What do you want to face? A market crash… or a personal emergency?', { rate: 0.88 }); }
@@ -1830,6 +1837,9 @@ if (typeof document !== 'undefined') (function () {
     // The intro gate is the first gesture — it unlocks audio AND lets the
     // opening question be narrated (autoplay-safe). The scenario cards stay
     // locked until that narration finishes (body.narrating).
+    // Warm the speech engine the instant Begin is pressed (pointerdown fires
+    // before click), so the opening voice starts with minimal cold-start lag.
+    on('introBtn', 'pointerdown', () => Voice.prime());
     on('introBtn', 'click', () => {
       Sound.unlock(); Sound.openSwell(); hide($('intro'));
       const crash = document.querySelector('#w_scenario .crash-scn');
