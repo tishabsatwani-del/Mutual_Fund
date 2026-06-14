@@ -139,6 +139,10 @@ body {
 .big-choices button b { font-size: 18.5px; }
 .big-choices button span { font-size: 14px; }
 
+/* Word-by-word reveal — text appearing as the RM speaks, live. */
+.rw { opacity: 0.12; transition: opacity .5s ease; }
+.rw.on { opacity: 1; }
+
 /* Step 2 — the friend revealed (after you've decided). */
 .reveal { background: rgba(5,8,10,0.95); }
 .reveal-inner { width: 100%; max-width: 540px; background: var(--card); border: 1px solid var(--line); border-radius: 24px; padding: 28px 24px; box-shadow: 0 40px 90px -30px rgba(0,0,0,0.85); animation: rise .55s ease both; }

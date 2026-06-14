@@ -528,6 +528,15 @@ if (typeof document !== 'undefined') (function () {
   }
   // Speak text with finance terms pronounced correctly (SIP -> the full phrase).
   function say(text, opts) { Voice.speak(text.replace(/\bSIP\b/g, 'systematic investment plan'), opts); }
+  // Reveal a quote word-by-word, as if spoken live on the call.
+  function revealQuote(id, text, startMs, perWord) {
+    const el = $(id); if (!el) return;
+    const words = text.split(' ');
+    el.innerHTML = words.map((w) => '<span class="rw">' + w + '</span>').join(' ');
+    const spans = el.querySelectorAll('.rw');
+    if (reduceMotion) { spans.forEach((s) => s.classList.add('on')); return; }
+    spans.forEach((s, i) => setTimeout(() => s.classList.add('on'), (startMs || 0) + i * (perWord || 160)));
+  }
   // A realistic relationship-manager response: behavioural coaching that also
   // takes a genuine cash need seriously (not just "never sell").
   const RM_CRASH_LINE = "Okay — breathe. First, one honest question: do you actually need this money in the next year, or is this fear talking? If you genuinely need some, we'll plan exactly how much to take and from where. If you don't, we touch nothing today. We don't make a permanent decision on one red day. Sleep on it — call me in the morning.";
@@ -681,6 +690,16 @@ if (typeof document !== 'undefined') (function () {
       for (let k = 0; k < 2; k++) { const t = T() + k * 1.0; tone(440, t, 0.4, 'sine', 0.12); tone(480, t, 0.4, 'sine', 0.12); }
     }
     function tick() { if (init()) tone(660, T(), 0.08, 'triangle', 0.08); }
+    // A soft, premium UI tap (subtle, high, short).
+    function ui() { if (init()) tone(880, T(), 0.045, 'sine', 0.04); }
+    // A breathy whoosh for screen transitions.
+    function whoosh() {
+      if (!init()) return; const t = T();
+      const s = ctx.createBufferSource(); s.buffer = brown(0.5); s.playbackRate.value = 1.6;
+      const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.setValueAtTime(500, t); bp.frequency.exponentialRampToValueAtTime(2600, t + 0.32); bp.Q.value = 0.9;
+      const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.06, t + 0.12); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.4);
+      s.connect(bp); bp.connect(g); g.connect(master); s.start(t); s.stop(t + 0.45);
+    }
     function freeze() { if (!init()) return; const t = T(); tone(1200, t, 0.5, 'sine', 0.05); const o = tone(300, t, 0.6, 'sine', 0.12); if (o) o.frequency.exponentialRampToValueAtTime(80, t + 0.55); }
     function stinger(low) { if (!init()) return; const t = T(); if (low) { const o = tone(140, t, 0.8, 'sawtooth', 0.18); if (o) o.frequency.exponentialRampToValueAtTime(60, t + 0.7); } else { tone(392, t, 0.7, 'sine', 0.1); tone(523, t, 0.8, 'sine', 0.08); } }
     function resolve() { if (!init()) return; const t = T(); [261.6, 329.6, 392].forEach((f, i) => tone(f, t + i * 0.08, 1.6, 'sine', 0.09, 0.05)); }
@@ -693,7 +712,7 @@ if (typeof document !== 'undefined') (function () {
     function stopAll() { stopRumble(); stopHeart(); stopPad(); }
     function toggle() { on = !on; if (master) master.gain.setTargetAtTime(on ? 0.95 : 0, T(), 0.05); return on; }
     function isOn() { return on; }
-    return { unlock, startPad, startRumble, stopRumble, impact, setHeart, stopHeart, silenceCut, stopPad, ring, tick, freeze, stinger, resolve, openSwell, strike, lossTone, stopAll, toggle, isOn };
+    return { unlock, startPad, startRumble, stopRumble, impact, setHeart, stopHeart, silenceCut, stopPad, ring, tick, ui, whoosh, freeze, stinger, resolve, openSwell, strike, lossTone, stopAll, toggle, isOn };
   })();
 
   /* ---- Voice narration (Web Speech API — built into the browser, no files). ---- */
@@ -729,7 +748,7 @@ if (typeof document !== 'undefined') (function () {
     scenario: 'crash', years: 20, sip: 10000, eventId: 'covid',
     emergencyId: 'icu', severity: 'major', downturn: false,
     pledge: null, choice: null, emResponse: null, emCtx: null, sim: null, luckStep: 0,
-    wizIndex: 0, head: 0, phase: 'idle', phaseStart: null, raf: 0, yMax: 1,
+    wizIndex: 0, head: 0, phase: 'idle', phaseStart: null, raf: 0, yMax: 1, embers: [],
   };
 
   /* ===================== Canvas ===================== */
@@ -751,12 +770,22 @@ if (typeof document !== 'undefined') (function () {
     return values[last] + (values[last + 1] - values[last]) * (head - last);
   }
   function hexFill(hex, a) { const n = parseInt(hex.slice(1), 16); return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')'; }
-  function drawLines(c, w, h, N, yMax, lines, head, pad) {
+  function drawLines(c, w, h, N, yMax, lines, head, pad, band) {
     const p = pad || { l: 18, r: 18, t: 26, b: 24 };
     const X = (m) => p.l + (m / N) * (w - p.l - p.r), Y = (v) => (h - p.b) - (v / yMax) * (h - p.t - p.b);
     c.clearRect(0, 0, w, h);
     c.strokeStyle = 'rgba(255,255,255,0.06)'; c.lineWidth = 1;
     for (let i = 0; i <= 3; i++) { const yy = p.t + i * (h - p.t - p.b) / 3; c.beginPath(); c.moveTo(p.l, yy); c.lineTo(w - p.r, yy); c.stroke(); }
+    // Divergence shading: fill the gap between two lines (the cost made visible).
+    if (band) {
+      const a = pointsUpTo(band.a, head == null ? N : head), b = pointsUpTo(band.b, head == null ? N : head);
+      if (a.length && b.length) {
+        c.save(); c.beginPath();
+        for (let i = 0; i < a.length; i++) { const [m, v] = a[i]; if (i === 0) c.moveTo(X(m), Y(v)); else c.lineTo(X(m), Y(v)); }
+        for (let i = b.length - 1; i >= 0; i--) { const [m, v] = b[i]; c.lineTo(X(m), Y(v)); }
+        c.closePath(); c.fillStyle = band.color; c.fill(); c.restore();
+      }
+    }
     for (const line of lines) {
       const pts = pointsUpTo(line.values, head == null ? N : head);
       if (!pts.length) continue;
@@ -771,7 +800,14 @@ if (typeof document !== 'undefined') (function () {
       c.beginPath();
       for (let i = 0; i < pts.length; i++) { const [m, v] = pts[i]; if (i === 0) c.moveTo(X(m), Y(v)); else c.lineTo(X(m), Y(v)); }
       c.stroke(); c.restore();
-      if (line.dot) { const [m, v] = pts[pts.length - 1]; c.save(); c.shadowColor = line.color; c.shadowBlur = 18; c.fillStyle = line.color; c.beginPath(); c.arc(X(m), Y(v), 5, 0, Math.PI * 2); c.fill(); c.restore(); }
+      if (line.dot) {
+        const [m, v] = pts[pts.length - 1];
+        const pulse = 1 + Math.sin(performance.now() / 220) * 0.18; // living, breathing tip
+        c.save(); c.shadowColor = line.color; c.shadowBlur = 22; c.fillStyle = line.color;
+        c.globalAlpha = 0.22; c.beginPath(); c.arc(X(m), Y(v), 12 * pulse, 0, Math.PI * 2); c.fill();
+        c.globalAlpha = 1; c.beginPath(); c.arc(X(m), Y(v), 5 * pulse, 0, Math.PI * 2); c.fill();
+        c.restore();
+      }
     }
   }
 
@@ -841,13 +877,43 @@ if (typeof document !== 'undefined') (function () {
         { values: yours.value, color: BEHAVIOURS[state.choice].color, width: 3.4, glow: true, dot: true, fill: hexFill(BEHAVIOURS[state.choice].color, 0.16) },
       ];
     }
-    drawLines(c, w, h, N, state.yMax, lines, state.head);
+    // Divergence shading — the gap between your path and the calm path, made
+    // visible (red if you fell behind, green if you pulled ahead).
+    let band = null;
+    if (!pre && state.head > sim.navDirect._bottom) {
+      const yours = sim.direct[state.choice], calm = sim.direct.hold;
+      const behind = yours.final < calm.final;
+      band = { a: yours.value, b: calm.value, color: hexFill(behind ? COL.crash : COL.direct, 0.16) };
+    }
+    drawLines(c, w, h, N, state.yMax, lines, state.head, null, band);
+    drawEmbers(c, w, h);
     const corpus = valueAt(front, state.head), months = Math.min(Math.floor(state.head), N);
     setText('corpus', inr(corpus));
     setText('corpusShort', '≈ ' + inrShort(corpus));
     setText('yearLabel', 'Year ' + Math.min(Math.floor(state.head / 12), sim.years) + ' / ' + sim.years);
     setText('invested', 'You\'ve put in ' + inrShort(state.sip * months));
     const bar = $('climbProg'); if (bar) bar.style.width = Math.min(100, state.head / N * 100) + '%';
+  }
+
+  /* ---- Falling embers/ash during the fall — cinematic atmosphere. ---- */
+  function spawnEmbers(n) {
+    for (let i = 0; i < n; i++) state.embers.push({ x: Math.random(), y: Math.random() * 0.3, vy: 0.0008 + Math.random() * 0.0016, vx: (Math.random() - 0.5) * 0.0008, r: 0.6 + Math.random() * 1.8, life: 1 });
+  }
+  function drawEmbers(c, w, h) {
+    if (state.phase === 'crash') { if (state.embers.length < 70 && Math.random() < 0.6) spawnEmbers(3); }
+    if (!state.embers.length) return;
+    c.save();
+    for (let i = state.embers.length - 1; i >= 0; i--) {
+      const e = state.embers[i];
+      e.y += e.vy; e.x += e.vx; e.vx += (Math.random() - 0.5) * 0.0002;
+      if (state.phase !== 'crash') e.life -= 0.012;
+      if (e.y > 1.05 || e.life <= 0) { state.embers.splice(i, 1); continue; }
+      const px = e.x * w, py = e.y * h;
+      c.globalAlpha = 0.5 * e.life * (1 - e.y * 0.4);
+      c.shadowColor = COL.crash; c.shadowBlur = 8; c.fillStyle = COL.crash;
+      c.beginPath(); c.arc(px, py, e.r, 0, Math.PI * 2); c.fill();
+    }
+    c.restore();
   }
 
   const CLIMB_MS = reduceMotion ? 200 : 7000, CRASH_MS = reduceMotion ? 150 : 5000, DIVERGE_MS = reduceMotion ? 200 : 6000;
@@ -858,7 +924,7 @@ if (typeof document !== 'undefined') (function () {
     const e = ts - state.phaseStart, sim = state.sim, N = sim.N, S = sim.S, bottom = sim.navDirect._bottom;
     if (state.phase === 'climb') {
       const p = Math.min(e / CLIMB_MS, 1); state.head = S * easeInOut(p); renderStage();
-      if (p >= 1) { state.phase = 'crash'; state.phaseStart = null; $('stage').classList.add('crashing'); tensionCue(); Sound.startRumble(CRASH_MS); Sound.setHeart(110); }
+      if (p >= 1) { state.phase = 'crash'; state.phaseStart = null; $('stage').classList.add('crashing'); tensionCue(); Sound.startRumble(CRASH_MS); Sound.setHeart(110); spawnEmbers(40); }
       state.raf = requestAnimationFrame(loop);
     } else if (state.phase === 'crash') {
       const p = Math.min(e / CRASH_MS, 1); state.head = S + (bottom - S) * p; renderStage();
@@ -873,7 +939,7 @@ if (typeof document !== 'undefined') (function () {
 
   function startClimb() {
     state.sim = runSinglePath(state.sip, state.eventId, state.years);
-    state.choice = null; state.head = 0; state.phase = 'climb'; state.phaseStart = null;
+    state.choice = null; state.head = 0; state.phase = 'climb'; state.phaseStart = null; state.embers = [];
     state.yMax = state.sim.direct.hold.final * 1.08;
     const marker = $('climbMarker'); if (marker) marker.style.left = (state.sim.S / state.sim.N * 100) + '%';
     setText('pledgeBadge', 'You swore: ' + PLEDGE_LABEL[state.pledge]);
@@ -896,11 +962,12 @@ if (typeof document !== 'undefined') (function () {
     setTimeout(() => say('Your ' + amountWords(peak) + ' is now ' + amountWords(bottom) + '. Down ' + depth + ' percent.', { rate: 0.9 }), 700);
   }
   // Step 1: YOU decide ALONE — no friend, no voice, nothing to copy.
-  function openYouDecision() { hide($('silence')); show($('youDecision')); }
+  function openYouDecision() { hide($('silence')); Sound.whoosh(); show($('youDecision')); }
   // Step 2: only AFTER you've chosen, the friend (and the RM call) is revealed.
   function openFriendReveal() {
     renderFriendPanel(); show($('friendReveal'));
-    Sound.ring(); Sound.setHeart(60); setTimeout(() => Sound.stopHeart(), 4500);
+    Sound.whoosh(); Sound.ring(); Sound.setHeart(60); setTimeout(() => Sound.stopHeart(), 4500);
+    revealQuote('revealQuote', '"' + RM_CRASH_LINE + '"', 700, 150);
     setTimeout(() => say(RM_CRASH_LINE, { rate: 0.96 }), 1500);
   }
   function renderFriendPanel() {
@@ -969,7 +1036,7 @@ if (typeof document !== 'undefined') (function () {
 
   /* ---- Result. ---- */
   function openResult() {
-    Sound.stopHeart(); Sound.resolve();
+    Sound.stopHeart(); Sound.whoosh(); Sound.resolve();
     const sim = state.sim, yours = sim.direct[state.choice], friend = sim.regular.hold, calm = sim.direct.hold;
     setText('youLabel', 'YOU · Direct · ' + BEHAVIOURS[state.choice].label);
     setText('friendLabelR', 'FRIEND · Regular · Held');
@@ -1160,9 +1227,11 @@ if (typeof document !== 'undefined') (function () {
   function emToDecision() { hide($('emStrike')); show($('emDecision')); Sound.setHeart(92); } // the clock, running
   function emChoose(r) {
     state.emResponse = r; Sound.stopHeart(); Sound.tick();
-    hide($('emDecision')); setText('emCallNeed', inrShort(state.emCtx.need)); show($('emCall'));
-    Sound.ring();
-    setTimeout(() => say(RM_EM_LINE, { rate: 0.97 }), 1200);
+    hide($('emDecision')); show($('emCall'));
+    Sound.whoosh(); Sound.ring();
+    const line = RM_EM_LINE.replace('exactly what the emergency needs', 'exactly ' + inrShort(state.emCtx.need));
+    revealQuote('emQuote', '"' + line + '"', 500, 140);
+    setTimeout(() => say(line, { rate: 0.97 }), 1200);
   }
   function emToResult() {
     hide($('emCall')); Sound.resolve();
@@ -1232,6 +1301,10 @@ if (typeof document !== 'undefined') (function () {
     const firstGesture = () => { Sound.unlock(); Sound.openSwell(); speakIntro(); document.removeEventListener('pointerdown', firstGesture); };
     document.addEventListener('pointerdown', firstGesture, { once: true });
     setTimeout(speakIntro, 350); // best-effort if autoplay is permitted
+    // Premium tactile feedback on every tap: a soft click + a light haptic.
+    document.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('button') && e.target.id !== 'muteBtn') { Sound.ui(); if (navigator.vibrate) navigator.vibrate(8); }
+    });
     on('muteBtn', 'click', () => { const onNow = Sound.toggle(); Voice.setEnabled(onNow); const b = $('muteBtn'); if (b) b.textContent = onNow ? '🔊' : '🔇'; });
 
     // Wizard: each step is a group of .opt buttons.
