@@ -422,11 +422,16 @@ function simEmergency(sip, feeFactor, response, need, S, downturn, N) {
     navs[key] = nav;
   }
   const units = { liquid: 0, largeCap: 0, midSmall: 0 };
-  for (let m = 0; m <= S; m++) if (m < N) for (const k in SLEEVES) units[k] += (sip * SLEEVES[k].weight) / navs[k][m];
-  const valueAt = (m) => Object.keys(units).reduce((s, k) => s + units[k] * navs[k][m], 0);
-  const corpusAtEmergency = valueAt(S);
-  const sleeveValues = {};
-  for (const k in units) sleeveValues[k] = units[k] * navs[k][S];
+  const value = new Array(N + 1);
+  const sumU = (m) => units.liquid * navs.liquid[m] + units.largeCap * navs.largeCap[m] + units.midSmall * navs.midSmall[m];
+  const flows = [];
+  // Phase 1 — accumulate up to the emergency month, recording the value path.
+  for (let m = 0; m <= S; m++) {
+    if (m < N) { for (const k in SLEEVES) units[k] += (sip * SLEEVES[k].weight) / navs[k][m]; flows.push({ t: m / 12, amount: -sip }); }
+    value[m] = sumU(m);
+  }
+  const corpusAtEmergency = value[S];
+  const sleeveValues = { liquid: units.liquid * navs.liquid[S], largeCap: units.largeCap * navs.largeCap[S], midSmall: units.midSmall * navs.midSmall[S] };
 
   const cfg = EM_RESPONSES[response] || EM_RESPONSES.surgical;
   let took = 0, idleCash = 0, shortfall = 0, fromMid = 0, fromLiquid = 0;
@@ -449,19 +454,16 @@ function simEmergency(sip, feeFactor, response, need, S, downturn, N) {
     shortfall = Math.max(remaining, 0); // emergency exceeded the whole portfolio
   }
   const resumeMonth = cfg.killSIP ? Infinity : S + 1 + cfg.pauseMonths;
-  const flows = [];
-  for (let m = 0; m <= S; m++) if (m < N) flows.push({ t: m / 12, amount: -sip });
-  for (let m = S + 1; m < N; m++) {
-    if (m < resumeMonth) continue;
-    for (const k in SLEEVES) units[k] += (sip * SLEEVES[k].weight) / navs[k][m];
-    flows.push({ t: m / 12, amount: -sip });
+  // Phase 2 — the years after; panic-redeemed cash sits in a bank/FD at 4%/yr.
+  for (let m = S + 1; m <= N; m++) {
+    if (m < N && m >= resumeMonth) { for (const k in SLEEVES) units[k] += (sip * SLEEVES[k].weight) / navs[k][m]; flows.push({ t: m / 12, amount: -sip }); }
+    value[m] = sumU(m) + idleCash * Math.pow(1 + SAVINGS_ANNUAL, (m - S) / 12);
   }
-  // Panic-redeemed cash doesn't vanish — it realistically sits in a bank/FD.
   const idleGrown = idleCash * Math.pow(1 + SAVINGS_ANNUAL, (N - S) / 12);
-  const final = valueAt(N) + idleGrown;
+  const final = value[N];
   flows.push({ t: S / 12, amount: took });
   flows.push({ t: N / 12, amount: final });
-  return { response, corpusAtEmergency, sleeveValues, took, need, shortfall, fromMid, fromLiquid, final,
+  return { response, value, corpusAtEmergency, sleeveValues, took, need, shortfall, fromMid, fromLiquid, final,
     sipSurvived: !cfg.killSIP, idleCash, idleGrown, xirr: xirr(flows) };
 }
 
@@ -834,6 +836,30 @@ if (typeof document !== 'undefined') (function () {
     }
   }
 
+  // Draw a finished two-line journey (used on the result screens).
+  function drawJourney(canvasId, a, b, N, years, behind) {
+    const cv = $(canvasId); if (!cv) return;
+    const { w, h, c } = fitCanvas(cv);
+    const yMax = Math.max(a.values[N], b.values[N], a.values[a.values.length - 1], b.values[b.values.length - 1]) * 1.08;
+    const band = { a: a.values, b: b.values, color: hexFill(behind ? COL.crash : COL.direct, 0.16) };
+    drawLines(c, w, h, N, yMax, [b, a], N, { l: 16, r: 16, t: 16, b: 22 }, band, { axis: true, axisYears: years });
+  }
+  // A premium allocation donut for the emergency intro.
+  function drawDonut(canvasId, parts) {
+    const cv = $(canvasId); if (!cv) return;
+    const { w, h, c } = fitCanvas(cv);
+    const cx = w / 2, cy = h / 2, r = Math.min(w, h) / 2 - 6, total = parts.reduce((s, p) => s + p.v, 0) || 1;
+    let a0 = -Math.PI / 2;
+    c.clearRect(0, 0, w, h);
+    for (const p of parts) {
+      const a1 = a0 + (p.v / total) * Math.PI * 2;
+      c.beginPath(); c.arc(cx, cy, r, a0, a1); c.lineWidth = 16; c.strokeStyle = p.color; c.lineCap = 'butt'; c.stroke();
+      a0 = a1;
+    }
+    c.fillStyle = '#fff'; c.font = '700 13px ui-monospace, monospace'; c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.fillText('3 funds', cx, cy);
+  }
+
   /* ===================== WIZARD (one decision per screen) ===================== */
   const WIZ_KEY = { scenario: 'scenario', duration: 'years', sip: 'sip', event: 'eventId', emType: 'emergencyId', severity: 'severity' };
   const WIZ_NUM = { duration: true, sip: true };
@@ -1097,6 +1123,9 @@ if (typeof document !== 'undefined') (function () {
     ])) + '<p class="maths-note">XIRR is the one annual rate that makes your monthly investments equal the final value — the correct return for a SIP. Every ₹ is computed from month-by-month units × NAV; only the two assumptions are inputs.</p>');
     closeMaths('mathsPanel', 'mathsToggle');
     show($('result'));
+    const a = { values: yours.value, color: BEHAVIOURS[state.choice].color, width: 3, glow: true, dot: true, texture: true };
+    const b = { values: friend.value, color: COL.regular, width: 2.4, alpha: 0.85, texture: true };
+    requestAnimationFrame(() => drawJourney('resultCanvas', a, b, sim.N, sim.years, yours.final < friend.final));
   }
 
   function verdictFor(choice, yours, friendFinal, sim) {
@@ -1229,6 +1258,9 @@ if (typeof document !== 'undefined') (function () {
       + sleeveRow('Large-cap', sv.largeCap, 'the core of your future')
       + sleeveRow('Mid / small-cap', sv.midSmall, ctx.downturn ? 'down hard right now — worst to sell' : 'highest growth — sell last'));
     show($('emIntro'));
+    requestAnimationFrame(() => drawDonut('emDonut', [
+      { v: sv.liquid, color: COL.cool }, { v: sv.largeCap, color: COL.direct }, { v: sv.midSmall, color: COL.regular },
+    ]));
   }
   function sleeveRow(name, val, note) { return '<div class="sleeve"><span class="sl-name">' + name + '</span><span class="sl-val">' + inrShort(val) + '</span><span class="sl-note">' + note + '</span></div>'; }
   function emToStrike() {
@@ -1260,9 +1292,12 @@ if (typeof document !== 'undefined') (function () {
     setTimeout(() => say(line, { rate: 0.97 }), 1200);
   }
   function emToResult() {
-    hide($('emCall')); Sound.resolve();
+    hide($('emCall')); Sound.whoosh(); Sound.resolve();
     const sim = runEmergency(state.sip, state.emergencyId, state.emResponse, state.downturn, state.years, state.severity);
     state.sim = sim; renderEmergencyResult(sim); show($('emergency'));
+    const a = { values: sim.you.value, color: COL.crash, width: 3, glow: true, dot: true, texture: true };
+    const b = { values: sim.directSmart.value, color: COL.direct, width: 2.4, alpha: 0.85, texture: true };
+    requestAnimationFrame(() => drawJourney('emResultCanvas', a, b, sim.N, sim.years, sim.you.final < sim.directSmart.final));
   }
   function emActionLabel(sim) {
     if (sim.youResponse === 'sellLosers') return sim.downturn ? 'sold the fund that had crashed — locking the loss' : 'sold your highest-growth fund to raise it';
