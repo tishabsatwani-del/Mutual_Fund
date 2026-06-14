@@ -507,6 +507,26 @@ if (typeof document !== 'undefined') (function () {
     return inr(v);
   }
   const pct = (r) => (r * 100).toFixed(1) + '%';
+  // Spoken rupees in Indian words — "5 lakh 33 thousand rupees", never "5 point 33".
+  function amountWords(v) {
+    v = Math.round(Math.abs(v));
+    if (v === 0) return 'zero rupees';
+    const cr = Math.floor(v / 1e7); v %= 1e7;
+    const lakh = Math.floor(v / 1e5); v %= 1e5;
+    const th = Math.floor(v / 1e3); v %= 1e3;
+    const parts = [];
+    if (cr) parts.push(cr + ' crore');
+    if (lakh) parts.push(lakh + ' lakh');
+    if (th) parts.push(th + ' thousand');
+    if (v) parts.push(String(v));
+    return parts.join(' ') + ' rupees';
+  }
+  // Speak text with finance terms pronounced correctly (SIP -> the full phrase).
+  function say(text, opts) { Voice.speak(text.replace(/\bSIP\b/g, 'systematic investment plan'), opts); }
+  // A realistic relationship-manager response: behavioural coaching that also
+  // takes a genuine cash need seriously (not just "never sell").
+  const RM_CRASH_LINE = "Okay — breathe. First, one honest question: do you actually need this money in the next year, or is this fear talking? If you genuinely need some, we'll plan exactly how much to take and from where. If you don't, we touch nothing today. We don't make a permanent decision on one red day. Sleep on it — call me in the morning.";
+  const RM_EM_LINE = "Right, this is real, so let's be calm and precise. We take exactly what the emergency needs — not a rupee more. Liquid fund first, then a little large-cap. We leave the fund that's down; selling it now turns a dip into a real loss. We pause the SIP for three months, we don't cancel it. The rest keeps working. This stays a setback, not a disaster.";
   // Make a rupee figure personal & exact: express it in the user's own SIP.
   function sipSpan(rupees) {
     const months = Math.abs(rupees) / state.sip, yrs = months / 12;
@@ -604,33 +624,42 @@ if (typeof document !== 'undefined') (function () {
       if (!init()) return;
       stopRumble();
       const secs = dur / 1000, t = T(), srcs = [];
-      const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.78, t + secs); g.connect(master);
+      const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.95, t + secs * 0.85); g.connect(master);
+      // 0) THE BRAAM — a cinematic descending dread-horn cluster (the gut-punch).
+      [55, 55.4, 82.5, 110].forEach((f, i) => {
+        const o = ctx.createOscillator(); o.type = 'sawtooth';
+        o.frequency.setValueAtTime(f, t); o.frequency.exponentialRampToValueAtTime(f * 0.5, t + secs);
+        const fl = ctx.createBiquadFilter(); fl.type = 'lowpass'; fl.frequency.setValueAtTime(160, t); fl.frequency.linearRampToValueAtTime(420, t + secs);
+        const bg = ctx.createGain(); bg.gain.setValueAtTime(0.0001, t); bg.gain.linearRampToValueAtTime(i === 0 ? 0.26 : 0.16, t + secs * 0.7);
+        o.connect(fl); fl.connect(bg); bg.connect(g); o.start(); srcs.push(o);
+      });
       // 1) deep ground rumble
       const n1 = ctx.createBufferSource(); n1.buffer = brown(Math.max(2, secs + 1)); n1.loop = true;
-      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.setValueAtTime(90, t); lp.frequency.linearRampToValueAtTime(820, t + secs);
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.setValueAtTime(90, t); lp.frequency.linearRampToValueAtTime(900, t + secs);
       n1.connect(lp); lp.connect(g); n1.start(); srcs.push(n1);
-      // 2) a rising roar (band of noise)
+      // 2) a rising roar (band of noise) that climbs toward the impact — "whoosh"
       const n2 = ctx.createBufferSource(); n2.buffer = brown(Math.max(2, secs + 1)); n2.loop = true;
-      const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 340; bp.Q.value = 0.6;
-      const g2 = ctx.createGain(); g2.gain.setValueAtTime(0.0001, t); g2.gain.linearRampToValueAtTime(0.5, t + secs);
+      const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.setValueAtTime(240, t); bp.frequency.linearRampToValueAtTime(1400, t + secs); bp.Q.value = 0.7;
+      const g2 = ctx.createGain(); g2.gain.setValueAtTime(0.0001, t); g2.gain.linearRampToValueAtTime(0.55, t + secs);
       n2.connect(bp); bp.connect(g2); g2.connect(g); n2.start(); srcs.push(n2);
       // 3) a sub that sinks — the floor dropping out
       const sub = ctx.createOscillator(), sg = ctx.createGain(); sub.type = 'sine';
-      sub.frequency.setValueAtTime(70, t); sub.frequency.exponentialRampToValueAtTime(28, t + secs);
-      sg.gain.value = 0.35; sub.connect(sg); sg.connect(g); sub.start(); srcs.push(sub);
-      // 4) dissonant dread drone (two clashing detuned saws)
-      [69, 73.5].forEach((f) => { const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f; const dl = ctx.createBiquadFilter(); dl.type = 'lowpass'; dl.frequency.value = 240; const dg = ctx.createGain(); dg.gain.setValueAtTime(0.0001, t); dg.gain.linearRampToValueAtTime(0.11, t + secs); o.connect(dl); dl.connect(dg); dg.connect(g); o.start(); srcs.push(o); });
+      sub.frequency.setValueAtTime(72, t); sub.frequency.exponentialRampToValueAtTime(26, t + secs);
+      sg.gain.value = 0.4; sub.connect(sg); sg.connect(g); sub.start(); srcs.push(sub);
       rumble = { srcs, g };
     }
     function stopRumble() { if (rumble) { try { rumble.g.gain.cancelScheduledValues(T()); rumble.g.gain.linearRampToValueAtTime(0.0001, T() + 0.2); rumble.srcs.forEach((s) => { try { s.stop(T() + 0.25); } catch (e) {} }); } catch (e) {} rumble = null; } }
     function impact() {
-      if (!init()) return; thump(0.85); const t = T();
+      if (!init()) return; thump(1.0); const t = T();
+      // Huge sub boom with a long tail.
       const o = ctx.createOscillator(), g = ctx.createGain(); o.type = 'sine';
-      o.frequency.setValueAtTime(82, t); o.frequency.exponentialRampToValueAtTime(28, t + 0.55);
-      g.gain.setValueAtTime(0.62, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.7);
-      o.connect(g); g.connect(master); o.start(t); o.stop(t + 0.75);
-      const s = ctx.createBufferSource(); s.buffer = brown(0.4); const ng = ctx.createGain(); ng.gain.setValueAtTime(0.5, t); ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.4);
-      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1800; s.connect(lp); lp.connect(ng); ng.connect(master); s.start(t); s.stop(t + 0.45);
+      o.frequency.setValueAtTime(90, t); o.frequency.exponentialRampToValueAtTime(24, t + 0.9);
+      g.gain.setValueAtTime(0.85, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.1);
+      o.connect(g); g.connect(master); o.start(t); o.stop(t + 1.15);
+      // A sharp "crack" — broadband noise burst.
+      const s = ctx.createBufferSource(); s.buffer = brown(0.5); const ng = ctx.createGain(); ng.gain.setValueAtTime(0.65, t); ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.setValueAtTime(3200, t); lp.frequency.exponentialRampToValueAtTime(500, t + 0.5);
+      s.connect(lp); lp.connect(ng); ng.connect(master); s.start(t); s.stop(t + 0.55);
     }
     function setHeart(bpm) {
       heartBpm = bpm;
@@ -859,7 +888,7 @@ if (typeof document !== 'undefined') (function () {
     setText('silFrom', inrShort(peak)); setText('silTo', inrShort(bottom));
     setText('silContext', (sim.crashYear % 1 ? sim.crashYear.toFixed(1) : sim.crashYear) + ' years in. ' + sim.ev.name + '.');
     show($('silence'));
-    setTimeout(() => Voice.speak('Your ' + inrShort(peak) + ' is now ' + inrShort(bottom) + '. Down ' + depth + ' percent.', { rate: 0.9 }), 700);
+    setTimeout(() => say('Your ' + amountWords(peak) + ' is now ' + amountWords(bottom) + '. Down ' + depth + ' percent.', { rate: 0.9 }), 700);
   }
   // Step 1: YOU decide ALONE — no friend, no voice, nothing to copy.
   function openYouDecision() { hide($('silence')); show($('youDecision')); }
@@ -867,7 +896,7 @@ if (typeof document !== 'undefined') (function () {
   function openFriendReveal() {
     renderFriendPanel(); show($('friendReveal'));
     Sound.ring(); Sound.setHeart(60); setTimeout(() => Sound.stopHeart(), 4500);
-    setTimeout(() => Voice.speak("Don't sell. I mean it. I sat with people through 2008 and 2020 — the ones who sold here never caught up. We're not touching it. Go for a walk. Call me tomorrow.", { rate: 0.94 }), 1500);
+    setTimeout(() => say(RM_CRASH_LINE, { rate: 0.96 }), 1500);
   }
   function renderFriendPanel() {
     const cv = $('friendCanvas'); if (!cv) return;
@@ -926,10 +955,10 @@ if (typeof document !== 'undefined') (function () {
     doShare(txt);
   }
   function shareEmergency() {
-    const sim = state.sim, diff = sim.friend.final - sim.you.final;
-    const txt = diff > 0
-      ? 'An emergency hit. Alone, I ' + EM_LABEL[sim.youResponse] + ' — and it cost me ' + inrShort(diff) + ' (' + sipSpan(diff) + ') versus a friend who had someone to call.'
-      : 'An emergency hit and I made the call almost no one makes alone. Try it yourself.';
+    const sim = state.sim, gap = sim.directSmart.final - sim.you.final;
+    const txt = gap > sim.sip
+      ? 'An emergency hit. Alone and under pressure, I ' + emActionLabel(sim) + ' — and one calm decision would have left me ' + inrShort(gap) + ' (' + sipSpan(gap) + ') richer. A temporary emergency almost became permanent.'
+      : 'An emergency hit and I kept it temporary — the call almost no one makes alone. Try it yourself.';
     doShare(txt);
   }
 
@@ -1002,45 +1031,65 @@ if (typeof document !== 'undefined') (function () {
   function closeMaths(panelId, toggleId) { const p = $(panelId), t = $(toggleId); if (p) p.hidden = true; if (t) t.textContent = 'See the maths ▾'; }
   function wireMaths(toggleId, panelId) { on(toggleId, 'click', () => { const p = $(panelId), t = $(toggleId); if (!p) return; p.hidden = !p.hidden; t.textContent = p.hidden ? 'See the maths ▾' : 'Hide the maths ▴'; }); }
 
-  /* ===================== "Was It Luck?" — interactive 10,000-life meter ===================== */
+  /* ===================== "Was It Luck?" — behaviour vs the door ===================== *
+   * Reframed so the lesson is NOT "Direct wins" but "BEHAVIOUR dwarfs the
+   * product". We hold the door constant (same investor) and let the user feel
+   * how much their behaviour swings the typical outcome — then show the fee gap
+   * is a sliver beside it, and that guidance's real value is behavioural. */
   const LUCK_BEHAVIOURS = [
-    { id: 'hold',     label: 'Hold',          color: COL.direct },
-    { id: 'pause',    label: 'Pause SIP',     color: COL.pause },
-    { id: 'sell',     label: 'Sell & rebuy',  color: COL.sellBack },
-    { id: 'sellWait', label: 'Sell & wait',   color: COL.crash },
+    { id: 'hold',     label: 'Stay invested', color: COL.direct },
+    { id: 'pause',    label: 'Pause the SIP',  color: COL.pause },
+    { id: 'sell',     label: 'Sell & rebuy',   color: COL.sellBack },
+    { id: 'sellWait', label: 'Sell & wait',    color: COL.crash },
   ];
   function openLuck() {
     show($('luck'));
     setHTML('luckBody', '<p class="mc-running">Living 10,000 lifetimes…</p>');
     setTimeout(() => {
-      // Run all four behaviours across the SAME 10,000 random markets, once.
-      state._luck = {};
-      for (const b of LUCK_BEHAVIOURS) state._luck[b.id] = Math.round(runMonteCarlo(state.sip, b.id, 'hold', 10000, 4242, state.years, true).youAhead / 100);
+      // Same investor (one door); only the behaviour changes. Median 20-yr corpus
+      // across 10,000 markets per behaviour, plus the pure fee (door) gap.
+      const med = {};
+      const hh = runMonteCarlo(state.sip, 'hold', 'hold', 10000, 4242, state.years, true);
+      med.hold = hh.you.p50;
+      const feeGap = hh.you.p50 - hh.friend.p50; // Direct-hold vs Regular-hold = the door
+      for (const b of ['pause', 'sell', 'sellWait']) med[b] = runMonteCarlo(state.sip, b, 'hold', 10000, 4242, state.years, true).you.p50;
+      const swing = med.hold - med.sellWait;     // behaviour effect (best vs worst)
+      state._luck = { med: med, feeGap: feeGap, swing: swing };
       setHTML('luckBody',
-        '<p class="luck-lead">If you lived these <b>' + state.years + ' years 10,000 times</b> — every boom and crash — how often would <b>you, alone</b>, still beat your guided friend? <span class="luck-hint">Tap a behaviour:</span></p>'
+        '<p class="luck-lead">Across <b>10,000 different futures</b>, what really decided your wealth — the <b>plan you bought</b>, or how you <b>behaved</b> in the storm? <span class="luck-hint">Same investor each time. Tap a behaviour:</span></p>'
         + '<div class="luck-pick" id="luckPick">' + LUCK_BEHAVIOURS.map((b) => '<button data-p="' + b.id + '">' + b.label + '</button>').join('') + '</div>'
-        + '<div class="luck-meter"><div class="luck-pct" id="luckPct">—</div><div class="luck-of">out of 100 futures, you win</div>'
+        + '<div class="luck-meter"><div class="luck-pct" id="luckPct">—</div><div class="luck-of">your typical wealth after ' + state.years + ' years</div>'
         + '<div class="luck-bar"><div class="luck-fill" id="luckFill"></div></div>'
-        + '<p class="luck-line" id="luckLine">Pick a behaviour above to live 10,000 lifetimes.</p></div>');
+        + '<p class="luck-line" id="luckLine"></p></div>'
+        + '<div class="luck-foot-card" id="luckFoot"></div>');
       on('luckPick', 'click', (ev) => { const b = ev.target.closest('button[data-p]'); if (b) selectLuck(b.dataset.p); });
       selectLuck('hold');
     }, 30);
   }
   function selectLuck(id) {
     if (!state._luck) return;
-    const pct = state._luck[id], beh = LUCK_BEHAVIOURS.find((b) => b.id === id);
+    const med = state._luck.med, val = med[id], holdMed = med.hold;
     document.querySelectorAll('#luckPick button').forEach((b) => b.classList.toggle('on', b.dataset.p === id));
-    const color = pct >= 60 ? COL.direct : pct <= 40 ? COL.crash : COL.regular;
-    const fill = $('luckFill'); if (fill) { fill.style.width = pct + '%'; fill.style.background = color; }
+    const good = id === 'hold' || id === 'pause';
+    const color = good ? COL.direct : COL.crash;
+    const fill = $('luckFill'); if (fill) { fill.style.width = Math.max(6, val / holdMed * 100) + '%'; fill.style.background = color; }
     $('luckPct').style.color = color;
-    countUp($('luckPct'), pct, 900, (v) => String(Math.round(v)));
+    countUp($('luckPct'), val, 1000, inrShort);
+    const lostVsHold = holdMed - val;
     const lines = {
-      hold: 'Holding wasn\'t luck — it beat your guided friend <b>' + pct + ' times in 100</b>. That\'s the fee you saved, quietly compounding.',
-      pause: 'Pausing kept your units but missed the cheap ones — ahead <b>' + pct + ' in 100</b>.',
-      sell: 'Sell and buy back, and you win only <b>' + pct + ' in 100</b>. The other ' + (100 - pct) + ', her one phone call beat your fee saving.',
-      sellWait: 'Sell and wait a year, and it\'s just <b>' + pct + ' in 100</b> — out of the market exactly when it healed.',
+      hold: 'Staying invested is the calm baseline — a typical <b>' + inrShort(val) + '</b>.',
+      pause: 'Pausing keeps your units but skips the cheap ones — about <b>' + inrShort(lostVsHold) + '</b> behind staying invested.',
+      sell: 'Selling and buying back forfeits units for good — roughly <b>' + inrShort(lostVsHold) + '</b> behind staying invested.',
+      sellWait: 'Selling and waiting a year is the deepest hole — about <b>' + inrShort(lostVsHold) + '</b> behind staying invested.',
     };
     setHTML('luckLine', lines[id]);
+    // The real lesson: behaviour dwarfs the door, and guidance's job is behaviour.
+    const ratio = Math.max(1, Math.round(state._luck.swing / Math.max(1, state._luck.feeGap)));
+    setHTML('luckFoot',
+      '<p class="luck-foot-line">Your <b>behaviour</b> swung the result by about <b class="bad">' + inrShort(state._luck.swing) + '</b>. '
+      + 'The <b>door</b> you chose — Direct vs Regular, the whole fee — swung it by only <b>' + inrShort(state._luck.feeGap) + '</b>. '
+      + 'Behaviour mattered roughly <b>' + ratio + '×</b> more than the product.</p>'
+      + '<p class="luck-foot-note">So neither door "wins." A calm Direct investor and a calm Regular investor both do well; a panicking one of either does badly. Guidance earns its fee for one reason — it makes you <i>far more likely to stay calm</i>. (AMFI–CRISIL: ~21% of guided equity money is still invested after five years, versus under 8% for direct.)</p>');
     Sound.tick();
   }
 
@@ -1106,40 +1155,52 @@ if (typeof document !== 'undefined') (function () {
   function emChoose(r) {
     state.emResponse = r; hide($('emDecision')); setText('emCallNeed', inrShort(state.emCtx.need)); show($('emCall'));
     Sound.ring();
-    setTimeout(() => Voice.speak('Take exactly what you need — not a rupee more. Liquid first, then a little large-cap. Leave the mid-cap, it is down. Pause the SIP three months, don\'t cancel it. The rest stays invested.', { rate: 0.95 }), 1200);
+    setTimeout(() => say(RM_EM_LINE, { rate: 0.97 }), 1200);
   }
   function emToResult() {
     hide($('emCall')); Sound.resolve();
     const sim = runEmergency(state.sip, state.emergencyId, state.emResponse, state.downturn, state.years, state.severity);
     state.sim = sim; renderEmergencyResult(sim); show($('emergency'));
   }
+  function emActionLabel(sim) {
+    if (sim.youResponse === 'sellLosers') return sim.downturn ? 'sold the fund that had crashed — locking the loss' : 'sold your highest-growth fund to raise it';
+    return EM_LABEL[sim.youResponse];
+  }
   function renderEmergencyResult(sim) {
-    const em = sim.em, need = sim.need, you = sim.you, friend = sim.friend, smart = sim.directSmart;
+    // Headline isolates BEHAVIOUR (same door): YOU vs the surgical "steady call".
+    // The Regular friend appears only in supporting copy, to make plain that the
+    // fee was never the point — the call was.
+    const em = sim.em, need = sim.need, you = sim.you, smart = sim.directSmart, friend = sim.friend;
+    const surgical = sim.youResponse === 'surgical';
     setText('emTitle', em.name);
-    setHTML('emLine', 'You needed <b>' + inrShort(need) + '</b>. You <b>' + EM_LABEL[sim.youResponse] + '</b>.' + (sim.downturn ? ' <span class="em-hard">Market falling.</span>' : ''));
-    setText('emYouLabel', 'YOU · Direct · alone');
-    setText('emFriendLabel', 'FRIEND · Regular · she called');
+    setHTML('emLine', 'You needed <b>' + inrShort(need) + '</b>. Alone, under pressure, you <b>' + emActionLabel(sim) + '</b>.' + (sim.downturn ? ' <span class="em-hard">Mid-crash.</span>' : ''));
+    setText('emYouLabel', surgical ? 'YOU — you stayed precise' : 'YOU — alone, afraid');
+    setText('emFriendLabel', 'A SINGLE STEADY CALL');
     countUp($('emYouFinal'), you.final, 1400, inrShort);
-    countUp($('emFriendFinal'), friend.final, 1400, inrShort);
-    const diff = friend.final - you.final;
-    setHTML('emGapLine', diff > 0 ? '<span class="bad">' + inr(diff) + ' behind her — same emergency, same rupees out.</span>' : '<span class="good">You matched her — the call almost no one makes alone.</span>');
-    setHTML('emVerdict', sim.youResponse === 'surgical'
-      ? 'You made the call most people can\'t make alone.<span class="verdict-sub">Just <b>' + inr(Math.abs(diff)) + '</b> between you and the guided plan. Under real pressure, almost no one does what you just did.</span>'
-      : 'She took only the emergency. You took the emergency <b>and your future</b>.<span class="verdict-sub">' + inr(diff) + ' gone by year ' + sim.years + ' — not because she was calmer, but because she had a number to call.</span>');
-    if (diff > state.sip * 6) setHTML('emResonate', '<b class="bad">' + inr(diff) + '</b> — that\'s <b>' + sipSpan(diff) + '</b>, decided in one frightened moment.');
-    else setHTML('emResonate', 'You raised what you needed — and kept the future you spent ' + sim.crashYear + ' years building.');
-    setHTML('emHonest', 'A disciplined Direct investor would\'ve had <b>' + inrShort(smart.final) + '</b> — even saved the fee. The door was never the point. Making this call alone, under pressure, is — and that\'s what her fee bought.');
+    countUp($('emFriendFinal'), smart.final, 1400, inrShort);
+    const gap = smart.final - you.final;
+    setHTML('emGapLine', surgical
+      ? '<span class="good">You matched the steady call — almost no one does this alone.</span>'
+      : '<span class="bad">' + inr(gap) + ' less than one calm decision would have left you.</span>');
+    setHTML('emVerdict', surgical
+      ? 'You kept a temporary emergency temporary.<span class="verdict-sub">Most people, alone and afraid, reach for the wrong part of their savings. You didn\'t — that\'s the whole game.</span>'
+      : 'A temporary emergency just became a permanent setback.<span class="verdict-sub">The money was right there. Under pressure, alone, you took it from the wrong place — and ' + sipSpan(gap) + ' never came back.</span>');
+    // The clear, powerful line — prominent, not buried.
+    setHTML('emResonate', surgical
+      ? 'It was never about being smart, or lucky. It was having a plan — and the nerve to follow it.'
+      : 'The difference wasn\'t intelligence. It wasn\'t luck. It was having <b>someone to stop a temporary emergency from becoming a permanent setback</b>.');
+    setHTML('emHonest', 'Your friend on the Regular plan had exactly that — a number to call. She made this call and finished with <b>' + inrShort(friend.final) + '</b>, even after paying her 1% fee. The fee was never the point. Having the call — when you\'re alone and afraid — is.');
     setHTML('emMathsPanel', mathsRows([
       ['Corpus when it struck (year ' + sim.crashYear + ')', inr(you.corpusAtEmergency), 'computed'],
       ['Emergency to raise', inr(need), 'computed'],
       ['You took out', inr(you.took) + (you.idleCash > 0 ? ' (₹' + Math.round(you.idleCash).toLocaleString('en-IN') + ' left idle)' : ''), 'computed'],
-      ['Friend took out', inr(friend.took), 'computed'],
-      ['YOUR corpus at year ' + sim.years, inr(you.final), 'computed'],
-      ['YOUR return (XIRR)', pct(you.xirr), 'computed'],
-      ['Friend at year ' + sim.years + ' (XIRR ' + pct(friend.xirr) + ')', inr(friend.final), 'computed'],
-      ['Sleeve returns', 'Liquid 6% · Large 12% · Mid/small 15%', 'assumption'],
+      ['YOU — at year ' + sim.years + ' (XIRR ' + pct(you.xirr) + ')', inr(you.final), 'computed'],
+      ['A steady call — same door, surgical (XIRR ' + pct(smart.xirr) + ')', inr(smart.final), 'computed'],
+      ['Your guided friend — Regular, after the 1% fee', inr(friend.final), 'computed'],
+      ['Behaviour cost (you vs the steady call)', inr(gap), 'computed'],
+      ['Sleeve returns', 'Liquid 6% · Large-cap 12% · Mid/small 15%', 'assumption'],
       ['Emergency size', sim.sev.label + ' (' + Math.round(need / you.corpusAtEmergency * 100) + '% of corpus)', 'assumption'],
-    ]) + '<p class="maths-note">Every ₹ computed from month-by-month units × NAV across three funds; XIRR from the real cash flows. Only the returns and the emergency size are inputs.</p>');
+    ]) + '<p class="maths-note">The headline compares the same investor — only the behaviour differs — so the fee can\'t flatter either side. Every ₹ is computed from month-by-month units × NAV; only the returns and the emergency size are inputs.</p>');
     closeMaths('emMathsPanel', 'emMathsToggle');
   }
 
