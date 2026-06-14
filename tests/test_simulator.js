@@ -128,6 +128,15 @@ ok('XIRR 100→200 over 6y ≈ 12.25%', Math.abs(E.xirr([{ t: 0, amount: -100 },
     `(panic floor ${L(lf.panic.p05)} vs calm ${L(lf.calm.p05)}; CoV ${covPanic.toFixed(2)} vs ${covCalm.toFixed(2)})`);
   ok('lifetimes: percentiles ordered', lf.calm.min <= lf.calm.p05 && lf.calm.p05 <= lf.calm.p50 && lf.calm.p50 <= lf.calm.p95 && lf.calm.p95 <= lf.calm.max);
   ok('lifetimes: representative sample collected', lf.sample.length > 1000 && lf.sample.length <= 3000, `(${lf.sample.length})`);
+
+  // The "cruelest life" replay: reproducible by index, calm clearly survives it.
+  const wl = E.buildWorstLife(10000, 20, 4242, lf.worstIdx);
+  console.log(`Cruelest life #${lf.worstIdx}: calm ${Cr(wl.calmFinal)}  panic ${Cr(wl.panicFinal)}  invested ${L(wl.invested)}`);
+  ok('worst life: series run the full horizon', wl.calmSeries.length === wl.N + 1 && wl.panicSeries.length === wl.N + 1);
+  ok('worst life: replay reproduces the counted finals', Math.abs(wl.calmSeries[wl.N] - wl.calmFinal) < 1 && Math.abs(wl.panicSeries[wl.N] - wl.panicFinal) < 1);
+  ok('worst life: even here the calm you ends above what was invested', wl.calmFinal > wl.invested, `(${Cr(wl.calmFinal)} > ${L(wl.invested)})`);
+  ok('worst life: on that same unlucky market the panic you ended underwater, below calm', wl.panicFinal < wl.invested && wl.panicFinal < wl.calmFinal, `(panic ${Cr(wl.panicFinal)} underwater vs calm ${Cr(wl.calmFinal)})`);
+  ok('worst life: buildWorstLife is deterministic for a given index', E.buildWorstLife(10000, 20, 4242, lf.worstIdx).calmFinal === wl.calmFinal);
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`);

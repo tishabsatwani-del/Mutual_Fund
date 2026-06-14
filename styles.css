@@ -172,33 +172,29 @@ body {
 .luck-line { font-size: 16.5px; line-height: 1.6; color: var(--ink); }
 .luck-line b { font-family: var(--num); color: var(--direct); }
 
-/* "Ten thousand lifetimes" — spray of lives + two mountains. */
+/* "Ten thousand lifetimes" — the collapse-to-one reveal (Section 10). */
 .lifetimes { max-width: 660px; }
 .life-lead { font-size: 16px; line-height: 1.6; color: var(--muted); text-align: center; margin: 6px auto 16px; max-width: 46ch; }
-.life-stage { position: relative; width: 100%; height: clamp(220px, 42vh, 320px); border-radius: 16px;
-  background: radial-gradient(120% 120% at 50% 0%, rgba(203,178,107,0.06), rgba(0,0,0,0) 60%);
+.life-stage { position: relative; width: 100%; height: clamp(240px, 46vh, 360px); border-radius: 16px;
+  background: radial-gradient(120% 120% at 50% 50%, rgba(203,178,107,0.05), rgba(0,0,0,0) 62%), #05070b;
   border: 1px solid var(--line); overflow: hidden; }
 #lifeCanvas { width: 100%; height: 100%; display: block; }
-.life-beats { margin-top: 18px; display: flex; flex-direction: column; gap: 14px; }
-.lbeat { opacity: 0; transform: translateY(10px); transition: opacity .7s ease, transform .7s ease; }
-.lbeat.show { opacity: 1; transform: none; }
+.life-beats { margin-top: 18px; min-height: 92px; display: flex; flex-direction: column; justify-content: center; }
+@keyframes beatIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+.lbeat { animation: beatIn .8s ease both; }
 .lbeat p { font-size: 16.5px; line-height: 1.62; color: var(--ink); text-align: center; margin: 0; }
 .lbeat p b { font-family: var(--num); color: var(--ghost, #cbb26b); }
-.life-legend { display: flex; justify-content: center; gap: 20px; margin-bottom: 8px; }
-.life-legend .lg { font-size: 13px; font-weight: 700; letter-spacing: .04em; display: inline-flex; align-items: center; gap: 7px; }
-.life-legend .lg::before { content: ''; width: 12px; height: 12px; border-radius: 3px; }
-.life-legend .lg.calm { color: var(--ghost, #cbb26b); }
-.life-legend .lg.calm::before { background: var(--ghost, #cbb26b); }
-.life-legend .lg.panic { color: var(--crash); }
-.life-legend .lg.panic::before { background: var(--crash); }
+.lbeat p i { font-style: italic; color: var(--ink); }
 .lbeat.odds { text-align: center; }
 .odds-big { font-family: var(--num); line-height: 1; margin-bottom: 6px; }
-.odds-big b { font-size: clamp(48px, 15vw, 76px); font-weight: 800; color: var(--ghost, #cbb26b); letter-spacing: -.02em; }
-.odds-big span { font-size: clamp(20px, 6vw, 28px); font-weight: 700; color: var(--muted); margin-left: 4px; }
-.lbeat.close p { font-size: 18px; line-height: 1.6; }
+.odds-big b { font-size: clamp(52px, 16vw, 84px); font-weight: 800; color: var(--direct); letter-spacing: -.02em; }
+.odds-big span { font-size: clamp(18px, 5.5vw, 26px); font-weight: 700; color: var(--muted); margin-left: 6px; }
+.lbeat.close { padding: 6px 4px; }
+.lbeat.close p { font-size: 18.5px; line-height: 1.62; }
 .lbeat.close p b { color: var(--ink); }
 .lbeat.door { padding: 16px 18px; border-radius: 16px; border: 1px solid var(--line); background: rgba(255,255,255,0.03); }
 .lbeat.door p b { color: var(--ghost, #cbb26b); }
+.life-cta { margin-top: 10px !important; font-size: 14px !important; color: var(--muted) !important; letter-spacing: .04em; }
 #friendCanvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 .pane-quote { font-size: 17px; line-height: 1.6; color: var(--ink); font-style: italic; margin-bottom: 12px; font-weight: 500; }
 .split.called .pane-quote { color: var(--regular); transition: color 1.3s ease; }

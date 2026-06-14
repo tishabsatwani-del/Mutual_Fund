@@ -301,7 +301,7 @@ const MC_POLICIES = {
   pause:    { id: 'pause',    label: 'paused the SIP',         drawdown: 0.25 },
   sellWait: { id: 'sellWait', label: 'sold and waited a year', drawdown: 0.25, waitMonths: 12 },
 };
-function simPolicyPath(nav, N, sip, policy, skipXirr, rng) {
+function simPolicyPath(nav, N, sip, policy, skipXirr, rng, rec) {
   // Behavioural policies across a random market path (real unit accounting):
   //   hold      — always invested.
   //   panic/sell — sell to cash on a drawdown > threshold; re-enter at prior peak.
@@ -335,8 +335,10 @@ function simPolicyPath(nav, N, sip, policy, skipXirr, rng) {
       }
     }
     if (st === 'out' || st === 'paused') cash += sip; else units += sip / nav[m];
+    if (rec) rec.push(units * nav[m] + cash); // monthly portfolio value, for replay
   }
   const final = units * nav[N] + cash;
+  if (rec) rec.push(final);
   return { final, xirr: skipXirr ? 0 : xirrFromSIP(sip, N, final) };
 }
 function runMonteCarlo(sip, youPolicy, friendPolicy, nPaths, seed, years, light) {
@@ -373,33 +375,60 @@ function distribution(finals) {
 // so the closing truth — behaviour moves everything, the door moves a little —
 // is counted, never asserted. Returns full distributions + a representative
 // sample of lives for the spray visual. Nothing here is fabricated.
+// Each path is seeded INDEPENDENTLY from (base, i) — two streams per path, one
+// for the market, one for the panic-seller's erratic re-entry — so any single
+// life is fully reproducible from its index alone (needed to replay the
+// "cruelest life" frame-by-frame later). Statistically identical to a single
+// stream; it just lets us rewind to one specific future.
+function lifeRngs(base, i) { return { m: mulberry32(base + i * 2 + 1), p: mulberry32(base + i * 2 + 2) }; }
 function runLifetimes(sip, years, seed, nPaths, sampleN) {
-  const N = (years || DEFAULT_YEARS) * 12;
-  const rng = mulberry32(seed == null ? 4242 : seed);
+  const N = (years || DEFAULT_YEARS) * 12, base = seed == null ? 4242 : seed;
   const calmP = MC_POLICIES.hold, panicP = MC_POLICIES.sellWait;
   const calm = new Float64Array(nPaths), panic = new Float64Array(nPaths);
   let calmAhead = 0, tied = 0, calmDirectSum = 0, calmRegularSum = 0;
   const sample = [], step = Math.max(1, Math.floor(nPaths / (sampleN || 1800)));
+  // The cruelest life to SHOW: the unluckiest market (lowest calm outcome) in
+  // which staying calm STILL pulled you through — calm ends above what you put
+  // in AND clearly above panic. (The absolute-worst markets never recover and
+  // ruin everyone equally; those don't teach the lesson, so we don't pretend
+  // they do.) A max-gap fallback guarantees a pick.
+  const invested = sip * N;
+  let worstIdx = 0, worstCalm = Infinity, gapIdx = 0, maxGap = -Infinity;
   for (let i = 0; i < nPaths; i++) {
-    const returns = genMarketReturns(N, rng);
+    const rg = lifeRngs(base, i);
+    const returns = genMarketReturns(N, rg.m);
     const navD = navFromReturns(returns, N, 1);          // YOU — Direct
     const navR = navFromReturns(returns, N, FEE_FACTOR); // the other door — Regular (1%/yr drag)
-    const c = simPolicyPath(navD, N, sip, calmP, true).final;        // calm you (held)
-    const p = simPolicyPath(navD, N, sip, panicP, true, rng).final;  // panic you (sold; erratic re-entry)
-    const cr = simPolicyPath(navR, N, sip, calmP, true).final;  // calm you, the OTHER door
+    const c = simPolicyPath(navD, N, sip, calmP, true).final;         // calm you (held)
+    const p = simPolicyPath(navD, N, sip, panicP, true, rg.p).final;  // panic you (sold; erratic re-entry)
+    const cr = simPolicyPath(navR, N, sip, calmP, true).final;        // calm you, the OTHER door
     calm[i] = c; panic[i] = p; calmDirectSum += c; calmRegularSum += cr;
     const rel = Math.abs(c - p) / Math.max(c, p);
     if (rel < 0.005) tied++; else if (c > p) calmAhead++;
+    if (c > invested * 1.25 && p < invested && c < worstCalm) { worstCalm = c; worstIdx = i; }
+    if (c - p > maxGap) { maxGap = c - p; gapIdx = i; }
     if (i % step === 0) sample.push([c, p]);
   }
+  if (worstCalm === Infinity) worstIdx = gapIdx; // no "survived" life found — fall back to the costliest panic
   const dc = distribution(calm), dp = distribution(panic);
   return {
-    nPaths, years, invested: sip * N, sample,
+    nPaths, years, seed: base, invested: sip * N, sample, worstIdx,
     calmAhead, tied, panicAhead: nPaths - calmAhead - tied,
     calm: dc, panic: dp,
     doorGap: (calmDirectSum - calmRegularSum) / nPaths, // the door (fee), averaged
     crowdGap: dc.p50 - dp.p50,                          // the crowd (behaviour), median
   };
+}
+// Replay a single life (by index) month by month — the value series for the
+// calm twin and the panic twin on the SAME market. Reproduces exactly the
+// finals counted in runLifetimes (same per-path seeds, same call order).
+function buildWorstLife(sip, years, seed, idx) {
+  const N = (years || DEFAULT_YEARS) * 12, base = seed == null ? 4242 : seed, rg = lifeRngs(base, idx);
+  const returns = genMarketReturns(N, rg.m), navD = navFromReturns(returns, N, 1);
+  const calmSeries = [], panicSeries = [];
+  const calmFinal = simPolicyPath(navD, N, sip, MC_POLICIES.hold, true, null, calmSeries).final;
+  const panicFinal = simPolicyPath(navD, N, sip, MC_POLICIES.sellWait, true, rg.p, panicSeries).final;
+  return { N, invested: sip * N, calmSeries, panicSeries, calmFinal, panicFinal };
 }
 
 /* =====================================================================
@@ -532,7 +561,7 @@ if (typeof module !== 'undefined' && module.exports) {
     DIRECT_ANNUAL, REGULAR_ANNUAL, DIRECT_MONTHLY, REGULAR_MONTHLY, FEE_FACTOR, DEFAULT_YEARS, EVENTS,
     drawCrash, cagr, xirr, xirrFromSIP, buildEventNav, buildTrendNav,
     simHold, simPause, simSell, peakRegainMonth, runSinglePath,
-    genMarketReturns, navFromReturns, simPolicyPath, runMonteCarlo, runLifetimes, distribution,
+    genMarketReturns, navFromReturns, simPolicyPath, runMonteCarlo, runLifetimes, buildWorstLife, distribution,
     EMERGENCIES, SEVERITY, EM_RESPONSES, SLEEVES, simEmergency, runEmergency, MC_POLICIES,
   };
 }
@@ -1377,146 +1406,150 @@ if (typeof document !== 'undefined') (function () {
    * product". We hold the door constant (same investor) and let the user feel
    * how much their behaviour swings the typical outcome — then show the fee gap
    * is a sliver beside it, and that guidance's real value is behavioural. */
-  /* ===== "Ten thousand lifetimes" — the spray of lives + two mountains =====
-   * The same investor, lived 10,000 times over 10,000 markets — once CALM,
-   * once in a PANIC, on the SAME door. The lives spray out, then settle into
-   * a mountain (a distribution of every future). The panic mountain rises
-   * beside it: lower, and wider. Every number on screen is COUNTED from those
-   * 10,000 lives — the odds, the band, the floor, the gaps — never asserted. */
+  /* ===== "Ten thousand lifetimes" — the collapse-to-one reveal (Section 10) =====
+   * A distribution is a fact, and facts live in the head. So this does the
+   * opposite of a chart: it sprays ten thousand possible lives, then COLLAPSES
+   * them to the one you're dealt; turns the win-rate into surgeon's odds you
+   * feel; replays the cruelest survivable life as two lines; and lands a line
+   * in silence. Every number is COUNTED from the engine — odds, the worst life,
+   * the gaps — never asserted. Five scenes, drawn on one canvas. */
   let lifeLayout = null;
   function buildLifeLayout(data, w, h) {
-    const pad = { l: 14, r: 14, t: 26, b: 30 };
-    const lo = Math.min(data.panic.p05, data.calm.p05) * 0.9;
-    const hi = Math.max(data.calm.p95, data.panic.p95) * 1.06;
-    const clamp = (v) => Math.max(lo, Math.min(hi, v));
-    const innerW = w - pad.l - pad.r;
-    const X = (v) => pad.l + (clamp(v) - lo) / (hi - lo) * innerW;
-    const baseY = h - pad.b, topY = pad.t, NB = 48;
-    const calmC = new Array(NB).fill(0), panicC = new Array(NB).fill(0);
-    const bk = (v) => Math.max(0, Math.min(NB - 1, Math.floor((clamp(v) - lo) / (hi - lo) * NB)));
-    for (const s of data.sample) { calmC[bk(s[0])]++; panicC[bk(s[1])]++; }
-    const maxC = Math.max(1, ...calmC, ...panicC), hScale = (baseY - topY) / maxC;
-    const curve = (counts) => counts.map((n, b) => [pad.l + (b + 0.5) / NB * innerW, baseY - n * hScale]);
-    const calmCurve = curve(calmC), panicCurve = curve(panicC);
-    const ridgeY = (x) => { const t = (x - pad.l) / innerW * NB - 0.5; const i = Math.max(0, Math.min(NB - 2, Math.floor(t))), f = Math.max(0, Math.min(1, t - i)); return calmCurve[i][1] + (calmCurve[i + 1][1] - calmCurve[i][1]) * f; };
-    const dots = data.sample.map((s) => { const x = X(s[0]); return { x: x, y: ridgeY(x) + 3 + Math.random() * 11 }; });
-    return { pad, X, baseY, topY, calmCurve, panicCurve, dots, calmMedX: X(data.calm.p50), panicMedX: X(data.panic.p50), calmFloorX: X(data.calm.p05), w, h };
+    const pad = { l: 16, r: 16, t: 16, b: 16 }, innerW = w - pad.l - pad.r, innerH = h - pad.t - pad.b;
+    const src = { x: pad.l + 2, y: h * 0.52 };
+    const vals = data.sample.map((s) => s[0]); const lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals);
+    const Y = (v) => pad.t + innerH * (1 - (v - lo) / ((hi - lo) || 1)); // richer life sits higher
+    const K = 8;
+    const threads = data.sample.map((s, i) => {
+      const r1 = ((i * 2654435761) % 1000) / 1000, r2 = ((i * 40503) % 1000) / 1000;
+      const endX = pad.l + innerW * (0.55 + 0.45 * r1), endY = Y(s[0]);
+      const amp = 6 + 16 * r2, ph = r1 * 6.28, freq = 2 + (i % 3), pts = [];
+      for (let k = 0; k <= K; k++) { const f = k / K, x = src.x + (endX - src.x) * f; const baseY = src.y + (endY - src.y) * f; pts.push([x, baseY + Math.sin(f * freq + ph) * amp * (1 - f)]); }
+      return { pts: pts, c: s[0], p: s[1] };
+    });
+    let youIdx = 0, best = Infinity; const med = data.calm.p50;
+    data.sample.forEach((s, i) => { const d = Math.abs(s[0] - med); if (d < best) { best = d; youIdx = i; } });
+    return { pad, src, threads, youIdx, w, h };
   }
-  function fillMountain(c, L, curve, p, hex, aFill, aLine) {
-    const Y = (pt) => L.baseY - (L.baseY - pt[1]) * p;
-    c.beginPath(); c.moveTo(curve[0][0], L.baseY);
-    for (const pt of curve) c.lineTo(pt[0], Y(pt)); c.lineTo(curve[curve.length - 1][0], L.baseY); c.closePath();
-    const g = c.createLinearGradient(0, L.topY, 0, L.baseY);
-    g.addColorStop(0, hexFill(hex, aFill)); g.addColorStop(1, hexFill(hex, aFill * 0.12));
-    c.fillStyle = g; c.fill();
-    c.beginPath(); curve.forEach((pt, i) => (i ? c.lineTo(pt[0], Y(pt)) : c.moveTo(pt[0], Y(pt))));
-    c.strokeStyle = hexFill(hex, aLine); c.lineWidth = 2; c.stroke();
+  function strokeThread(c, pts, f) { // add a partial polyline (up to fraction f) to the current path
+    const K = pts.length - 1, upto = f * K; c.moveTo(pts[0][0], pts[0][1]);
+    for (let k = 1; k <= K; k++) {
+      if (upto >= k) c.lineTo(pts[k][0], pts[k][1]);
+      else { const fr = upto - (k - 1); if (fr > 0) c.lineTo(pts[k - 1][0] + (pts[k][0] - pts[k - 1][0]) * fr, pts[k - 1][1] + (pts[k][1] - pts[k - 1][1]) * fr); break; }
+    }
   }
-  function medianLine(c, L, x, hex, p, label) {
-    const a = Math.min(1, (p - 0.4) * 2); if (a <= 0) return;
-    c.save(); c.globalAlpha = a; c.setLineDash([3, 4]); c.strokeStyle = hexFill(hex, 0.85); c.lineWidth = 1.5;
-    c.beginPath(); c.moveTo(x, L.baseY); c.lineTo(x, L.topY + 4); c.stroke();
-    c.setLineDash([]); c.fillStyle = hexFill(hex, 0.95); c.font = '700 11px ui-monospace, monospace'; c.textAlign = 'center';
-    c.fillText(label, x, L.topY - 2 < 12 ? L.topY + 12 : L.topY - 2); c.restore();
+  function drawThreads(c, L, scene, p) {
+    const N = L.threads.length;
+    if (scene === 'spray') {
+      c.globalCompositeOperation = 'lighter'; c.beginPath();
+      for (let i = 0; i < N; i++) { const f = Math.max(0, Math.min(1, p * 1.3 - (i / N) * 0.3)); if (f <= 0) continue; strokeThread(c, L.threads[i].pts, f); }
+      c.strokeStyle = 'rgba(232,178,87,0.13)'; c.lineWidth = 1; c.stroke(); c.globalCompositeOperation = 'source-over';
+    } else { // collapse — the 9,999 dim to ghosts; the one you're dealt ignites
+      c.globalCompositeOperation = 'lighter'; c.beginPath();
+      for (let i = 0; i < N; i++) { if (i === L.youIdx) continue; strokeThread(c, L.threads[i].pts, 1); }
+      c.strokeStyle = 'rgba(232,178,87,' + Math.max(0.02, 0.12 - 0.1 * p) + ')'; c.lineWidth = 1; c.stroke(); c.globalCompositeOperation = 'source-over';
+      const yt = L.threads[L.youIdx]; c.beginPath(); strokeThread(c, yt.pts, 1);
+      c.strokeStyle = hexFill(COL.ghost, 0.5 + 0.5 * p); c.lineWidth = 2.4; c.shadowColor = COL.ghost; c.shadowBlur = 14 * p; c.stroke(); c.shadowBlur = 0;
+      const end = yt.pts[yt.pts.length - 1]; c.fillStyle = hexFill('#ffffff', 0.85 * p); c.beginPath(); c.arc(end[0], end[1], 2.4 + 2.2 * p, 0, 7); c.fill();
+    }
   }
-  function drawLifetimes(canvasId, data, st) {
+  function drawOdds(c, w, h, data, p, t) {
+    const calmN = Math.round(data.calmAhead / data.nPaths * 100), cols = 10, rows = 10;
+    const cellW = (w - 36) / cols, cellH = (h - 36) / rows, r = Math.min(cellW, cellH) * 0.24;
+    for (let idx = 0; idx < 100; idx++) {
+      if (idx / 100 > p * 1.1) continue;
+      const cx = 18 + cellW * (idx % cols + 0.5), cy = 18 + cellH * (Math.floor(idx / cols) + 0.5);
+      if (idx < calmN) c.fillStyle = hexFill(COL.direct, 0.92);
+      else c.fillStyle = hexFill(COL.crash, Math.max(0.16, 0.36 + 0.34 * Math.sin(t * 4 + idx)));
+      c.beginPath(); c.arc(cx, cy, r, 0, 7); c.fill();
+    }
+  }
+  function drawWorst(c, w, h, wl, p) {
+    if (!wl) return;
+    if (!wl._yMax) { let m = 0; for (const v of wl.calmSeries) if (v > m) m = v; for (const v of wl.panicSeries) if (v > m) m = v; wl._yMax = m * 1.08; }
+    const pad = { l: 16, r: 16, t: 22, b: 24 }, innerW = w - pad.l - pad.r, innerH = h - pad.t - pad.b, N = wl.N, yMax = wl._yMax;
+    const Xm = (m) => pad.l + m / N * innerW, Yv = (v) => (h - pad.b) - v / yMax * innerH, wy = Yv(wl.invested);
+    c.setLineDash([4, 4]); c.strokeStyle = 'rgba(230,238,248,0.32)'; c.lineWidth = 1; c.beginPath(); c.moveTo(pad.l, wy); c.lineTo(w - pad.r, wy); c.stroke(); c.setLineDash([]);
+    c.fillStyle = 'rgba(230,238,248,0.5)'; c.font = '600 10px ui-monospace, monospace'; c.textAlign = 'left'; c.textBaseline = 'bottom'; c.fillText('what you put in', pad.l + 2, wy - 2);
+    const upto = Math.max(1, Math.floor(N * p));
+    const line = (series, hex, wd) => { c.beginPath(); for (let m = 0; m <= upto; m++) { const x = Xm(m), y = Yv(series[m]); m ? c.lineTo(x, y) : c.moveTo(x, y); } c.strokeStyle = hex; c.lineWidth = wd; c.stroke(); };
+    line(wl.panicSeries, hexFill(COL.crash, 0.95), 2);
+    line(wl.calmSeries, hexFill(COL.ghost, 0.98), 2.4);
+    if (p > 0.88) {
+      const ex = Xm(upto);
+      c.fillStyle = COL.ghost; c.beginPath(); c.arc(ex, Yv(wl.calmSeries[upto]), 3, 0, 7); c.fill();
+      c.fillStyle = COL.crash; c.beginPath(); c.arc(ex, Yv(wl.panicSeries[upto]), 3, 0, 7); c.fill();
+    }
+  }
+  function drawLifeScene(canvasId, data, st) {
     const cv = $(canvasId); if (!cv) return;
     const { w, h, c } = fitCanvas(cv);
     if (!lifeLayout || lifeLayout.w !== w || lifeLayout.h !== h || lifeLayout.data !== data) { lifeLayout = buildLifeLayout(data, w, h); lifeLayout.data = data; }
-    const L = lifeLayout;
     c.clearRect(0, 0, w, h);
-    // The "danger zone" — everything below the CALM investor's worst-case (1-in-20)
-    // floor. The panic mountain's tail reaches into it; the calm one never does.
-    // A wordless proof that panic isn't just poorer, it's less safe.
-    if (st.panicP > 0.35) {
-      const a = Math.min(1, (st.panicP - 0.35) * 1.6);
-      c.fillStyle = hexFill(COL.crash, 0.06 * a); c.fillRect(L.pad.l, L.topY, L.calmFloorX - L.pad.l, L.baseY - L.topY);
-      c.save(); c.globalAlpha = a * 0.8; c.setLineDash([2, 4]); c.strokeStyle = hexFill(COL.crash, 0.5); c.lineWidth = 1;
-      c.beginPath(); c.moveTo(L.calmFloorX, L.topY); c.lineTo(L.calmFloorX, L.baseY); c.stroke(); c.setLineDash([]);
-      c.fillStyle = hexFill(COL.crash, 0.85); c.font = '600 10px ui-monospace, monospace'; c.textAlign = 'left'; c.textBaseline = 'top';
-      c.fillText('below calm’s worst case', L.pad.l + 4, L.topY + 2); c.restore();
-    }
-    c.strokeStyle = 'rgba(203,178,107,0.16)'; c.lineWidth = 1;
-    c.beginPath(); c.moveTo(L.pad.l, L.baseY); c.lineTo(w - L.pad.r, L.baseY); c.stroke();
-    const src = { x: L.pad.l + 4, y: (L.topY + L.baseY) / 2 };
-    if (st.sprayP > 0 && st.calmP < 1) {
-      const fade = 1 - st.calmP; c.globalCompositeOperation = 'lighter';
-      for (let i = 0; i < L.dots.length; i++) {
-        const d = L.dots[i], dp = Math.max(0, Math.min(1, st.sprayP * 1.3 - (i / L.dots.length) * 0.3));
-        const e = 1 - Math.pow(1 - dp, 3), arc = Math.sin(e * Math.PI) * 24 * (1 - e * 0.4);
-        const x = src.x + (d.x - src.x) * e, y = src.y + (d.y - src.y) * e - arc;
-        c.fillStyle = 'rgba(232,178,87,' + (0.5 * fade) + ')'; c.beginPath(); c.arc(x, y, 1.15, 0, 7); c.fill();
-      }
-      c.globalCompositeOperation = 'source-over';
-    }
-    if (st.panicP > 0) fillMountain(c, L, L.panicCurve, st.panicP, COL.crash, 0.2, 0.55);
-    if (st.calmP > 0) fillMountain(c, L, L.calmCurve, st.calmP, COL.ghost, 0.3, 0.95);
-    if (st.calmP > 0.4) medianLine(c, L, L.calmMedX, COL.ghost, st.calmP, 'calm');
-    if (st.panicP > 0.4) medianLine(c, L, L.panicMedX, COL.crash, st.panicP, 'panic');
+    if (st.scene === 'spray' || st.scene === 'collapse') drawThreads(c, lifeLayout, st.scene, st.p);
+    else if (st.scene === 'odds') drawOdds(c, w, h, data, st.p, st.t);
+    else if (st.scene === 'worst') drawWorst(c, w, h, st.worst, st.p);
+    // 'line' and 'door' — intentionally blank: the line stands alone.
   }
 
   function openLuck() {
     show($('luck'));
     lifeLayout = null;
-    setHTML('lifeBeats', '<p class="mc-running">Living ten thousand lives…</p>');
     setText('lifeTitle', 'No one can show you your future.');
     setText('lifeLead', 'So we ran it ten thousand times.');
-    setTimeout(() => { const data = runLifetimes(state.sip, state.years, 4242, 10000, 1800); runLifeSequence(data); }, 30);
+    setHTML('lifeBeats', '<p class="mc-running">Living ten thousand lives…</p>');
+    setTimeout(() => {
+      const data = runLifetimes(state.sip, state.years, 4242, 10000, 1800);
+      const worst = buildWorstLife(state.sip, state.years, data.seed, data.worstIdx);
+      runLifeSequence(data, worst);
+    }, 30);
   }
-  function revealBeat(id) { const el = $(id); if (el) { el.classList.add('show'); Sound.tick(); } }
-  function lifeAdvance(step) {
-    const t = state._life; if (!t) return;
-    if (step === 'spray') t.tSpray = 1;
-    else if (step === 'settle') { t.tSpray = 1; t.tCalm = 1; revealBeat('lb_cap'); }
-    else if (step === 'panic') { t.tPanic = 1; revealBeat('lb_panic'); Sound.stinger(true); }
-    else if (step === 'odds') { revealBeat('lb_odds'); Sound.resolve(); }
-    else if (step === 'range') revealBeat('lb_range');
-    else if (step === 'close') revealBeat('lb_close');
-    else if (step === 'door') revealBeat('lb_door');
-  }
-  function runLifeSequence(data) {
-    const calmAhead = data.calmAhead, nP = data.nPaths;
-    const fmtN = (n) => n.toLocaleString('en-IN');
-    const lo = data.calm.p10, hi = data.calm.p90, floor = data.calm.p05, panicTyp = data.panic.p50, panicFloor = data.panic.p05;
+  function lifeShow(html) { setHTML('lifeBeats', '<div class="lbeat">' + html + '</div>'); }
+  function runLifeSequence(data, worst) {
+    const nP = data.nPaths, calmPct = Math.round(data.calmAhead / nP * 100), panicPct = Math.round(data.panicAhead / nP * 100);
     const ratio = (Math.abs(data.crowdGap) / Math.max(1, Math.abs(data.doorGap))).toFixed(1);
-    setText('lifeTitle', 'No one can show you your future.');
-    setText('lifeLead', 'So we ran it ten thousand times — every crash, every recovery, every order they could come in.');
-    setHTML('lifeBeats',
-      '<div class="lbeat" id="lb_cap"><p>Every future you could have, at once. Most lives gather in the middle; a few soared, a few struggled.</p></div>'
-      + '<div class="lbeat" id="lb_panic"><div class="life-legend"><span class="lg calm">The calm you</span><span class="lg panic">The panic you</span></div>'
-      + '<p>The same lives, lived in a panic — sold in the fall, climbed back at the wrong time. The whole mountain <b>slides lower</b>, and its worst lives fall further. Panic doesn’t only make you poorer — it leaves you <b>less safe</b>.</p></div>'
-      + '<div class="lbeat odds" id="lb_odds"><div class="odds-big"><b>' + fmtN(calmAhead) + '</b><span>/ ' + fmtN(nP) + '</span></div>'
-      + '<p>lives where the one who stayed <b>calm</b> came out ahead.</p></div>'
-      + '<div class="lbeat" id="lb_range"><p>Most calm yous ended between <b>' + inrShort(lo) + '</b> and <b>' + inrShort(hi) + '</b>; even the unluckiest — the worst 1 in 20 — still held <b>' + inrShort(floor) + '</b>. '
-      + 'The typical panic you ended around <b>' + inrShort(panicTyp) + '</b>, and its unluckiest 1 in 20 fell all the way to <b>' + inrShort(panicFloor) + '</b>.</p></div>'
-      + '<div class="lbeat close" id="lb_close"><p>You only get to live <b>one</b> of these ten thousand lives. You don’t get to choose which one — the market throws the dice. '
-      + 'The only thing you ever got to choose was <b>which crowd you were standing in</b> when it did.</p></div>'
-      + '<div class="lbeat door" id="lb_door"><p>The <b>door</b> — the entire fee, Direct vs Regular — changed a calm life by about <b>' + inrShort(Math.abs(data.doorGap)) + '</b>. '
-      + 'The <b>crowd</b> you stood in — calm or panic — mattered <b>~' + ratio + '×</b> more, about <b>' + inrShort(Math.abs(data.crowdGap)) + '</b>. The fee is real; your behaviour is bigger.</p></div>');
-    state._life = { sprayP: 0, calmP: 0, panicP: 0, tSpray: 0, tCalm: 0, tPanic: 0 };
-    lifeAdvance('spray');
-    const draw = () => { const t = state._life; if (!t) return;
-      t.sprayP += (t.tSpray - t.sprayP) * 0.05; t.calmP += (t.tCalm - t.calmP) * 0.06; t.panicP += (t.tPanic - t.panicP) * 0.06;
-      drawLifetimes('lifeCanvas', data, { sprayP: t.sprayP, calmP: t.calmP, panicP: t.panicP });
-      state._lifeRaf = requestAnimationFrame(draw); };
+    const B = {
+      spray: '<p>Ten thousand versions of your next twenty years. Each one real. Each one different.</p>',
+      collapse: '<p>But you don’t get ten thousand. <b>You get one.</b> You didn’t choose it. You won’t see it coming. And you live it once — no replay, no refund.</p>',
+      odds: '<div class="lbeat odds"><div class="odds-big"><b>' + calmPct + '</b><span>in 100</span></div>'
+        + '<p>If a surgeon’s operation worked <b>' + calmPct + ' times in 100</b>, you’d book it tomorrow. At <b>' + panicPct + ' in 100</b>, you’d walk out. <b>Staying calm</b> is the ' + calmPct + '. <b>Panicking</b> is the ' + panicPct + '. Same money — the only thing that changed was whether the hands were steady, or shaking.</p></div>',
+      worst: '<p>Of all ten thousand lives, here is the cruelest market in which staying calm <i>still pulled you through</i>. Watch both of you live it.</p>',
+      worstEnd: '<p>Even here, the <b>calm you</b> climbed back above water — <b>' + inrShort(worst.calmFinal) + '</b>. The <b>panic you</b>, same market, never came back — <b>' + inrShort(worst.panicFinal) + '</b>, below the <b>' + inrShort(worst.invested) + '</b> you put in.</p>',
+      line: '<div class="lbeat close"><p>The market deals you one life, face down. You live it once — no replay, no refund.<br>You never choose the life. You only ever choose <b>who you are</b> when it turns face up.</p></div>',
+      door: '<div class="lbeat door"><p>The <b>door</b> you walked through moved the number a little — about <b>' + inrShort(Math.abs(data.doorGap)) + '</b>. The <b>crowd</b> you chose to stand in moved it <b>~' + ratio + '×</b> more — about <b>' + inrShort(Math.abs(data.crowdGap)) + '</b>. The fee is real; who you were is bigger.</p><p class="life-cta">Now — live it yourself.</p></div>',
+    };
+    state._life = { scene: 'spray', p: 0, t0: null, elapsed: 0, verdict: false };
+    lifeShow(B.spray);
+    function go(step) {
+      const t = state._life; if (!t) return;
+      if (step === 'collapse') { t.scene = 'collapse'; t.p = 0; lifeShow(B.collapse); Sound.freeze(); }
+      else if (step === 'odds') { t.scene = 'odds'; t.p = 0; setHTML('lifeBeats', B.odds); Sound.resolve(); }
+      else if (step === 'worst') { t.scene = 'worst'; t.p = 0; t.verdict = false; lifeShow(B.worst); Sound.stinger(true); }
+      else if (step === 'line') { t.scene = 'line'; t.p = 0; setHTML('lifeBeats', B.line); Sound.stopPad(); }
+      else if (step === 'door') { t.scene = 'door'; t.p = 0; setHTML('lifeBeats', B.door); }
+    }
+    const draw = (ts) => {
+      const t = state._life; if (!t) return;
+      if (t.t0 == null) t.t0 = ts; t.elapsed = (ts - t.t0) / 1000;
+      t.p += (1 - t.p) * 0.045; if (t.p > 0.999) t.p = 1;
+      drawLifeScene('lifeCanvas', data, { scene: t.scene, p: t.p, t: t.elapsed, worst: worst });
+      if (t.scene === 'worst' && t.p > 0.97 && !t.verdict) { t.verdict = true; lifeShow(B.worstEnd); }
+      state._lifeRaf = requestAnimationFrame(draw);
+    };
     cancelAnimationFrame(state._lifeRaf); state._lifeRaf = requestAnimationFrame(draw);
-    if (reduceMotion) { state._life.tSpray = state._life.sprayP = 1; ['settle', 'panic', 'odds', 'range', 'close', 'door'].forEach(lifeAdvance); state._life.calmP = state._life.panicP = 1; return; }
+    if (reduceMotion) { ['collapse', 'odds', 'worst', 'line', 'door'].forEach(go); state._life.scene = 'door'; state._life.p = 1; lifeShow(B.worstEnd + B.line + B.door); return; }
     const seq = [
-      { text: 'No one can show you your future. So we ran it, ten thousand times.', rate: 0.9 },
-      { text: 'Ten thousand possible lives. Each one with its own crashes, its own rallies.', rate: 0.92 },
-      { text: 'Then they settle into a mountain. Most lives gather in the middle. This is every future you could have, all at once.', rate: 0.92, onStart: () => lifeAdvance('settle') },
-      { text: 'Now the same lives, lived in a panic — sold in the fall, came back at the wrong moment. The mountain slides lower, and its worst lives fall further.', rate: 0.92, onStart: () => lifeAdvance('panic') },
-      { text: 'Panic does not only make you poorer. It leaves you less safe.', rate: 0.94 },
-      { text: 'In ' + fmtN(calmAhead) + ' of these ten thousand lives, the one who stayed calm came out ahead.', rate: 0.92, onStart: () => lifeAdvance('odds') },
-      { text: 'Most calm yous ended between ' + amountWords(lo) + ' and ' + amountWords(hi) + '. Even the unluckiest still held ' + amountWords(floor) + '.', rate: 0.94, onStart: () => lifeAdvance('range') },
-      { text: 'You only get to live one of these ten thousand lives. The only thing you ever chose was which crowd you were standing in.', rate: 0.92, onStart: () => lifeAdvance('close') },
-      { text: 'The fee you paid was real. The crowd you chose to stand in mattered more.', rate: 0.92, onStart: () => lifeAdvance('door') },
+      { text: 'No one can show you your future. So we ran it ten thousand times.', rate: 0.9 },
+      { text: 'Ten thousand versions of your next twenty years. Each one real. Each one different.', rate: 0.92 },
+      { text: 'But you don’t get ten thousand. You get one. This one is yours — you live it once. No replay. No refund.', rate: 0.9, onStart: () => go('collapse') },
+      { text: 'If a surgeon said an operation worked ' + calmPct + ' times in a hundred, you’d book it tomorrow. At ' + panicPct + ' in a hundred, you’d walk out. Staying calm is the ' + calmPct + '. Panicking is the ' + panicPct + '.', rate: 0.92, onStart: () => go('odds') },
+      { text: 'Of all ten thousand lives, here is the cruelest market in which staying calm still pulled you through. Watch both of you live it.', rate: 0.92, onStart: () => go('worst') },
+      { text: 'Even here, the calm you climbed back above water. The panic you, same market, never came back.', rate: 0.94 },
+      { text: 'The market deals you one life, face down. You live it once. You never choose the life. You only ever choose who you are when it turns face up.', rate: 0.88, onStart: () => go('line') },
+      { text: 'The door you walked through moved the number a little. The crowd you chose to stand in mattered more.', rate: 0.92, onStart: () => go('door') },
     ];
     const spoke = Voice.speakSequence(seq);
-    if (!spoke) { // no voice — drive the same beats on a timeline
-      const steps = ['settle', 'panic', 'odds', 'range', 'close', 'door'];
-      steps.forEach((s, i) => setTimeout(() => lifeAdvance(s), 2600 + i * 1700));
-    }
+    if (!spoke) { [['collapse', 5500], ['odds', 9500], ['worst', 14000], ['line', 20000], ['door', 25000]].forEach((s) => setTimeout(() => go(s[0]), s[1])); }
   }
   function stopLife() { cancelAnimationFrame(state._lifeRaf); state._life = null; Voice.stop(); }
 
