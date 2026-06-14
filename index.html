@@ -4,104 +4,105 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>Two Doors, One Storm — A Behavioural Investing Simulator</title>
-<meta name="description" content="Same money, same market. One investor goes Direct (alone), one goes Regular (a relationship manager to call when life hits). Live a real crash or a real emergency, make the call, and see — in exact, computed rupees — what your behaviour cost." />
+<meta name="description" content="You swear you won't sell in a crash. This simulator makes you live one — then shows you the gap between what you promised and what you actually did. Same money, two doors: alone, or with someone to call." />
 <meta name="theme-color" content="#05070b" />
 <meta property="og:title" content="Two Doors, One Storm" />
-<meta property="og:description" content="The only real variable is who is beside you when it falls." />
+<meta property="og:description" content="You say you won't panic. Prove it." />
 <meta property="og:type" content="website" />
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚪</text></svg>" />
-<link rel="stylesheet" href="styles.css?v=20260614a" />
+<link rel="stylesheet" href="styles.css?v=20260614b" />
 </head>
 <body>
 <div id="app">
 
-  <!-- ===================== SETUP ===================== -->
+  <!-- ===================== SETUP WIZARD (one decision per screen) ===================== -->
   <section id="setup" class="screen show">
-    <div class="setup-inner">
-      <p class="kicker">A behaviour-driven investing simulator</p>
-      <h1 class="title">Two&nbsp;Doors,<br />One&nbsp;Storm</h1>
-      <p class="tagline">Same money. Same market.<br />The only variable is who is beside you<br />when it&nbsp;falls.</p>
-
-      <div class="chip-group">
-        <p class="chip-label">1 · Choose the moment</p>
-        <div class="chip-row" id="scenarioChips">
-          <button class="chip on" data-val="crash">A market crash</button>
-          <button class="chip" data-val="emergency">A personal emergency</button>
-        </div>
+    <div class="wiz">
+      <div class="wiz-head">
+        <button id="wizBack" class="wiz-back" hidden>← back</button>
+        <div id="wizDots" class="wiz-dots"></div>
       </div>
 
-      <div class="chip-group">
-        <p class="chip-label">2 · How long will you invest?</p>
-        <div class="chip-row" id="durationChips">
-          <button class="chip" data-val="15">15 years</button>
-          <button class="chip on" data-val="20">20 years</button>
-          <button class="chip" data-val="30">30 years</button>
-        </div>
+      <div id="w_scenario" class="wstep">
+        <p class="kicker">Two Doors, One Storm</p>
+        <h2 class="wq">What do you want to face?</h2>
+        <button class="opt card-opt" data-val="crash"><b>A market crash</b><span>Your money is falling. Do you hold, or run?</span></button>
+        <button class="opt card-opt" data-val="emergency"><b>A personal emergency</b><span>Life needs cash, now. Where do you take it from?</span></button>
       </div>
 
-      <div class="chip-group">
-        <p class="chip-label">3 · Your monthly SIP</p>
-        <div class="chip-row wrap" id="sipChips">
-          <button class="chip" data-val="5000">₹5,000</button>
-          <button class="chip on" data-val="10000">₹10,000</button>
-          <button class="chip" data-val="20000">₹20,000</button>
-          <button class="chip" data-val="25000">₹25,000</button>
-          <button class="chip" data-val="50000">₹50,000</button>
-        </div>
+      <div id="w_duration" class="wstep" hidden>
+        <h2 class="wq">How long will you invest?</h2>
+        <button class="opt chip-opt" data-val="15">15 years</button>
+        <button class="opt chip-opt" data-val="20">20 years</button>
+        <button class="opt chip-opt" data-val="30">30 years</button>
       </div>
 
-      <div id="crashInputs" class="chip-group">
-        <p class="chip-label">4 · Which storm do you live through?</p>
-        <div class="chip-row wrap" id="eventChips">
-          <button class="chip on" data-val="covid">COVID-19, 2020</button>
-          <button class="chip" data-val="gfc">2008 crisis</button>
-          <button class="chip" data-val="corr2022">2022 correction</button>
-          <button class="chip" data-val="iranUsa">Iran–USA war</button>
-          <button class="chip" data-val="indiaPak">India–Pakistan war</button>
-        </div>
-        <p id="eventDesc" class="desc"></p>
-        <p id="crashTiming" class="timing"></p>
+      <div id="w_sip" class="wstep" hidden>
+        <h2 class="wq">Your monthly SIP?</h2>
+        <button class="opt chip-opt" data-val="5000">₹5,000</button>
+        <button class="opt chip-opt" data-val="10000">₹10,000</button>
+        <button class="opt chip-opt" data-val="20000">₹20,000</button>
+        <button class="opt chip-opt" data-val="25000">₹25,000</button>
+        <button class="opt chip-opt" data-val="50000">₹50,000</button>
       </div>
 
-      <div id="emergencyInputs" class="chip-group" hidden>
-        <p class="chip-label">4 · What life throws at you</p>
-        <div class="chip-row wrap" id="emergencyChips">
-          <button class="chip on" data-val="icu">Hospitalisation / ICU</button>
-          <button class="chip" data-val="business">Business loss</button>
-          <button class="chip" data-val="pandemic">Pandemic — COVID</button>
-          <button class="chip" data-val="war">War</button>
-        </div>
-        <p id="emergencyDesc" class="desc"></p>
-        <p class="chip-label" style="margin-top:18px">5 · How big is the hit?</p>
-        <div class="chip-row" id="severityChips">
-          <button class="chip" data-val="minor">Manageable</button>
-          <button class="chip on" data-val="major">Serious</button>
-          <button class="chip" data-val="severe">Devastating</button>
-        </div>
-        <label class="toggle">
-          <input type="checkbox" id="downturnToggle" />
-          <span>Hardest mode — the emergency lands during a market fall<br /><i>(a pandemic or war forces this on anyway)</i></span>
-        </label>
-        <p id="emTiming" class="timing"></p>
+      <div id="w_event" class="wstep" hidden>
+        <h2 class="wq">Which storm do you live through?</h2>
+        <button class="opt card-opt" data-val="covid"><b>COVID-19, 2020</b><span>The V-shape — panic punished fastest and hardest.</span></button>
+        <button class="opt card-opt" data-val="gfc"><b>Global Financial Crisis, 2008</b><span>The slow grind — selling felt smart for over a year.</span></button>
+        <button class="opt card-opt" data-val="corr2022"><b>2022 correction</b><span>The dull ache — not every fall is a catastrophe.</span></button>
+        <button class="opt card-opt" data-val="war"><b>War / geopolitical shock</b><span>The headline scare — fear is bigger than the damage.</span></button>
+        <button class="opt card-opt drawn" data-val="drawn"><b>A crash no one saw coming</b><span>Drawn live — unknown depth, unknown timing. Like real life.</span></button>
       </div>
 
-      <button id="startBtn" class="cta">Live the crash</button>
-      <p class="assume">Illustration, not a prediction. Returns are assumptions (Direct 12% / Regular 11% a year — a 1%/yr fee gap); drawdowns are based on real history. Every rupee on screen is computed live; nothing is invented. The guided investor's contact is a relationship manager (RM).</p>
+      <div id="w_emType" class="wstep" hidden>
+        <h2 class="wq">What does life throw at you?</h2>
+        <button class="opt card-opt" data-val="icu"><b>Hospitalisation / ICU</b><span>A deposit due before treatment continues.</span></button>
+        <button class="opt card-opt" data-val="business"><b>Business loss</b><span>Salaries and suppliers, due this week.</span></button>
+        <button class="opt card-opt" data-val="pandemic"><b>Pandemic — COVID</b><span>Income gone, a bill due, market crashing — at once.</span></button>
+        <button class="opt card-opt" data-val="war"><b>War</b><span>Cash for safety, in the week selling hurts most.</span></button>
+      </div>
+
+      <div id="w_severity" class="wstep" hidden>
+        <h2 class="wq">How big is the hit?</h2>
+        <button class="opt chip-opt" data-val="minor">Manageable</button>
+        <button class="opt chip-opt" data-val="major">Serious</button>
+        <button class="opt chip-opt" data-val="severe">Devastating</button>
+        <label class="toggle"><input type="checkbox" id="downturnToggle" /><span>Hardest mode — it lands during a market fall <i>(pandemic & war force this on)</i></span></label>
+      </div>
+
+      <p class="assume">Illustration, not advice. Returns are assumptions (Direct 12% / Regular 11% a year — a 1%/yr fee gap); drawdowns are based on real history. Every rupee is computed live; nothing is invented.</p>
     </div>
   </section>
+
+  <!-- ===================== THE PLEDGE (commit) ===================== -->
+  <div id="pledge" class="overlay pledge" hidden>
+    <div class="card pledge-card">
+      <p class="kicker">Before you begin</p>
+      <h2 class="pledge-q">Sometime in your <span id="pledgeYears">20</span> years, a crash <b>will</b> come.</h2>
+      <p class="pledge-sub">You won't know when. Swear it now, while you're calm and the screen is green: when your savings are deep in the red, what will you do?</p>
+      <div class="choices" id="pledgeChoices">
+        <button data-pledge="hold"><b>I'll hold</b><span>I won't touch a thing</span></button>
+        <button data-pledge="pause"><b>I'll pause</b><span>stop investing till it passes</span></button>
+        <button data-pledge="sell"><b>I'll sell</b><span>protect what's left</span></button>
+      </div>
+      <p class="pledge-foot">Most people pick "hold." Then they meet the crash.</p>
+    </div>
+  </div>
 
   <!-- ===================== STAGE (crash) ===================== -->
   <section id="stage" class="screen stage" hidden>
     <div class="hud">
       <div class="hud-top">
         <span id="yearLabel" class="hud-year">Year 0 / 20</span>
-        <span id="invested" class="hud-invested">Invested ₹0</span>
+        <span id="pledgeBadge" class="pledge-badge"></span>
       </div>
       <div class="hud-corpus">
         <span class="hud-cap">Your corpus</span>
         <span id="corpus" class="hud-value">₹0</span>
         <span id="corpusShort" class="hud-short"></span>
       </div>
+      <div id="invested" class="hud-invested">You've put in ₹0</div>
       <div class="prog"><div id="climbProg" class="prog-fill"></div><div id="climbMarker" class="prog-marker"></div></div>
     </div>
     <div class="canvas-wrap"><canvas id="stageCanvas" role="img" aria-label="Two wealth lines over time"></canvas></div>
@@ -114,7 +115,7 @@
       <p class="sil-pct">−<span id="silDepth">38</span><span class="pctmark">%</span></p>
       <div class="sil-flow"><span id="silFrom">₹0</span><span class="arrow">▸</span><span id="silTo" class="to">₹0</span></div>
       <p class="sil-context" id="silContext"></p>
-      <p class="sil-quiet">No call. No voice. Just you and a red number that won't stop. That was the deal — you went alone to save the fee.</p>
+      <p class="sil-quiet">No call. No voice. Just you and a red number that won't stop.</p>
       <button id="silenceContinue" class="cta crash-cta">Sit in it — then face the choice →</button>
     </div>
   </div>
@@ -124,37 +125,37 @@
     <div class="split-grid">
       <div class="split-pane you-pane">
         <p class="pane-cap">YOU — Direct. Alone.</p>
-        <p class="pane-sub">No one will pick for you. Take your time — there's no clock, only the fear.</p>
+        <p class="pane-sub">No one will pick for you. Only the fear.</p>
         <div class="choices" id="youChoices">
-          <button data-choice="hold"><b>Hold</b><span>keep buying into the fear</span></button>
-          <button data-choice="pause"><b>Pause the SIP</b><span>stop, just till it's over</span></button>
+          <button data-choice="hold"><b>Hold</b><span>keep buying the fear</span></button>
+          <button data-choice="pause"><b>Pause the SIP</b><span>stop till it's over</span></button>
           <button data-choice="sellBack"><b>Sell</b><span>buy back when it's safe</span></button>
-          <button data-choice="sellWait"><b>Sell everything</b><span>make the bleeding stop</span></button>
+          <button data-choice="sellWait"><b>Sell everything</b><span>make it stop</span></button>
         </div>
       </div>
       <div class="split-pane friend-pane">
-        <p class="pane-cap">YOUR FRIEND — Regular. The call.</p>
+        <p class="pane-cap">YOUR FRIEND — Regular.</p>
         <div class="friend-canvas-wrap"><canvas id="friendCanvas" aria-label="Your friend's steadying line"></canvas></div>
-        <p class="pane-quote">"Saans le. Maine yeh chaar baar dekha hai. Har baar market wapas aaya. Kuch mat bech."</p>
-        <p class="pane-foot">Her relationship manager. She isn't smarter than you. She just wasn't alone.</p>
+        <p class="pane-quote">"Don't sell. I mean it. I sat with people through 2008 and 2020 — the ones who sold here never caught up. We're not touching it. Go for a walk. Call me tomorrow."</p>
+        <p class="pane-foot">Her relationship manager picked up on the first ring. She isn't smarter than you. She just wasn't alone.</p>
       </div>
     </div>
   </div>
 
-  <!-- ===================== SELL-AS-RELIEF ===================== -->
-  <div id="relief" class="overlay relief" hidden>
-    <div class="relief-inner">
-      <p class="relief-word">The falling stops.</p>
-      <p class="relief-sub">The red freezes. Your shoulders drop. For one perfect moment, it feels like the smartest thing you've ever done.</p>
-      <p class="relief-warn">But the market doesn't know you sold. And it isn't done.</p>
-      <button id="reliefContinue" class="cta crash-cta">See where this leaves you →</button>
+  <!-- ===================== THE COLLISION (commit vs reality) ===================== -->
+  <div id="collision" class="overlay collision" hidden>
+    <div class="collision-inner">
+      <p class="collision-tag" id="collisionTag"></p>
+      <h2 class="collision-title" id="collisionTitle"></h2>
+      <p class="collision-body" id="collisionBody"></p>
+      <button id="collisionBtn" class="cta crash-cta">See what it cost →</button>
     </div>
   </div>
 
   <!-- ===================== RESULT (crash) ===================== -->
   <div id="result" class="overlay" hidden>
     <div class="card result-card">
-      <h2 class="res-title">20 years later</h2>
+      <h2 class="res-title">The finish line</h2>
       <div class="result-cols">
         <div class="rcol"><span class="rcap" id="youLabel">YOU</span><span id="youFinal" class="rval">₹0</span></div>
         <div class="rcol friend"><span class="rcap" id="friendLabelR">FRIEND</span><span id="friendFinal" class="rval">₹0</span></div>
@@ -178,16 +179,16 @@
     <div class="card wide-card">
       <h2 class="all-title">Was it luck?</h2>
       <div id="luckBody" class="luck-body"></div>
-      <p class="disclaimer">Documented market model: mean ≈ 12%/yr, volatility ≈ 15–18%/yr, with fat tails and clustered crashes. Odds are ranges of possibility, never predictions.</p>
+      <p class="disclaimer">Documented model: mean ≈ 12%/yr, vol ≈ 15–18%/yr, fat tails + clustered crashes. Odds are ranges, never predictions.</p>
       <button id="luckClose" class="ghost-btn">Back</button>
     </div>
   </div>
 
-  <!-- ===================== ALL FOUR CHOICES (grid) ===================== -->
+  <!-- ===================== ALL FOUR CHOICES ===================== -->
   <div id="grid" class="overlay" hidden>
     <div class="card wide-card">
       <h2 class="all-title">Every choice, same market</h2>
-      <p class="all-sub">Your behaviour (Direct) against hers (Regular) — Direct can finish above, equal to, or below Regular, honestly.</p>
+      <p class="all-sub">Your behaviour (Direct) against hers (Regular).</p>
       <div id="gridBody" class="grid-body"></div>
       <button id="gridClose" class="ghost-btn">Back</button>
     </div>
@@ -197,8 +198,8 @@
   <div id="emIntro" class="overlay em-stage" hidden>
     <div class="card em-card">
       <p class="kicker"><span id="emIntroYears">10</span> years in.</p>
-      <h2 class="em-head">You built this, quietly, month after month.</h2>
-      <p class="em-body">₹<span id="emIntroSip"></span> every month, never missed. You never planned to touch it. Today it's worth:</p>
+      <h2 class="em-head">You built this, month after month.</h2>
+      <p class="em-body">₹<span id="emIntroSip"></span> a month. Today it's worth:</p>
       <p class="em-corpus" id="emIntroCorpus">₹0</p>
       <div class="em-sleeves" id="emIntroSleeves"></div>
       <button id="emIntroBtn" class="cta">Then life happens →</button>
@@ -210,7 +211,7 @@
       <p class="strike-tag" id="emStrikeTag">EMERGENCY</p>
       <h2 class="em-head" id="emStrikeTitle"></h2>
       <p class="em-strike-what" id="emStrikeWhat"></p>
-      <p class="em-need-cap">The cash you need, now:</p>
+      <p class="em-need-cap">You need, now:</p>
       <p class="em-need" id="emStrikeNeed">₹0</p>
       <p class="em-body" id="emStrikePressure"></p>
       <button id="emStrikeBtn" class="cta crash-cta">What do you do? →</button>
@@ -219,22 +220,22 @@
 
   <div id="emDecision" class="overlay em-stage" hidden>
     <div class="card em-card">
-      <p class="pane-cap you-cap">YOU — Direct. Alone. The clock running.</p>
-      <p class="em-body">No one to ask which fund to sell, or how much is "enough." Fear has one instruction: be safe. <b>What do you tap?</b></p>
+      <p class="pane-cap you-cap">YOU — Direct. Alone. Clock running.</p>
+      <p class="em-body">Fear says: be safe. <b>What do you tap?</b></p>
       <div class="choices em-choices" id="emChoices">
-        <button data-choice="panic"><b>Redeem everything</b><span>take it all out, just be safe</span></button>
-        <button data-choice="surgical"><b>Take only what you need</b><span>from the safe money first, leave the rest</span></button>
-        <button data-choice="sellLosers"><b>Sell the fund that's fallen</b><span>cut the loss, raise the cash there</span></button>
-        <button data-choice="sipKill"><b>Stop the SIP, sell a little</b><span>you can't afford to keep investing now</span></button>
+        <button data-choice="panic"><b>Redeem everything</b><span>take it all, just be safe</span></button>
+        <button data-choice="surgical"><b>Take only what you need</b><span>safe money first, leave the rest</span></button>
+        <button data-choice="sellLosers"><b>Sell the fallen fund</b><span>cut the loss, raise it there</span></button>
+        <button data-choice="sipKill"><b>Stop the SIP, sell a little</b><span>can't afford to keep investing</span></button>
       </div>
     </div>
   </div>
 
   <div id="emCall" class="overlay em-stage" hidden>
     <div class="card em-card friend-card">
-      <p class="pane-cap friend-cap">YOUR FRIEND — Regular. The call she can make.</p>
-      <p class="em-quote">"Saans le. You need <b id="emCallNeed">₹0</b> — we take exactly that, not a rupee more. Liquid first, then a little large-cap. Leave the mid-cap, it's down. Pause the SIP three months, don't cancel it. The rest stays invested. This is not going to cost you your future."</p>
-      <p class="em-body">She redeems what she needs. The rest keeps working. You had only yourself.</p>
+      <p class="pane-cap friend-cap">YOUR FRIEND — Regular. The call.</p>
+      <p class="em-quote">"Take exactly <b id="emCallNeed">₹0</b> — not a rupee more. Liquid first, then a little large-cap. Leave the mid-cap, it's down. Pause the SIP three months, don't cancel. The rest stays invested."</p>
+      <p class="em-body">She takes what she needs. The rest keeps working. You had only yourself.</p>
       <button id="emCallBtn" class="cta">See where it leaves you both →</button>
     </div>
   </div>
@@ -253,7 +254,7 @@
       <button id="emMathsToggle" class="maths-toggle">See the maths ▾</button>
       <div id="emMathsPanel" class="maths-panel" hidden></div>
       <p class="em-honest" id="emHonest"></p>
-      <p class="disclaimer">Portfolio: liquid + large-cap + mid/small-cap. Every rupee computed live; only the returns and the emergency size are inputs.</p>
+      <p class="disclaimer">Portfolio: liquid + large-cap + mid/small-cap. Every rupee computed live; only the returns and emergency size are inputs.</p>
       <div class="result-actions">
         <button id="emReplay" class="cta">Face it again — choose differently</button>
         <button id="emLuckBtn" class="ghost-btn">Was it luck? (play it 1,000 times)</button>
@@ -266,6 +267,6 @@
 </div>
 
 <footer class="global-foot">Educational tool — not investment advice.</footer>
-<script src="app.js?v=20260614a"></script>
+<script src="app.js?v=20260614b"></script>
 </body>
 </html>
