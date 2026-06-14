@@ -845,12 +845,18 @@ if (typeof document !== 'undefined') (function () {
       // dissonant alarm stab (two clashing saws)
       [233, 247].forEach((f) => { const so = ctx.createOscillator(), gg = ctx.createGain(); so.type = 'sawtooth'; so.frequency.value = f; gg.gain.setValueAtTime(0.18, t); gg.gain.exponentialRampToValueAtTime(0.0001, t + 0.9); const fl = ctx.createBiquadFilter(); fl.type = 'lowpass'; fl.frequency.value = 900; so.connect(fl); fl.connect(gg); gg.connect(master); so.start(t); so.stop(t + 0.95); });
     }
-    // A heavy descending thud as each red candle drops during the fall.
-    function crashTick() {
-      if (!init()) return; const t = T(), o = ctx.createOscillator(), g = ctx.createGain();
-      o.type = 'sine'; o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(48, t + 0.18);
-      g.gain.setValueAtTime(0.5, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.34);
-      o.connect(g); g.connect(master); o.start(t); o.stop(t + 0.36);
+    // A heavy descending thud as each red candle drops — deepens and grows as
+    // the crash bottoms out (depth 0..1), so the fall is felt getting worse.
+    function crashTick(depth) {
+      if (!init()) return; const t = T(), d = Math.max(0, Math.min(1, depth || 0));
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'sine'; o.frequency.setValueAtTime(150 - 60 * d, t); o.frequency.exponentialRampToValueAtTime(40 - 14 * d, t + 0.2 + 0.1 * d);
+      g.gain.setValueAtTime(0.45 + 0.4 * d, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.34 + 0.18 * d);
+      o.connect(g); g.connect(master); o.start(t); o.stop(t + 0.55);
+      // a short noise "thump" of impact, louder deeper in
+      const s = ctx.createBufferSource(); s.buffer = brown(0.18); const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 360 + 200 * (1 - d);
+      const sg = ctx.createGain(); sg.gain.setValueAtTime(0.18 + 0.22 * d, t); sg.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
+      s.connect(lp); lp.connect(sg); sg.connect(master); s.start(t); s.stop(t + 0.22);
     }
     function setHeart(bpm) {
       heartBpm = bpm;
@@ -1065,6 +1071,70 @@ if (typeof document !== 'undefined') (function () {
     c.fillText('THE MARKET', p.l + 2, p.t - 8 < 14 ? 16 : p.t - 8);
   }
 
+  // A single candle (wick + body) — shared by the climb and the crash waterfall.
+  function drawCandle(c, x, o, cl, cw, Y, col, wickv) {
+    c.strokeStyle = col; c.fillStyle = col; c.lineWidth = 1;
+    c.beginPath(); c.moveTo(x, Y(Math.max(o, cl) + wickv)); c.lineTo(x, Y(Math.min(o, cl) - wickv)); c.stroke();
+    const top = Math.min(Y(o), Y(cl)), ht = Math.max(1.8, Math.abs(Y(cl) - Y(o)));
+    c.fillRect(x - cw / 2, top, cw, ht);
+  }
+  // Stage the fall as a fixed waterfall of red candles from peak → the REAL
+  // computed bottom (the destination is the true value; the cascade is the
+  // visual). Slightly jagged, with the odd dead-cat bounce, so it reads real.
+  function buildCrashSeq(sim, K) {
+    const peak = sim.navDirect[sim.S], bottom = sim.navDirect[sim.navDirect._bottom];
+    const seq = [peak];
+    for (let i = 1; i <= K; i++) {
+      const t = i / K, base = peak + (bottom - peak) * easeInCrash(t);
+      let v = base;
+      if (i < K) { const n = Math.sin(i * 12.9898) * 43758.5453; const fr = n - Math.floor(n); v = base * (1 + (fr - 0.5) * 0.045); }
+      else v = bottom;
+      seq.push(v);
+    }
+    return seq;
+  }
+  function drawCrash(c, w, h, sim, q) {
+    const K = CRASH_CANDLES, seq = state.crashSeq, p = { l: 18, r: 18, t: 30, b: 32 }, Wpre = 14, displayN = Wpre + K;
+    const revealedF = q * K, revealed = Math.max(1, Math.min(K, Math.ceil(revealedF)));
+    const peak = seq[0], bottom = seq[K], preStart = Math.max(1, sim.S - Wpre);
+    let lo = bottom, hi = peak;
+    for (let m = preStart; m <= sim.S; m++) { const v = sim.navDirect[m]; if (v < lo) lo = v; if (v > hi) hi = v; }
+    const span = (hi - lo) || 1; lo -= span * 0.10; hi += span * 0.10;
+    const X = (slot) => p.l + (slot / displayN) * (w - p.l - p.r);
+    const Y = (v) => (h - p.b) - ((v - lo) / (hi - lo)) * (h - p.t - p.b);
+    const cw = Math.max(4, (w - p.l - p.r) / displayN * 0.62);
+    // current (interpolated) price + drawdown
+    const fi = Math.min(K, Math.floor(revealedF)), fr = Math.max(0, Math.min(1, revealedF - fi));
+    const curV = seq[Math.max(0, fi)] + (seq[Math.min(K, fi + 1)] - seq[Math.max(0, fi)]) * fr;
+    const dd = Math.max(0, (1 - curV / peak) * 100);
+    // screen shake intensifies with the fall
+    const jx = (Math.random() - 0.5) * 9 * q, jy = (Math.random() - 0.5) * 9 * q;
+    c.clearRect(0, 0, w, h); c.save(); c.translate(jx, jy);
+    c.strokeStyle = 'rgba(255,255,255,0.05)'; c.lineWidth = 1;
+    for (let i = 0; i <= 3; i++) { const yy = p.t + i * (h - p.t - p.b) / 3; c.beginPath(); c.moveTo(p.l, yy); c.lineTo(w - p.r, yy); c.stroke(); }
+    // recent climb (green) for context
+    for (let i = 1; i < Wpre; i++) { const m = preStart + i; if (m > sim.S) break; const o = sim.navDirect[m - 1], cl = sim.navDirect[m]; drawCandle(c, X(i), o, cl, cw, Y, '#2fae7e', Math.max(o, cl) * 0.006); }
+    // the waterfall (red, the odd bounce green)
+    for (let i = 1; i <= revealed; i++) {
+      const o = seq[i - 1]; let cl = seq[i];
+      if (i === revealed) cl = o + (seq[i] - o) * fr; // the live candle grows down
+      const col = cl >= o ? '#3ee0a4' : '#ff4d4d';
+      drawCandle(c, X(Wpre - 1 + i), o, cl, cw, Y, col, Math.abs(chartNoise(i) * 0.5 + 0.4) * Math.max(o, cl) * 0.012);
+    }
+    // falling red level line at the live price
+    const yL = Y(curV);
+    c.setLineDash([4, 5]); c.strokeStyle = hexFill('#ff4d4d', 0.8); c.lineWidth = 1.2;
+    c.beginPath(); c.moveTo(p.l, yL); c.lineTo(w - p.r, yL); c.stroke(); c.setLineDash([]);
+    // big live drawdown ticker
+    c.textAlign = 'right'; c.textBaseline = 'top';
+    c.fillStyle = hexFill('#ff4d4d', 0.95); c.font = '800 ' + Math.round(26 + 16 * q) + 'px ui-monospace, monospace';
+    c.shadowColor = 'rgba(255,60,60,0.6)'; c.shadowBlur = 18 * q;
+    c.fillText('−' + dd.toFixed(0) + '%', w - p.r - 2, p.t + 2); c.shadowBlur = 0;
+    c.textAlign = 'left'; c.fillStyle = hexFill('#ff7a7a', 0.7); c.font = '700 11px ui-monospace, monospace';
+    c.fillText('THE MARKET', p.l + 2, p.t - 8 < 14 ? 16 : p.t - 8);
+    c.restore();
+  }
+
   // Draw a finished two-line journey (used on the result screens).
   function drawJourney(canvasId, a, b, N, years, behind) {
     const cv = $(canvasId); if (!cv) return;
@@ -1154,7 +1224,8 @@ if (typeof document !== 'undefined') (function () {
     if (pre) {
       // Watch THE MARKET as live candlesticks; the HUD shows your money.
       front = sim.direct.hold.value;
-      drawCandles(c, w, h, N, sim.navDirect, state.head, { l: 18, r: 18, t: 30, b: 32 }, sim.years, state.phase === 'crash');
+      if (state.phase === 'crash' && state.crashSeq) drawCrash(c, w, h, sim, state.crashQ || 0);
+      else drawCandles(c, w, h, N, sim.navDirect, state.head, { l: 18, r: 18, t: 30, b: 32 }, sim.years, false);
     } else {
       // The consequence: your path vs the calm path, with the gap shaded.
       const yours = sim.direct[state.choice], calm = sim.direct.hold;
@@ -1179,7 +1250,8 @@ if (typeof document !== 'undefined') (function () {
 
   function spawnEmbers() {} // removed — falling red dots read as childish
 
-  const CLIMB_MS = reduceMotion ? 200 : 7000, CRASH_MS = reduceMotion ? 150 : 8200, DIVERGE_MS = reduceMotion ? 200 : 6000;
+  const CLIMB_MS = reduceMotion ? 200 : 5200, CRASH_MS = reduceMotion ? 150 : 7600, DIVERGE_MS = reduceMotion ? 200 : 6000;
+  const CRASH_CANDLES = 16; // the fall is staged as a dramatic waterfall of N candles, regardless of the event's literal fall length
   function tensionCue() { if (!reduceMotion && navigator.vibrate) navigator.vibrate([20, 70, 30]); }
 
   function loop(ts) {
@@ -1187,14 +1259,16 @@ if (typeof document !== 'undefined') (function () {
     const e = ts - state.phaseStart, sim = state.sim, N = sim.N, S = sim.S, bottom = sim.navDirect._bottom;
     if (state.phase === 'climb') {
       const p = Math.min(e / CLIMB_MS, 1); state.head = S * easeInOut(p); renderStage();
-      if (p >= 1) { state.phase = 'crash'; state.phaseStart = null; state._lastTick = S; $('stage').classList.add('crashing'); tensionCue(); Sound.crashHit(); Sound.startRumble(CRASH_MS); Sound.setHeart(110); }
+      if (p >= 1) { state.phase = 'crash'; state.phaseStart = null; state._crashCand = 0; state.crashSeq = buildCrashSeq(sim, CRASH_CANDLES); state.crashQ = 0; $('stage').classList.add('crashing'); tensionCue(); Sound.impact(); Sound.crashHit(); Sound.startRumble(CRASH_MS + 600); Sound.setHeart(104); }
       state.raf = requestAnimationFrame(loop);
     } else if (state.phase === 'crash') {
-      // ease into the fall so each red candle drops with weight, then a heavy crashTick as it lands
-      const p = Math.min(e / CRASH_MS, 1), q = easeInCrash(p); state.head = S + (bottom - S) * q; renderStage();
-      const cur = Math.floor(state.head);
-      if (cur > state._lastTick) { state._lastTick = cur; Sound.crashTick(); if (!reduceMotion && navigator.vibrate) navigator.vibrate(18); }
-      if (p >= 1) { cancelAnimationFrame(state.raf); enterSilence(); return; }
+      // a dramatic, accelerating WATERFALL: CRASH_CANDLES red candles tumble from
+      // peak to the real computed bottom — felt one heavy thud at a time.
+      const p = Math.min(e / CRASH_MS, 1), q = easeInCrash(p);
+      state.crashQ = q; state.head = S + (bottom - S) * q; renderStage();
+      const cur = Math.floor(q * CRASH_CANDLES);
+      if (cur > state._crashCand) { state._crashCand = cur; Sound.crashTick(q); Sound.setHeart(104 + Math.round(q * 56)); if (!reduceMotion && navigator.vibrate) navigator.vibrate(10 + Math.round(q * 30)); }
+      if (p >= 1) { Sound.impact(); Sound.lossTone(); cancelAnimationFrame(state.raf); enterSilence(); return; }
       state.raf = requestAnimationFrame(loop);
     } else if (state.phase === 'diverge') {
       const p = Math.min(e / DIVERGE_MS, 1); state.head = bottom + (N - bottom) * easeInOut(p); renderStage();

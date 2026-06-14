@@ -77,11 +77,12 @@ body {
 .prog-marker::after { content: "crash"; position: absolute; top: -16px; left: 50%; transform: translateX(-50%); font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: var(--crash); }
 .canvas-wrap { flex: 1; position: relative; }
 #stageCanvas { position: absolute; inset: 0; width: 100%; height: 100%; }
-.stage.crashing .canvas-wrap::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(130% 100% at 50% 100%, rgba(243,112,112,0.3), transparent 66%); animation: vignette 2s ease both; }
-.stage.crashing .hud-value { color: var(--cool); }
-@keyframes vignette { from { opacity: 0; } to { opacity: 1; } }
-.stage.crashing .canvas-wrap { animation: shudder 1.3s ease both; }
-@keyframes shudder { 0% { transform: translateX(0); } 18% { transform: translateX(-3px); } 38% { transform: translateX(3px); } 58% { transform: translateX(-2px); } 78% { transform: translateX(2px); } 100% { transform: translateX(0); } }
+.stage.crashing .canvas-wrap::after { content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 2;
+  background: radial-gradient(130% 100% at 50% 100%, rgba(243,40,40,0.5), rgba(243,40,40,0.12) 45%, transparent 70%);
+  animation: vignettePulse 1.6s ease-in-out infinite alternate; }
+.stage.crashing .hud-value { color: var(--crash); }
+@keyframes vignettePulse { from { opacity: 0.4; } to { opacity: 1; } }
+/* the candlestick canvas does its own shake while crashing (scales with depth) */
 
 /* ===================== OVERLAYS ===================== */
 .overlay { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgba(4,6,10,0.72); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); opacity: 0; transition: opacity .5s ease; overflow-y: auto; }
