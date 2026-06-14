@@ -60,10 +60,18 @@ upfront so it's never a surprise.
 - **Computed vs assumption.** Every figure is labelled: results (corpus, XIRR,
   CAGR, fee cost) are **computed live**; only the returns and the
   drawdown/emergency size are **inputs**. Nothing is invented.
-- **"Was it luck?"** — the rigorous Monte Carlo engine (1,000 paths; mean ≈
-  12%/yr, vol ≈ 15–18%/yr, fat tails + clustered crashes) reduced to one plain
-  line and a **100-dot grid**: *"Held through every crash → ahead in X of 100
-  futures; sold in the fall → ahead in only Y of 100."*
+- **"Ten thousand lifetimes."** — the rigorous Monte Carlo engine (10,000
+  paths; mean ≈ 12%/yr, vol ≈ 15–18%/yr, fat tails + clustered crashes) staged
+  as a cinematic reveal: ten thousand lives **spray** out from today and
+  **settle into a mountain** (the distribution of every future you could have);
+  a second mountain — the *panic* you, same markets — rises beside it, lower.
+  Then the plain truth, every figure **counted from those 10,000 lives**: in
+  *X of 10,000* the calm you came out ahead; most calm yous ended between ₹A
+  and ₹B; even the unluckiest 1-in-20 still held ₹C. An honest footnote sizes
+  the fee (the *door*) against behaviour (the *crowd*) in real rupees — the fee
+  is real; behaviour is bigger. *Note: a panic-seller who sits in cash ends
+  lower but no wider — so the tool never claims panic "makes you less
+  certain"; only that it ends behind, life after life.*
 - **Honest, not rigged** — across paths, Direct can finish **above, equal to,
   or below** Regular. The tool never claims one door is better — it proves the
   door was never the point.

@@ -110,5 +110,22 @@ ok('XIRR 100→200 over 6y ≈ 12.25%', Math.abs(E.xirr([{ t: 0, amount: -100 },
   ok('war is crash-linked', E.runEmergency(10000, 'war', 'surgical', false, 20, 'major').downturn === true);
 }
 
+/* ---------------- Ten thousand lifetimes: calm vs panic, same door ---------------- */
+{
+  const lf = E.runLifetimes(10000, 20, 4242, 3000, 1500);
+  console.log(`\nTen thousand lifetimes (3,000 here): calm ahead ${lf.calmAhead}/${lf.nPaths}  calm p50 ${Cr(lf.calm.p50)}  panic p50 ${Cr(lf.panic.p50)}  crowdGap ${L(lf.crowdGap)}  doorGap ${L(lf.doorGap)}`);
+  ok('lifetimes: outcomes partition (calm + tied + panic = nPaths)', lf.calmAhead + lf.tied + lf.panicAhead === lf.nPaths);
+  ok('lifetimes: the calm you wins the clear majority of lives', lf.calmAhead > lf.nPaths * 0.6, `(${lf.calmAhead}/${lf.nPaths})`);
+  ok('lifetimes: calm median above panic median', lf.calm.p50 > lf.panic.p50, `(${Cr(lf.calm.p50)} > ${Cr(lf.panic.p50)})`);
+  ok('lifetimes: the crowd (behaviour) outweighs the door (fee)', Math.abs(lf.crowdGap) > 1.5 * Math.abs(lf.doorGap), `(crowd ${L(lf.crowdGap)} vs door ${L(lf.doorGap)})`);
+  ok('lifetimes: door gap is positive (Direct beats Regular, calm vs calm)', lf.doorGap > 0, `(${L(lf.doorGap)})`);
+  // Honest finding: a panic-seller sits in cash through the storm, so panic ends
+  // LOWER but no wider — the calm investor, fully exposed, carries the larger spread.
+  ok('lifetimes: panic ends lower than calm but not wider (sits in cash)',
+    lf.panic.p50 < lf.calm.p50 && (lf.panic.p90 - lf.panic.p10) <= (lf.calm.p90 - lf.calm.p10));
+  ok('lifetimes: percentiles ordered', lf.calm.min <= lf.calm.p05 && lf.calm.p05 <= lf.calm.p50 && lf.calm.p50 <= lf.calm.p95 && lf.calm.p95 <= lf.calm.max);
+  ok('lifetimes: representative sample collected', lf.sample.length > 1000 && lf.sample.length <= 3000, `(${lf.sample.length})`);
+}
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);

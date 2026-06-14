@@ -354,7 +354,44 @@ function runMonteCarlo(sip, youPolicy, friendPolicy, nPaths, seed, years, light)
 function distribution(finals) {
   const sorted = Float64Array.from(finals).sort();
   const n = sorted.length, q = (p) => sorted[Math.min(n - 1, Math.max(0, Math.floor(p * (n - 1))))];
-  return { n, p05: q(0.05), p50: q(0.50), p95: q(0.95), mean: sorted.reduce((s, v) => s + v, 0) / n };
+  return { n, min: sorted[0], max: sorted[n - 1], p05: q(0.05), p10: q(0.10), p25: q(0.25),
+    p50: q(0.50), p75: q(0.75), p90: q(0.90), p95: q(0.95), mean: sorted.reduce((s, v) => s + v, 0) / n };
+}
+// "Ten thousand lifetimes." The SAME investor, lived nPaths times over the SAME
+// markets — once CALM (held through every crash), once PANICKED (sold in the
+// fall, re-entered a year after recovery). Both on the SAME door (Direct), so
+// the only thing that changes is behaviour — the crowd, not the door. We also
+// measure the door's pure effect (calm-Direct vs calm-Regular, the whole fee)
+// so the closing truth — behaviour moves everything, the door moves a little —
+// is counted, never asserted. Returns full distributions + a representative
+// sample of lives for the spray visual. Nothing here is fabricated.
+function runLifetimes(sip, years, seed, nPaths, sampleN) {
+  const N = (years || DEFAULT_YEARS) * 12;
+  const rng = mulberry32(seed == null ? 4242 : seed);
+  const calmP = MC_POLICIES.hold, panicP = MC_POLICIES.sellWait;
+  const calm = new Float64Array(nPaths), panic = new Float64Array(nPaths);
+  let calmAhead = 0, tied = 0, calmDirectSum = 0, calmRegularSum = 0;
+  const sample = [], step = Math.max(1, Math.floor(nPaths / (sampleN || 1800)));
+  for (let i = 0; i < nPaths; i++) {
+    const returns = genMarketReturns(N, rng);
+    const navD = navFromReturns(returns, N, 1);          // YOU — Direct
+    const navR = navFromReturns(returns, N, FEE_FACTOR); // the other door — Regular (1%/yr drag)
+    const c = simPolicyPath(navD, N, sip, calmP, true).final;   // calm you (held)
+    const p = simPolicyPath(navD, N, sip, panicP, true).final;  // panic you (sold & waited)
+    const cr = simPolicyPath(navR, N, sip, calmP, true).final;  // calm you, the OTHER door
+    calm[i] = c; panic[i] = p; calmDirectSum += c; calmRegularSum += cr;
+    const rel = Math.abs(c - p) / Math.max(c, p);
+    if (rel < 0.005) tied++; else if (c > p) calmAhead++;
+    if (i % step === 0) sample.push([c, p]);
+  }
+  const dc = distribution(calm), dp = distribution(panic);
+  return {
+    nPaths, years, invested: sip * N, sample,
+    calmAhead, tied, panicAhead: nPaths - calmAhead - tied,
+    calm: dc, panic: dp,
+    doorGap: (calmDirectSum - calmRegularSum) / nPaths, // the door (fee), averaged
+    crowdGap: dc.p50 - dp.p50,                          // the crowd (behaviour), median
+  };
 }
 
 /* =====================================================================
@@ -487,7 +524,7 @@ if (typeof module !== 'undefined' && module.exports) {
     DIRECT_ANNUAL, REGULAR_ANNUAL, DIRECT_MONTHLY, REGULAR_MONTHLY, FEE_FACTOR, DEFAULT_YEARS, EVENTS,
     drawCrash, cagr, xirr, xirrFromSIP, buildEventNav, buildTrendNav,
     simHold, simPause, simSell, peakRegainMonth, runSinglePath,
-    genMarketReturns, navFromReturns, simPolicyPath, runMonteCarlo, distribution,
+    genMarketReturns, navFromReturns, simPolicyPath, runMonteCarlo, runLifetimes, distribution,
     EMERGENCIES, SEVERITY, EM_RESPONSES, SLEEVES, simEmergency, runEmergency, MC_POLICIES,
   };
 }
@@ -1332,62 +1369,137 @@ if (typeof document !== 'undefined') (function () {
    * product". We hold the door constant (same investor) and let the user feel
    * how much their behaviour swings the typical outcome — then show the fee gap
    * is a sliver beside it, and that guidance's real value is behavioural. */
-  const LUCK_BEHAVIOURS = [
-    { id: 'hold',     label: 'Stay invested', color: COL.direct },
-    { id: 'pause',    label: 'Pause the SIP',  color: COL.pause },
-    { id: 'sell',     label: 'Sell & rebuy',   color: COL.sellBack },
-    { id: 'sellWait', label: 'Sell & wait',    color: COL.crash },
-  ];
+  /* ===== "Ten thousand lifetimes" — the spray of lives + two mountains =====
+   * The same investor, lived 10,000 times over 10,000 markets — once CALM,
+   * once in a PANIC, on the SAME door. The lives spray out, then settle into
+   * a mountain (a distribution of every future). The panic mountain rises
+   * beside it: lower, and wider. Every number on screen is COUNTED from those
+   * 10,000 lives — the odds, the band, the floor, the gaps — never asserted. */
+  let lifeLayout = null;
+  function buildLifeLayout(data, w, h) {
+    const pad = { l: 14, r: 14, t: 26, b: 30 };
+    const lo = Math.min(data.panic.p05, data.calm.p05) * 0.9;
+    const hi = Math.max(data.calm.p95, data.panic.p95) * 1.06;
+    const clamp = (v) => Math.max(lo, Math.min(hi, v));
+    const innerW = w - pad.l - pad.r;
+    const X = (v) => pad.l + (clamp(v) - lo) / (hi - lo) * innerW;
+    const baseY = h - pad.b, topY = pad.t, NB = 48;
+    const calmC = new Array(NB).fill(0), panicC = new Array(NB).fill(0);
+    const bk = (v) => Math.max(0, Math.min(NB - 1, Math.floor((clamp(v) - lo) / (hi - lo) * NB)));
+    for (const s of data.sample) { calmC[bk(s[0])]++; panicC[bk(s[1])]++; }
+    const maxC = Math.max(1, ...calmC, ...panicC), hScale = (baseY - topY) / maxC;
+    const curve = (counts) => counts.map((n, b) => [pad.l + (b + 0.5) / NB * innerW, baseY - n * hScale]);
+    const calmCurve = curve(calmC), panicCurve = curve(panicC);
+    const ridgeY = (x) => { const t = (x - pad.l) / innerW * NB - 0.5; const i = Math.max(0, Math.min(NB - 2, Math.floor(t))), f = Math.max(0, Math.min(1, t - i)); return calmCurve[i][1] + (calmCurve[i + 1][1] - calmCurve[i][1]) * f; };
+    const dots = data.sample.map((s) => { const x = X(s[0]); return { x: x, y: ridgeY(x) + 3 + Math.random() * 11 }; });
+    return { pad, X, baseY, topY, calmCurve, panicCurve, dots, calmMedX: X(data.calm.p50), panicMedX: X(data.panic.p50), w, h };
+  }
+  function fillMountain(c, L, curve, p, hex, aFill, aLine) {
+    const Y = (pt) => L.baseY - (L.baseY - pt[1]) * p;
+    c.beginPath(); c.moveTo(curve[0][0], L.baseY);
+    for (const pt of curve) c.lineTo(pt[0], Y(pt)); c.lineTo(curve[curve.length - 1][0], L.baseY); c.closePath();
+    const g = c.createLinearGradient(0, L.topY, 0, L.baseY);
+    g.addColorStop(0, hexFill(hex, aFill)); g.addColorStop(1, hexFill(hex, aFill * 0.12));
+    c.fillStyle = g; c.fill();
+    c.beginPath(); curve.forEach((pt, i) => (i ? c.lineTo(pt[0], Y(pt)) : c.moveTo(pt[0], Y(pt))));
+    c.strokeStyle = hexFill(hex, aLine); c.lineWidth = 2; c.stroke();
+  }
+  function medianLine(c, L, x, hex, p, label) {
+    const a = Math.min(1, (p - 0.4) * 2); if (a <= 0) return;
+    c.save(); c.globalAlpha = a; c.setLineDash([3, 4]); c.strokeStyle = hexFill(hex, 0.85); c.lineWidth = 1.5;
+    c.beginPath(); c.moveTo(x, L.baseY); c.lineTo(x, L.topY + 4); c.stroke();
+    c.setLineDash([]); c.fillStyle = hexFill(hex, 0.95); c.font = '700 11px ui-monospace, monospace'; c.textAlign = 'center';
+    c.fillText(label, x, L.topY - 2 < 12 ? L.topY + 12 : L.topY - 2); c.restore();
+  }
+  function drawLifetimes(canvasId, data, st) {
+    const cv = $(canvasId); if (!cv) return;
+    const { w, h, c } = fitCanvas(cv);
+    if (!lifeLayout || lifeLayout.w !== w || lifeLayout.h !== h || lifeLayout.data !== data) { lifeLayout = buildLifeLayout(data, w, h); lifeLayout.data = data; }
+    const L = lifeLayout;
+    c.clearRect(0, 0, w, h);
+    c.strokeStyle = 'rgba(203,178,107,0.16)'; c.lineWidth = 1;
+    c.beginPath(); c.moveTo(L.pad.l, L.baseY); c.lineTo(w - L.pad.r, L.baseY); c.stroke();
+    const src = { x: L.pad.l + 4, y: (L.topY + L.baseY) / 2 };
+    if (st.sprayP > 0 && st.calmP < 1) {
+      const fade = 1 - st.calmP; c.globalCompositeOperation = 'lighter';
+      for (let i = 0; i < L.dots.length; i++) {
+        const d = L.dots[i], dp = Math.max(0, Math.min(1, st.sprayP * 1.3 - (i / L.dots.length) * 0.3));
+        const e = 1 - Math.pow(1 - dp, 3), arc = Math.sin(e * Math.PI) * 24 * (1 - e * 0.4);
+        const x = src.x + (d.x - src.x) * e, y = src.y + (d.y - src.y) * e - arc;
+        c.fillStyle = 'rgba(232,178,87,' + (0.5 * fade) + ')'; c.beginPath(); c.arc(x, y, 1.15, 0, 7); c.fill();
+      }
+      c.globalCompositeOperation = 'source-over';
+    }
+    if (st.panicP > 0) fillMountain(c, L, L.panicCurve, st.panicP, COL.crash, 0.2, 0.55);
+    if (st.calmP > 0) fillMountain(c, L, L.calmCurve, st.calmP, COL.ghost, 0.3, 0.95);
+    if (st.calmP > 0.4) medianLine(c, L, L.calmMedX, COL.ghost, st.calmP, 'calm');
+    if (st.panicP > 0.4) medianLine(c, L, L.panicMedX, COL.crash, st.panicP, 'panic');
+  }
+
   function openLuck() {
     show($('luck'));
-    setHTML('luckBody', '<p class="mc-running">Living 10,000 lifetimes…</p>');
-    setTimeout(() => {
-      // Same investor (one door); only the behaviour changes. Median 20-yr corpus
-      // across 10,000 markets per behaviour, plus the pure fee (door) gap.
-      const med = {};
-      const hh = runMonteCarlo(state.sip, 'hold', 'hold', 10000, 4242, state.years, true);
-      med.hold = hh.you.p50;
-      const feeGap = hh.you.p50 - hh.friend.p50; // Direct-hold vs Regular-hold = the door
-      for (const b of ['pause', 'sell', 'sellWait']) med[b] = runMonteCarlo(state.sip, b, 'hold', 10000, 4242, state.years, true).you.p50;
-      const swing = med.hold - med.sellWait;     // behaviour effect (best vs worst)
-      state._luck = { med: med, feeGap: feeGap, swing: swing };
-      setHTML('luckBody',
-        '<p class="luck-lead">Across <b>10,000 different futures</b>, what really decided your wealth — the <b>plan you bought</b>, or how you <b>behaved</b> in the storm? <span class="luck-hint">Same investor each time. Tap a behaviour:</span></p>'
-        + '<div class="luck-pick" id="luckPick">' + LUCK_BEHAVIOURS.map((b) => '<button data-p="' + b.id + '">' + b.label + '</button>').join('') + '</div>'
-        + '<div class="luck-meter"><div class="luck-pct" id="luckPct">—</div><div class="luck-of">your typical wealth after ' + state.years + ' years</div>'
-        + '<div class="luck-bar"><div class="luck-fill" id="luckFill"></div></div>'
-        + '<p class="luck-line" id="luckLine"></p></div>'
-        + '<div class="luck-foot-card" id="luckFoot"></div>');
-      on('luckPick', 'click', (ev) => { const b = ev.target.closest('button[data-p]'); if (b) selectLuck(b.dataset.p); });
-      selectLuck('hold');
-    }, 30);
+    lifeLayout = null;
+    setHTML('lifeBeats', '<p class="mc-running">Living ten thousand lives…</p>');
+    setText('lifeTitle', 'No one can show you your future.');
+    setText('lifeLead', 'So we ran it ten thousand times.');
+    setTimeout(() => { const data = runLifetimes(state.sip, state.years, 4242, 10000, 1800); runLifeSequence(data); }, 30);
   }
-  function selectLuck(id) {
-    if (!state._luck) return;
-    const med = state._luck.med, val = med[id], holdMed = med.hold;
-    document.querySelectorAll('#luckPick button').forEach((b) => b.classList.toggle('on', b.dataset.p === id));
-    const good = id === 'hold' || id === 'pause';
-    const color = good ? COL.direct : COL.crash;
-    const fill = $('luckFill'); if (fill) { fill.style.width = Math.max(6, val / holdMed * 100) + '%'; fill.style.background = color; }
-    $('luckPct').style.color = color;
-    countUp($('luckPct'), val, 1000, inrShort);
-    const lostVsHold = holdMed - val;
-    const lines = {
-      hold: 'Staying invested is the calm baseline — a typical <b>' + inrShort(val) + '</b>.',
-      pause: 'Pausing keeps your units but skips the cheap ones — about <b>' + inrShort(lostVsHold) + '</b> behind staying invested.',
-      sell: 'Selling and buying back forfeits units for good — roughly <b>' + inrShort(lostVsHold) + '</b> behind staying invested.',
-      sellWait: 'Selling and waiting a year is the deepest hole — about <b>' + inrShort(lostVsHold) + '</b> behind staying invested.',
-    };
-    setHTML('luckLine', lines[id]);
-    // The real lesson: behaviour dwarfs the door, and guidance's job is behaviour.
-    const ratio = Math.max(1, Math.round(state._luck.swing / Math.max(1, state._luck.feeGap)));
-    setHTML('luckFoot',
-      '<p class="luck-foot-line">Your <b>behaviour</b> swung the result by about <b class="bad">' + inrShort(state._luck.swing) + '</b>. '
-      + 'The <b>door</b> you chose — Direct vs Regular, the whole fee — swung it by only <b>' + inrShort(state._luck.feeGap) + '</b>. '
-      + 'Behaviour mattered roughly <b>' + ratio + '×</b> more than the product.</p>'
-      + '<p class="luck-foot-note">So neither door "wins." A calm Direct investor and a calm Regular investor both do well; a panicking one of either does badly. Guidance earns its fee for one reason — it makes you <i>far more likely to stay calm</i>. (AMFI–CRISIL: ~21% of guided equity money is still invested after five years, versus under 8% for direct.)</p>');
-    Sound.tick();
+  function revealBeat(id) { const el = $(id); if (el) { el.classList.add('show'); Sound.tick(); } }
+  function lifeAdvance(step) {
+    const t = state._life; if (!t) return;
+    if (step === 'spray') t.tSpray = 1;
+    else if (step === 'settle') { t.tSpray = 1; t.tCalm = 1; revealBeat('lb_cap'); }
+    else if (step === 'panic') { t.tPanic = 1; revealBeat('lb_panic'); Sound.stinger(true); }
+    else if (step === 'odds') { revealBeat('lb_odds'); Sound.resolve(); }
+    else if (step === 'range') revealBeat('lb_range');
+    else if (step === 'close') revealBeat('lb_close');
+    else if (step === 'door') revealBeat('lb_door');
   }
+  function runLifeSequence(data) {
+    const calmAhead = data.calmAhead, nP = data.nPaths;
+    const fmtN = (n) => n.toLocaleString('en-IN');
+    const lo = data.calm.p10, hi = data.calm.p90, floor = data.calm.p05, panicTyp = data.panic.p50;
+    const ratio = Math.max(2, Math.round(Math.abs(data.crowdGap) / Math.max(1, Math.abs(data.doorGap))));
+    setText('lifeTitle', 'No one can show you your future.');
+    setText('lifeLead', 'So we ran it ten thousand times — every crash, every recovery, every order they could come in.');
+    setHTML('lifeBeats',
+      '<div class="lbeat" id="lb_cap"><p>Every future you could have, at once. Most lives gather in the middle; a few soared, a few struggled.</p></div>'
+      + '<div class="lbeat" id="lb_panic"><div class="life-legend"><span class="lg calm">The calm you</span><span class="lg panic">The panic you</span></div>'
+      + '<p>The same lives, lived in a panic — sold in the fall, climbed back in late. The whole mountain <b>slides lower</b>. Life after life, the calm you finished ahead.</p></div>'
+      + '<div class="lbeat odds" id="lb_odds"><div class="odds-big"><b>' + fmtN(calmAhead) + '</b><span>/ ' + fmtN(nP) + '</span></div>'
+      + '<p>lives where the one who stayed <b>calm</b> came out ahead.</p></div>'
+      + '<div class="lbeat" id="lb_range"><p>Most calm yous ended between <b>' + inrShort(lo) + '</b> and <b>' + inrShort(hi) + '</b>; even the unluckiest — the worst 1 in 20 — still held <b>' + inrShort(floor) + '</b>. '
+      + 'The typical panic you ended around <b>' + inrShort(panicTyp) + '</b> — a whole <b>' + inrShort(Math.abs(data.crowdGap)) + '</b> behind.</p></div>'
+      + '<div class="lbeat close" id="lb_close"><p>You only get to live <b>one</b> of these ten thousand lives. You don’t get to choose which one — the market throws the dice. '
+      + 'The only thing you ever got to choose was <b>which crowd you were standing in</b> when it did.</p></div>'
+      + '<div class="lbeat door" id="lb_door"><p>The <b>door</b> — the entire fee, Direct vs Regular — changed a calm life by about <b>' + inrShort(Math.abs(data.doorGap)) + '</b>. '
+      + 'The <b>crowd</b> you stood in — calm or panic — changed it by about <b>' + inrShort(Math.abs(data.crowdGap)) + '</b>, roughly <b>' + ratio + '×</b> more. The fee is real; your behaviour is bigger.</p></div>');
+    state._life = { sprayP: 0, calmP: 0, panicP: 0, tSpray: 0, tCalm: 0, tPanic: 0 };
+    lifeAdvance('spray');
+    const draw = () => { const t = state._life; if (!t) return;
+      t.sprayP += (t.tSpray - t.sprayP) * 0.05; t.calmP += (t.tCalm - t.calmP) * 0.06; t.panicP += (t.tPanic - t.panicP) * 0.06;
+      drawLifetimes('lifeCanvas', data, { sprayP: t.sprayP, calmP: t.calmP, panicP: t.panicP });
+      state._lifeRaf = requestAnimationFrame(draw); };
+    cancelAnimationFrame(state._lifeRaf); state._lifeRaf = requestAnimationFrame(draw);
+    if (reduceMotion) { state._life.tSpray = state._life.sprayP = 1; ['settle', 'panic', 'odds', 'range', 'close', 'door'].forEach(lifeAdvance); state._life.calmP = state._life.panicP = 1; return; }
+    const seq = [
+      { text: 'No one can show you your future. So we ran it, ten thousand times.', rate: 0.9 },
+      { text: 'Ten thousand possible lives. Each one with its own crashes, its own rallies.', rate: 0.92 },
+      { text: 'Then they settle into a mountain. Most lives gather in the middle. This is every future you could have, all at once.', rate: 0.92, onStart: () => lifeAdvance('settle') },
+      { text: 'Now the same lives, lived in a panic — sold in the fall, came back in late. The whole mountain slides lower.', rate: 0.92, onStart: () => lifeAdvance('panic') },
+      { text: 'Life after life, the calm you finished ahead.', rate: 0.94 },
+      { text: 'In ' + fmtN(calmAhead) + ' of these ten thousand lives, the one who stayed calm came out ahead.', rate: 0.92, onStart: () => lifeAdvance('odds') },
+      { text: 'Most calm yous ended between ' + amountWords(lo) + ' and ' + amountWords(hi) + '. Even the unluckiest still held ' + amountWords(floor) + '.', rate: 0.94, onStart: () => lifeAdvance('range') },
+      { text: 'You only get to live one of these ten thousand lives. The only thing you ever chose was which crowd you were standing in.', rate: 0.92, onStart: () => lifeAdvance('close') },
+      { text: 'The fee you paid was real. The crowd you chose to stand in mattered more.', rate: 0.92, onStart: () => lifeAdvance('door') },
+    ];
+    const spoke = Voice.speakSequence(seq);
+    if (!spoke) { // no voice — drive the same beats on a timeline
+      const steps = ['settle', 'panic', 'odds', 'range', 'close', 'door'];
+      steps.forEach((s, i) => setTimeout(() => lifeAdvance(s), 2600 + i * 1700));
+    }
+  }
+  function stopLife() { cancelAnimationFrame(state._lifeRaf); state._life = null; Voice.stop(); }
 
   /* ===================== Every choice (grid) ===================== */
   function openGrid() {
@@ -1585,7 +1697,7 @@ if (typeof document !== 'undefined') (function () {
     on('shareBtn', 'click', shareCrash);
     on('emShareBtn', 'click', shareEmergency);
     on('luckBtn', 'click', openLuck);
-    on('luckClose', 'click', () => hide($('luck')));
+    on('luckClose', 'click', () => { hide($('luck')); stopLife(); });
     on('gridBtn', 'click', openGrid);
     on('gridClose', 'click', () => hide($('grid')));
     on('changeBtn', 'click', backToSetup);
