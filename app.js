@@ -954,7 +954,26 @@ if (typeof document !== 'undefined') (function () {
     function stop() { if (ok) try { window.speechSynthesis.cancel(); } catch (e) {} }
     function setEnabled(b) { enabled = b; if (!b) stop(); }
     function isEnabled() { return enabled; }
-    return { speak, speakSequence, stop, setEnabled, isEnabled, available: ok };
+    // Speak ONE line and fire marks as the engine actually reaches each word
+    // (via onboundary — the only reliable way to sync visuals to speech). Each
+    // mark fires once. Returns true if it attempted to speak.
+    function speakSynced(text, marks, onEnd) {
+      if (!ok || !enabled || !text) { if (onEnd) onEnd(); return false; }
+      try {
+        window.speechSynthesis.cancel();
+        if (!picked) picked = pick();
+        const u = new SpeechSynthesisUtterance(text);
+        if (picked) u.voice = picked;
+        u.rate = 0.9; u.pitch = 1; u.volume = 1;
+        const fired = marks.map(() => false);
+        const fire = (i) => { if (!fired[i]) { fired[i] = true; try { marks[i].fn(); } catch (e) {} } };
+        u.onboundary = (e) => { for (let i = 0; i < marks.length; i++) if (e.charIndex >= marks[i].at) fire(i); };
+        u.onend = u.onerror = () => { for (let i = 0; i < marks.length; i++) fire(i); if (onEnd) onEnd(); };
+        window.speechSynthesis.speak(u);
+        return true;
+      } catch (e) { if (onEnd) onEnd(); return false; }
+    }
+    return { speak, speakSequence, speakSynced, stop, setEnabled, isEnabled, available: ok };
   })();
   let introSpoken = false;
   function speakIntro() { if (introSpoken) return; introSpoken = true; Voice.speak('What do you want to face? A market crash… or a personal emergency?', { rate: 0.88 }); }
@@ -1815,18 +1834,18 @@ if (typeof document !== 'undefined') (function () {
       Sound.unlock(); Sound.openSwell(); hide($('intro'));
       const crash = document.querySelector('#w_scenario .crash-scn');
       const em = document.querySelector('#w_scenario .em-scn');
-      // Reveal the doors PROMPTLY and identically every run (a quick stagger as
-      // the screen lands). We do NOT wait on speech: speechSynthesis gives no
-      // reliable start timing on mobile, so gating visuals on it produced the
-      // "doors late / voice after / both at once" randomness. The voice simply
-      // plays over the top.
-      const swing = (el, delay) => { if (!el) return; el.classList.remove('reveal-in'); void el.offsetWidth; setTimeout(() => { el.classList.add('reveal-in'); Sound.ui(); if (navigator.vibrate) navigator.vibrate(8); }, delay); };
-      swing(crash, 350); swing(em, 650);
-      Voice.speakSequence([
-        { text: 'What do you want to face?', rate: 0.9 },
-        { text: 'A market crash.', rate: 0.92 },
-        { text: 'Or… a personal emergency.', rate: 0.92 },
-      ]);
+      // Each door swings in exactly as the voice SPEAKS its name — driven by the
+      // speech engine's word-boundary events (the reliable way to sync visuals
+      // to speech on mobile). A timed fallback covers engines without boundary
+      // events, and the no-voice case; every reveal fires at most once.
+      const swing = (el) => { if (!el) return; el.classList.remove('reveal-in'); void el.offsetWidth; el.classList.add('reveal-in'); Sound.ui(); if (navigator.vibrate) navigator.vibrate(8); };
+      let f1 = false, f2 = false;
+      const door1 = () => { if (!f1) { f1 = true; swing(crash); } };
+      const door2 = () => { if (!f2) { f2 = true; swing(em); } };
+      const line = 'What do you want to face? A market crash… or a personal emergency.';
+      const spoke = Voice.speakSynced(line, [{ at: line.indexOf('market'), fn: door1 }, { at: line.indexOf('personal'), fn: door2 }]);
+      if (spoke) { setTimeout(door1, 2400); setTimeout(door2, 4400); } // fallback if no boundary events
+      else { setTimeout(door1, 350); setTimeout(door2, 650); }         // no voice — clean stagger
     });
     // Premium tactile feedback on every tap: a soft click + a light haptic.
     document.addEventListener('pointerdown', (e) => {
