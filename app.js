@@ -48,19 +48,19 @@ const EVENTS = {
     id: 'covid', name: 'COVID-19 crash, 2020', hypothetical: false,
     depth: 0.38, fallMonths: 1, recoveryMonths: 9,
     tag: 'The fast one',
-    what: 'A global pandemic shut the world economy almost overnight. Indian markets fell about 38% in barely a month — then, fuelled by stimulus, recovered most of it within months. Panic was punished brutally.',
+    what: 'The world stopped overnight. Markets fell ~38% in one month — then roared back. The fastest fall, and the fastest forgiveness.',
   },
   gfc: {
-    id: 'gfc', name: '2008 Financial Crisis', hypothetical: false,
+    id: 'gfc', name: 'Global Financial Crisis, 2008', hypothetical: false,
     depth: 0.60, fallMonths: 14, recoveryMonths: 24,
     tag: 'The deep, slow one',
-    what: "US sub-prime home loans collapsed and Lehman Brothers — a giant investment bank — went bankrupt, freezing global credit. Indian indices fell about 60% over roughly 14 months. It was the deepest, slowest fall in modern memory, and the panic 'felt right' the longest.",
+    what: 'Banks collapsed worldwide. Markets bled ~60% over 14 long months — the slow crash that made selling feel smart for over a year.',
   },
   corr2022: {
     id: 'corr2022', name: '2022 correction', hypothetical: false,
     depth: 0.18, fallMonths: 8, recoveryMonths: 12,
-    tag: 'The moderate one',
-    what: 'After COVID stimulus, inflation surged worldwide. Central banks raised interest rates sharply, foreign investors pulled money out of India, and the market drifted down about 18% through the year before steadying.',
+    tag: 'The slow ache',
+    what: 'Inflation and rising interest rates dragged markets down ~18% across the year. Not a catastrophe — just a long, dull ache that tested your patience.',
   },
   iranUsa: {
     id: 'iranUsa', name: 'Iran–USA war', hypothetical: true,
@@ -179,7 +179,12 @@ function simHold(nav, N, sip) {
   return summarise(value, sip, N);
 }
 function simPause(nav, N, sip) {
-  const S = nav._S, reentry = nav._healed + 1;
+  // Realistic fear: a paused investor does NOT restart the instant the market
+  // heals — confidence returns roughly a year after it has clearly recovered.
+  // We stop contributions from the crash start until then (units are kept), and
+  // report the exact pause length so the behaviour is fully auditable.
+  const S = nav._S;
+  const reentry = Math.min(N, nav._healed + 12);
   let units = 0, cash = 0; const value = new Array(N + 1);
   for (let m = 0; m <= N; m++) {
     if (m < N) {
@@ -190,7 +195,9 @@ function simPause(nav, N, sip) {
     }
     value[m] = units * nav[m] + cash;
   }
-  return summarise(value, sip, N);
+  const res = summarise(value, sip, N);
+  res.pauseMonths = reentry - S;   // how long contributions stayed frozen
+  return res;
 }
 function simSell(nav, N, sip, reentry) {
   const bottom = nav._bottom;
@@ -647,9 +654,12 @@ if (typeof document !== 'undefined') (function () {
 
     // The maths panel (computed vs assumption, fully auditable).
     const feeSaved = sim.feeSavingRupees, behaviourCost = calm.final - yours.final;
+    const pauseRow = (state.choice === 'pause' && yours.pauseMonths)
+      ? [['You stayed paused for', (yours.pauseMonths / 12).toFixed(1) + ' years (until confidence returned)', 'computed']] : [];
     setHTML('mathsPanel',
       mathsRows([
         ['Total you invested (₹' + state.sip.toLocaleString('en-IN') + '×' + sim.N + ' months)', inr(yours.invested), 'computed'],
+      ].concat(pauseRow).concat([
         ['YOUR final corpus', inr(yours.final), 'computed'],
         ['YOUR return (XIRR)', pct(yours.xirr), 'computed'],
         ['Friend\'s final corpus', inr(friend.final), 'computed'],
@@ -659,7 +669,7 @@ if (typeof document !== 'undefined') (function () {
         ['What your crash decision cost you (vs holding)', inr(behaviourCost), 'computed'],
         ['Assumed returns', 'Direct 12% / Regular 11% a year', 'assumption'],
         ['Assumed drawdown', '−' + Math.round(sim.ev.depth * 100) + '% over ' + sim.ev.fallMonths + ' mo, recover ' + sim.ev.recoveryMonths + ' mo', 'assumption'],
-      ]) + '<p class="maths-note">XIRR is the one annual rate that makes all your monthly investments add up to the final value — the correct return for a SIP. Every ₹ above is computed from the month-by-month units × NAV; only the two assumptions are inputs.</p>');
+      ])) + '<p class="maths-note">XIRR is the one annual rate that makes all your monthly investments add up to the final value — the correct return for a SIP. Every ₹ above is computed from the month-by-month units × NAV; only the two assumptions are inputs.</p>');
     closeMaths('mathsPanel', 'mathsToggle');
     show($('result'));
   }
