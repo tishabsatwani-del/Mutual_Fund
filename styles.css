@@ -65,7 +65,7 @@ body {
 .hud { padding: calc(22px + env(safe-area-inset-top)) 24px 8px; z-index: 2; }
 .hud-top { display: flex; justify-content: space-between; align-items: baseline; font-size: 14px; color: var(--muted); margin-bottom: 12px; }
 .hud-year { text-transform: uppercase; font-weight: 700; color: var(--ink); letter-spacing: .08em; }
-.hud-invested { color: var(--faint); }
+.hud-invested { color: var(--ink); font-weight: 700; font-family: var(--num); background: rgba(255,255,255,0.06); padding: 4px 10px; border-radius: 999px; }
 .hud-corpus { display: flex; flex-direction: column; gap: 3px; }
 .hud-cap { font-size: 12px; letter-spacing: .2em; text-transform: uppercase; color: var(--faint); }
 .hud-value { font-family: var(--num); font-size: clamp(38px, 12vw, 56px); font-weight: 600; letter-spacing: -.02em; font-variant-numeric: tabular-nums; transition: color .8s ease; }
