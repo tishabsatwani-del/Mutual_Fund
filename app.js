@@ -560,6 +560,62 @@ if (typeof document !== 'undefined') (function () {
     else if (navigator.clipboard) { navigator.clipboard.writeText(text + '\n\n' + url).then(() => toast('Copied — send it to a friend'), () => toast(text)); }
     else toast(text);
   }
+  /* ---- Shareable result IMAGE — what actually travels (a screenshot, not a
+   * link). Renders a premium 1080×1350 card on an offscreen canvas. ---- */
+  const SANS = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  const MONO = 'ui-monospace, "SF Mono", Menlo, monospace';
+  function wrapText(c, text, x, y, maxW, lineH) {
+    const words = text.split(' '); let line = '', yy = y;
+    for (const wd of words) { const t = line ? line + ' ' + wd : wd; if (c.measureText(t).width > maxW && line) { c.fillText(line, x, yy); line = wd; yy += lineH; } else line = t; }
+    if (line) c.fillText(line, x, yy); return yy;
+  }
+  function chartToImage(cw, ch, lines, band, N, yMax) {
+    const cv = document.createElement('canvas'); cv.width = cw; cv.height = ch;
+    drawLines(cv.getContext('2d'), cw, ch, N, yMax, lines, N, { l: 12, r: 12, t: 16, b: 16 }, band, {});
+    return cv;
+  }
+  function renderShareCard(cfg) {
+    const W = 1080, H = 1350, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    const g = c.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#0e1622'); g.addColorStop(0.6, '#07090f'); g.addColorStop(1, '#05070b'); c.fillStyle = g; c.fillRect(0, 0, W, H);
+    const rg = c.createRadialGradient(W / 2, H * 0.42, 180, W / 2, H * 0.5, H * 0.72); rg.addColorStop(0, 'rgba(0,0,0,0)'); rg.addColorStop(1, 'rgba(0,0,0,0.55)'); c.fillStyle = rg; c.fillRect(0, 0, W, H);
+    c.textAlign = 'center';
+    c.fillStyle = '#c4cdd9'; c.font = '600 26px ' + SANS; if ('letterSpacing' in c) c.letterSpacing = '4px';
+    c.fillText(cfg.kicker.toUpperCase(), W / 2, 116); if ('letterSpacing' in c) c.letterSpacing = '0px';
+    c.fillStyle = '#fff'; c.font = '800 58px ' + SANS; c.fillText('Two Doors, One Storm', W / 2, 192);
+    c.fillStyle = '#9aa7b8'; c.font = '400 30px ' + SANS; c.fillText(cfg.sub, W / 2, 250);
+    // Journey chart.
+    const chW = W - 180, chH = 400, chartImg = chartToImage(chW, chH, cfg.lines, cfg.band, cfg.N, cfg.yMax);
+    c.drawImage(chartImg, 90, 300);
+    // Two numbers.
+    const ry = 800, lx = W * 0.28, rx = W * 0.72;
+    c.font = '800 26px ' + SANS; if ('letterSpacing' in c) c.letterSpacing = '1px';
+    c.fillStyle = cfg.you.color; c.fillText(cfg.you.label, lx, ry);
+    c.fillStyle = cfg.friend.color; c.fillText(cfg.friend.label, rx, ry);
+    if ('letterSpacing' in c) c.letterSpacing = '0px';
+    c.font = '700 62px ' + MONO;
+    c.fillStyle = cfg.you.color; c.fillText(cfg.you.val, lx, ry + 78);
+    c.fillStyle = cfg.friend.color; c.fillText(cfg.friend.val, rx, ry + 78);
+    c.fillStyle = cfg.gapColor; c.font = '700 38px ' + SANS; c.fillText(cfg.gapText, W / 2, ry + 175);
+    c.fillStyle = '#eef2f8'; c.font = '400 34px ' + SANS; wrapText(c, cfg.punch, W / 2, ry + 250, W - 200, 48);
+    c.fillStyle = '#7e93d4'; c.font = '700 26px ' + SANS; c.fillText('Live it yourself → tishabsatwani-del.github.io/Mutual_Fund', W / 2, H - 110);
+    c.fillStyle = '#5a6675'; c.font = '400 22px ' + SANS; c.fillText('Educational tool — not investment advice.', W / 2, H - 64);
+    return cv;
+  }
+  function shareImage(canvas, text) {
+    const url = location.href.split('#')[0];
+    if (!canvas.toBlob) { doShare(text); return; }
+    canvas.toBlob((blob) => {
+      if (!blob) { doShare(text); return; }
+      const file = new File([blob], 'two-doors-one-storm.png', { type: 'image/png' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        navigator.share({ files: [file], text: text, url: url }).catch(() => {});
+      } else {
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'two-doors-one-storm.png'; document.body.appendChild(a); a.click(); a.remove();
+        toast('Image saved — share it anywhere');
+      }
+    }, 'image/png');
+  }
 
   const $ = (id) => document.getElementById(id);
   const show = (el) => { if (!el) return; el.hidden = false; requestAnimationFrame(() => el.classList.add('show')); };
@@ -1068,7 +1124,7 @@ if (typeof document !== 'undefined') (function () {
     state.phase = 'diverge'; state.phaseStart = null; cancelAnimationFrame(state.raf); state.raf = requestAnimationFrame(loop);
   }
   function shareCrash() {
-    const sim = state.sim, yours = sim.direct[state.choice], cost = sim.direct.hold.final - yours.final;
+    const sim = state.sim, yours = sim.direct[state.choice], friend = sim.regular.hold, cost = sim.direct.hold.final - yours.final;
     let txt;
     if (CHOICE_CAT[state.choice] === 'sell' && state.pledge === 'hold')
       txt = 'I swore I\'d hold through a crash. At −' + Math.round(sim.ev.depth * 100) + '% I sold anyway. It cost me ' + inrShort(cost) + ' — ' + sipSpan(cost) + '. I just found out the kind of investor I really am.';
@@ -1076,14 +1132,35 @@ if (typeof document !== 'undefined') (function () {
       txt = 'I held through ' + sim.ev.name + ' and finished with ' + inrShort(yours.final) + '. Doing nothing was the hardest, smartest thing.';
     else
       txt = 'I lived ' + sim.ev.name + ' as an investor. My one decision in the crash cost me ' + inrShort(cost) + ' — ' + sipSpan(cost) + '.';
-    doShare(txt);
+    const behind = yours.final < friend.final;
+    const card = renderShareCard({
+      kicker: 'I lived ' + sim.ev.name, sub: 'You ' + BEHAVIOURS[state.choice].label + ' · ' + sim.years + ' years',
+      you: { label: 'YOU', val: inrShort(yours.final), color: '#3ee0a4' },
+      friend: { label: 'YOUR FRIEND', val: inrShort(friend.final), color: '#f0bb63' },
+      gapText: (yours.final >= friend.final ? '+' : '−') + inrShort(Math.abs(yours.final - friend.final)) + (yours.final >= friend.final ? ' ahead' : ' behind'),
+      gapColor: yours.final >= friend.final ? '#3ee0a4' : '#ff7a7a', punch: txt,
+      N: sim.N, yMax: Math.max(yours.final, friend.final, sim.direct.hold.final) * 1.08,
+      lines: [{ values: friend.value, color: '#f0bb63', width: 4, alpha: 0.9, texture: true }, { values: yours.value, color: BEHAVIOURS[state.choice].color, width: 5, glow: true, dot: true, texture: true }],
+      band: { a: yours.value, b: sim.direct.hold.value, color: hexFill(behind ? '#ff7a7a' : '#3ee0a4', 0.16) },
+    });
+    shareImage(card, txt);
   }
   function shareEmergency() {
     const sim = state.sim, gap = sim.directSmart.final - sim.you.final;
     const txt = gap > sim.sip
       ? 'An emergency hit. Alone and under pressure, I ' + emActionLabel(sim) + ' — and one calm decision would have left me ' + inrShort(gap) + ' (' + sipSpan(gap) + ') richer. A temporary emergency almost became permanent.'
       : 'An emergency hit and I kept it temporary — the call almost no one makes alone. Try it yourself.';
-    doShare(txt);
+    const card = renderShareCard({
+      kicker: sim.em.name, sub: 'You ' + emActionLabel(sim) + ' · ' + sim.years + ' years',
+      you: { label: 'YOU, ALONE', val: inrShort(sim.you.final), color: '#ff7a7a' },
+      friend: { label: 'A STEADY CALL', val: inrShort(sim.directSmart.final), color: '#3ee0a4' },
+      gapText: gap > 1 ? '−' + inrShort(gap) + ' for facing it alone' : 'You kept it temporary',
+      gapColor: gap > 1 ? '#ff7a7a' : '#3ee0a4', punch: txt,
+      N: sim.N, yMax: Math.max(sim.you.final, sim.directSmart.final) * 1.08,
+      lines: [{ values: sim.directSmart.value, color: '#3ee0a4', width: 4, alpha: 0.9, texture: true }, { values: sim.you.value, color: '#ff7a7a', width: 5, glow: true, dot: true, texture: true }],
+      band: { a: sim.you.value, b: sim.directSmart.value, color: hexFill('#ff7a7a', 0.16) },
+    });
+    shareImage(card, txt);
   }
 
   /* ---- Result. ---- */
