@@ -1210,7 +1210,7 @@ if (typeof document !== 'undefined') (function () {
     const name = steps[state.wizIndex];
     document.querySelectorAll('.wstep').forEach((el) => { el.hidden = el.id !== 'w_' + name; });
     // Returning to the doors: reset them to open/visible (no leftover swing).
-    if (name === 'scenario') document.querySelectorAll('#w_scenario .scn-card').forEach((c) => { c.classList.remove('chosen', 'dismiss'); c.classList.add('reveal-in'); });
+    if (name === 'scenario') document.querySelectorAll('#w_scenario .scn-card').forEach((c) => { c.classList.remove('chosen', 'dismiss', 'locked'); c.classList.add('open'); });
     const key = WIZ_KEY[name], cur = String(state[key]);
     document.querySelectorAll('#w_' + name + ' .opt').forEach((b) => b.classList.toggle('on', b.dataset.val === cur));
     const back = $('wizBack'); if (back) back.hidden = state.wizIndex === 0;
@@ -1834,18 +1834,20 @@ if (typeof document !== 'undefined') (function () {
       Sound.unlock(); Sound.openSwell(); hide($('intro'));
       const crash = document.querySelector('#w_scenario .crash-scn');
       const em = document.querySelector('#w_scenario .em-scn');
-      // Each door swings in exactly as the voice SPEAKS its name — driven by the
-      // speech engine's word-boundary events (the reliable way to sync visuals
-      // to speech on mobile). A timed fallback covers engines without boundary
-      // events, and the no-voice case; every reveal fires at most once.
-      const swing = (el) => { if (!el) return; el.classList.remove('reveal-in'); void el.offsetWidth; el.classList.add('reveal-in'); Sound.ui(); if (navigator.vibrate) navigator.vibrate(8); };
+      // Both doors appear INSTANTLY, locked (closed, dim, padlock). The girl
+      // reads the line immediately; each door UNLOCKS the moment she speaks its
+      // name — driven by the speech engine's word-boundary events (the reliable
+      // way to sync to speech on mobile). A timed fallback covers engines without
+      // boundary events and the no-voice case; each door opens at most once.
+      [crash, em].forEach((el) => { if (el) { el.classList.remove('open', 'reveal-in', 'chosen', 'dismiss'); void el.offsetWidth; el.classList.add('locked'); } });
+      const openDoor = (el) => { if (!el || !el.classList.contains('locked')) return; el.classList.remove('locked'); el.classList.add('open'); Sound.tick(); Sound.whoosh(); if (navigator.vibrate) navigator.vibrate(12); };
       let f1 = false, f2 = false;
-      const door1 = () => { if (!f1) { f1 = true; swing(crash); } };
-      const door2 = () => { if (!f2) { f2 = true; swing(em); } };
+      const door1 = () => { if (!f1) { f1 = true; openDoor(crash); } };
+      const door2 = () => { if (!f2) { f2 = true; openDoor(em); } };
       const line = 'What do you want to face? A market crash… or a personal emergency.';
       const spoke = Voice.speakSynced(line, [{ at: line.indexOf('market'), fn: door1 }, { at: line.indexOf('personal'), fn: door2 }]);
       if (spoke) { setTimeout(door1, 2400); setTimeout(door2, 4400); } // fallback if no boundary events
-      else { setTimeout(door1, 350); setTimeout(door2, 650); }         // no voice — clean stagger
+      else { setTimeout(door1, 600); setTimeout(door2, 1100); }        // no voice — open on a stagger
     });
     // Premium tactile feedback on every tap: a soft click + a light haptic.
     document.addEventListener('pointerdown', (e) => {
