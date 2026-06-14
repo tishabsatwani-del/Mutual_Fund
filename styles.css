@@ -371,7 +371,9 @@ body {
 @keyframes shimmerText { to { background-position: 220% center; } }
 
 /* Living aurora behind the opening. */
-#setup { position: relative; overflow: hidden; }
+/* Doors fit via flex (no scroll on the scenario step); other steps may scroll
+   only if a small screen truly can't hold the list — never clipped. */
+#setup { position: relative; overflow-y: auto; overflow-x: hidden; }
 /* Scenario step: doors fill the space left between title and footer — always
    side by side, always fully on screen, never scrolling. */
 #w_scenario { justify-content: stretch; }
@@ -444,6 +446,44 @@ body {
 .door-flash.show { animation: flashThrough .95s ease-out; }
 @keyframes flashThrough { 0% { opacity: 0; } 45% { opacity: 1; } 100% { opacity: 0; } }
 @media (max-width: 380px) { .scenario-grid { gap: 10px; perspective: none; } .scn-card b { font-size: 19px; } .scn-icon { width: 72px; height: 72px; font-size: 34px; } }
+
+/* ===== Mobile compression — keep each beat on one screen, minimise scroll ===== */
+@media (max-width: 640px) {
+  .wiz { padding: calc(14px + env(safe-area-inset-top)) 18px calc(20px + env(safe-area-inset-bottom)); }
+  .wq { font-size: clamp(26px, 7.5vw, 38px); margin-bottom: 16px; }
+  .wstep .kicker { margin-bottom: 8px; }
+  .card-opt { padding: 14px 16px; margin-bottom: 9px; }
+  .card-opt b { font-size: 17px; margin-bottom: 2px; }
+  .card-opt span { font-size: 13px; line-height: 1.35; }
+  .chip-opt { padding: 15px 16px; margin-bottom: 9px; font-size: 18px; }
+  .assume { font-size: 11px; margin-top: 10px; }
+  /* result + scene cards: tighter so the whole verdict fits */
+  .card { padding: 20px 16px; border-radius: 20px; }
+  .all-title { font-size: 21px; }
+  .res-title { margin-bottom: 10px; }
+  .res-chart { height: clamp(104px, 19vh, 150px); margin: 2px 0 10px; }
+  .rcol { padding: 13px 10px; gap: 5px; }
+  .rval { font-size: clamp(21px, 6.6vw, 30px); }
+  .gap-line { font-size: 15px; margin: 2px 0 8px; }
+  .verdict { font-size: 16.5px; margin: 8px 2px 8px; line-height: 1.35; }
+  .verdict-sub { font-size: 13px; margin-top: 7px; line-height: 1.5; }
+  .resonate { font-size: 12.5px; margin: 0 2px 10px; }
+  .result-actions { gap: 8px; }
+  .cta { padding: 15px; font-size: 16px; margin-top: 12px; }
+  .ghost-btn { padding: 12px; font-size: 14px; }
+  .maths-toggle { padding: 10px; margin-bottom: 6px; }
+  .disclaimer { font-size: 11px; margin: 6px 0 12px; }
+  .hud { padding: calc(14px + env(safe-area-inset-top)) 18px 6px; }
+  .hud-value { font-size: clamp(36px, 12vw, 54px); }
+}
+/* ===== Tablet / desktop — comfortable, centred, never stretched ===== */
+@media (min-width: 768px) {
+  .life-stage { height: clamp(280px, 42vh, 380px); }
+}
+@media (min-width: 1024px) {
+  .card { max-width: 600px; } .wide-card { max-width: 680px; }
+  .wq { font-size: 46px; } .big-wq { font-size: 52px; }
+}
 .opt { display: block; width: 100%; font-family: var(--sans); cursor: pointer; transition: all .2s ease; }
 .card-opt { text-align: left; padding: 22px 20px; border-radius: 18px; border: 1px solid var(--line); background: linear-gradient(165deg, rgba(255,255,255,0.05), rgba(255,255,255,0.015)); color: var(--ink); margin-bottom: 13px; transition: all .25s ease; }
 .card-opt b { display: block; font-size: 20px; font-weight: 800; margin-bottom: 4px; }

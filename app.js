@@ -1006,12 +1006,20 @@ if (typeof document !== 'undefined') (function () {
     // on the right (clear of the line); year ticks run along the bottom.
     if (opts.axis) {
       c.save();
-      c.font = '600 13px ui-monospace, "SF Mono", Menlo, monospace';
-      c.fillStyle = 'rgba(230,238,248,0.75)'; c.textAlign = 'right'; c.textBaseline = 'middle';
-      for (let i = 0; i <= 3; i++) { const yy = p.t + i * (h - p.t - p.b) / 3; const val = yMax * (3 - i) / 3; if (i < 3) c.fillText(inrShort(val), w - p.r - 4, yy + 9); }
-      c.fillStyle = 'rgba(230,238,248,0.6)'; c.textAlign = 'center'; c.textBaseline = 'alphabetic';
-      const yrs = opts.axisYears || Math.round(N / 12);
-      for (let yr = 0; yr <= yrs; yr += Math.max(1, Math.round(yrs / 4))) { const xx = X(yr * 12); c.fillText('Yr ' + yr, xx, h - p.b + 17); }
+      c.font = '600 12px ui-monospace, "SF Mono", Menlo, monospace';
+      // ₹ gridline values on the LEFT (the lines and their end-dots live on the
+      // right, so left-aligned labels never collide with them).
+      c.fillStyle = 'rgba(230,238,248,0.62)'; c.textAlign = 'left'; c.textBaseline = 'bottom';
+      for (let i = 0; i < 3; i++) { const yy = p.t + i * (h - p.t - p.b) / 3; const val = yMax * (3 - i) / 3; c.fillText(inrShort(val), p.l + 3, yy - 3); }
+      // year ticks — first left-anchored, last right-anchored, so neither spills off-canvas.
+      c.fillStyle = 'rgba(230,238,248,0.55)'; c.textBaseline = 'alphabetic';
+      const yrs = opts.axisYears || Math.round(N / 12), step = Math.max(1, Math.round(yrs / 4));
+      for (let yr = 0; yr <= yrs; yr += step) {
+        const last = yr + step > yrs;
+        c.textAlign = yr === 0 ? 'left' : (last ? 'right' : 'center');
+        const lx = yr === 0 ? p.l : (last ? w - p.r : X(yr * 12));
+        c.fillText('Yr ' + yr, lx, h - p.b + 16);
+      }
       c.restore();
     }
     // Divergence shading: fill the gap between two lines (the cost made visible).
@@ -1808,19 +1816,17 @@ if (typeof document !== 'undefined') (function () {
       if (crash) crash.classList.remove('reveal-in');
       if (em) em.classList.remove('reveal-in');
       const unlock = (el) => { if (el && !el.classList.contains('reveal-in')) { el.classList.add('reveal-in'); Sound.ui(); if (navigator.vibrate) navigator.vibrate(10); } };
-      // Each card unlocks the instant the voice SPEAKS its name.
-      const spoke = Voice.speakSequence([
+      // The voice plays over the top; the doors reveal on a FIXED, identical
+      // cadence every run. (We don't gate visuals on speechSynthesis onstart —
+      // its timing is wildly inconsistent across mobile browsers, which caused
+      // the "voice first / doors first / both at once" randomness.)
+      Voice.speakSequence([
         { text: 'What do you want to face?', rate: 0.9 },
-        { text: 'A market crash.', rate: 0.92, onStart: () => unlock(crash) },
-        { text: 'Or… a personal emergency.', rate: 0.92, onStart: () => unlock(em) },
+        { text: 'A market crash.', rate: 0.92 },
+        { text: 'Or… a personal emergency.', rate: 0.92 },
       ]);
-      if (spoke) {
-        // Backstop: if a browser drops onstart, reveal both anyway.
-        setTimeout(() => { unlock(crash); unlock(em); }, 8000);
-      } else {
-        // No voice — stage them in.
-        setTimeout(() => unlock(crash), 500); setTimeout(() => unlock(em), 1500);
-      }
+      setTimeout(() => unlock(crash), 700);
+      setTimeout(() => unlock(em), 1700);
     });
     // Premium tactile feedback on every tap: a soft click + a light haptic.
     document.addEventListener('pointerdown', (e) => {
