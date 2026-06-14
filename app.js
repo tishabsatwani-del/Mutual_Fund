@@ -509,6 +509,96 @@ if (typeof document !== 'undefined') (function () {
   const EM_LABEL = { panic: 'redeemed everything', surgical: 'took only what you needed',
     sellLosers: 'sold the fallen fund', sipKill: 'stopped the SIP' };
 
+  /* ===================== PROCEDURAL AUDIO =====================
+   * Every sound is synthesised live with the Web Audio API — no files, no CDN,
+   * fully offline. Calm pad on the climb; a low rumble that swells through the
+   * fall; an impact at the bottom; then the cut to silence with a lone, racing
+   * heartbeat that slows the moment the friend's call lands; a phone ring; warm
+   * tones to resolve. Gated behind a user gesture (autoplay-safe) and mutable. */
+  const Sound = (function () {
+    let ctx = null, master = null, on = true;
+    let pad = null, rumble = null, heartTimer = 0, heartBpm = 0;
+    function init() {
+      if (ctx) return true;
+      try {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return false;
+        ctx = new AC();
+        master = ctx.createGain(); master.gain.value = on ? 0.9 : 0; master.connect(ctx.destination);
+        return true;
+      } catch (e) { return false; }
+    }
+    function unlock() { if (init() && ctx.state === 'suspended') ctx.resume(); }
+    const T = () => ctx.currentTime;
+    function brown(dur) {
+      const len = Math.floor(ctx.sampleRate * dur), b = ctx.createBuffer(1, len, ctx.sampleRate), d = b.getChannelData(0);
+      let last = 0;
+      for (let i = 0; i < len; i++) { const w = Math.random() * 2 - 1; last = (last + 0.02 * w) / 1.02; d[i] = last * 3.5; }
+      return b;
+    }
+    function tone(freq, t0, dur, type, peak, atk) {
+      if (!ctx) return;
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = type || 'sine'; o.frequency.setValueAtTime(freq, t0);
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(peak, t0 + (atk || 0.012));
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      o.connect(g); g.connect(master); o.start(t0); o.stop(t0 + dur + 0.05);
+      return o;
+    }
+    function thump(peak) {
+      if (!ctx) return;
+      const t = T(), o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'sine'; o.frequency.setValueAtTime(120, t); o.frequency.exponentialRampToValueAtTime(45, t + 0.14);
+      g.gain.setValueAtTime(peak, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.32);
+      o.connect(g); g.connect(master); o.start(t); o.stop(t + 0.36);
+    }
+    function startPad() {
+      if (!init()) return;
+      if (pad) { try { pad.gain.cancelScheduledValues(T()); pad.gain.setValueAtTime(Math.max(pad.gain.value || 0.0001, 0.0001), T()); pad.gain.linearRampToValueAtTime(0.05, T() + 2.5); } catch (e) {} return; }
+      pad = ctx.createGain(); pad.gain.value = 0.0; pad.connect(master);
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 600; lp.connect(pad);
+      [110, 110.5, 164.8].forEach((f) => { const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = f; o.connect(lp); o.start(); });
+      const lfo = ctx.createOscillator(), lg = ctx.createGain(); lfo.frequency.value = 0.08; lg.gain.value = 0.012;
+      lfo.connect(lg); lg.connect(pad.gain); lfo.start();
+      pad.gain.linearRampToValueAtTime(0.05, T() + 2.5);
+    }
+    function startRumble(dur) {
+      if (!init()) return;
+      stopRumble();
+      const src = ctx.createBufferSource(); src.buffer = brown(Math.max(2, dur / 1000 + 1)); src.loop = true;
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.setValueAtTime(120, T()); lp.frequency.linearRampToValueAtTime(900, T() + dur / 1000);
+      const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, T()); g.gain.linearRampToValueAtTime(0.42, T() + dur / 1000);
+      src.connect(lp); lp.connect(g); g.connect(master); src.start();
+      const sub = tone(60, T(), dur / 1000 + 0.2, 'sine', 0.3); if (sub) sub.frequency.exponentialRampToValueAtTime(32, T() + dur / 1000);
+      rumble = { src, g };
+    }
+    function stopRumble() { if (rumble) { try { rumble.g.gain.cancelScheduledValues(T()); rumble.g.gain.linearRampToValueAtTime(0.0001, T() + 0.15); rumble.src.stop(T() + 0.2); } catch (e) {} rumble = null; } }
+    function impact() { if (!init()) return; thump(0.7); const t = T(); const s = ctx.createBufferSource(); s.buffer = brown(0.25); const g = ctx.createGain(); g.gain.setValueAtTime(0.4, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.25); s.connect(g); g.connect(master); s.start(t); s.stop(t + 0.3); }
+    function setHeart(bpm) {
+      heartBpm = bpm;
+      if (heartTimer) { clearInterval(heartTimer); heartTimer = 0; }
+      if (!bpm || !ctx) return;
+      const beat = () => { thump(0.32); setTimeout(() => thump(0.22), 180); };
+      beat(); heartTimer = setInterval(beat, 60000 / bpm);
+    }
+    function stopHeart() { if (heartTimer) clearInterval(heartTimer); heartTimer = 0; heartBpm = 0; }
+    function silenceCut() { stopRumble(); if (pad) { try { pad.gain.cancelScheduledValues(T()); pad.gain.linearRampToValueAtTime(0.0001, T() + 0.25); } catch (e) {} } }
+    function stopPad() { if (pad) { try { pad.gain.cancelScheduledValues(T()); pad.gain.linearRampToValueAtTime(0.0001, T() + 0.4); } catch (e) {} } }
+    function ring() {
+      if (!init()) return;
+      for (let k = 0; k < 2; k++) { const t = T() + k * 1.0; tone(440, t, 0.4, 'sine', 0.12); tone(480, t, 0.4, 'sine', 0.12); }
+    }
+    function tick() { if (init()) tone(660, T(), 0.08, 'triangle', 0.08); }
+    function freeze() { if (!init()) return; const t = T(); tone(1200, t, 0.5, 'sine', 0.05); const o = tone(300, t, 0.6, 'sine', 0.12); if (o) o.frequency.exponentialRampToValueAtTime(80, t + 0.55); }
+    function stinger(low) { if (!init()) return; const t = T(); if (low) { const o = tone(140, t, 0.8, 'sawtooth', 0.18); if (o) o.frequency.exponentialRampToValueAtTime(60, t + 0.7); } else { tone(392, t, 0.7, 'sine', 0.1); tone(523, t, 0.8, 'sine', 0.08); } }
+    function resolve() { if (!init()) return; const t = T(); [261.6, 329.6, 392].forEach((f, i) => tone(f, t + i * 0.08, 1.6, 'sine', 0.09, 0.05)); }
+    function stopAll() { stopRumble(); stopHeart(); stopPad(); }
+    function toggle() { on = !on; if (master) master.gain.setTargetAtTime(on ? 0.9 : 0, T(), 0.05); return on; }
+    function isOn() { return on; }
+    return { unlock, startPad, startRumble, stopRumble, impact, setHeart, stopHeart, silenceCut, stopPad, ring, tick, freeze, stinger, resolve, stopAll, toggle, isOn };
+  })();
+
   const state = {
     scenario: 'crash', years: 20, sip: 10000, eventId: 'covid',
     emergencyId: 'icu', severity: 'major', downturn: false,
@@ -638,7 +728,7 @@ if (typeof document !== 'undefined') (function () {
     const e = ts - state.phaseStart, sim = state.sim, N = sim.N, S = sim.S, bottom = sim.navDirect._bottom;
     if (state.phase === 'climb') {
       const p = Math.min(e / CLIMB_MS, 1); state.head = S * easeInOut(p); renderStage();
-      if (p >= 1) { state.phase = 'crash'; state.phaseStart = null; $('stage').classList.add('crashing'); tensionCue(); }
+      if (p >= 1) { state.phase = 'crash'; state.phaseStart = null; $('stage').classList.add('crashing'); tensionCue(); Sound.startRumble(CRASH_MS); Sound.setHeart(110); }
       state.raf = requestAnimationFrame(loop);
     } else if (state.phase === 'crash') {
       const p = Math.min(e / CRASH_MS, 1); state.head = S + (bottom - S) * p; renderStage();
@@ -660,11 +750,13 @@ if (typeof document !== 'undefined') (function () {
     $('stage').classList.remove('crashing');
     hideAllOverlays(); hide($('setup')); hide($('emergency'));
     show($('stage'));
+    Sound.unlock(); Sound.startPad();
     cancelAnimationFrame(state.raf); state.raf = requestAnimationFrame(loop);
   }
 
   function enterSilence() {
     const sim = state.sim;
+    Sound.impact(); Sound.silenceCut(); Sound.setHeart(96); // lone, racing heart
     const peak = sim.direct.hold.value[sim.S], bottom = sim.direct.hold.value[sim.navDirect._bottom];
     setText('silDepth', Math.round(sim.ev.depth * 100));
     setText('silFrom', inrShort(peak)); setText('silTo', inrShort(bottom));
@@ -673,7 +765,7 @@ if (typeof document !== 'undefined') (function () {
   }
   function openSplit() {
     hide($('silence')); renderFriendPanel(); show($('split'));
-    const wash = () => { const s = $('split'); if (s) s.classList.add('called'); };
+    const wash = () => { const s = $('split'); if (s) s.classList.add('called'); Sound.ring(); Sound.setHeart(60); setTimeout(() => Sound.stopHeart(), 4000); };
     if (reduceMotion) wash(); else setTimeout(wash, 1100);
   }
   function renderFriendPanel() {
@@ -681,7 +773,7 @@ if (typeof document !== 'undefined') (function () {
     const sim = state.sim, { w, h, c } = fitCanvas(cv);
     drawLines(c, w, h, sim.N, state.yMax, [{ values: sim.regular.hold.value, color: COL.regular, width: 2.8, glow: true, dot: true, fill: hexFill(COL.regular, 0.14) }], sim.navRegular._healed, { l: 10, r: 10, t: 14, b: 14 });
   }
-  function choose(choice) { state.choice = choice; const s = $('split'); if (s) s.classList.remove('called'); hide($('split')); $('stage').classList.remove('crashing'); showCollision(); }
+  function choose(choice) { state.choice = choice; Sound.stopHeart(); if (CHOICE_CAT[choice] === 'sell') Sound.freeze(); else Sound.tick(); const s = $('split'); if (s) s.classList.remove('called'); hide($('split')); $('stage').classList.remove('crashing'); showCollision(); }
 
   /* ---- The collision: your promise vs what you actually did. ---- */
   function showCollision() {
@@ -691,14 +783,14 @@ if (typeof document !== 'undefined') (function () {
       setText('collisionTag', 'YOU KEPT YOUR WORD');
       setHTML('collisionTitle', 'You said you\'d ' + sworn + '.<br />You did.');
       setHTML('collisionBody', 'Most people swear the same thing — then break it the moment the screen turns red. You didn\'t. Let\'s see what that was worth.');
-      $('collision').classList.remove('broke');
+      $('collision').classList.remove('broke'); Sound.stinger(false);
     } else {
       setText('collisionTag', 'WHAT YOU SWORE vs WHAT YOU DID');
       setHTML('collisionTitle', 'You swore you\'d ' + sworn + '.<br />You ' + did + '.');
       setHTML('collisionBody', (CHOICE_CAT[state.choice] === 'sell'
         ? 'The instant you sold, the red froze and the fear stopped — pure relief. That flinch feels smart in the moment. It is the most expensive feeling in investing.'
         : 'Calm, you meant it. In the red, your hand moved anyway. That\'s the gap between the investor you plan to be and the one who shows up on the worst day.'));
-      $('collision').classList.add('broke');
+      $('collision').classList.add('broke'); Sound.stinger(true);
     }
     show($('collision'));
   }
@@ -706,6 +798,7 @@ if (typeof document !== 'undefined') (function () {
 
   /* ---- Result. ---- */
   function openResult() {
+    Sound.stopHeart(); Sound.resolve();
     const sim = state.sim, yours = sim.direct[state.choice], friend = sim.regular.hold, calm = sim.direct.hold;
     setText('youLabel', 'YOU · Direct · ' + BEHAVIOURS[state.choice].label);
     setText('friendLabelR', 'FRIEND · Regular · Held');
@@ -840,6 +933,7 @@ if (typeof document !== 'undefined') (function () {
   }
   function sleeveRow(name, val, note) { return '<div class="sleeve"><span class="sl-name">' + name + '</span><span class="sl-val">' + inrShort(val) + '</span><span class="sl-note">' + note + '</span></div>'; }
   function emToStrike() {
+    Sound.unlock(); Sound.stinger(true);
     hide($('emIntro'));
     const ctx = state.emCtx, em = ctx.em;
     const copy = {
@@ -859,7 +953,7 @@ if (typeof document !== 'undefined') (function () {
   function emToDecision() { hide($('emStrike')); show($('emDecision')); }
   function emChoose(r) { state.emResponse = r; hide($('emDecision')); setText('emCallNeed', inrShort(state.emCtx.need)); show($('emCall')); }
   function emToResult() {
-    hide($('emCall'));
+    hide($('emCall')); Sound.resolve();
     const sim = runEmergency(state.sip, state.emergencyId, state.emResponse, state.downturn, state.years, state.severity);
     state.sim = sim; renderEmergencyResult(sim); show($('emergency'));
   }
@@ -894,9 +988,14 @@ if (typeof document !== 'undefined') (function () {
   /* ===================== Wiring ===================== */
   function hideAllOverlays() { ['pledge', 'silence', 'split', 'collision', 'result', 'luck', 'grid', 'emIntro', 'emStrike', 'emDecision', 'emCall', 'emergency'].forEach((id) => hide($(id))); }
   function on(id, type, fn) { const el = $(id); if (el) el.addEventListener(type, fn); }
-  function backToSetup() { cancelAnimationFrame(state.raf); hideAllOverlays(); hide($('stage')); hide($('emergency')); state.wizIndex = 0; showWizStep(0); show($('setup')); }
+  function backToSetup() { Sound.stopAll(); cancelAnimationFrame(state.raf); hideAllOverlays(); hide($('stage')); hide($('emergency')); state.wizIndex = 0; showWizStep(0); show($('setup')); }
 
   function boot() {
+    // Unlock audio on the very first interaction (autoplay policy).
+    const firstGesture = () => { Sound.unlock(); document.removeEventListener('pointerdown', firstGesture); };
+    document.addEventListener('pointerdown', firstGesture, { once: true });
+    on('muteBtn', 'click', () => { const onNow = Sound.toggle(); const b = $('muteBtn'); if (b) b.textContent = onNow ? '🔊' : '🔇'; });
+
     // Wizard: each step is a group of .opt buttons.
     document.querySelectorAll('.wstep').forEach((step) => {
       const name = step.id.replace('w_', '');
