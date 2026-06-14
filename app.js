@@ -301,13 +301,18 @@ const MC_POLICIES = {
   pause:    { id: 'pause',    label: 'paused the SIP',         drawdown: 0.25 },
   sellWait: { id: 'sellWait', label: 'sold and waited a year', drawdown: 0.25, waitMonths: 12 },
 };
-function simPolicyPath(nav, N, sip, policy, skipXirr) {
+function simPolicyPath(nav, N, sip, policy, skipXirr, rng) {
   // Behavioural policies across a random market path (real unit accounting):
   //   hold      — always invested.
   //   panic/sell — sell to cash on a drawdown > threshold; re-enter at prior peak.
   //   pause     — keep units but stop contributing on the drawdown; resume (and
   //               deploy the cash piled up) once the price regains the peak.
-  //   sellWait  — sell on the drawdown; re-enter a year AFTER it regains the peak.
+  //   sellWait  — sell on the drawdown, then re-enter:
+  //               · with an `rng` — at an ERRATIC, mostly-late time (realistic
+  //                 panic: most return within ~2y, some capitulate for years, a
+  //                 few jump back while still down). This dispersion is exactly
+  //                 what makes a panic life LESS CERTAIN — a wider mountain.
+  //               · without — a fixed year after the price regains the old peak.
   let units = 0, cash = 0, peak = nav[0], st = 'in', reentryAt = -1;
   const id = policy.id, thr = policy.drawdown || 0, wait = policy.waitMonths || 12;
   for (let m = 0; m < N; m++) {
@@ -320,10 +325,13 @@ function simPolicyPath(nav, N, sip, policy, skipXirr) {
       if (st === 'in' && dd > thr) st = 'paused';
       else if (st === 'paused' && nav[m] >= peak) { units += cash / nav[m]; cash = 0; st = 'in'; }
     } else if (id === 'sellWait') {
-      if (st === 'in' && dd > thr) { cash += units * nav[m]; units = 0; st = 'out'; reentryAt = -1; }
-      else if (st === 'out') {
-        if (reentryAt < 0 && nav[m] >= peak) reentryAt = m + wait;
-        if (reentryAt >= 0 && m >= reentryAt) { units += cash / nav[m]; cash = 0; st = 'in'; }
+      if (st === 'in' && dd > thr) {
+        cash += units * nav[m]; units = 0; st = 'out';
+        if (rng) { let D = 3 + Math.floor(rng() * 18); if (rng() < 0.15) D += 18 + Math.floor(rng() * 30); reentryAt = m + D; }
+        else reentryAt = -1;
+      } else if (st === 'out') {
+        if (rng) { if (m >= reentryAt) { units += cash / nav[m]; cash = 0; st = 'in'; } }
+        else { if (reentryAt < 0 && nav[m] >= peak) reentryAt = m + wait; if (reentryAt >= 0 && m >= reentryAt) { units += cash / nav[m]; cash = 0; st = 'in'; } }
       }
     }
     if (st === 'out' || st === 'paused') cash += sip; else units += sip / nav[m];
@@ -376,8 +384,8 @@ function runLifetimes(sip, years, seed, nPaths, sampleN) {
     const returns = genMarketReturns(N, rng);
     const navD = navFromReturns(returns, N, 1);          // YOU — Direct
     const navR = navFromReturns(returns, N, FEE_FACTOR); // the other door — Regular (1%/yr drag)
-    const c = simPolicyPath(navD, N, sip, calmP, true).final;   // calm you (held)
-    const p = simPolicyPath(navD, N, sip, panicP, true).final;  // panic you (sold & waited)
+    const c = simPolicyPath(navD, N, sip, calmP, true).final;        // calm you (held)
+    const p = simPolicyPath(navD, N, sip, panicP, true, rng).final;  // panic you (sold; erratic re-entry)
     const cr = simPolicyPath(navR, N, sip, calmP, true).final;  // calm you, the OTHER door
     calm[i] = c; panic[i] = p; calmDirectSum += c; calmRegularSum += cr;
     const rel = Math.abs(c - p) / Math.max(c, p);
@@ -1458,18 +1466,18 @@ if (typeof document !== 'undefined') (function () {
   function runLifeSequence(data) {
     const calmAhead = data.calmAhead, nP = data.nPaths;
     const fmtN = (n) => n.toLocaleString('en-IN');
-    const lo = data.calm.p10, hi = data.calm.p90, floor = data.calm.p05, panicTyp = data.panic.p50;
+    const lo = data.calm.p10, hi = data.calm.p90, floor = data.calm.p05, panicTyp = data.panic.p50, panicFloor = data.panic.p05;
     const ratio = Math.max(2, Math.round(Math.abs(data.crowdGap) / Math.max(1, Math.abs(data.doorGap))));
     setText('lifeTitle', 'No one can show you your future.');
     setText('lifeLead', 'So we ran it ten thousand times — every crash, every recovery, every order they could come in.');
     setHTML('lifeBeats',
       '<div class="lbeat" id="lb_cap"><p>Every future you could have, at once. Most lives gather in the middle; a few soared, a few struggled.</p></div>'
       + '<div class="lbeat" id="lb_panic"><div class="life-legend"><span class="lg calm">The calm you</span><span class="lg panic">The panic you</span></div>'
-      + '<p>The same lives, lived in a panic — sold in the fall, climbed back in late. The whole mountain <b>slides lower</b>. Life after life, the calm you finished ahead.</p></div>'
+      + '<p>The same lives, lived in a panic — sold in the fall, climbed back at the wrong time. The whole mountain <b>slides lower</b>, and its worst lives fall further. Panic doesn’t only make you poorer — it leaves you <b>less safe</b>.</p></div>'
       + '<div class="lbeat odds" id="lb_odds"><div class="odds-big"><b>' + fmtN(calmAhead) + '</b><span>/ ' + fmtN(nP) + '</span></div>'
       + '<p>lives where the one who stayed <b>calm</b> came out ahead.</p></div>'
       + '<div class="lbeat" id="lb_range"><p>Most calm yous ended between <b>' + inrShort(lo) + '</b> and <b>' + inrShort(hi) + '</b>; even the unluckiest — the worst 1 in 20 — still held <b>' + inrShort(floor) + '</b>. '
-      + 'The typical panic you ended around <b>' + inrShort(panicTyp) + '</b> — a whole <b>' + inrShort(Math.abs(data.crowdGap)) + '</b> behind.</p></div>'
+      + 'The typical panic you ended around <b>' + inrShort(panicTyp) + '</b>, and its unluckiest 1 in 20 fell all the way to <b>' + inrShort(panicFloor) + '</b>.</p></div>'
       + '<div class="lbeat close" id="lb_close"><p>You only get to live <b>one</b> of these ten thousand lives. You don’t get to choose which one — the market throws the dice. '
       + 'The only thing you ever got to choose was <b>which crowd you were standing in</b> when it did.</p></div>'
       + '<div class="lbeat door" id="lb_door"><p>The <b>door</b> — the entire fee, Direct vs Regular — changed a calm life by about <b>' + inrShort(Math.abs(data.doorGap)) + '</b>. '
@@ -1486,8 +1494,8 @@ if (typeof document !== 'undefined') (function () {
       { text: 'No one can show you your future. So we ran it, ten thousand times.', rate: 0.9 },
       { text: 'Ten thousand possible lives. Each one with its own crashes, its own rallies.', rate: 0.92 },
       { text: 'Then they settle into a mountain. Most lives gather in the middle. This is every future you could have, all at once.', rate: 0.92, onStart: () => lifeAdvance('settle') },
-      { text: 'Now the same lives, lived in a panic — sold in the fall, came back in late. The whole mountain slides lower.', rate: 0.92, onStart: () => lifeAdvance('panic') },
-      { text: 'Life after life, the calm you finished ahead.', rate: 0.94 },
+      { text: 'Now the same lives, lived in a panic — sold in the fall, came back at the wrong moment. The mountain slides lower, and its worst lives fall further.', rate: 0.92, onStart: () => lifeAdvance('panic') },
+      { text: 'Panic does not only make you poorer. It leaves you less safe.', rate: 0.94 },
       { text: 'In ' + fmtN(calmAhead) + ' of these ten thousand lives, the one who stayed calm came out ahead.', rate: 0.92, onStart: () => lifeAdvance('odds') },
       { text: 'Most calm yous ended between ' + amountWords(lo) + ' and ' + amountWords(hi) + '. Even the unluckiest still held ' + amountWords(floor) + '.', rate: 0.94, onStart: () => lifeAdvance('range') },
       { text: 'You only get to live one of these ten thousand lives. The only thing you ever chose was which crowd you were standing in.', rate: 0.92, onStart: () => lifeAdvance('close') },
