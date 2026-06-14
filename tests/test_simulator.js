@@ -119,10 +119,13 @@ ok('XIRR 100→200 over 6y ≈ 12.25%', Math.abs(E.xirr([{ t: 0, amount: -100 },
   ok('lifetimes: calm median above panic median', lf.calm.p50 > lf.panic.p50, `(${Cr(lf.calm.p50)} > ${Cr(lf.panic.p50)})`);
   ok('lifetimes: the crowd (behaviour) outweighs the door (fee)', Math.abs(lf.crowdGap) > 1.5 * Math.abs(lf.doorGap), `(crowd ${L(lf.crowdGap)} vs door ${L(lf.doorGap)})`);
   ok('lifetimes: door gap is positive (Direct beats Regular, calm vs calm)', lf.doorGap > 0, `(${L(lf.doorGap)})`);
-  // Honest finding: a panic-seller sits in cash through the storm, so panic ends
-  // LOWER but no wider — the calm investor, fully exposed, carries the larger spread.
-  ok('lifetimes: panic ends lower than calm but not wider (sits in cash)',
-    lf.panic.p50 < lf.calm.p50 && (lf.panic.p90 - lf.panic.p10) <= (lf.calm.p90 - lf.calm.p10));
+  // Realistic panic re-enters at erratic, mostly-late times — so it ends LOWER,
+  // with a WORSE FLOOR and more scatter relative to its median (less safe). It is
+  // NOT wider in absolute rupees: calm's huge upper tail stretches its range more.
+  const covPanic = (lf.panic.p90 - lf.panic.p10) / lf.panic.p50, covCalm = (lf.calm.p90 - lf.calm.p10) / lf.calm.p50;
+  ok('lifetimes: panic ends lower, with a worse floor and more relative scatter (less safe)',
+    lf.panic.p50 < lf.calm.p50 && lf.panic.p05 < lf.calm.p05 && covPanic > covCalm,
+    `(panic floor ${L(lf.panic.p05)} vs calm ${L(lf.calm.p05)}; CoV ${covPanic.toFixed(2)} vs ${covCalm.toFixed(2)})`);
   ok('lifetimes: percentiles ordered', lf.calm.min <= lf.calm.p05 && lf.calm.p05 <= lf.calm.p50 && lf.calm.p50 <= lf.calm.p95 && lf.calm.p95 <= lf.calm.max);
   ok('lifetimes: representative sample collected', lf.sample.length > 1000 && lf.sample.length <= 3000, `(${lf.sample.length})`);
 }
