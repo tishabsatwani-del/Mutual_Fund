@@ -560,8 +560,8 @@ if (typeof document !== 'undefined') (function () {
   }
   // A realistic relationship-manager response: behavioural coaching that also
   // takes a genuine cash need seriously (not just "never sell").
-  const RM_CRASH_LINE = "Okay — breathe. First, one honest question: do you actually need this money in the next year, or is this fear talking? If you genuinely need some, we'll plan exactly how much to take and from where. If you don't, we touch nothing today. We don't make a permanent decision on one red day. Sleep on it — call me in the morning.";
-  const RM_EM_LINE = "Stay calm. First, let's understand exactly how much you truly need. We'll build the withdrawal around that one number — we don't sell randomly and undo years of discipline. Take a breath. We handle this carefully, together, and your future stays intact.";
+  const RM_CRASH_LINE = "Breathe. I've seen this in 2008 and 2020 — it always came back. Don't sell a thing. We hold.";
+  const RM_EM_LINE = "Take only what you truly need — not a rupee more. We don't undo years of discipline for one hard week.";
   // Make a rupee figure personal & exact: express it in the user's own SIP.
   function sipSpan(rupees) {
     const months = Math.abs(rupees) / state.sip, yrs = months / 12;
@@ -1127,17 +1127,24 @@ if (typeof document !== 'undefined') (function () {
   // Step 1: YOU decide ALONE — no friend, no voice, nothing to copy.
   function openYouDecision() { hide($('silence')); Sound.whoosh(); show($('youDecision')); }
   // Step 2: only AFTER you've chosen, the friend (and the RM call) is revealed.
+  // Her phone rings (MD calling). You "listen in" — then the MD's short, sharp
+  // advice plays. Makes clear it's the FRIEND's call, not yours.
   function openFriendReveal() {
-    renderFriendPanel(); show($('friendReveal'));
-    Sound.whoosh(); Sound.ring(); Sound.setHeart(60); setTimeout(() => Sound.stopHeart(), 4500);
-    startCallTimer('revealTimer');
-    revealQuote('revealQuote', '"' + RM_CRASH_LINE + '"', 1600, 150);
-    setTimeout(() => narrate(RM_CRASH_LINE, { rate: 0.96 }), 1500); // locks "See how it ends" until he finishes
+    show($('friendReveal'));
+    const wave = $('revealWave'); if (wave) wave.hidden = true;
+    setText('revealStatus', 'Her fund\'s MD — incoming…');
+    setHTML('revealQuote', '');
+    const ans = $('friendAnswer'); if (ans) ans.hidden = false;
+    const go = $('friendRevealBtn'); if (go) go.hidden = true;
+    Sound.whoosh(); Sound.ring();
   }
-  function renderFriendPanel() {
-    const cv = $('friendCanvas'); if (!cv) return;
-    const sim = state.sim, { w, h, c } = fitCanvas(cv);
-    drawLines(c, w, h, sim.N, state.yMax, [{ values: sim.regular.hold.value, color: COL.regular, width: 2.8, glow: true, dot: true, fill: hexFill(COL.regular, 0.14) }], sim.navRegular._healed, { l: 10, r: 10, t: 14, b: 14 });
+  function answerFriendCall() {
+    const ans = $('friendAnswer'); if (ans) ans.hidden = true;
+    const av = document.querySelector('#friendReveal .call-avatar'); if (av) av.classList.remove('ringing');
+    const wave = $('revealWave'); if (wave) wave.hidden = false;
+    setText('revealStatus', 'Connected · MD');
+    revealQuote('revealQuote', '"' + RM_CRASH_LINE + '"', 350, 130);
+    narrate(RM_CRASH_LINE, { rate: 0.98 }, () => { const go = $('friendRevealBtn'); if (go) go.hidden = false; });
   }
   function choose(choice) {
     state.choice = choice; Sound.stopHeart();
@@ -1419,10 +1426,20 @@ if (typeof document !== 'undefined') (function () {
   function emChoose(r) {
     state.emResponse = r; Sound.stopHeart(); Sound.tick();
     hide($('emDecision')); show($('emCall'));
+    const wave = $('emCallWave'); if (wave) wave.hidden = true;
+    setText('emCallStatus', 'She calls her MD — connecting…');
+    setHTML('emQuote', '');
+    const ans = $('emAnswer'); if (ans) ans.hidden = false;
+    const go = $('emCallBtn'); if (go) go.hidden = true;
     Sound.whoosh(); Sound.ring();
-    startCallTimer('emCallTimer');
-    revealQuote('emQuote', '"' + RM_EM_LINE + '"', 1300, 150);
-    setTimeout(() => narrate(RM_EM_LINE, { rate: 0.96 }), 1200); // locks "See how it ends" until he finishes
+  }
+  function answerEmCall() {
+    const ans = $('emAnswer'); if (ans) ans.hidden = true;
+    const av = document.querySelector('#emCall .call-avatar'); if (av) av.classList.remove('ringing');
+    const wave = $('emCallWave'); if (wave) wave.hidden = false;
+    setText('emCallStatus', 'Connected · MD');
+    revealQuote('emQuote', '"' + RM_EM_LINE + '"', 350, 130);
+    narrate(RM_EM_LINE, { rate: 0.98 }, () => { const go = $('emCallBtn'); if (go) go.hidden = false; });
   }
   function emToResult() {
     stopCallTimer(); hide($('emCall')); Sound.whoosh(); Sound.resolve();
@@ -1531,6 +1548,7 @@ if (typeof document !== 'undefined') (function () {
 
     on('silenceContinue', 'click', openYouDecision);
     on('youChoices', 'click', (ev) => { const b = ev.target.closest('button[data-choice]'); if (b) choose(b.dataset.choice); });
+    on('friendAnswer', 'click', answerFriendCall);
     on('friendRevealBtn', 'click', () => { stopCallTimer(); hide($('friendReveal')); showCollision(); });
     on('collisionBtn', 'click', afterCollision);
 
@@ -1547,6 +1565,7 @@ if (typeof document !== 'undefined') (function () {
     on('emIntroBtn', 'click', emToStrike);
     on('emStrikeBtn', 'click', emToDecision);
     on('emChoices', 'click', (ev) => { const b = ev.target.closest('button[data-choice]'); if (b) emChoose(b.dataset.choice); });
+    on('emAnswer', 'click', answerEmCall);
     on('emCallBtn', 'click', emToResult);
     on('emReplay', 'click', startEmergency);
     on('emLuckBtn', 'click', openLuck);
@@ -1554,7 +1573,7 @@ if (typeof document !== 'undefined') (function () {
     on('emChangeBtn', 'click', backToSetup);
     wireMaths('emMathsToggle', 'emMathsPanel');
 
-    window.addEventListener('resize', () => { if (!state.sim) return; if ($('stage') && !$('stage').hidden) renderStage(); if ($('friendReveal') && !$('friendReveal').hidden) renderFriendPanel(); });
+    window.addEventListener('resize', () => { if (!state.sim) return; if ($('stage') && !$('stage').hidden) renderStage(); });
 
     showWizStep(0);
   }
