@@ -10,7 +10,7 @@
 <meta property="og:description" content="You say you won't panic. Prove it." />
 <meta property="og:type" content="website" />
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚪</text></svg>" />
-<link rel="stylesheet" href="styles.css?v=20260614c" />
+<link rel="stylesheet" href="styles.css?v=20260614d" />
 </head>
 <body>
 <div id="grain" aria-hidden="true"></div>
@@ -107,7 +107,7 @@
       <div id="invested" class="hud-invested">You've put in ₹0</div>
       <div class="prog"><div id="climbProg" class="prog-fill"></div><div id="climbMarker" class="prog-marker"></div></div>
     </div>
-    <div class="canvas-wrap"><canvas id="stageCanvas" role="img" aria-label="Two wealth lines over time"></canvas></div>
+    <div class="canvas-wrap"><canvas id="stageCanvas" role="img" aria-label="Two wealth lines over time"></canvas><div id="regretCaption" class="regret" hidden></div></div>
   </section>
 
   <!-- ===================== THE SILENCE ===================== -->
@@ -164,11 +164,13 @@
       </div>
       <p id="gapLine" class="gap-line"></p>
       <p id="verdict" class="verdict"></p>
+      <p id="resonate" class="resonate"></p>
       <button id="mathsToggle" class="maths-toggle">See the maths ▾</button>
       <div id="mathsPanel" class="maths-panel" hidden></div>
       <p class="disclaimer">Illustration, not advice. Returns are assumptions; every other figure is computed from the month-by-month cash flows.</p>
       <div class="result-actions">
         <button id="replayBtn" class="cta">Live it again — choose differently</button>
+        <button id="shareBtn" class="ghost-btn">Share what it cost me</button>
         <button id="luckBtn" class="ghost-btn">Was it luck? (play it 1,000 times)</button>
         <button id="gridBtn" class="ghost-btn">See all four choices</button>
         <button id="changeBtn" class="ghost-btn">Change inputs</button>
@@ -255,10 +257,12 @@
       <p class="verdict" id="emVerdict"></p>
       <button id="emMathsToggle" class="maths-toggle">See the maths ▾</button>
       <div id="emMathsPanel" class="maths-panel" hidden></div>
+      <p id="emResonate" class="resonate"></p>
       <p class="em-honest" id="emHonest"></p>
       <p class="disclaimer">Portfolio: liquid + large-cap + mid/small-cap. Every rupee computed live; only the returns and emergency size are inputs.</p>
       <div class="result-actions">
         <button id="emReplay" class="cta">Face it again — choose differently</button>
+        <button id="emShareBtn" class="ghost-btn">Share what it cost me</button>
         <button id="emLuckBtn" class="ghost-btn">Was it luck? (play it 1,000 times)</button>
         <button id="emGridBtn" class="ghost-btn">See the crash version</button>
         <button id="emChangeBtn" class="ghost-btn">Change inputs</button>
@@ -268,7 +272,8 @@
 
 </div>
 
+<div id="toast" class="toast" hidden></div>
 <footer class="global-foot">Educational tool — not investment advice.</footer>
-<script src="app.js?v=20260614c"></script>
+<script src="app.js?v=20260614d"></script>
 </body>
 </html>

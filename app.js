@@ -487,6 +487,23 @@ if (typeof document !== 'undefined') (function () {
     return inr(v);
   }
   const pct = (r) => (r * 100).toFixed(1) + '%';
+  // Make a rupee figure personal & exact: express it in the user's own SIP.
+  function sipSpan(rupees) {
+    const months = Math.abs(rupees) / state.sip, yrs = months / 12;
+    return yrs >= 1 ? yrs.toFixed(1) + ' years of your SIP' : Math.round(months) + ' months of your SIP';
+  }
+  let toastTimer = 0;
+  function toast(msg) {
+    const t = $('toast'); if (!t) return;
+    t.textContent = msg; t.hidden = false; requestAnimationFrame(() => t.classList.add('show'));
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.classList.remove('show'); setTimeout(() => { t.hidden = true; }, 300); }, 2600);
+  }
+  function doShare(text) {
+    const url = location.href.split('#')[0];
+    if (navigator.share) { navigator.share({ title: 'Two Doors, One Storm', text: text, url: url }).catch(() => {}); }
+    else if (navigator.clipboard) { navigator.clipboard.writeText(text + '\n\n' + url).then(() => toast('Copied — send it to a friend'), () => toast(text)); }
+    else toast(text);
+  }
 
   const $ = (id) => document.getElementById(id);
   const show = (el) => { if (!el) return; el.hidden = false; requestAnimationFrame(() => el.classList.add('show')); };
@@ -794,7 +811,38 @@ if (typeof document !== 'undefined') (function () {
     }
     show($('collision'));
   }
-  function afterCollision() { hide($('collision')); show($('stage')); state.phase = 'diverge'; state.phaseStart = null; cancelAnimationFrame(state.raf); state.raf = requestAnimationFrame(loop); }
+  function afterCollision() {
+    hide($('collision')); show($('stage'));
+    // The regret beat: for sellers, the market visibly recovers without them.
+    const reg = $('regretCaption');
+    if (reg) {
+      if (CHOICE_CAT[state.choice] === 'sell' && !reduceMotion) {
+        reg.textContent = 'The market recovered. Without you.';
+        reg.hidden = false; reg.classList.remove('show');
+        setTimeout(() => reg.classList.add('show'), 1600);
+        setTimeout(() => { reg.classList.remove('show'); setTimeout(() => { reg.hidden = true; }, 600); }, 4400);
+      } else { reg.hidden = true; }
+    }
+    state.phase = 'diverge'; state.phaseStart = null; cancelAnimationFrame(state.raf); state.raf = requestAnimationFrame(loop);
+  }
+  function shareCrash() {
+    const sim = state.sim, yours = sim.direct[state.choice], cost = sim.direct.hold.final - yours.final;
+    let txt;
+    if (CHOICE_CAT[state.choice] === 'sell' && state.pledge === 'hold')
+      txt = 'I swore I\'d hold through a crash. At −' + Math.round(sim.ev.depth * 100) + '% I sold anyway. It cost me ' + inrShort(cost) + ' — ' + sipSpan(cost) + '. I just found out the kind of investor I really am.';
+    else if (state.choice === 'hold')
+      txt = 'I held through ' + sim.ev.name + ' and finished with ' + inrShort(yours.final) + '. Doing nothing was the hardest, smartest thing.';
+    else
+      txt = 'I lived ' + sim.ev.name + ' as an investor. My one decision in the crash cost me ' + inrShort(cost) + ' — ' + sipSpan(cost) + '.';
+    doShare(txt);
+  }
+  function shareEmergency() {
+    const sim = state.sim, diff = sim.friend.final - sim.you.final;
+    const txt = diff > 0
+      ? 'An emergency hit. Alone, I ' + EM_LABEL[sim.youResponse] + ' — and it cost me ' + inrShort(diff) + ' (' + sipSpan(diff) + ') versus a friend who had someone to call.'
+      : 'An emergency hit and I made the call almost no one makes alone. Try it yourself.';
+    doShare(txt);
+  }
 
   /* ---- Result. ---- */
   function openResult() {
@@ -810,6 +858,13 @@ if (typeof document !== 'undefined') (function () {
     setHTML('verdict', verdictFor(state.choice, yours.final, friend.final, sim));
 
     const feeSaved = sim.feeSavingRupees, behaviourCost = calm.final - yours.final;
+    // Make it personal: the cost in years of their own SIP, or the magic of holding.
+    if (behaviourCost > state.sip * 6)
+      setHTML('resonate', '<b class="bad">' + inr(behaviourCost) + '</b> — that\'s <b>' + sipSpan(behaviourCost) + '</b>, gone in a decision you made in a few frightened seconds.');
+    else if (state.choice === 'hold')
+      setHTML('resonate', 'You put in ' + inrShort(yours.invested) + ' and did nothing. Nothing turned it into <b class="good">' + inrShort(yours.final) + '</b>.');
+    else
+      setHTML('resonate', 'You put in ' + inrShort(yours.invested) + '. It became <b>' + inrShort(yours.final) + '</b>.');
     const pauseRow = (state.choice === 'pause' && yours.pauseMonths) ? [['You stayed paused for', (yours.pauseMonths / 12).toFixed(1) + ' years (until confidence returned)', 'computed']] : [];
     setHTML('mathsPanel', mathsRows([
       ['Total you invested (₹' + state.sip.toLocaleString('en-IN') + ' × ' + sim.N + ' months)', inr(yours.invested), 'computed'],
@@ -970,6 +1025,8 @@ if (typeof document !== 'undefined') (function () {
     setHTML('emVerdict', sim.youResponse === 'surgical'
       ? 'You made the call most people can\'t make alone.<span class="verdict-sub">Just <b>' + inr(Math.abs(diff)) + '</b> between you and the guided plan. Under real pressure, almost no one does what you just did.</span>'
       : 'She took only the emergency. You took the emergency <b>and your future</b>.<span class="verdict-sub">' + inr(diff) + ' gone by year ' + sim.years + ' — not because she was calmer, but because she had a number to call.</span>');
+    if (diff > state.sip * 6) setHTML('emResonate', '<b class="bad">' + inr(diff) + '</b> — that\'s <b>' + sipSpan(diff) + '</b>, decided in one frightened moment.');
+    else setHTML('emResonate', 'You raised what you needed — and kept the future you spent ' + sim.crashYear + ' years building.');
     setHTML('emHonest', 'A disciplined Direct investor would\'ve had <b>' + inrShort(smart.final) + '</b> — even saved the fee. The door was never the point. Making this call alone, under pressure, is — and that\'s what her fee bought.');
     setHTML('emMathsPanel', mathsRows([
       ['Corpus when it struck (year ' + sim.crashYear + ')', inr(you.corpusAtEmergency), 'computed'],
@@ -1011,6 +1068,8 @@ if (typeof document !== 'undefined') (function () {
     on('collisionBtn', 'click', afterCollision);
 
     on('replayBtn', 'click', () => { hideAllOverlays(); showPledge(); });
+    on('shareBtn', 'click', shareCrash);
+    on('emShareBtn', 'click', shareEmergency);
     on('luckBtn', 'click', openLuck);
     on('luckClose', 'click', () => hide($('luck')));
     on('gridBtn', 'click', openGrid);
