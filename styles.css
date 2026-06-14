@@ -85,7 +85,7 @@ body {
 /* the candlestick canvas does its own shake while crashing (scales with depth) */
 
 /* ===================== OVERLAYS ===================== */
-.overlay { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgba(4,6,10,0.72); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); opacity: 0; transition: opacity .5s ease; overflow-y: auto; }
+.overlay { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgba(4,6,10,0.72); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); opacity: 0; transition: opacity .5s ease; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
 .overlay.show { opacity: 1; }
 .card { width: 100%; max-width: 560px; background: var(--card); border: 1px solid rgba(216,200,120,0.18); border-radius: 24px; padding: 32px 26px; box-shadow: 0 40px 90px -30px rgba(0,0,0,0.85); animation: rise .55s ease both; margin: auto; }
 .wide-card { max-width: 620px; }
@@ -475,6 +475,30 @@ body {
   .disclaimer { font-size: 11px; margin: 6px 0 12px; }
   .hud { padding: calc(14px + env(safe-area-inset-top)) 18px 6px; }
   .hud-value { font-size: clamp(36px, 12vw, 54px); }
+}
+/* Scene screens compressed for short phones so each beat fits the viewport. */
+@media (max-width: 640px) {
+  .overlay { padding: 18px 16px calc(20px + env(safe-area-inset-bottom)); }
+  .sil-pct { font-size: clamp(58px, 20vw, 96px); }
+  .sil-flow { font-size: clamp(17px, 5vw, 24px); margin: 12px 0 8px; }
+  .sil-context { font-size: 15px; margin-bottom: 10px; }
+  .sil-quiet { font-size: 14.5px; margin-bottom: 18px; line-height: 1.5; }
+  .pledge-q { font-size: clamp(20px, 5.6vw, 26px); margin-bottom: 10px; }
+  .pledge-sub { font-size: 15px; margin-bottom: 16px; line-height: 1.5; }
+  .pledge-foot { margin-top: 12px; font-size: 13px; }
+  .decide-sub { font-size: 15.5px; margin-bottom: 16px; }
+  .choices button { padding: 12px 14px; }
+  .choices button b { font-size: 16px; }
+  .reveal-inner { padding: 22px 18px; }
+  .reveal-quote, .call-caption { font-size: 16.5px; }
+  .call-avatar { width: 92px; height: 92px; margin-bottom: 14px; }
+  .call-initials { font-size: 32px; }
+  .call-name { font-size: 21px; }
+  .call-context, .call-owner { margin-bottom: 16px; }
+  .em-corpus { font-size: clamp(28px, 8.5vw, 44px); margin-bottom: 14px; }
+  .em-need { font-size: clamp(34px, 10vw, 56px); margin-bottom: 14px; }
+  .collision-title { font-size: clamp(24px, 7vw, 36px); margin-bottom: 14px; }
+  .collision-body { font-size: 15px; margin-bottom: 20px; }
 }
 /* ===== Tablet / desktop — comfortable, centred, never stretched ===== */
 @media (min-width: 768px) {
