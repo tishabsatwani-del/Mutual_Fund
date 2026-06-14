@@ -1841,24 +1841,46 @@ if (typeof document !== 'undefined') (function () {
     // Kick the voice list loading at startup so a fast LOCAL voice is already
     // selected by the time Begin is pressed (avoids picking a slow default).
     try { window.speechSynthesis && window.speechSynthesis.getVoices(); } catch (e) {}
+    // Recorded opening clip (instant + identically-timed on every device). When
+    // present at this path it is used and the doors sync to ITS playback; if it
+    // is missing/blocked, we fall back to the live voice. OPEN_M1/M2 are the
+    // fractions of the clip at which each door unlocks (tune to the recording:
+    // ~when "market crash" and "personal emergency" are spoken).
+    const OPENING_SRC = 'voice/opening.mp3?v=20260614ar', OPEN_M1 = 0.42, OPEN_M2 = 0.82;
     on('introBtn', 'click', () => {
       Sound.unlock(); Sound.openSwell(); hide($('intro'));
       const crash = document.querySelector('#w_scenario .crash-scn');
       const em = document.querySelector('#w_scenario .em-scn');
-      // Both doors appear INSTANTLY, locked (closed, dim, padlock). The girl
-      // reads the line immediately; each door UNLOCKS the moment she speaks its
-      // name — driven by the speech engine's word-boundary events (the reliable
-      // way to sync to speech on mobile). A timed fallback covers engines without
-      // boundary events and the no-voice case; each door opens at most once.
+      // Both doors appear INSTANTLY, locked (closed, dim, padlock); each UNLOCKS
+      // exactly as its name is spoken — synced to the recorded clip's timeline
+      // (or the live voice's word-boundaries when the clip isn't available).
       [crash, em].forEach((el) => { if (el) { el.classList.remove('open', 'reveal-in', 'chosen', 'dismiss'); void el.offsetWidth; el.classList.add('locked'); } });
       const openDoor = (el) => { if (!el || !el.classList.contains('locked')) return; el.classList.remove('locked'); el.classList.add('open'); Sound.tick(); Sound.whoosh(); if (navigator.vibrate) navigator.vibrate(12); };
       let f1 = false, f2 = false;
       const door1 = () => { if (!f1) { f1 = true; openDoor(crash); } };
       const door2 = () => { if (!f2) { f2 = true; openDoor(em); } };
+      // Absolute backstop — the doors can never stay stuck, whatever happens.
+      setTimeout(door1, 5000); setTimeout(door2, 6500);
+
+      if (!Voice.isEnabled()) { setTimeout(door1, 600); setTimeout(door2, 1100); return; } // muted → silent stagger
+
       const line = 'What do you want to face? A market crash… or a personal emergency.';
-      const spoke = Voice.speakSynced(line, [{ at: line.indexOf('market'), fn: door1 }, { at: line.indexOf('personal'), fn: door2 }]);
-      if (spoke) { setTimeout(door1, 2400); setTimeout(door2, 4400); } // fallback if no boundary events
-      else { setTimeout(door1, 600); setTimeout(door2, 1100); }        // no voice — open on a stagger
+      const ttsOpening = () => {
+        const spoke = Voice.speakSynced(line, [{ at: line.indexOf('market'), fn: door1 }, { at: line.indexOf('personal'), fn: door2 }]);
+        if (spoke) { setTimeout(door1, 2400); setTimeout(door2, 4400); }
+        else { setTimeout(door1, 600); setTimeout(door2, 1100); }
+      };
+      let clipStarted = false, fellBack = false;
+      const useTTS = () => { if (clipStarted || fellBack) return; fellBack = true; ttsOpening(); };
+      try {
+        const clip = new Audio(OPENING_SRC); clip.preload = 'auto';
+        clip.addEventListener('playing', () => { clipStarted = true; });
+        clip.addEventListener('timeupdate', () => { const d = clip.duration; if (d && isFinite(d)) { if (clip.currentTime >= d * OPEN_M1) door1(); if (clip.currentTime >= d * OPEN_M2) door2(); } });
+        clip.addEventListener('ended', () => { door1(); door2(); });
+        clip.addEventListener('error', useTTS);
+        const pr = clip.play(); if (pr && pr.catch) pr.catch(useTTS);
+        setTimeout(useTTS, 600); // clip hasn't started → use the live voice
+      } catch (e) { useTTS(); }
     });
     // Premium tactile feedback on every tap: a soft click + a light haptic.
     document.addEventListener('pointerdown', (e) => {
