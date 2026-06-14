@@ -298,7 +298,7 @@ const MC_POLICIES = {
   hold:  { id: 'hold',  label: 'held through everything' },
   panic: { id: 'panic', label: 'sold when it fell hard', drawdown: 0.25 },
 };
-function simPolicyPath(nav, N, sip, policy) {
+function simPolicyPath(nav, N, sip, policy, skipXirr) {
   let units = 0, cash = 0, peak = nav[0], out = false, reentryPeak = 0;
   for (let m = 0; m < N; m++) {
     if (nav[m] > peak) peak = nav[m];
@@ -309,9 +309,9 @@ function simPolicyPath(nav, N, sip, policy) {
     if (out) cash += sip; else units += sip / nav[m];
   }
   const final = units * nav[N] + cash;
-  return { final, xirr: xirrFromSIP(sip, N, final) };
+  return { final, xirr: skipXirr ? 0 : xirrFromSIP(sip, N, final) };
 }
-function runMonteCarlo(sip, youPolicy, friendPolicy, nPaths, seed, years) {
+function runMonteCarlo(sip, youPolicy, friendPolicy, nPaths, seed, years, light) {
   const N = (years || DEFAULT_YEARS) * 12;
   const rng = mulberry32(seed == null ? 12345 : seed);
   const youP = MC_POLICIES[youPolicy] || MC_POLICIES.hold;
@@ -322,8 +322,8 @@ function runMonteCarlo(sip, youPolicy, friendPolicy, nPaths, seed, years) {
     const returns = genMarketReturns(N, rng);
     const navD = navFromReturns(returns, N, 1);            // YOU = Direct
     const navR = navFromReturns(returns, N, FEE_FACTOR);   // FRIEND = Regular (1%/yr drag)
-    const you = simPolicyPath(navD, N, sip, youP);
-    const fr = simPolicyPath(navR, N, sip, friendP);
+    const you = simPolicyPath(navD, N, sip, youP, light);
+    const fr = simPolicyPath(navR, N, sip, friendP, light);
     youFinals[i] = you.final; friendFinals[i] = fr.final;
     const rel = Math.abs(you.final - fr.final) / Math.max(you.final, fr.final);
     if (rel < 0.01) tied++; else if (you.final > fr.final) youAhead++; else friendAhead++;
@@ -583,15 +583,35 @@ if (typeof document !== 'undefined') (function () {
     function startRumble(dur) {
       if (!init()) return;
       stopRumble();
-      const src = ctx.createBufferSource(); src.buffer = brown(Math.max(2, dur / 1000 + 1)); src.loop = true;
-      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.setValueAtTime(120, T()); lp.frequency.linearRampToValueAtTime(900, T() + dur / 1000);
-      const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, T()); g.gain.linearRampToValueAtTime(0.42, T() + dur / 1000);
-      src.connect(lp); lp.connect(g); g.connect(master); src.start();
-      const sub = tone(60, T(), dur / 1000 + 0.2, 'sine', 0.3); if (sub) sub.frequency.exponentialRampToValueAtTime(32, T() + dur / 1000);
-      rumble = { src, g };
+      const secs = dur / 1000, t = T(), srcs = [];
+      const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.6, t + secs); g.connect(master);
+      // 1) deep ground rumble
+      const n1 = ctx.createBufferSource(); n1.buffer = brown(Math.max(2, secs + 1)); n1.loop = true;
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.setValueAtTime(90, t); lp.frequency.linearRampToValueAtTime(820, t + secs);
+      n1.connect(lp); lp.connect(g); n1.start(); srcs.push(n1);
+      // 2) a rising roar (band of noise)
+      const n2 = ctx.createBufferSource(); n2.buffer = brown(Math.max(2, secs + 1)); n2.loop = true;
+      const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 340; bp.Q.value = 0.6;
+      const g2 = ctx.createGain(); g2.gain.setValueAtTime(0.0001, t); g2.gain.linearRampToValueAtTime(0.5, t + secs);
+      n2.connect(bp); bp.connect(g2); g2.connect(g); n2.start(); srcs.push(n2);
+      // 3) a sub that sinks — the floor dropping out
+      const sub = ctx.createOscillator(), sg = ctx.createGain(); sub.type = 'sine';
+      sub.frequency.setValueAtTime(70, t); sub.frequency.exponentialRampToValueAtTime(28, t + secs);
+      sg.gain.value = 0.35; sub.connect(sg); sg.connect(g); sub.start(); srcs.push(sub);
+      // 4) dissonant dread drone (two clashing detuned saws)
+      [69, 73.5].forEach((f) => { const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f; const dl = ctx.createBiquadFilter(); dl.type = 'lowpass'; dl.frequency.value = 240; const dg = ctx.createGain(); dg.gain.setValueAtTime(0.0001, t); dg.gain.linearRampToValueAtTime(0.11, t + secs); o.connect(dl); dl.connect(dg); dg.connect(g); o.start(); srcs.push(o); });
+      rumble = { srcs, g };
     }
-    function stopRumble() { if (rumble) { try { rumble.g.gain.cancelScheduledValues(T()); rumble.g.gain.linearRampToValueAtTime(0.0001, T() + 0.15); rumble.src.stop(T() + 0.2); } catch (e) {} rumble = null; } }
-    function impact() { if (!init()) return; thump(0.7); const t = T(); const s = ctx.createBufferSource(); s.buffer = brown(0.25); const g = ctx.createGain(); g.gain.setValueAtTime(0.4, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.25); s.connect(g); g.connect(master); s.start(t); s.stop(t + 0.3); }
+    function stopRumble() { if (rumble) { try { rumble.g.gain.cancelScheduledValues(T()); rumble.g.gain.linearRampToValueAtTime(0.0001, T() + 0.2); rumble.srcs.forEach((s) => { try { s.stop(T() + 0.25); } catch (e) {} }); } catch (e) {} rumble = null; } }
+    function impact() {
+      if (!init()) return; thump(0.85); const t = T();
+      const o = ctx.createOscillator(), g = ctx.createGain(); o.type = 'sine';
+      o.frequency.setValueAtTime(82, t); o.frequency.exponentialRampToValueAtTime(28, t + 0.55);
+      g.gain.setValueAtTime(0.62, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.7);
+      o.connect(g); g.connect(master); o.start(t); o.stop(t + 0.75);
+      const s = ctx.createBufferSource(); s.buffer = brown(0.4); const ng = ctx.createGain(); ng.gain.setValueAtTime(0.5, t); ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.4);
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1800; s.connect(lp); lp.connect(ng); ng.connect(master); s.start(t); s.stop(t + 0.45);
+    }
     function setHeart(bpm) {
       heartBpm = bpm;
       if (heartTimer) { clearInterval(heartTimer); heartTimer = 0; }
@@ -615,6 +635,35 @@ if (typeof document !== 'undefined') (function () {
     function isOn() { return on; }
     return { unlock, startPad, startRumble, stopRumble, impact, setHeart, stopHeart, silenceCut, stopPad, ring, tick, freeze, stinger, resolve, stopAll, toggle, isOn };
   })();
+
+  /* ---- Voice narration (Web Speech API — built into the browser, no files). ---- */
+  const Voice = (function () {
+    const ok = typeof window !== 'undefined' && 'speechSynthesis' in window;
+    let enabled = true, picked = null;
+    function pick() {
+      if (!ok) return null;
+      const vs = window.speechSynthesis.getVoices() || [];
+      // Prefer a natural English voice; Indian English if present.
+      return vs.find((v) => /en[-_]?IN/i.test(v.lang)) || vs.find((v) => /en[-_]?GB/i.test(v.lang))
+        || vs.find((v) => /^en/i.test(v.lang)) || vs[0] || null;
+    }
+    if (ok) { try { window.speechSynthesis.onvoiceschanged = () => { picked = pick(); }; } catch (e) {} }
+    function speak(text, opts) {
+      if (!ok || !enabled || !text) return;
+      try {
+        window.speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance(text);
+        if (!picked) picked = pick(); if (picked) u.voice = picked;
+        u.rate = (opts && opts.rate) || 0.9; u.pitch = (opts && opts.pitch) || 1; u.volume = (opts && opts.volume) || 1;
+        window.speechSynthesis.speak(u);
+      } catch (e) {}
+    }
+    function stop() { if (ok) try { window.speechSynthesis.cancel(); } catch (e) {} }
+    function setEnabled(b) { enabled = b; if (!b) stop(); }
+    return { speak, stop, setEnabled, available: ok };
+  })();
+  let introSpoken = false;
+  function speakIntro() { if (introSpoken) return; introSpoken = true; Voice.speak('What do you want to face? A market crash… or a personal emergency?', { rate: 0.88 }); }
 
   const state = {
     scenario: 'crash', years: 20, sip: 10000, eventId: 'covid',
@@ -681,11 +730,14 @@ if (typeof document !== 'undefined') (function () {
     const back = $('wizBack'); if (back) back.hidden = state.wizIndex === 0;
     setHTML('wizDots', steps.map((s, idx) => '<span class="wdot' + (idx === state.wizIndex ? ' on' : '') + '"></span>').join(''));
   }
-  function wizPick(name, val) {
+  function wizPick(name, val, btn) {
     state[WIZ_KEY[name]] = WIZ_NUM[name] ? Number(val) : val;
+    if (btn) { document.querySelectorAll('#w_' + name + ' .opt').forEach((b) => b.classList.toggle('on', b === btn)); }
+    if (name === 'event') Voice.speak(EVENTS[val] ? EVENTS[val].name + '. ' + (EVENTS[val].tag || '') : 'A crash no one saw coming.');
     const steps = wizSteps();
-    if (state.wizIndex >= steps.length - 1) { wizLaunch(); return; }
-    showWizStep(state.wizIndex + 1);
+    const advance = () => { if (state.wizIndex >= steps.length - 1) wizLaunch(); else showWizStep(state.wizIndex + 1); };
+    // Let the selection visibly register before moving on.
+    if (reduceMotion) advance(); else setTimeout(advance, 300);
   }
   function wizBack() { if (state.wizIndex > 0) showWizStep(state.wizIndex - 1); }
   function wizLaunch() {
@@ -699,6 +751,7 @@ if (typeof document !== 'undefined') (function () {
     state.pledge = null;
     setText('pledgeYears', state.years);
     show($('pledge'));
+    Voice.speak('Sometime in your ' + state.years + ' years, a crash will come. Swear it now, while you are calm: when your savings are deep in the red, what will you do?', { rate: 0.92 });
   }
   function makePledge(p) {
     state.pledge = p;
@@ -782,7 +835,12 @@ if (typeof document !== 'undefined') (function () {
   }
   function openSplit() {
     hide($('silence')); renderFriendPanel(); show($('split'));
-    const wash = () => { const s = $('split'); if (s) s.classList.add('called'); Sound.ring(); Sound.setHeart(60); setTimeout(() => Sound.stopHeart(), 4000); };
+    const wash = () => {
+      const s = $('split'); if (s) s.classList.add('called');
+      Sound.ring(); Sound.setHeart(60); setTimeout(() => Sound.stopHeart(), 4000);
+      // The RM's voice — the most human moment in the whole experience.
+      setTimeout(() => Voice.speak("Don't sell. I mean it. I sat with people through 2008 and 2020 — the ones who sold here never caught up. We're not touching it. Go for a walk. Call me tomorrow.", { rate: 0.94 }), 1600);
+    };
     if (reduceMotion) wash(); else setTimeout(wash, 1100);
   }
   function renderFriendPanel() {
@@ -916,29 +974,31 @@ if (typeof document !== 'undefined') (function () {
   /* ===================== "Was it luck?" — sequential, lived ===================== */
   function openLuck() { state.luckStep = 0; show($('luck')); renderLuck(); }
   function renderLuck() {
-    const N = 1000;
+    const N = 10000;
     if (state.luckStep === 0) {
-      setHTML('luckBody', '<p class="mc-running">Replaying 1,000 lifetimes…</p>');
+      setHTML('luckBody', '<p class="mc-running">Living 10,000 lifetimes…</p>');
       setTimeout(() => {
-        const held = runMonteCarlo(state.sip, 'hold', 'hold', N, 4242, state.years);
+        const held = runMonteCarlo(state.sip, 'hold', 'hold', N, 4242, state.years, true);
         state._luckHeld = Math.round(held.youAhead / N * 100);
         setHTML('luckBody',
-          '<p class="luck-intro">We replayed your ' + state.years + ' years across <b>1,000 random markets</b> — booms, crashes, fat tails. <b>YOU (Direct, alone)</b> vs <b>your friend (Regular)</b>, who always holds because someone talks her through it.</p>'
-          + luckRow('If you HOLD through every crash', state._luckHeld, COL.direct,
-              'Holding wasn\'t luck — you beat your guided friend in <b>' + state._luckHeld + ' of 100</b> futures. That\'s the fee you saved, compounding.')
-          + '<button id="luckNext" class="cta">But you swore you\'d hold… what if you sold? →</button>');
+          '<p class="luck-intro">We replayed your ' + state.years + ' years across <b>10,000 different futures</b> — booms, crashes, fat tails, the lot. <b>YOU (Direct, alone)</b> against <b>your friend (Regular)</b>, who always holds because someone talks her through it.</p>'
+          + luckRow('If you HELD through every crash', state._luckHeld, COL.direct,
+              'Holding wasn\'t luck — you came out ahead of your guided friend in <b>' + state._luckHeld + ' of 100</b> futures. That\'s the fee you saved, quietly compounding.')
+          + '<button id="luckNext" class="cta">But you swore you\'d hold… what if you panicked? →</button>');
         on('luckNext', 'click', () => { state.luckStep = 1; renderLuck(); });
       }, 30);
     } else {
-      setHTML('luckBody', '<p class="mc-running">Replaying with a panic-sell…</p>');
+      setHTML('luckBody', '<p class="mc-running">Living 10,000 more — this time you sold…</p>');
       setTimeout(() => {
-        const sold = runMonteCarlo(state.sip, 'panic', 'hold', N, 4242, state.years);
+        const sold = runMonteCarlo(state.sip, 'panic', 'hold', N, 4242, state.years, true);
         const s = Math.round(sold.youAhead / N * 100);
         setHTML('luckBody',
-          luckRow('If you HOLD', state._luckHeld, COL.direct, 'Beat your guided friend in <b>' + state._luckHeld + ' of 100</b>.')
-          + luckRow('If you SELL when it falls hard', s, COL.crash,
-              'You beat her in only <b>' + s + ' of 100</b>. The other <b>' + (100 - s) + '</b> times, the phone call she had was worth more than the fee you saved.')
-          + '<p class="luck-foot">Same money. Same markets. The only difference was your behaviour — and whether someone was there to stop you.</p>');
+          luckRow('If you HELD', state._luckHeld, COL.direct, 'Ahead of your guided friend in <b>' + state._luckHeld + ' of 100</b> futures.')
+          + luckRow('If you SOLD when it fell hard', s, COL.crash,
+              'Ahead in only <b>' + s + ' of 100</b>. The other <b>' + (100 - s) + '</b> times, the one phone call she had beat every rupee of fee you saved.')
+          + '<p class="luck-foot">Same money. Same 10,000 markets. The only difference was your behaviour — and whether someone was there to stop you.</p>'
+          + '<button id="luckReplay" class="ghost-btn">↺ Watch it again</button>');
+        on('luckReplay', 'click', () => { state.luckStep = 0; renderLuck(); });
       }, 30);
     }
   }
@@ -1006,7 +1066,11 @@ if (typeof document !== 'undefined') (function () {
     show($('emStrike'));
   }
   function emToDecision() { hide($('emStrike')); show($('emDecision')); }
-  function emChoose(r) { state.emResponse = r; hide($('emDecision')); setText('emCallNeed', inrShort(state.emCtx.need)); show($('emCall')); }
+  function emChoose(r) {
+    state.emResponse = r; hide($('emDecision')); setText('emCallNeed', inrShort(state.emCtx.need)); show($('emCall'));
+    Sound.ring();
+    setTimeout(() => Voice.speak('Take exactly what you need — not a rupee more. Liquid first, then a little large-cap. Leave the mid-cap, it is down. Pause the SIP three months, don\'t cancel it. The rest stays invested.', { rate: 0.95 }), 1200);
+  }
   function emToResult() {
     hide($('emCall')); Sound.resolve();
     const sim = runEmergency(state.sip, state.emergencyId, state.emResponse, state.downturn, state.years, state.severity);
@@ -1045,18 +1109,20 @@ if (typeof document !== 'undefined') (function () {
   /* ===================== Wiring ===================== */
   function hideAllOverlays() { ['pledge', 'silence', 'split', 'collision', 'result', 'luck', 'grid', 'emIntro', 'emStrike', 'emDecision', 'emCall', 'emergency'].forEach((id) => hide($(id))); }
   function on(id, type, fn) { const el = $(id); if (el) el.addEventListener(type, fn); }
-  function backToSetup() { Sound.stopAll(); cancelAnimationFrame(state.raf); hideAllOverlays(); hide($('stage')); hide($('emergency')); state.wizIndex = 0; showWizStep(0); show($('setup')); }
+  function backToSetup() { Sound.stopAll(); Voice.stop(); cancelAnimationFrame(state.raf); hideAllOverlays(); hide($('stage')); hide($('emergency')); state.wizIndex = 0; showWizStep(0); show($('setup')); }
 
   function boot() {
-    // Unlock audio on the very first interaction (autoplay policy).
-    const firstGesture = () => { Sound.unlock(); document.removeEventListener('pointerdown', firstGesture); };
+    // Unlock audio + speak the opening line on the very first interaction
+    // (browsers block sound/speech until a gesture). Also try immediately.
+    const firstGesture = () => { Sound.unlock(); speakIntro(); document.removeEventListener('pointerdown', firstGesture); };
     document.addEventListener('pointerdown', firstGesture, { once: true });
-    on('muteBtn', 'click', () => { const onNow = Sound.toggle(); const b = $('muteBtn'); if (b) b.textContent = onNow ? '🔊' : '🔇'; });
+    setTimeout(speakIntro, 350); // best-effort if autoplay is permitted
+    on('muteBtn', 'click', () => { const onNow = Sound.toggle(); Voice.setEnabled(onNow); const b = $('muteBtn'); if (b) b.textContent = onNow ? '🔊' : '🔇'; });
 
     // Wizard: each step is a group of .opt buttons.
     document.querySelectorAll('.wstep').forEach((step) => {
       const name = step.id.replace('w_', '');
-      step.addEventListener('click', (ev) => { const b = ev.target.closest('.opt'); if (b) wizPick(name, b.dataset.val); });
+      step.addEventListener('click', (ev) => { const b = ev.target.closest('.opt'); if (b) wizPick(name, b.dataset.val, b); });
     });
     on('wizBack', 'click', wizBack);
     on('downturnToggle', 'change', (e) => { state.downturn = e.target.checked; });

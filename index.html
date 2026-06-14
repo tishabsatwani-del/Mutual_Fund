@@ -10,7 +10,7 @@
 <meta property="og:description" content="You say you won't panic. Prove it." />
 <meta property="og:type" content="website" />
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚪</text></svg>" />
-<link rel="stylesheet" href="styles.css?v=20260614d" />
+<link rel="stylesheet" href="styles.css?v=20260614e" />
 </head>
 <body>
 <div id="grain" aria-hidden="true"></div>
@@ -27,9 +27,19 @@
 
       <div id="w_scenario" class="wstep">
         <p class="kicker">Two Doors, One Storm</p>
-        <h2 class="wq">What do you want to face?</h2>
-        <button class="opt card-opt" data-val="crash"><b>A market crash</b><span>Your money is falling. Do you hold, or run?</span></button>
-        <button class="opt card-opt" data-val="emergency"><b>A personal emergency</b><span>Life needs cash, now. Where do you take it from?</span></button>
+        <h2 class="wq big-wq">What do you want to face?</h2>
+        <div class="scenario-grid">
+          <button class="opt scn-card crash-scn" data-val="crash">
+            <span class="scn-icon">📉</span>
+            <b>A Market Crash</b>
+            <span class="scn-sub">Your money is falling. Do you hold — or run?</span>
+          </button>
+          <button class="opt scn-card em-scn" data-val="emergency">
+            <span class="scn-icon">🚨</span>
+            <b>A Personal Emergency</b>
+            <span class="scn-sub">Life needs cash, now. Where do you take it from?</span>
+          </button>
+        </div>
       </div>
 
       <div id="w_duration" class="wstep" hidden>
@@ -137,9 +147,13 @@
       </div>
       <div class="split-pane friend-pane">
         <p class="pane-cap">YOUR FRIEND — Regular.</p>
-        <div class="friend-canvas-wrap"><canvas id="friendCanvas" aria-label="Your friend's steadying line"></canvas></div>
+        <div class="rm-call">
+          <div class="rm-avatar">RM<span class="rm-ring"></span></div>
+          <div class="rm-meta"><span class="rm-name">Relationship Manager</span><span class="rm-status">● on the call</span></div>
+        </div>
         <p class="pane-quote">"Don't sell. I mean it. I sat with people through 2008 and 2020 — the ones who sold here never caught up. We're not touching it. Go for a walk. Call me tomorrow."</p>
-        <p class="pane-foot">Her relationship manager picked up on the first ring. She isn't smarter than you. She just wasn't alone.</p>
+        <div class="friend-canvas-wrap"><canvas id="friendCanvas" aria-label="Your friend's steadying line"></canvas></div>
+        <p class="pane-foot">She isn't smarter than you. She just wasn't alone.</p>
       </div>
     </div>
   </div>
@@ -171,7 +185,7 @@
       <div class="result-actions">
         <button id="replayBtn" class="cta">Live it again — choose differently</button>
         <button id="shareBtn" class="ghost-btn">Share what it cost me</button>
-        <button id="luckBtn" class="ghost-btn">Was it luck? (play it 1,000 times)</button>
+        <button id="luckBtn" class="ghost-btn">Was It Luck? — Play 10,000 Times</button>
         <button id="gridBtn" class="ghost-btn">See all four choices</button>
         <button id="changeBtn" class="ghost-btn">Change inputs</button>
       </div>
@@ -181,7 +195,7 @@
   <!-- ===================== WAS IT LUCK? ===================== -->
   <div id="luck" class="overlay" hidden>
     <div class="card wide-card">
-      <h2 class="all-title">Was it luck?</h2>
+      <h2 class="all-title">Was It Luck?</h2>
       <div id="luckBody" class="luck-body"></div>
       <p class="disclaimer">Documented model: mean ≈ 12%/yr, vol ≈ 15–18%/yr, fat tails + clustered crashes. Odds are ranges, never predictions.</p>
       <button id="luckClose" class="ghost-btn">Back</button>
@@ -237,7 +251,10 @@
 
   <div id="emCall" class="overlay em-stage" hidden>
     <div class="card em-card friend-card">
-      <p class="pane-cap friend-cap">YOUR FRIEND — Regular. The call.</p>
+      <div class="rm-call">
+        <div class="rm-avatar">RM<span class="rm-ring"></span></div>
+        <div class="rm-meta"><span class="rm-name">Relationship Manager</span><span class="rm-status">● on the call</span></div>
+      </div>
       <p class="em-quote">"Take exactly <b id="emCallNeed">₹0</b> — not a rupee more. Liquid first, then a little large-cap. Leave the mid-cap, it's down. Pause the SIP three months, don't cancel. The rest stays invested."</p>
       <p class="em-body">She takes what she needs. The rest keeps working. You had only yourself.</p>
       <button id="emCallBtn" class="cta">See where it leaves you both →</button>
@@ -263,7 +280,7 @@
       <div class="result-actions">
         <button id="emReplay" class="cta">Face it again — choose differently</button>
         <button id="emShareBtn" class="ghost-btn">Share what it cost me</button>
-        <button id="emLuckBtn" class="ghost-btn">Was it luck? (play it 1,000 times)</button>
+        <button id="emLuckBtn" class="ghost-btn">Was It Luck? — Play 10,000 Times</button>
         <button id="emGridBtn" class="ghost-btn">See the crash version</button>
         <button id="emChangeBtn" class="ghost-btn">Change inputs</button>
       </div>
@@ -274,6 +291,6 @@
 
 <div id="toast" class="toast" hidden></div>
 <footer class="global-foot">Educational tool — not investment advice.</footer>
-<script src="app.js?v=20260614d"></script>
+<script src="app.js?v=20260614e"></script>
 </body>
 </html>
