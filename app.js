@@ -931,6 +931,40 @@ if (typeof document !== 'undefined') (function () {
     }
   }
 
+  // A real trading-terminal CANDLESTICK chart of the market, auto-fitting to
+  // the visible window. Green = up month, red = down month; the crash is a
+  // cascade of red candles.
+  function drawCandles(c, w, h, N, nav, head, pad, years, crashing) {
+    const p = pad, last = Math.max(1, Math.min(Math.floor(head), nav.length - 1));
+    let lo = Infinity, hi = -Infinity;
+    for (let m = 0; m <= last; m++) { const o = nav[m], rg = Math.max(o, 1) * 0.02; if (o - rg < lo) lo = o - rg; if (o + rg > hi) hi = o + rg; }
+    const span = (hi - lo) || 1; lo -= span * 0.06; hi += span * 0.06;
+    const X = (m) => p.l + (m / N) * (w - p.l - p.r);
+    const Y = (v) => (h - p.b) - ((v - lo) / (hi - lo)) * (h - p.t - p.b);
+    c.clearRect(0, 0, w, h);
+    c.strokeStyle = 'rgba(255,255,255,0.05)'; c.lineWidth = 1;
+    for (let i = 0; i <= 3; i++) { const yy = p.t + i * (h - p.t - p.b) / 3; c.beginPath(); c.moveTo(p.l, yy); c.lineTo(w - p.r, yy); c.stroke(); }
+    const cw = Math.max(1.6, Math.min(11, (w - p.l - p.r) / N * 0.6));
+    for (let m = 1; m <= last; m++) {
+      const o = nav[m - 1], cl = nav[m], up = cl >= o, col = up ? '#3ee0a4' : '#ff7a7a';
+      const wick = (Math.abs(chartNoise(m)) * 0.5 + 0.35) * Math.max(o, cl) * 0.012;
+      const x = X(m);
+      c.strokeStyle = col; c.fillStyle = col; c.lineWidth = 1;
+      c.beginPath(); c.moveTo(x, Y(Math.max(o, cl) + wick)); c.lineTo(x, Y(Math.min(o, cl) - wick)); c.stroke();
+      const top = Math.min(Y(o), Y(cl)), ht = Math.max(1.6, Math.abs(Y(cl) - Y(o)));
+      c.globalAlpha = up ? 0.85 : 1; c.fillRect(x - cw / 2, top, cw, ht); c.globalAlpha = 1;
+    }
+    // last-price level + label (right edge), like a live ticker
+    const lc = nav[last], yL = Y(lc);
+    c.setLineDash([4, 5]); c.strokeStyle = crashing ? hexFill('#ff7a7a', 0.7) : hexFill('#3ee0a4', 0.7); c.lineWidth = 1;
+    c.beginPath(); c.moveTo(p.l, yL); c.lineTo(w - p.r, yL); c.stroke(); c.setLineDash([]);
+    // axis: year ticks + a 'market' caption
+    c.fillStyle = 'rgba(230,238,248,0.6)'; c.font = '600 13px ui-monospace, monospace'; c.textAlign = 'center'; c.textBaseline = 'alphabetic';
+    for (let yr = 0; yr <= years; yr += Math.max(1, Math.round(years / 4))) c.fillText('Yr ' + yr, X(yr * 12), h - p.b + 17);
+    c.textAlign = 'left'; c.fillStyle = 'rgba(230,238,248,0.5)'; c.font = '700 11px ui-monospace, monospace';
+    c.fillText('THE MARKET', p.l + 2, p.t - 8 < 14 ? 16 : p.t - 8);
+  }
+
   // Draw a finished two-line journey (used on the result screens).
   function drawJourney(canvasId, a, b, N, years, behind) {
     const cv = $(canvasId); if (!cv) return;
@@ -1016,31 +1050,22 @@ if (typeof document !== 'undefined') (function () {
     const { w, h, c } = fitCanvas(cv);
     const sim = state.sim, N = sim.N;
     const pre = state.phase === 'climb' || state.phase === 'crash';
-    let lines, front;
+    let front;
     if (pre) {
-      const crashing = state.phase === 'crash', d = sim.direct.hold.value, r = sim.regular.hold.value;
-      front = d;
-      lines = [
-        { values: r, color: crashing ? hexFill(COL.cool, 0.85) : COL.regular, width: 1.8, alpha: 0.8, texture: true },
-        { values: d, color: crashing ? COL.cool : COL.direct, width: 2.4, glow: true, dot: true, texture: true, fill: crashing ? hexFill(COL.cool, 0.14) : hexFill(COL.direct, 0.14) },
-      ];
+      // Watch THE MARKET as live candlesticks; the HUD shows your money.
+      front = sim.direct.hold.value;
+      drawCandles(c, w, h, N, sim.navDirect, state.head, { l: 18, r: 18, t: 30, b: 32 }, sim.years, state.phase === 'crash');
     } else {
+      // The consequence: your path vs the calm path, with the gap shaded.
       const yours = sim.direct[state.choice], calm = sim.direct.hold;
       front = yours.value;
-      lines = [
+      const lines = [
         { values: calm.value, color: COL.ghost, width: 1.8, alpha: 0.38, dash: [4, 5] },
         { values: yours.value, color: BEHAVIOURS[state.choice].color, width: 2.4, glow: true, dot: true, texture: true, fill: hexFill(BEHAVIOURS[state.choice].color, 0.14) },
       ];
+      const band = state.head > sim.navDirect._bottom ? { a: yours.value, b: calm.value, color: hexFill(yours.final < calm.final ? COL.crash : COL.direct, 0.16) } : null;
+      drawLines(c, w, h, N, state.yMax, lines, state.head, { l: 18, r: 18, t: 28, b: 32 }, band, { axis: true, axisYears: sim.years });
     }
-    // Divergence shading — the gap between your path and the calm path, made
-    // visible (red if you fell behind, green if you pulled ahead).
-    let band = null;
-    if (!pre && state.head > sim.navDirect._bottom) {
-      const yours = sim.direct[state.choice], calm = sim.direct.hold;
-      const behind = yours.final < calm.final;
-      band = { a: yours.value, b: calm.value, color: hexFill(behind ? COL.crash : COL.direct, 0.16) };
-    }
-    drawLines(c, w, h, N, state.yMax, lines, state.head, { l: 18, r: 18, t: 28, b: 32 }, band, { axis: true, axisYears: sim.years });
     const corpus = valueAt(front, state.head), months = Math.min(Math.floor(state.head), N);
     // A soft tick + light haptic each year the climb passes — time, felt.
     const yr = Math.min(Math.floor(state.head / 12), sim.years);
