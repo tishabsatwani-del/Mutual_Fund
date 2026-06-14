@@ -1400,7 +1400,7 @@ if (typeof document !== 'undefined') (function () {
     const calmCurve = curve(calmC), panicCurve = curve(panicC);
     const ridgeY = (x) => { const t = (x - pad.l) / innerW * NB - 0.5; const i = Math.max(0, Math.min(NB - 2, Math.floor(t))), f = Math.max(0, Math.min(1, t - i)); return calmCurve[i][1] + (calmCurve[i + 1][1] - calmCurve[i][1]) * f; };
     const dots = data.sample.map((s) => { const x = X(s[0]); return { x: x, y: ridgeY(x) + 3 + Math.random() * 11 }; });
-    return { pad, X, baseY, topY, calmCurve, panicCurve, dots, calmMedX: X(data.calm.p50), panicMedX: X(data.panic.p50), w, h };
+    return { pad, X, baseY, topY, calmCurve, panicCurve, dots, calmMedX: X(data.calm.p50), panicMedX: X(data.panic.p50), calmFloorX: X(data.calm.p05), w, h };
   }
   function fillMountain(c, L, curve, p, hex, aFill, aLine) {
     const Y = (pt) => L.baseY - (L.baseY - pt[1]) * p;
@@ -1425,6 +1425,17 @@ if (typeof document !== 'undefined') (function () {
     if (!lifeLayout || lifeLayout.w !== w || lifeLayout.h !== h || lifeLayout.data !== data) { lifeLayout = buildLifeLayout(data, w, h); lifeLayout.data = data; }
     const L = lifeLayout;
     c.clearRect(0, 0, w, h);
+    // The "danger zone" — everything below the CALM investor's worst-case (1-in-20)
+    // floor. The panic mountain's tail reaches into it; the calm one never does.
+    // A wordless proof that panic isn't just poorer, it's less safe.
+    if (st.panicP > 0.35) {
+      const a = Math.min(1, (st.panicP - 0.35) * 1.6);
+      c.fillStyle = hexFill(COL.crash, 0.06 * a); c.fillRect(L.pad.l, L.topY, L.calmFloorX - L.pad.l, L.baseY - L.topY);
+      c.save(); c.globalAlpha = a * 0.8; c.setLineDash([2, 4]); c.strokeStyle = hexFill(COL.crash, 0.5); c.lineWidth = 1;
+      c.beginPath(); c.moveTo(L.calmFloorX, L.topY); c.lineTo(L.calmFloorX, L.baseY); c.stroke(); c.setLineDash([]);
+      c.fillStyle = hexFill(COL.crash, 0.85); c.font = '600 10px ui-monospace, monospace'; c.textAlign = 'left'; c.textBaseline = 'top';
+      c.fillText('below calm’s worst case', L.pad.l + 4, L.topY + 2); c.restore();
+    }
     c.strokeStyle = 'rgba(203,178,107,0.16)'; c.lineWidth = 1;
     c.beginPath(); c.moveTo(L.pad.l, L.baseY); c.lineTo(w - L.pad.r, L.baseY); c.stroke();
     const src = { x: L.pad.l + 4, y: (L.topY + L.baseY) / 2 };
@@ -1467,7 +1478,7 @@ if (typeof document !== 'undefined') (function () {
     const calmAhead = data.calmAhead, nP = data.nPaths;
     const fmtN = (n) => n.toLocaleString('en-IN');
     const lo = data.calm.p10, hi = data.calm.p90, floor = data.calm.p05, panicTyp = data.panic.p50, panicFloor = data.panic.p05;
-    const ratio = Math.max(2, Math.round(Math.abs(data.crowdGap) / Math.max(1, Math.abs(data.doorGap))));
+    const ratio = (Math.abs(data.crowdGap) / Math.max(1, Math.abs(data.doorGap))).toFixed(1);
     setText('lifeTitle', 'No one can show you your future.');
     setText('lifeLead', 'So we ran it ten thousand times — every crash, every recovery, every order they could come in.');
     setHTML('lifeBeats',
@@ -1481,7 +1492,7 @@ if (typeof document !== 'undefined') (function () {
       + '<div class="lbeat close" id="lb_close"><p>You only get to live <b>one</b> of these ten thousand lives. You don’t get to choose which one — the market throws the dice. '
       + 'The only thing you ever got to choose was <b>which crowd you were standing in</b> when it did.</p></div>'
       + '<div class="lbeat door" id="lb_door"><p>The <b>door</b> — the entire fee, Direct vs Regular — changed a calm life by about <b>' + inrShort(Math.abs(data.doorGap)) + '</b>. '
-      + 'The <b>crowd</b> you stood in — calm or panic — changed it by about <b>' + inrShort(Math.abs(data.crowdGap)) + '</b>, roughly <b>' + ratio + '×</b> more. The fee is real; your behaviour is bigger.</p></div>');
+      + 'The <b>crowd</b> you stood in — calm or panic — mattered <b>~' + ratio + '×</b> more, about <b>' + inrShort(Math.abs(data.crowdGap)) + '</b>. The fee is real; your behaviour is bigger.</p></div>');
     state._life = { sprayP: 0, calmP: 0, panicP: 0, tSpray: 0, tCalm: 0, tPanic: 0 };
     lifeAdvance('spray');
     const draw = () => { const t = state._life; if (!t) return;
