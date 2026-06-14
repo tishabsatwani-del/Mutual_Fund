@@ -865,17 +865,22 @@ if (typeof document !== 'undefined') (function () {
     return values[last] + (values[last + 1] - values[last]) * (head - last);
   }
   function hexFill(hex, a) { const n = parseInt(hex.slice(1), 16); return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')'; }
-  // Deterministic organic "market texture" so the line reads like a real index
-  // chart, not a smooth formula. Stable per month (no frame flicker). Visual
-  // only — the HUD figure remains the exact computed value.
-  function chartNoise(m) { return Math.sin(m * 0.7) * 0.5 + Math.sin(m * 1.93 + 1.3) * 0.3 + Math.sin(m * 3.31 + 0.7) * 0.2; }
+  // Realistic market texture — an irregular random walk built once per run
+  // (stable across frames, so the line jitters like a real index, not a smooth
+  // wave). Visual only: the HUD figure stays the exact computed value.
+  let texArr = null;
+  function buildTex(N) {
+    texArr = new Array(N + 1); let v = 0;
+    for (let m = 0; m <= N; m++) { v = v * 0.86 + (Math.random() - 0.5) * 1.5; texArr[m] = Math.max(-2.3, Math.min(2.3, v)); }
+  }
+  function chartNoise(m) { if (!texArr) return 0; return texArr[Math.min(Math.max(0, Math.round(m)), texArr.length - 1)] || 0; }
   function drawLines(c, w, h, N, yMax, lines, head, pad, band, opts) {
     const p = pad || { l: 18, r: 18, t: 26, b: 24 };
     opts = opts || {};
     const X = (m) => p.l + (m / N) * (w - p.l - p.r);
     const Y = (v) => (h - p.b) - (v / yMax) * (h - p.t - p.b);
     // Plotted Y with optional texture (amplitude scales with value, like real vol).
-    const PY = (m, v, tex) => Y(tex ? v * (1 + 0.014 * chartNoise(m)) : v);
+    const PY = (m, v, tex) => Y(tex ? v * (1 + 0.026 * chartNoise(m)) : v);
     c.clearRect(0, 0, w, h);
     c.strokeStyle = 'rgba(255,255,255,0.06)'; c.lineWidth = 1;
     for (let i = 0; i <= 3; i++) { const yy = p.t + i * (h - p.t - p.b) / 3; c.beginPath(); c.moveTo(p.l, yy); c.lineTo(w - p.r, yy); c.stroke(); }
@@ -1036,7 +1041,6 @@ if (typeof document !== 'undefined') (function () {
       band = { a: yours.value, b: calm.value, color: hexFill(behind ? COL.crash : COL.direct, 0.16) };
     }
     drawLines(c, w, h, N, state.yMax, lines, state.head, { l: 18, r: 18, t: 28, b: 32 }, band, { axis: true, axisYears: sim.years });
-    drawEmbers(c, w, h);
     const corpus = valueAt(front, state.head), months = Math.min(Math.floor(state.head), N);
     // A soft tick + light haptic each year the climb passes — time, felt.
     const yr = Math.min(Math.floor(state.head / 12), sim.years);
@@ -1048,26 +1052,7 @@ if (typeof document !== 'undefined') (function () {
     const bar = $('climbProg'); if (bar) bar.style.width = Math.min(100, state.head / N * 100) + '%';
   }
 
-  /* ---- Falling embers/ash during the fall — cinematic atmosphere. ---- */
-  function spawnEmbers(n) {
-    for (let i = 0; i < n; i++) state.embers.push({ x: Math.random(), y: Math.random() * 0.3, vy: 0.0008 + Math.random() * 0.0016, vx: (Math.random() - 0.5) * 0.0008, r: 0.6 + Math.random() * 1.8, life: 1 });
-  }
-  function drawEmbers(c, w, h) {
-    if (state.phase === 'crash') { if (state.embers.length < 36 && Math.random() < 0.5) spawnEmbers(2); }
-    if (!state.embers.length) return;
-    c.save();
-    for (let i = state.embers.length - 1; i >= 0; i--) {
-      const e = state.embers[i];
-      e.y += e.vy; e.x += e.vx; e.vx += (Math.random() - 0.5) * 0.0002;
-      if (state.phase !== 'crash') e.life -= 0.012;
-      if (e.y > 1.05 || e.life <= 0) { state.embers.splice(i, 1); continue; }
-      const px = e.x * w, py = e.y * h;
-      c.globalAlpha = 0.32 * e.life * (1 - e.y * 0.4);
-      c.shadowColor = COL.crash; c.shadowBlur = 8; c.fillStyle = COL.crash;
-      c.beginPath(); c.arc(px, py, e.r, 0, Math.PI * 2); c.fill();
-    }
-    c.restore();
-  }
+  function spawnEmbers() {} // removed — falling red dots read as childish
 
   const CLIMB_MS = reduceMotion ? 200 : 7000, CRASH_MS = reduceMotion ? 150 : 5000, DIVERGE_MS = reduceMotion ? 200 : 6000;
   function tensionCue() { if (!reduceMotion && navigator.vibrate) navigator.vibrate([20, 70, 30]); }
@@ -1092,6 +1077,7 @@ if (typeof document !== 'undefined') (function () {
 
   function startClimb() {
     state.sim = runSinglePath(state.sip, state.eventId, state.years);
+    buildTex(state.sim.N); // fresh realistic market texture for this run
     state.choice = null; state.head = 0; state.phase = 'climb'; state.phaseStart = null; state.embers = []; state._lastYear = -1;
     state.yMax = state.sim.direct.hold.final * 1.08;
     const marker = $('climbMarker'); if (marker) marker.style.left = (state.sim.S / state.sim.N * 100) + '%';
@@ -1416,6 +1402,7 @@ if (typeof document !== 'undefined') (function () {
   function emToResult() {
     stopCallTimer(); hide($('emCall')); Sound.whoosh(); Sound.resolve();
     const sim = runEmergency(state.sip, state.emergencyId, state.emResponse, state.downturn, state.years, state.severity);
+    buildTex(sim.N);
     state.sim = sim; renderEmergencyResult(sim); show($('emergency'));
     const a = { values: sim.you.value, color: COL.crash, width: 3, glow: true, dot: true, texture: true };
     const b = { values: sim.directSmart.value, color: COL.direct, width: 2.4, alpha: 0.85, texture: true };
