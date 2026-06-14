@@ -770,12 +770,28 @@ if (typeof document !== 'undefined') (function () {
     return values[last] + (values[last + 1] - values[last]) * (head - last);
   }
   function hexFill(hex, a) { const n = parseInt(hex.slice(1), 16); return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')'; }
-  function drawLines(c, w, h, N, yMax, lines, head, pad, band) {
+  // Deterministic organic "market texture" so the line reads like a real index
+  // chart, not a smooth formula. Stable per month (no frame flicker). Visual
+  // only — the HUD figure remains the exact computed value.
+  function chartNoise(m) { return Math.sin(m * 0.7) * 0.5 + Math.sin(m * 1.93 + 1.3) * 0.3 + Math.sin(m * 3.31 + 0.7) * 0.2; }
+  function drawLines(c, w, h, N, yMax, lines, head, pad, band, opts) {
     const p = pad || { l: 18, r: 18, t: 26, b: 24 };
-    const X = (m) => p.l + (m / N) * (w - p.l - p.r), Y = (v) => (h - p.b) - (v / yMax) * (h - p.t - p.b);
+    opts = opts || {};
+    const X = (m) => p.l + (m / N) * (w - p.l - p.r);
+    const Y = (v) => (h - p.b) - (v / yMax) * (h - p.t - p.b);
+    // Plotted Y with optional texture (amplitude scales with value, like real vol).
+    const PY = (m, v, tex) => Y(tex ? v * (1 + 0.014 * chartNoise(m)) : v);
     c.clearRect(0, 0, w, h);
     c.strokeStyle = 'rgba(255,255,255,0.06)'; c.lineWidth = 1;
     for (let i = 0; i <= 3; i++) { const yy = p.t + i * (h - p.t - p.b) / 3; c.beginPath(); c.moveTo(p.l, yy); c.lineTo(w - p.r, yy); c.stroke(); }
+    // Axis labels — make it read as a genuine financial chart.
+    if (opts.axis) {
+      c.save(); c.fillStyle = 'rgba(255,255,255,0.34)'; c.font = '11px ' + 'var(--num)'.replace('var(--num)', 'ui-monospace, monospace'); c.textAlign = 'left';
+      for (let i = 0; i <= 3; i++) { const yy = p.t + i * (h - p.t - p.b) / 3; const val = yMax * (3 - i) / 3; c.fillText(inrShort(val), p.l + 2, yy - 4); }
+      const yrs = opts.axisYears || Math.round(N / 12); c.textAlign = 'center';
+      for (let yr = 0; yr <= yrs; yr += Math.max(1, Math.round(yrs / 4))) { const xx = X(yr * 12); c.fillText('Y' + yr, xx, h - p.b + 16); }
+      c.restore();
+    }
     // Divergence shading: fill the gap between two lines (the cost made visible).
     if (band) {
       const a = pointsUpTo(band.a, head == null ? N : head), b = pointsUpTo(band.b, head == null ? N : head);
@@ -789,23 +805,30 @@ if (typeof document !== 'undefined') (function () {
     for (const line of lines) {
       const pts = pointsUpTo(line.values, head == null ? N : head);
       if (!pts.length) continue;
+      const tex = !!line.texture;
       if (line.fill) {
         c.beginPath(); c.moveTo(X(pts[0][0]), h - p.b);
-        for (const [m, v] of pts) c.lineTo(X(m), Y(v));
+        for (const [m, v] of pts) c.lineTo(X(m), PY(m, v, tex));
         c.lineTo(X(pts[pts.length - 1][0]), h - p.b); c.closePath();
         const g = c.createLinearGradient(0, p.t, 0, h - p.b); g.addColorStop(0, line.fill); g.addColorStop(1, 'rgba(0,0,0,0)'); c.fillStyle = g; c.fill();
       }
+      const tracePath = (dx) => { c.beginPath(); for (let i = 0; i < pts.length; i++) { const [m, v] = pts[i]; const px = X(m) + (dx || 0), py = PY(m, v, tex); if (i === 0) c.moveTo(px, py); else c.lineTo(px, py); } };
+      // Chromatic glitch as the line cracks — a brief RGB split.
+      if (opts.glitch && line.glow) {
+        c.save(); c.globalCompositeOperation = 'screen'; c.lineWidth = (line.width || 2);
+        c.strokeStyle = 'rgba(255,40,40,0.5)'; tracePath(2.2); c.stroke();
+        c.strokeStyle = 'rgba(40,200,255,0.5)'; tracePath(-2.2); c.stroke();
+        c.restore();
+      }
       c.save(); c.globalAlpha = line.alpha == null ? 1 : line.alpha; c.strokeStyle = line.color; c.lineWidth = line.width || 2;
       c.lineJoin = 'round'; c.lineCap = 'round'; if (line.dash) c.setLineDash(line.dash); if (line.glow) { c.shadowColor = line.color; c.shadowBlur = 14; }
-      c.beginPath();
-      for (let i = 0; i < pts.length; i++) { const [m, v] = pts[i]; if (i === 0) c.moveTo(X(m), Y(v)); else c.lineTo(X(m), Y(v)); }
-      c.stroke(); c.restore();
+      tracePath(0); c.stroke(); c.restore();
       if (line.dot) {
-        const [m, v] = pts[pts.length - 1];
+        const [m, v] = pts[pts.length - 1]; const px = X(m), py = PY(m, v, tex);
         const pulse = 1 + Math.sin(performance.now() / 220) * 0.18; // living, breathing tip
         c.save(); c.shadowColor = line.color; c.shadowBlur = 22; c.fillStyle = line.color;
-        c.globalAlpha = 0.22; c.beginPath(); c.arc(X(m), Y(v), 12 * pulse, 0, Math.PI * 2); c.fill();
-        c.globalAlpha = 1; c.beginPath(); c.arc(X(m), Y(v), 5 * pulse, 0, Math.PI * 2); c.fill();
+        c.globalAlpha = 0.22; c.beginPath(); c.arc(px, py, 12 * pulse, 0, Math.PI * 2); c.fill();
+        c.globalAlpha = 1; c.beginPath(); c.arc(px, py, 5 * pulse, 0, Math.PI * 2); c.fill();
         c.restore();
       }
     }
@@ -866,15 +889,15 @@ if (typeof document !== 'undefined') (function () {
       const crashing = state.phase === 'crash', d = sim.direct.hold.value, r = sim.regular.hold.value;
       front = d;
       lines = [
-        { values: r, color: crashing ? hexFill(COL.cool, 0.9) : COL.regular, width: 2.4, alpha: 0.85 },
-        { values: d, color: crashing ? COL.cool : COL.direct, width: 3.4, glow: true, dot: true, fill: crashing ? hexFill(COL.cool, 0.16) : hexFill(COL.direct, 0.16) },
+        { values: r, color: crashing ? hexFill(COL.cool, 0.9) : COL.regular, width: 2.4, alpha: 0.85, texture: true },
+        { values: d, color: crashing ? COL.cool : COL.direct, width: 3.4, glow: true, dot: true, texture: true, fill: crashing ? hexFill(COL.cool, 0.16) : hexFill(COL.direct, 0.16) },
       ];
     } else {
       const yours = sim.direct[state.choice], calm = sim.direct.hold;
       front = yours.value;
       lines = [
         { values: calm.value, color: COL.ghost, width: 2.2, alpha: 0.4, dash: [5, 6] },
-        { values: yours.value, color: BEHAVIOURS[state.choice].color, width: 3.4, glow: true, dot: true, fill: hexFill(BEHAVIOURS[state.choice].color, 0.16) },
+        { values: yours.value, color: BEHAVIOURS[state.choice].color, width: 3.4, glow: true, dot: true, texture: true, fill: hexFill(BEHAVIOURS[state.choice].color, 0.16) },
       ];
     }
     // Divergence shading — the gap between your path and the calm path, made
@@ -885,12 +908,15 @@ if (typeof document !== 'undefined') (function () {
       const behind = yours.final < calm.final;
       band = { a: yours.value, b: calm.value, color: hexFill(behind ? COL.crash : COL.direct, 0.16) };
     }
-    drawLines(c, w, h, N, state.yMax, lines, state.head, null, band);
+    drawLines(c, w, h, N, state.yMax, lines, state.head, null, band, { axis: true, axisYears: sim.years, glitch: state.phase === 'crash' });
     drawEmbers(c, w, h);
     const corpus = valueAt(front, state.head), months = Math.min(Math.floor(state.head), N);
+    // A soft tick + light haptic each year the climb passes — time, felt.
+    const yr = Math.min(Math.floor(state.head / 12), sim.years);
+    if (state.phase === 'climb' && yr !== state._lastYear) { state._lastYear = yr; if (yr > 0) { Sound.ui(); if (navigator.vibrate) navigator.vibrate(5); } }
     setText('corpus', inr(corpus));
     setText('corpusShort', '≈ ' + inrShort(corpus));
-    setText('yearLabel', 'Year ' + Math.min(Math.floor(state.head / 12), sim.years) + ' / ' + sim.years);
+    setText('yearLabel', 'Year ' + yr + ' / ' + sim.years);
     setText('invested', 'You\'ve put in ' + inrShort(state.sip * months));
     const bar = $('climbProg'); if (bar) bar.style.width = Math.min(100, state.head / N * 100) + '%';
   }
@@ -939,7 +965,7 @@ if (typeof document !== 'undefined') (function () {
 
   function startClimb() {
     state.sim = runSinglePath(state.sip, state.eventId, state.years);
-    state.choice = null; state.head = 0; state.phase = 'climb'; state.phaseStart = null; state.embers = [];
+    state.choice = null; state.head = 0; state.phase = 'climb'; state.phaseStart = null; state.embers = []; state._lastYear = -1;
     state.yMax = state.sim.direct.hold.final * 1.08;
     const marker = $('climbMarker'); if (marker) marker.style.left = (state.sim.S / state.sim.N * 100) + '%';
     setText('pledgeBadge', 'You swore: ' + PLEDGE_LABEL[state.pledge]);
