@@ -13,7 +13,7 @@
 <meta property="og:description" content="You say you won't panic. Prove it." />
 <meta property="og:type" content="website" />
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚪</text></svg>" />
-<link rel="stylesheet" href="styles.css?v=20260614z" />
+<link rel="stylesheet" href="styles.css?v=20260614aa" />
 </head>
 <body>
 <div id="grain" aria-hidden="true"></div>
@@ -215,7 +215,7 @@
       <div class="result-actions">
         <button id="replayBtn" class="cta">Live it again — choose differently</button>
         <button id="shareBtn" class="ghost-btn">Share what it cost me</button>
-        <button id="luckBtn" class="ghost-btn">Was It Luck? — Play 10,000 Times</button>
+        <button id="luckBtn" class="ghost-btn">See your 10,000 lifetimes</button>
         <button id="gridBtn" class="ghost-btn">See all four choices</button>
         <button id="changeBtn" class="ghost-btn">Change inputs</button>
       </div>
@@ -224,10 +224,12 @@
 
   <!-- ===================== WAS IT LUCK? ===================== -->
   <div id="luck" class="overlay" hidden>
-    <div class="card wide-card">
-      <h2 class="all-title">Was it luck — or behaviour?</h2>
-      <div id="luckBody" class="luck-body"></div>
-      <p class="disclaimer">Documented model: mean ≈ 12%/yr, vol ≈ 15–18%/yr, fat tails + clustered crashes. Odds are ranges, never predictions.</p>
+    <div class="card wide-card lifetimes">
+      <h2 class="all-title" id="lifeTitle">No one can show you your future.</h2>
+      <p class="life-lead" id="lifeLead">So we ran it ten thousand times.</p>
+      <div class="life-stage"><canvas id="lifeCanvas" aria-label="Ten thousand possible lives, settling into two mountains"></canvas></div>
+      <div id="lifeBeats" class="life-beats"></div>
+      <p class="disclaimer">10,000 simulated lives — same investor, same markets, calm vs panic, on the same plan. Model: mean ≈ 12%/yr, vol ≈ 15–18%/yr, fat tails + clustered crashes. Every figure here is counted from those lives, never assumed. Ranges of possibility, not predictions.</p>
       <button id="luckClose" class="ghost-btn">Back</button>
     </div>
   </div>
@@ -313,7 +315,7 @@
       <div class="result-actions">
         <button id="emReplay" class="cta">Face it again — choose differently</button>
         <button id="emShareBtn" class="ghost-btn">Share what it cost me</button>
-        <button id="emLuckBtn" class="ghost-btn">Was It Luck? — Play 10,000 Times</button>
+        <button id="emLuckBtn" class="ghost-btn">See your 10,000 lifetimes</button>
         <button id="emGridBtn" class="ghost-btn">See the crash version</button>
         <button id="emChangeBtn" class="ghost-btn">Change inputs</button>
       </div>
@@ -324,6 +326,6 @@
 
 <div id="toast" class="toast" hidden></div>
 <footer class="global-foot">Educational tool — not investment advice.</footer>
-<script src="app.js?v=20260614z"></script>
+<script src="app.js?v=20260614aa"></script>
 </body>
 </html>
