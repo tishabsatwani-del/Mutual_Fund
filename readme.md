@@ -60,19 +60,19 @@ upfront so it's never a surprise.
 - **Computed vs assumption.** Every figure is labelled: results (corpus, XIRR,
   CAGR, fee cost) are **computed live**; only the returns and the
   drawdown/emergency size are **inputs**. Nothing is invented.
-- **"Ten thousand lifetimes."** — the rigorous Monte Carlo engine (10,000
-  paths; mean ≈ 12%/yr, vol ≈ 15–18%/yr, fat tails + clustered crashes) staged
-  as a guided, *collapse-to-one* reveal (Section 10 of `BUILD_BRIEF.md`):
-  ten thousand lives **spray** out from today; then **9,999 dim to ghosts** and
-  the single life you're dealt **ignites**; the win-rate becomes **surgeon's
-  odds** made physical (100 dots — *X* steady, the rest flickering); the
-  **cruelest market in which calm still pulled through** replays as two lines
-  (calm climbs back above water, panic ends underwater); then a line lands in
-  **silence**. Every figure is **counted from the 10,000 lives** — the odds, the
-  worst life (reproducible by index), the door-vs-crowd gap — never asserted.
-  *Honesty notes: the genuinely worst markets ruin everyone, so the replay shows
-  the unluckiest market calm still **survived**, stated as such; and the closing
-  door/crowd line uses the real ~1.7× magnitude, not "moved everything."*
+- **"Run it yourself" — the interactive 10,000-life experiment.** The rigorous
+  Monte Carlo engine (10,000 paths; mean ≈ 12%/yr, vol ≈ 15–18%/yr, fat tails +
+  clustered crashes) staged not as a chart but as a *thing you do*, a choice at
+  every beat: **(1)** try to control one thing about your 20 years — every dial
+  but *your own nerve* is locked; **(2)** *guess* how many in 100 hold through a
+  crash, then meet the real figure (AMFI–CRISIL: ~8 alone, ~21 with a steady
+  hand); **(3)** **pull the lever** STAY vs RUN and watch 10,000 outcomes settle
+  high or low; **(4)** decide, hand shaking, whether to *reach for a steady
+  hand*; **(5)** turn the gap into **years of your life** at a spend you pick;
+  then the line, and the honest **door (~₹X) vs lever (~₹Y, ~1.7×)** seal. Every
+  rupee is computed live; the 8/21 are cited; the "years" uses an on-screen,
+  clearly-illustrative monthly-spend assumption. *(See `BUILD_BRIEF.md` for the
+  spec; this ships the interactive variant of its Section 10.)*
 - **Honest, not rigged** — across paths, Direct can finish **above, equal to,
   or below** Regular. The tool never claims one door is better — it proves the
   door was never the point.
