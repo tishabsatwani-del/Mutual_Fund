@@ -295,18 +295,38 @@ function navFromReturns(returns, N, feeFactor) {
   return nav;
 }
 const MC_POLICIES = {
-  hold:  { id: 'hold',  label: 'held through everything' },
-  panic: { id: 'panic', label: 'sold when it fell hard', drawdown: 0.25 },
+  hold:     { id: 'hold',     label: 'held through everything' },
+  panic:    { id: 'panic',    label: 'sold when it fell hard', drawdown: 0.25 },
+  sell:     { id: 'sell',     label: 'sold, then bought back', drawdown: 0.25 },
+  pause:    { id: 'pause',    label: 'paused the SIP',         drawdown: 0.25 },
+  sellWait: { id: 'sellWait', label: 'sold and waited a year', drawdown: 0.25, waitMonths: 12 },
 };
 function simPolicyPath(nav, N, sip, policy, skipXirr) {
-  let units = 0, cash = 0, peak = nav[0], out = false, reentryPeak = 0;
+  // Behavioural policies across a random market path (real unit accounting):
+  //   hold      — always invested.
+  //   panic/sell — sell to cash on a drawdown > threshold; re-enter at prior peak.
+  //   pause     — keep units but stop contributing on the drawdown; resume (and
+  //               deploy the cash piled up) once the price regains the peak.
+  //   sellWait  — sell on the drawdown; re-enter a year AFTER it regains the peak.
+  let units = 0, cash = 0, peak = nav[0], st = 'in', reentryAt = -1;
+  const id = policy.id, thr = policy.drawdown || 0, wait = policy.waitMonths || 12;
   for (let m = 0; m < N; m++) {
     if (nav[m] > peak) peak = nav[m];
-    if (policy.id === 'panic') {
-      if (!out && nav[m] < peak * (1 - policy.drawdown)) { cash += units * nav[m]; units = 0; out = true; reentryPeak = peak; }
-      else if (out && nav[m] >= reentryPeak) { units += cash / nav[m]; cash = 0; out = false; }
+    const dd = 1 - nav[m] / peak;
+    if (id === 'panic' || id === 'sell') {
+      if (st === 'in' && dd > thr) { cash += units * nav[m]; units = 0; st = 'out'; }
+      else if (st === 'out' && nav[m] >= peak) { units += cash / nav[m]; cash = 0; st = 'in'; }
+    } else if (id === 'pause') {
+      if (st === 'in' && dd > thr) st = 'paused';
+      else if (st === 'paused' && nav[m] >= peak) { units += cash / nav[m]; cash = 0; st = 'in'; }
+    } else if (id === 'sellWait') {
+      if (st === 'in' && dd > thr) { cash += units * nav[m]; units = 0; st = 'out'; reentryAt = -1; }
+      else if (st === 'out') {
+        if (reentryAt < 0 && nav[m] >= peak) reentryAt = m + wait;
+        if (reentryAt >= 0 && m >= reentryAt) { units += cash / nav[m]; cash = 0; st = 'in'; }
+      }
     }
-    if (out) cash += sip; else units += sip / nav[m];
+    if (st === 'out' || st === 'paused') cash += sip; else units += sip / nav[m];
   }
   const final = units * nav[N] + cash;
   return { final, xirr: skipXirr ? 0 : xirrFromSIP(sip, N, final) };
@@ -541,7 +561,7 @@ if (typeof document !== 'undefined') (function () {
         const AC = window.AudioContext || window.webkitAudioContext;
         if (!AC) return false;
         ctx = new AC();
-        master = ctx.createGain(); master.gain.value = on ? 0.9 : 0; master.connect(ctx.destination);
+        master = ctx.createGain(); master.gain.value = on ? 0.95 : 0; master.connect(ctx.destination);
         return true;
       } catch (e) { return false; }
     }
@@ -584,7 +604,7 @@ if (typeof document !== 'undefined') (function () {
       if (!init()) return;
       stopRumble();
       const secs = dur / 1000, t = T(), srcs = [];
-      const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.6, t + secs); g.connect(master);
+      const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.78, t + secs); g.connect(master);
       // 1) deep ground rumble
       const n1 = ctx.createBufferSource(); n1.buffer = brown(Math.max(2, secs + 1)); n1.loop = true;
       const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.setValueAtTime(90, t); lp.frequency.linearRampToValueAtTime(820, t + secs);
@@ -620,7 +640,7 @@ if (typeof document !== 'undefined') (function () {
       beat(); heartTimer = setInterval(beat, 60000 / bpm);
     }
     function stopHeart() { if (heartTimer) clearInterval(heartTimer); heartTimer = 0; heartBpm = 0; }
-    function silenceCut() { stopRumble(); if (pad) { try { pad.gain.cancelScheduledValues(T()); pad.gain.linearRampToValueAtTime(0.0001, T() + 0.25); } catch (e) {} } }
+    function silenceCut() { if (rumble) { try { rumble.g.gain.cancelScheduledValues(T()); rumble.g.gain.linearRampToValueAtTime(0.0001, T() + 0.9); rumble.srcs.forEach((s) => { try { s.stop(T() + 1.0); } catch (e) {} }); } catch (e) {} rumble = null; } if (pad) { try { pad.gain.cancelScheduledValues(T()); pad.gain.linearRampToValueAtTime(0.0001, T() + 0.4); } catch (e) {} } }
     function stopPad() { if (pad) { try { pad.gain.cancelScheduledValues(T()); pad.gain.linearRampToValueAtTime(0.0001, T() + 0.4); } catch (e) {} } }
     function ring() {
       if (!init()) return;
@@ -630,10 +650,16 @@ if (typeof document !== 'undefined') (function () {
     function freeze() { if (!init()) return; const t = T(); tone(1200, t, 0.5, 'sine', 0.05); const o = tone(300, t, 0.6, 'sine', 0.12); if (o) o.frequency.exponentialRampToValueAtTime(80, t + 0.55); }
     function stinger(low) { if (!init()) return; const t = T(); if (low) { const o = tone(140, t, 0.8, 'sawtooth', 0.18); if (o) o.frequency.exponentialRampToValueAtTime(60, t + 0.7); } else { tone(392, t, 0.7, 'sine', 0.1); tone(523, t, 0.8, 'sine', 0.08); } }
     function resolve() { if (!init()) return; const t = T(); [261.6, 329.6, 392].forEach((f, i) => tone(f, t + i * 0.08, 1.6, 'sine', 0.09, 0.05)); }
+    // A premium rising swell for the opening screen.
+    function openSwell() { if (!init()) return; const t = T(); [196, 261.6, 329.6, 392, 523.25].forEach((f, i) => tone(f, t + i * 0.13, 2.2, 'sine', 0.05, 0.06)); const o = tone(98, t, 2.4, 'sine', 0.06); if (o) o.frequency.linearRampToValueAtTime(130, t + 2); }
+    // The emergency hit — a deep cinematic boom + a tense minor swell (not harsh).
+    function strike() { if (!init()) return; thump(0.8); const t = T(); const o = tone(160, t, 1.2, 'sine', 0.16); if (o) o.frequency.exponentialRampToValueAtTime(70, t + 1.1); tone(190, t + 0.04, 1.0, 'triangle', 0.06); const s = ctx.createBufferSource(); s.buffer = brown(0.5); const g = ctx.createGain(); g.gain.setValueAtTime(0.3, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.5); const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 700; s.connect(lp); lp.connect(g); g.connect(master); s.start(t); s.stop(t + 0.55); }
+    // A descending, hollow loss tone for the crash reveal.
+    function lossTone() { if (!init()) return; const t = T(); const o = tone(330, t, 1.4, 'sine', 0.1); if (o) o.frequency.exponentialRampToValueAtTime(120, t + 1.2); tone(247, t + 0.1, 1.2, 'sine', 0.06); }
     function stopAll() { stopRumble(); stopHeart(); stopPad(); }
-    function toggle() { on = !on; if (master) master.gain.setTargetAtTime(on ? 0.9 : 0, T(), 0.05); return on; }
+    function toggle() { on = !on; if (master) master.gain.setTargetAtTime(on ? 0.95 : 0, T(), 0.05); return on; }
     function isOn() { return on; }
-    return { unlock, startPad, startRumble, stopRumble, impact, setHeart, stopHeart, silenceCut, stopPad, ring, tick, freeze, stinger, resolve, stopAll, toggle, isOn };
+    return { unlock, startPad, startRumble, stopRumble, impact, setHeart, stopHeart, silenceCut, stopPad, ring, tick, freeze, stinger, resolve, openSwell, strike, lossTone, stopAll, toggle, isOn };
   })();
 
   /* ---- Voice narration (Web Speech API — built into the browser, no files). ---- */
@@ -790,7 +816,7 @@ if (typeof document !== 'undefined') (function () {
     const bar = $('climbProg'); if (bar) bar.style.width = Math.min(100, state.head / N * 100) + '%';
   }
 
-  const CLIMB_MS = reduceMotion ? 200 : 7000, CRASH_MS = reduceMotion ? 150 : 3200, DIVERGE_MS = reduceMotion ? 200 : 6000;
+  const CLIMB_MS = reduceMotion ? 200 : 7000, CRASH_MS = reduceMotion ? 150 : 5000, DIVERGE_MS = reduceMotion ? 200 : 6000;
   function tensionCue() { if (!reduceMotion && navigator.vibrate) navigator.vibrate([20, 70, 30]); }
 
   function loop(ts) {
@@ -826,29 +852,34 @@ if (typeof document !== 'undefined') (function () {
 
   function enterSilence() {
     const sim = state.sim;
-    Sound.impact(); Sound.silenceCut(); Sound.setHeart(96); // lone, racing heart
+    Sound.impact(); Sound.silenceCut(); Sound.lossTone(); Sound.setHeart(96); // impact, hollow loss tone, lone racing heart
     const peak = sim.direct.hold.value[sim.S], bottom = sim.direct.hold.value[sim.navDirect._bottom];
-    setText('silDepth', Math.round(sim.ev.depth * 100));
+    const depth = Math.round(sim.ev.depth * 100);
+    setText('silDepth', depth);
     setText('silFrom', inrShort(peak)); setText('silTo', inrShort(bottom));
     setText('silContext', (sim.crashYear % 1 ? sim.crashYear.toFixed(1) : sim.crashYear) + ' years in. ' + sim.ev.name + '.');
     show($('silence'));
+    setTimeout(() => Voice.speak('Your ' + inrShort(peak) + ' is now ' + inrShort(bottom) + '. Down ' + depth + ' percent.', { rate: 0.9 }), 700);
   }
-  function openSplit() {
-    hide($('silence')); renderFriendPanel(); show($('split'));
-    const wash = () => {
-      const s = $('split'); if (s) s.classList.add('called');
-      Sound.ring(); Sound.setHeart(60); setTimeout(() => Sound.stopHeart(), 4000);
-      // The RM's voice — the most human moment in the whole experience.
-      setTimeout(() => Voice.speak("Don't sell. I mean it. I sat with people through 2008 and 2020 — the ones who sold here never caught up. We're not touching it. Go for a walk. Call me tomorrow.", { rate: 0.94 }), 1600);
-    };
-    if (reduceMotion) wash(); else setTimeout(wash, 1100);
+  // Step 1: YOU decide ALONE — no friend, no voice, nothing to copy.
+  function openYouDecision() { hide($('silence')); show($('youDecision')); }
+  // Step 2: only AFTER you've chosen, the friend (and the RM call) is revealed.
+  function openFriendReveal() {
+    renderFriendPanel(); show($('friendReveal'));
+    Sound.ring(); Sound.setHeart(60); setTimeout(() => Sound.stopHeart(), 4500);
+    setTimeout(() => Voice.speak("Don't sell. I mean it. I sat with people through 2008 and 2020 — the ones who sold here never caught up. We're not touching it. Go for a walk. Call me tomorrow.", { rate: 0.94 }), 1500);
   }
   function renderFriendPanel() {
     const cv = $('friendCanvas'); if (!cv) return;
     const sim = state.sim, { w, h, c } = fitCanvas(cv);
     drawLines(c, w, h, sim.N, state.yMax, [{ values: sim.regular.hold.value, color: COL.regular, width: 2.8, glow: true, dot: true, fill: hexFill(COL.regular, 0.14) }], sim.navRegular._healed, { l: 10, r: 10, t: 14, b: 14 });
   }
-  function choose(choice) { state.choice = choice; Sound.stopHeart(); if (CHOICE_CAT[choice] === 'sell') Sound.freeze(); else Sound.tick(); const s = $('split'); if (s) s.classList.remove('called'); hide($('split')); $('stage').classList.remove('crashing'); showCollision(); }
+  function choose(choice) {
+    state.choice = choice; Sound.stopHeart();
+    if (CHOICE_CAT[choice] === 'sell') Sound.freeze(); else Sound.tick();
+    hide($('youDecision')); $('stage').classList.remove('crashing');
+    openFriendReveal();
+  }
 
   /* ---- The collision: your promise vs what you actually did. ---- */
   function showCollision() {
@@ -971,41 +1002,46 @@ if (typeof document !== 'undefined') (function () {
   function closeMaths(panelId, toggleId) { const p = $(panelId), t = $(toggleId); if (p) p.hidden = true; if (t) t.textContent = 'See the maths ▾'; }
   function wireMaths(toggleId, panelId) { on(toggleId, 'click', () => { const p = $(panelId), t = $(toggleId); if (!p) return; p.hidden = !p.hidden; t.textContent = p.hidden ? 'See the maths ▾' : 'Hide the maths ▴'; }); }
 
-  /* ===================== "Was it luck?" — sequential, lived ===================== */
-  function openLuck() { state.luckStep = 0; show($('luck')); renderLuck(); }
-  function renderLuck() {
-    const N = 10000;
-    if (state.luckStep === 0) {
-      setHTML('luckBody', '<p class="mc-running">Living 10,000 lifetimes…</p>');
-      setTimeout(() => {
-        const held = runMonteCarlo(state.sip, 'hold', 'hold', N, 4242, state.years, true);
-        state._luckHeld = Math.round(held.youAhead / N * 100);
-        setHTML('luckBody',
-          '<p class="luck-intro">We replayed your ' + state.years + ' years across <b>10,000 different futures</b> — booms, crashes, fat tails, the lot. <b>YOU (Direct, alone)</b> against <b>your friend (Regular)</b>, who always holds because someone talks her through it.</p>'
-          + luckRow('If you HELD through every crash', state._luckHeld, COL.direct,
-              'Holding wasn\'t luck — you came out ahead of your guided friend in <b>' + state._luckHeld + ' of 100</b> futures. That\'s the fee you saved, quietly compounding.')
-          + '<button id="luckNext" class="cta">But you swore you\'d hold… what if you panicked? →</button>');
-        on('luckNext', 'click', () => { state.luckStep = 1; renderLuck(); });
-      }, 30);
-    } else {
-      setHTML('luckBody', '<p class="mc-running">Living 10,000 more — this time you sold…</p>');
-      setTimeout(() => {
-        const sold = runMonteCarlo(state.sip, 'panic', 'hold', N, 4242, state.years, true);
-        const s = Math.round(sold.youAhead / N * 100);
-        setHTML('luckBody',
-          luckRow('If you HELD', state._luckHeld, COL.direct, 'Ahead of your guided friend in <b>' + state._luckHeld + ' of 100</b> futures.')
-          + luckRow('If you SOLD when it fell hard', s, COL.crash,
-              'Ahead in only <b>' + s + ' of 100</b>. The other <b>' + (100 - s) + '</b> times, the one phone call she had beat every rupee of fee you saved.')
-          + '<p class="luck-foot">Same money. Same 10,000 markets. The only difference was your behaviour — and whether someone was there to stop you.</p>'
-          + '<button id="luckReplay" class="ghost-btn">↺ Watch it again</button>');
-        on('luckReplay', 'click', () => { state.luckStep = 0; renderLuck(); });
-      }, 30);
-    }
+  /* ===================== "Was It Luck?" — interactive 10,000-life meter ===================== */
+  const LUCK_BEHAVIOURS = [
+    { id: 'hold',     label: 'Hold',          color: COL.direct },
+    { id: 'pause',    label: 'Pause SIP',     color: COL.pause },
+    { id: 'sell',     label: 'Sell & rebuy',  color: COL.sellBack },
+    { id: 'sellWait', label: 'Sell & wait',   color: COL.crash },
+  ];
+  function openLuck() {
+    show($('luck'));
+    setHTML('luckBody', '<p class="mc-running">Living 10,000 lifetimes…</p>');
+    setTimeout(() => {
+      // Run all four behaviours across the SAME 10,000 random markets, once.
+      state._luck = {};
+      for (const b of LUCK_BEHAVIOURS) state._luck[b.id] = Math.round(runMonteCarlo(state.sip, b.id, 'hold', 10000, 4242, state.years, true).youAhead / 100);
+      setHTML('luckBody',
+        '<p class="luck-lead">If you lived these <b>' + state.years + ' years 10,000 times</b> — every boom and crash — how often would <b>you, alone</b>, still beat your guided friend? <span class="luck-hint">Tap a behaviour:</span></p>'
+        + '<div class="luck-pick" id="luckPick">' + LUCK_BEHAVIOURS.map((b) => '<button data-p="' + b.id + '">' + b.label + '</button>').join('') + '</div>'
+        + '<div class="luck-meter"><div class="luck-pct" id="luckPct">—</div><div class="luck-of">out of 100 futures, you win</div>'
+        + '<div class="luck-bar"><div class="luck-fill" id="luckFill"></div></div>'
+        + '<p class="luck-line" id="luckLine">Pick a behaviour above to live 10,000 lifetimes.</p></div>');
+      on('luckPick', 'click', (ev) => { const b = ev.target.closest('button[data-p]'); if (b) selectLuck(b.dataset.p); });
+      selectLuck('hold');
+    }, 30);
   }
-  function luckRow(title, greenPct, color, caption) {
-    let dots = '';
-    for (let i = 0; i < 100; i++) dots += '<span class="dot' + (i < greenPct ? ' on' : '') + '" style="' + (i < greenPct ? 'background:' + color : '') + '"></span>';
-    return '<div class="luck-block"><p class="luck-title">' + title + '</p><div class="dot-grid">' + dots + '</div><p class="luck-cap">' + caption + '</p></div>';
+  function selectLuck(id) {
+    if (!state._luck) return;
+    const pct = state._luck[id], beh = LUCK_BEHAVIOURS.find((b) => b.id === id);
+    document.querySelectorAll('#luckPick button').forEach((b) => b.classList.toggle('on', b.dataset.p === id));
+    const color = pct >= 60 ? COL.direct : pct <= 40 ? COL.crash : COL.regular;
+    const fill = $('luckFill'); if (fill) { fill.style.width = pct + '%'; fill.style.background = color; }
+    $('luckPct').style.color = color;
+    countUp($('luckPct'), pct, 900, (v) => String(Math.round(v)));
+    const lines = {
+      hold: 'Holding wasn\'t luck — it beat your guided friend <b>' + pct + ' times in 100</b>. That\'s the fee you saved, quietly compounding.',
+      pause: 'Pausing kept your units but missed the cheap ones — ahead <b>' + pct + ' in 100</b>.',
+      sell: 'Sell and buy back, and you win only <b>' + pct + ' in 100</b>. The other ' + (100 - pct) + ', her one phone call beat your fee saving.',
+      sellWait: 'Sell and wait a year, and it\'s just <b>' + pct + ' in 100</b> — out of the market exactly when it healed.',
+    };
+    setHTML('luckLine', lines[id]);
+    Sound.tick();
   }
 
   /* ===================== Every choice (grid) ===================== */
@@ -1037,7 +1073,8 @@ if (typeof document !== 'undefined') (function () {
     state.emCtx = ctx; state.emResponse = null;
     hideAllOverlays(); hide($('setup')); hide($('stage'));
     setText('emIntroSip', state.sip.toLocaleString('en-IN'));
-    setText('emIntroYears', ctx.crashYear);
+    setText('emIntroYears', ctx.crashYear % 1 ? ctx.crashYear.toFixed(1) : ctx.crashYear);
+    setText('emIntroInvested', inrShort(state.sip * ctx.S));
     setText('emIntroCorpus', inr(ctx.directSmart.corpusAtEmergency));
     const sv = ctx.directSmart.sleeveValues;
     setHTML('emIntroSleeves',
@@ -1048,7 +1085,7 @@ if (typeof document !== 'undefined') (function () {
   }
   function sleeveRow(name, val, note) { return '<div class="sleeve"><span class="sl-name">' + name + '</span><span class="sl-val">' + inrShort(val) + '</span><span class="sl-note">' + note + '</span></div>'; }
   function emToStrike() {
-    Sound.unlock(); Sound.stinger(true);
+    Sound.unlock(); Sound.strike();
     hide($('emIntro'));
     const ctx = state.emCtx, em = ctx.em;
     const copy = {
@@ -1107,14 +1144,14 @@ if (typeof document !== 'undefined') (function () {
   }
 
   /* ===================== Wiring ===================== */
-  function hideAllOverlays() { ['pledge', 'silence', 'split', 'collision', 'result', 'luck', 'grid', 'emIntro', 'emStrike', 'emDecision', 'emCall', 'emergency'].forEach((id) => hide($(id))); }
+  function hideAllOverlays() { ['pledge', 'silence', 'youDecision', 'friendReveal', 'collision', 'result', 'luck', 'grid', 'emIntro', 'emStrike', 'emDecision', 'emCall', 'emergency'].forEach((id) => hide($(id))); }
   function on(id, type, fn) { const el = $(id); if (el) el.addEventListener(type, fn); }
   function backToSetup() { Sound.stopAll(); Voice.stop(); cancelAnimationFrame(state.raf); hideAllOverlays(); hide($('stage')); hide($('emergency')); state.wizIndex = 0; showWizStep(0); show($('setup')); }
 
   function boot() {
     // Unlock audio + speak the opening line on the very first interaction
     // (browsers block sound/speech until a gesture). Also try immediately.
-    const firstGesture = () => { Sound.unlock(); speakIntro(); document.removeEventListener('pointerdown', firstGesture); };
+    const firstGesture = () => { Sound.unlock(); Sound.openSwell(); speakIntro(); document.removeEventListener('pointerdown', firstGesture); };
     document.addEventListener('pointerdown', firstGesture, { once: true });
     setTimeout(speakIntro, 350); // best-effort if autoplay is permitted
     on('muteBtn', 'click', () => { const onNow = Sound.toggle(); Voice.setEnabled(onNow); const b = $('muteBtn'); if (b) b.textContent = onNow ? '🔊' : '🔇'; });
@@ -1129,8 +1166,9 @@ if (typeof document !== 'undefined') (function () {
 
     on('pledgeChoices', 'click', (ev) => { const b = ev.target.closest('button[data-pledge]'); if (b) makePledge(b.dataset.pledge); });
 
-    on('silenceContinue', 'click', openSplit);
+    on('silenceContinue', 'click', openYouDecision);
     on('youChoices', 'click', (ev) => { const b = ev.target.closest('button[data-choice]'); if (b) choose(b.dataset.choice); });
+    on('friendRevealBtn', 'click', () => { hide($('friendReveal')); showCollision(); });
     on('collisionBtn', 'click', afterCollision);
 
     on('replayBtn', 'click', () => { hideAllOverlays(); showPledge(); });
@@ -1153,7 +1191,7 @@ if (typeof document !== 'undefined') (function () {
     on('emChangeBtn', 'click', backToSetup);
     wireMaths('emMathsToggle', 'emMathsPanel');
 
-    window.addEventListener('resize', () => { if (!state.sim) return; if ($('stage') && !$('stage').hidden) renderStage(); if ($('split') && !$('split').hidden) renderFriendPanel(); });
+    window.addEventListener('resize', () => { if (!state.sim) return; if ($('stage') && !$('stage').hidden) renderStage(); if ($('friendReveal') && !$('friendReveal').hidden) renderFriendPanel(); });
 
     showWizStep(0);
   }

@@ -119,15 +119,48 @@ body {
 .choices button span { font-size: 13px; color: var(--muted); line-height: 1.4; }
 .choices button:hover { border-color: rgba(255,255,255,0.3); background: rgba(255,255,255,0.08); transform: translateY(-1px); }
 .choices button:active { transform: translateY(1px); }
-/* Live-call UI for the relationship manager. */
-.rm-call { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; padding: 12px 14px; border-radius: 14px; background: linear-gradient(180deg, rgba(240,187,99,0.14), rgba(240,187,99,0.04)); border: 1px solid rgba(240,187,99,0.28); }
-.rm-avatar { position: relative; width: 46px; height: 46px; border-radius: 50%; flex: none; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 15px; color: #1a1206; background: linear-gradient(180deg, #f4cd86, #e0a948); }
-.rm-ring { position: absolute; inset: -5px; border-radius: 50%; border: 2px solid var(--regular); opacity: 0.7; animation: rmPulse 1.6s ease-out infinite; }
-@keyframes rmPulse { 0% { transform: scale(0.9); opacity: 0.7; } 100% { transform: scale(1.35); opacity: 0; } }
-.rm-meta { display: flex; flex-direction: column; gap: 2px; }
-.rm-name { font-size: 16px; font-weight: 800; color: var(--ink); }
-.rm-status { font-size: 13px; color: var(--regular); font-weight: 600; }
-.friend-canvas-wrap { position: relative; height: 90px; margin-bottom: 14px; }
+/* Live-call UI for the relationship manager — premium dark glass, green accent. */
+.rm-call { display: flex; align-items: center; gap: 13px; margin-bottom: 16px; padding: 14px 16px; border-radius: 16px; background: linear-gradient(160deg, rgba(62,224,164,0.12), rgba(255,255,255,0.02)); border: 1px solid rgba(62,224,164,0.3); box-shadow: inset 0 1px 0 rgba(255,255,255,0.05); }
+.rm-avatar { position: relative; width: 50px; height: 50px; border-radius: 50%; flex: none; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 16px; color: #04130d; background: linear-gradient(180deg, #5ff0bd, #2bbd8e); }
+.rm-ring { position: absolute; inset: -6px; border-radius: 50%; border: 2px solid var(--direct); opacity: 0.7; animation: rmPulse 1.5s ease-out infinite; }
+@keyframes rmPulse { 0% { transform: scale(0.88); opacity: 0.75; } 100% { transform: scale(1.4); opacity: 0; } }
+.rm-meta { display: flex; flex-direction: column; gap: 3px; }
+.rm-name { font-size: 17px; font-weight: 800; color: #fff; }
+.rm-status { font-size: 13.5px; color: var(--direct); font-weight: 700; letter-spacing: .02em; }
+.friend-canvas-wrap { position: relative; height: 110px; margin: 6px 0 16px; }
+
+/* Step 1 — your decision, alone (full, immersive, no influence). */
+.decide { background: rgba(6,4,5,0.94); }
+.decide-inner { width: 100%; max-width: 540px; animation: rise .6s ease both; }
+.decide-cap { font-size: 18px; font-weight: 800; color: var(--crash); letter-spacing: .01em; margin-bottom: 8px; }
+.decide-sub { font-size: 17px; line-height: 1.6; color: var(--ink); margin-bottom: 22px; }
+.decide-sub b { color: #fff; }
+.big-choices button { padding: 18px 18px; }
+.big-choices button b { font-size: 18.5px; }
+.big-choices button span { font-size: 14px; }
+
+/* Step 2 — the friend revealed (after you've decided). */
+.reveal { background: rgba(5,8,10,0.95); }
+.reveal-inner { width: 100%; max-width: 540px; background: var(--card); border: 1px solid var(--line); border-radius: 24px; padding: 28px 24px; box-shadow: 0 40px 90px -30px rgba(0,0,0,0.85); animation: rise .55s ease both; }
+.reveal-tag { font-size: 15px; color: var(--muted); margin-bottom: 16px; font-weight: 600; }
+.reveal-quote { font-size: 18px; line-height: 1.65; font-style: italic; color: #fff; margin-bottom: 14px; font-weight: 500; }
+.reveal-foot { font-size: 15px; line-height: 1.6; color: var(--direct); margin-bottom: 22px; font-weight: 600; }
+
+/* Interactive 10,000-life meter. */
+.luck-lead { font-size: 18px; line-height: 1.6; color: var(--ink); margin-bottom: 18px; text-align: center; }
+.luck-lead b { color: var(--direct); }
+.luck-hint { display: block; margin-top: 8px; font-size: 14px; color: var(--muted); }
+.luck-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 24px; }
+.luck-pick button { padding: 15px 12px; border-radius: 13px; border: 1px solid var(--line); background: rgba(255,255,255,0.04); color: var(--ink); font-size: 16px; font-weight: 700; font-family: var(--sans); cursor: pointer; transition: all .2s ease; }
+.luck-pick button:hover { border-color: rgba(255,255,255,0.3); }
+.luck-pick button.on { color: #06120c; background: linear-gradient(180deg, #4fe3ab, #25b487); border-color: transparent; }
+.luck-meter { text-align: center; }
+.luck-pct { font-family: var(--num); font-size: clamp(64px, 20vw, 96px); font-weight: 800; line-height: 1; letter-spacing: -.03em; color: var(--direct); }
+.luck-of { font-size: 14px; text-transform: uppercase; letter-spacing: .14em; color: var(--muted); margin-bottom: 16px; }
+.luck-bar { height: 16px; border-radius: 999px; background: rgba(255,255,255,0.08); overflow: hidden; margin-bottom: 16px; }
+.luck-fill { height: 100%; width: 0; border-radius: 999px; background: var(--direct); transition: width 1s cubic-bezier(.2,.7,.2,1), background .4s ease; box-shadow: 0 0 18px -2px currentColor; }
+.luck-line { font-size: 16.5px; line-height: 1.6; color: var(--ink); }
+.luck-line b { font-family: var(--num); color: var(--direct); }
 #friendCanvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 .pane-quote { font-size: 17px; line-height: 1.6; color: var(--ink); font-style: italic; margin-bottom: 12px; font-weight: 500; }
 .split.called .pane-quote { color: var(--regular); transition: color 1.3s ease; }
@@ -217,8 +250,11 @@ body {
 
 /* ===================== EMERGENCY ===================== */
 .em-stage { align-items: center; }
-.em-card { text-align: center; max-width: 480px; }
+.em-card { text-align: center; max-width: 520px; }
 .em-card .kicker { margin-bottom: 12px; }
+.em-years { font-size: clamp(22px, 6vw, 30px); font-weight: 800; letter-spacing: -.01em; margin-bottom: 10px; color: var(--ink); }
+.em-years b { color: var(--regular); }
+.em-body b { color: #fff; font-family: var(--num); }
 .em-head { font-size: clamp(24px, 6.4vw, 32px); font-weight: 800; letter-spacing: -.02em; line-height: 1.15; margin-bottom: 14px; }
 .em-body { font-size: 17px; line-height: 1.65; color: var(--ink); margin-bottom: 18px; }
 .em-body b { color: var(--regular); }
@@ -259,16 +295,23 @@ body {
 .wq { font-size: clamp(26px, 7vw, 36px); font-weight: 800; letter-spacing: -.02em; line-height: 1.2; margin-bottom: 24px; text-align: center; }
 .big-wq { font-size: clamp(30px, 8vw, 44px); }
 
-/* Opening: two big premium cards, side by side. */
+/* Opening: two big, dazzling cards side by side — colour, glow, motion. */
 .scenario-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-.scn-card { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; padding: 28px 16px; border-radius: 20px; border: 1px solid var(--line); background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.015)); color: var(--ink); cursor: pointer; transition: all .22s ease; min-height: 210px; justify-content: center; }
-.scn-icon { font-size: 46px; line-height: 1; filter: drop-shadow(0 6px 18px rgba(0,0,0,0.5)); }
-.scn-card b { font-size: 20px; font-weight: 800; letter-spacing: -.01em; }
-.scn-sub { font-size: 14.5px; color: var(--muted); line-height: 1.45; }
-.scn-card:hover { transform: translateY(-3px); border-color: rgba(255,255,255,0.28); background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02)); }
-.crash-scn:hover, .crash-scn.on { border-color: var(--crash); box-shadow: 0 0 0 1px var(--crash), 0 22px 50px -24px rgba(255,122,122,0.6); }
-.em-scn:hover, .em-scn.on { border-color: var(--regular); box-shadow: 0 0 0 1px var(--regular), 0 22px 50px -24px rgba(240,187,99,0.6); }
-.scn-card.on { transform: translateY(-3px) scale(1.02); }
+.scn-card { position: relative; overflow: hidden; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 12px; padding: 32px 16px; border-radius: 22px; border: 1px solid rgba(255,255,255,0.14); color: #fff; cursor: pointer; transition: transform .22s ease, box-shadow .3s ease, border-color .3s ease; min-height: 240px; justify-content: center; }
+.crash-scn { background: radial-gradient(120% 80% at 30% 0%, rgba(255,108,108,0.45), transparent 60%), linear-gradient(165deg, #4a121a 0%, #25090e 70%, #16070a 100%); box-shadow: 0 24px 60px -28px rgba(255,90,90,0.5), inset 0 1px 0 rgba(255,255,255,0.08); }
+.em-scn { background: radial-gradient(120% 80% at 30% 0%, rgba(62,224,164,0.42), transparent 60%), linear-gradient(165deg, #0d4733 0%, #0a261d 70%, #07140f 100%); box-shadow: 0 24px 60px -28px rgba(62,224,164,0.5), inset 0 1px 0 rgba(255,255,255,0.08); }
+.scn-card::after { content: ""; position: absolute; top: -60%; height: 220%; width: 45%; left: -50%; transform: rotate(18deg); background: linear-gradient(90deg, transparent, rgba(255,255,255,0.16), transparent); animation: sheen 5s ease-in-out infinite; pointer-events: none; }
+.em-scn::after { animation-delay: 1.2s; }
+@keyframes sheen { 0% { left: -55%; } 55% { left: 130%; } 100% { left: 130%; } }
+.scn-icon { font-size: 52px; line-height: 1; filter: drop-shadow(0 8px 22px rgba(0,0,0,0.6)); animation: floatIcon 4s ease-in-out infinite; }
+@keyframes floatIcon { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+.scn-card b { font-size: 21px; font-weight: 800; letter-spacing: -.01em; }
+.scn-sub { font-size: 14.5px; color: rgba(255,255,255,0.82); line-height: 1.5; }
+.scn-card:hover { transform: translateY(-4px); }
+.crash-scn:hover, .crash-scn.on { border-color: var(--crash); box-shadow: 0 0 0 2px var(--crash), 0 30px 70px -26px rgba(255,90,90,0.85); }
+.em-scn:hover, .em-scn.on { border-color: var(--direct); box-shadow: 0 0 0 2px var(--direct), 0 30px 70px -26px rgba(62,224,164,0.85); }
+.scn-card.on { transform: translateY(-4px) scale(1.03); }
+@media (max-width: 360px) { .scenario-grid { grid-template-columns: 1fr; } .scn-card { min-height: 150px; } }
 .opt { display: block; width: 100%; font-family: var(--sans); cursor: pointer; transition: all .2s ease; }
 .card-opt { text-align: left; padding: 18px 18px; border-radius: 16px; border: 1px solid var(--line); background: rgba(255,255,255,0.03); color: var(--ink); margin-bottom: 11px; }
 .card-opt b { display: block; font-size: 18px; font-weight: 700; margin-bottom: 3px; }
