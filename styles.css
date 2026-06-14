@@ -373,6 +373,21 @@ body {
 .scn-card:hover { transform: translateY(-3px); border-color: rgba(216,200,120,0.7); box-shadow: 0 56px 96px -40px rgba(0,0,0,0.9), inset 0 0 0 6px rgba(0,0,0,0.3), inset 0 0 0 7px rgba(216,200,120,0.4), 0 0 44px -8px rgba(216,200,120,0.45); }
 .scn-card.on { border-color: var(--gold); box-shadow: 0 0 0 2px var(--gold), 0 0 70px -6px rgba(216,200,120,0.8), inset 0 0 0 6px rgba(0,0,0,0.25), inset 0 0 0 7px rgba(216,200,120,0.55); }
 .scn-card.on .door-glow { opacity: 0.55; transition: opacity .4s ease; }
+
+/* You picked a door — it swings WIDE open and light floods out (you step through). */
+.scn-card.chosen { z-index: 4; }
+.crash-scn.chosen { animation: throughL .8s cubic-bezier(.5,0,.75,1) forwards; }
+.em-scn.chosen { animation: throughR .8s cubic-bezier(.5,0,.75,1) forwards; }
+@keyframes throughL { 0% { transform: rotateY(0); opacity: 1; } 70% { opacity: 1; } 100% { transform: rotateY(-100deg) scale(1.12); opacity: 0; } }
+@keyframes throughR { 0% { transform: rotateY(0); opacity: 1; } 70% { opacity: 1; } 100% { transform: rotateY(100deg) scale(1.12); opacity: 0; } }
+.scn-card.chosen .door-glow { animation: floodOut .8s ease-out forwards; }
+@keyframes floodOut { 0% { opacity: 0.4; } 60% { opacity: 1; } 100% { opacity: 1; } }
+.scn-card.dismiss { animation: doorRecede .55s ease forwards; }
+@keyframes doorRecede { to { opacity: 0; transform: scale(.9); filter: blur(4px); } }
+/* The flash of light as you cross the threshold. */
+.door-flash { position: fixed; inset: 0; z-index: 9; pointer-events: none; opacity: 0; background: radial-gradient(circle at 50% 48%, rgba(255,249,230,0.95), rgba(236,217,134,0.5) 38%, transparent 76%); }
+.door-flash.show { animation: flashThrough .95s ease-out; }
+@keyframes flashThrough { 0% { opacity: 0; } 45% { opacity: 1; } 100% { opacity: 0; } }
 @media (max-width: 360px) { .scenario-grid { grid-template-columns: 1fr; perspective: none; } .scn-card { min-height: 200px; transform-origin: center; } }
 .opt { display: block; width: 100%; font-family: var(--sans); cursor: pointer; transition: all .2s ease; }
 .card-opt { text-align: left; padding: 22px 20px; border-radius: 18px; border: 1px solid var(--line); background: linear-gradient(165deg, rgba(255,255,255,0.05), rgba(255,255,255,0.015)); color: var(--ink); margin-bottom: 13px; transition: all .25s ease; }
