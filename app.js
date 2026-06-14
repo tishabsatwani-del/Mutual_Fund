@@ -1406,152 +1406,165 @@ if (typeof document !== 'undefined') (function () {
    * product". We hold the door constant (same investor) and let the user feel
    * how much their behaviour swings the typical outcome — then show the fee gap
    * is a sliver beside it, and that guidance's real value is behavioural. */
-  /* ===== "Ten thousand lifetimes" — the collapse-to-one reveal (Section 10) =====
-   * A distribution is a fact, and facts live in the head. So this does the
-   * opposite of a chart: it sprays ten thousand possible lives, then COLLAPSES
-   * them to the one you're dealt; turns the win-rate into surgeon's odds you
-   * feel; replays the cruelest survivable life as two lines; and lands a line
-   * in silence. Every number is COUNTED from the engine — odds, the worst life,
-   * the gaps — never asserted. Five scenes, drawn on one canvas. */
-  let lifeLayout = null;
-  function buildLifeLayout(data, w, h) {
-    const pad = { l: 16, r: 16, t: 16, b: 16 }, innerW = w - pad.l - pad.r, innerH = h - pad.t - pad.b;
-    const src = { x: pad.l + 2, y: h * 0.52 };
-    const vals = data.sample.map((s) => s[0]); const lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals);
-    const Y = (v) => pad.t + innerH * (1 - (v - lo) / ((hi - lo) || 1)); // richer life sits higher
-    const K = 8;
-    const threads = data.sample.map((s, i) => {
-      const r1 = ((i * 2654435761) % 1000) / 1000, r2 = ((i * 40503) % 1000) / 1000;
-      const endX = pad.l + innerW * (0.55 + 0.45 * r1), endY = Y(s[0]);
-      const amp = 6 + 16 * r2, ph = r1 * 6.28, freq = 2 + (i % 3), pts = [];
-      for (let k = 0; k <= K; k++) { const f = k / K, x = src.x + (endX - src.x) * f; const baseY = src.y + (endY - src.y) * f; pts.push([x, baseY + Math.sin(f * freq + ph) * amp * (1 - f)]); }
-      return { pts: pts, c: s[0], p: s[1] };
-    });
-    let youIdx = 0, best = Infinity; const med = data.calm.p50;
-    data.sample.forEach((s, i) => { const d = Math.abs(s[0] - med); if (d < best) { best = d; youIdx = i; } });
-    return { pad, src, threads, youIdx, w, h };
+  /* ===== "Run it yourself" — the interactive 10,000-life experiment (Section 10) =====
+   * Not a film you watch — an experiment you RUN. A choice at every beat, so the
+   * reader proves the point on themselves: they try to control what they can't,
+   * guess the odds, pull the lever both ways, decide whether to reach for a
+   * steady hand, and turn the gap into years of their own life. Every rupee is
+   * computed from the engine; the 8/21 persistence figures are cited (AMFI–CRISIL). */
+  let expLayout = null;
+  function buildExpLayout(data, w, h) {
+    const pad = { l: 16, r: 16, t: 18, b: 22 }, innerW = w - pad.l - pad.r, innerH = h - pad.t - pad.b, baseY = h - pad.b;
+    const cl = data.sample.map((s) => s[0]), pn = data.sample.map((s) => s[1]);
+    const lo = Math.min(Math.min.apply(null, cl), Math.min.apply(null, pn)), hi = Math.max(Math.max.apply(null, cl), Math.max.apply(null, pn));
+    const Y = (v) => pad.t + innerH * (1 - (Math.max(lo, Math.min(hi, v)) - lo) / ((hi - lo) || 1));
+    const dots = data.sample.map((s, i) => { const r = ((i * 2654435761) % 1000) / 1000; return { x: pad.l + innerW * (0.05 + 0.9 * r), yStay: Y(s[0]), yRun: Y(s[1]) }; });
+    return { pad, baseY, dots, investedY: Y(data.invested), w, h };
   }
-  function strokeThread(c, pts, f) { // add a partial polyline (up to fraction f) to the current path
-    const K = pts.length - 1, upto = f * K; c.moveTo(pts[0][0], pts[0][1]);
-    for (let k = 1; k <= K; k++) {
-      if (upto >= k) c.lineTo(pts[k][0], pts[k][1]);
-      else { const fr = upto - (k - 1); if (fr > 0) c.lineTo(pts[k - 1][0] + (pts[k][0] - pts[k - 1][0]) * fr, pts[k - 1][1] + (pts[k][1] - pts[k - 1][1]) * fr); break; }
+  function drawCloud(c, w, h, L, stayP, runP) {
+    c.setLineDash([4, 4]); c.strokeStyle = 'rgba(230,238,248,0.22)'; c.lineWidth = 1; c.beginPath(); c.moveTo(L.pad.l, L.investedY); c.lineTo(w - L.pad.r, L.investedY); c.stroke(); c.setLineDash([]);
+    c.fillStyle = 'rgba(230,238,248,0.4)'; c.font = '600 9px ui-monospace, monospace'; c.textAlign = 'left'; c.textBaseline = 'bottom'; c.fillText('what you put in', L.pad.l + 2, L.investedY - 2);
+    const eo = (p) => 1 - Math.pow(1 - p, 3);
+    for (const d of L.dots) {
+      if (runP > 0) { const y = L.baseY + (d.yRun - L.baseY) * eo(runP); c.fillStyle = hexFill(COL.crash, 0.42 * runP); c.beginPath(); c.arc(d.x, y, 1.4, 0, 7); c.fill(); }
+      if (stayP > 0) { const y = L.baseY + (d.yStay - L.baseY) * eo(stayP); c.fillStyle = hexFill(COL.ghost, 0.5 * stayP); c.beginPath(); c.arc(d.x, y, 1.4, 0, 7); c.fill(); }
     }
   }
-  function drawThreads(c, L, scene, p) {
-    const N = L.threads.length;
-    if (scene === 'spray') {
-      c.globalCompositeOperation = 'lighter'; c.beginPath();
-      for (let i = 0; i < N; i++) { const f = Math.max(0, Math.min(1, p * 1.3 - (i / N) * 0.3)); if (f <= 0) continue; strokeThread(c, L.threads[i].pts, f); }
-      c.strokeStyle = 'rgba(232,178,87,0.13)'; c.lineWidth = 1; c.stroke(); c.globalCompositeOperation = 'source-over';
-    } else { // collapse — the 9,999 dim to ghosts; the one you're dealt ignites
-      c.globalCompositeOperation = 'lighter'; c.beginPath();
-      for (let i = 0; i < N; i++) { if (i === L.youIdx) continue; strokeThread(c, L.threads[i].pts, 1); }
-      c.strokeStyle = 'rgba(232,178,87,' + Math.max(0.02, 0.12 - 0.1 * p) + ')'; c.lineWidth = 1; c.stroke(); c.globalCompositeOperation = 'source-over';
-      const yt = L.threads[L.youIdx]; c.beginPath(); strokeThread(c, yt.pts, 1);
-      c.strokeStyle = hexFill(COL.ghost, 0.5 + 0.5 * p); c.lineWidth = 2.4; c.shadowColor = COL.ghost; c.shadowBlur = 14 * p; c.stroke(); c.shadowBlur = 0;
-      const end = yt.pts[yt.pts.length - 1]; c.fillStyle = hexFill('#ffffff', 0.85 * p); c.beginPath(); c.arc(end[0], end[1], 2.4 + 2.2 * p, 0, 7); c.fill();
+  function drawDials(c, w, h, t) {
+    const cx = w / 2, cy = h / 2, R = Math.min(w, h);
+    for (let i = 0; i < 6; i++) {
+      const r = 18 + i * R * 0.072, a0 = t * (0.25 + i * 0.13) * (i % 2 ? 1 : -1);
+      c.beginPath(); c.arc(cx, cy, r, a0, a0 + Math.PI * 1.15); c.strokeStyle = 'rgba(203,178,107,' + (0.05 + 0.025 * i) + ')'; c.lineWidth = 2; c.stroke();
+      const hx = cx + Math.cos(a0) * r, hy = cy + Math.sin(a0) * r; c.fillStyle = 'rgba(203,178,107,0.3)'; c.beginPath(); c.arc(hx, hy, 2, 0, 7); c.fill();
     }
   }
-  function drawOdds(c, w, h, data, p, t) {
-    const calmN = Math.round(data.calmAhead / data.nPaths * 100), cols = 10, rows = 10;
-    const cellW = (w - 36) / cols, cellH = (h - 36) / rows, r = Math.min(cellW, cellH) * 0.24;
+  function drawOddsGrid(c, w, h, count, p, t) {
+    const cols = 10, cellW = (w - 36) / cols, cellH = (h - 36) / 10, r = Math.min(cellW, cellH) * 0.24;
     for (let idx = 0; idx < 100; idx++) {
       if (idx / 100 > p * 1.1) continue;
       const cx = 18 + cellW * (idx % cols + 0.5), cy = 18 + cellH * (Math.floor(idx / cols) + 0.5);
-      if (idx < calmN) c.fillStyle = hexFill(COL.direct, 0.92);
-      else c.fillStyle = hexFill(COL.crash, Math.max(0.16, 0.36 + 0.34 * Math.sin(t * 4 + idx)));
+      if (idx < count) c.fillStyle = hexFill(COL.direct, 0.92);
+      else c.fillStyle = hexFill(COL.crash, Math.max(0.14, 0.32 + 0.32 * Math.sin(t * 4 + idx)));
       c.beginPath(); c.arc(cx, cy, r, 0, 7); c.fill();
     }
   }
-  function drawWorst(c, w, h, wl, p) {
-    if (!wl) return;
-    if (!wl._yMax) { let m = 0; for (const v of wl.calmSeries) if (v > m) m = v; for (const v of wl.panicSeries) if (v > m) m = v; wl._yMax = m * 1.08; }
-    const pad = { l: 16, r: 16, t: 22, b: 24 }, innerW = w - pad.l - pad.r, innerH = h - pad.t - pad.b, N = wl.N, yMax = wl._yMax;
-    const Xm = (m) => pad.l + m / N * innerW, Yv = (v) => (h - pad.b) - v / yMax * innerH, wy = Yv(wl.invested);
-    c.setLineDash([4, 4]); c.strokeStyle = 'rgba(230,238,248,0.32)'; c.lineWidth = 1; c.beginPath(); c.moveTo(pad.l, wy); c.lineTo(w - pad.r, wy); c.stroke(); c.setLineDash([]);
-    c.fillStyle = 'rgba(230,238,248,0.5)'; c.font = '600 10px ui-monospace, monospace'; c.textAlign = 'left'; c.textBaseline = 'bottom'; c.fillText('what you put in', pad.l + 2, wy - 2);
-    const upto = Math.max(1, Math.floor(N * p));
-    const line = (series, hex, wd) => { c.beginPath(); for (let m = 0; m <= upto; m++) { const x = Xm(m), y = Yv(series[m]); m ? c.lineTo(x, y) : c.moveTo(x, y); } c.strokeStyle = hex; c.lineWidth = wd; c.stroke(); };
-    line(wl.panicSeries, hexFill(COL.crash, 0.95), 2);
-    line(wl.calmSeries, hexFill(COL.ghost, 0.98), 2.4);
-    if (p > 0.88) {
-      const ex = Xm(upto);
-      c.fillStyle = COL.ghost; c.beginPath(); c.arc(ex, Yv(wl.calmSeries[upto]), 3, 0, 7); c.fill();
-      c.fillStyle = COL.crash; c.beginPath(); c.arc(ex, Yv(wl.panicSeries[upto]), 3, 0, 7); c.fill();
-    }
+  function drawGlow(c, w, h, t) {
+    const g = c.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, Math.min(w, h) * 0.55);
+    g.addColorStop(0, hexFill(COL.ghost, 0.1 + 0.04 * Math.sin(t * 1.5))); g.addColorStop(1, 'rgba(0,0,0,0)');
+    c.fillStyle = g; c.fillRect(0, 0, w, h);
+    c.fillStyle = hexFill(COL.ghost, 0.85); c.beginPath(); c.arc(w / 2, h / 2, 3, 0, 7); c.fill();
   }
-  function drawLifeScene(canvasId, data, st) {
-    const cv = $(canvasId); if (!cv) return;
+  function drawExpScene(data, st) {
+    const cv = $('lifeCanvas'); if (!cv) return;
     const { w, h, c } = fitCanvas(cv);
-    if (!lifeLayout || lifeLayout.w !== w || lifeLayout.h !== h || lifeLayout.data !== data) { lifeLayout = buildLifeLayout(data, w, h); lifeLayout.data = data; }
+    if (!expLayout || expLayout.w !== w || expLayout.h !== h || expLayout.data !== data) { expLayout = buildExpLayout(data, w, h); expLayout.data = data; }
     c.clearRect(0, 0, w, h);
-    if (st.scene === 'spray' || st.scene === 'collapse') drawThreads(c, lifeLayout, st.scene, st.p);
-    else if (st.scene === 'odds') drawOdds(c, w, h, data, st.p, st.t);
-    else if (st.scene === 'worst') drawWorst(c, w, h, st.worst, st.p);
-    // 'line' and 'door' — intentionally blank: the line stands alone.
+    if (st.scene === 'dials') drawDials(c, w, h, st.t);
+    else if (st.scene === 'odds') drawOddsGrid(c, w, h, st.oddsCount, st.p, st.t);
+    else if (st.scene === 'cloud') drawCloud(c, w, h, expLayout, st.stayP, st.runP);
+    else drawGlow(c, w, h, st.t);
   }
 
   function openLuck() {
-    show($('luck'));
-    lifeLayout = null;
-    setText('lifeTitle', 'No one can show you your future.');
-    setText('lifeLead', 'So we ran it ten thousand times.');
-    setHTML('lifeBeats', '<p class="mc-running">Living ten thousand lives…</p>');
-    setTimeout(() => {
-      const data = runLifetimes(state.sip, state.years, 4242, 10000, 1800);
-      const worst = buildWorstLife(state.sip, state.years, data.seed, data.worstIdx);
-      runLifeSequence(data, worst);
-    }, 30);
+    show($('luck')); expLayout = null;
+    setText('lifeTitle', 'Run it yourself.');
+    setText('lifeLead', 'Ten thousand futures. Your call at every step.');
+    setHTML('lifeBeats', '<p class="mc-running">Building ten thousand futures…</p>');
+    setTimeout(() => { const data = runLifetimes(state.sip, state.years, 4242, 10000, 1800); startExperiment(data); }, 30);
   }
-  function lifeShow(html) { setHTML('lifeBeats', '<div class="lbeat">' + html + '</div>'); }
-  function runLifeSequence(data, worst) {
-    const nP = data.nPaths, calmPct = Math.round(data.calmAhead / nP * 100), panicPct = Math.round(data.panicAhead / nP * 100);
-    const ratio = (Math.abs(data.crowdGap) / Math.max(1, Math.abs(data.doorGap))).toFixed(1);
-    const B = {
-      spray: '<p>Ten thousand versions of your next twenty years. Each one real. Each one different.</p>',
-      collapse: '<p>But you don’t get ten thousand. <b>You get one.</b> You didn’t choose it. You won’t see it coming. And you live it once — no replay, no refund.</p>',
-      odds: '<div class="lbeat odds"><div class="odds-big"><b>' + calmPct + '</b><span>in 100</span></div>'
-        + '<p>If a surgeon’s operation worked <b>' + calmPct + ' times in 100</b>, you’d book it tomorrow. At <b>' + panicPct + ' in 100</b>, you’d walk out. <b>Staying calm</b> is the ' + calmPct + '. <b>Panicking</b> is the ' + panicPct + '. Same money — the only thing that changed was whether the hands were steady, or shaking.</p></div>',
-      worst: '<p>Of all ten thousand lives, here is the cruelest market in which staying calm <i>still pulled you through</i>. Watch both of you live it.</p>',
-      worstEnd: '<p>Even here, the <b>calm you</b> climbed back above water — <b>' + inrShort(worst.calmFinal) + '</b>. The <b>panic you</b>, same market, never came back — <b>' + inrShort(worst.panicFinal) + '</b>, below the <b>' + inrShort(worst.invested) + '</b> you put in.</p>',
-      line: '<div class="lbeat close"><p>The market deals you one life, face down. You live it once — no replay, no refund.<br>You never choose the life. You only ever choose <b>who you are</b> when it turns face up.</p></div>',
-      door: '<div class="lbeat door"><p>The <b>door</b> you walked through moved the number a little — about <b>' + inrShort(Math.abs(data.doorGap)) + '</b>. The <b>crowd</b> you chose to stand in moved it <b>~' + ratio + '×</b> more — about <b>' + inrShort(Math.abs(data.crowdGap)) + '</b>. The fee is real; who you were is bigger.</p><p class="life-cta">Now — live it yourself.</p></div>',
-    };
-    state._life = { scene: 'spray', p: 0, t0: null, elapsed: 0, verdict: false };
-    lifeShow(B.spray);
-    function go(step) {
-      const t = state._life; if (!t) return;
-      if (step === 'collapse') { t.scene = 'collapse'; t.p = 0; lifeShow(B.collapse); Sound.freeze(); }
-      else if (step === 'odds') { t.scene = 'odds'; t.p = 0; setHTML('lifeBeats', B.odds); Sound.resolve(); }
-      else if (step === 'worst') { t.scene = 'worst'; t.p = 0; t.verdict = false; lifeShow(B.worst); Sound.stinger(true); }
-      else if (step === 'line') { t.scene = 'line'; t.p = 0; setHTML('lifeBeats', B.line); Sound.stopPad(); }
-      else if (step === 'door') { t.scene = 'door'; t.p = 0; setHTML('lifeBeats', B.door); }
-    }
-    const draw = (ts) => {
-      const t = state._life; if (!t) return;
-      if (t.t0 == null) t.t0 = ts; t.elapsed = (ts - t.t0) / 1000;
-      t.p += (1 - t.p) * 0.045; if (t.p > 0.999) t.p = 1;
-      drawLifeScene('lifeCanvas', data, { scene: t.scene, p: t.p, t: t.elapsed, worst: worst });
-      if (t.scene === 'worst' && t.p > 0.97 && !t.verdict) { t.verdict = true; lifeShow(B.worstEnd); }
-      state._lifeRaf = requestAnimationFrame(draw);
-    };
+  const EXP_STEPS = ['control', 'guess', 'lever', 'hand', 'life', 'reveal', 'seal'];
+  function startExperiment(data) {
+    const gap = Math.abs(data.crowdGap), door = Math.abs(data.doorGap);
+    state.exp = { step: 'control', data: data, scene: 'dials', p: 0, t0: null, elapsed: 0, oddsCount: 8,
+      stay: false, run: false, stayP: 0, runP: 0, calmTyp: data.calm.p50, panicTyp: data.panic.p50, gap: gap, door: door, ratio: (gap / Math.max(1, door)).toFixed(1) };
+    const draw = (ts) => { const e = state.exp; if (!e) return;
+      if (e.t0 == null) e.t0 = ts; e.elapsed = (ts - e.t0) / 1000;
+      e.p += (1 - e.p) * 0.06; if (e.p > 0.999) e.p = 1;
+      if (e.stay) e.stayP += (1 - e.stayP) * 0.05; if (e.run) e.runP += (1 - e.runP) * 0.05;
+      drawExpScene(data, { scene: e.scene, p: e.p, t: e.elapsed, oddsCount: e.oddsCount, stayP: e.stayP, runP: e.runP });
+      state._lifeRaf = requestAnimationFrame(draw); };
     cancelAnimationFrame(state._lifeRaf); state._lifeRaf = requestAnimationFrame(draw);
-    if (reduceMotion) { ['collapse', 'odds', 'worst', 'line', 'door'].forEach(go); state._life.scene = 'door'; state._life.p = 1; lifeShow(B.worstEnd + B.line + B.door); return; }
-    const seq = [
-      { text: 'No one can show you your future. So we ran it ten thousand times.', rate: 0.9 },
-      { text: 'Ten thousand versions of your next twenty years. Each one real. Each one different.', rate: 0.92 },
-      { text: 'But you don’t get ten thousand. You get one. This one is yours — you live it once. No replay. No refund.', rate: 0.9, onStart: () => go('collapse') },
-      { text: 'If a surgeon said an operation worked ' + calmPct + ' times in a hundred, you’d book it tomorrow. At ' + panicPct + ' in a hundred, you’d walk out. Staying calm is the ' + calmPct + '. Panicking is the ' + panicPct + '.', rate: 0.92, onStart: () => go('odds') },
-      { text: 'Of all ten thousand lives, here is the cruelest market in which staying calm still pulled you through. Watch both of you live it.', rate: 0.92, onStart: () => go('worst') },
-      { text: 'Even here, the calm you climbed back above water. The panic you, same market, never came back.', rate: 0.94 },
-      { text: 'The market deals you one life, face down. You live it once. You never choose the life. You only ever choose who you are when it turns face up.', rate: 0.88, onStart: () => go('line') },
-      { text: 'The door you walked through moved the number a little. The crowd you chose to stand in mattered more.', rate: 0.92, onStart: () => go('door') },
-    ];
-    const spoke = Voice.speakSequence(seq);
-    if (!spoke) { [['collapse', 5500], ['odds', 9500], ['worst', 14000], ['line', 20000], ['door', 25000]].forEach((s) => setTimeout(() => go(s[0]), s[1])); }
+    expRender('control');
   }
-  function stopLife() { cancelAnimationFrame(state._lifeRaf); state._life = null; Voice.stop(); }
+  function expScene(scene) { const e = state.exp; if (!e) return; if (e.scene !== scene) { e.scene = scene; e.p = 0; } }
+  function expBtn(act, label, cls) { return '<button class="exp-btn ' + (cls || '') + '" data-act="' + act + '">' + label + '</button>'; }
+  function nextBtn(to) { return '<button class="exp-btn next" data-act="next" data-next="' + to + '">Continue →</button>'; }
+  function progressDots(idx) { return '<div class="exp-progress">' + EXP_STEPS.map((s, i) => '<span class="edot' + (i === idx ? ' on' : (i < idx ? ' done' : '')) + '"></span>').join('') + '</div>'; }
+  function expRender(step) {
+    const e = state.exp; if (!e) return; e.step = step; const idx = EXP_STEPS.indexOf(step);
+    let html = progressDots(idx);
+    if (step === 'control') { expScene('dials');
+      html += '<p class="exp-prompt">If you could control <b>one thing</b> about your next 20 years, which would it be?</p>'
+        + '<div class="exp-grid">' + expBtn('year', 'The year the crash hits') + expBtn('deep', 'How deep it falls') + expBtn('fund', 'Which fund wins') + expBtn('news', 'The news') + expBtn('nerve', 'Your own nerve') + '</div>'
+        + '<p class="exp-note" id="expNote"></p>';
+    } else if (step === 'guess') { expScene('dials');
+      html += '<p class="exp-prompt">When the market crashes, how many out of 100 do you think <b>actually hold on</b>?</p>'
+        + '<div class="exp-grid four">' + expBtn('g70', '70 or more') + expBtn('g50', 'About 50') + expBtn('g30', 'About 30') + expBtn('g10', 'Under 10') + '</div>'
+        + '<p class="exp-note" id="expNote"></p>';
+    } else if (step === 'lever') { expScene('cloud');
+      html += '<p class="exp-prompt">Your money, 10,000 markets, 20 years. <b>Pull the lever — both ways.</b></p>'
+        + '<div class="exp-grid two">' + expBtn('stay', '▲ STAY invested', 'stay') + expBtn('run', '▼ RUN to cash', 'run') + '</div>'
+        + '<p class="exp-note" id="expNote"></p>';
+    } else if (step === 'hand') { expScene('glow');
+      html += '<p class="exp-prompt">The crash is here. Your hand is shaking — fear is shoving the lever toward RUN. <b>What do you do?</b></p>'
+        + '<div class="exp-grid two">' + expBtn('alone', 'Hold it alone') + expBtn('help', 'Reach for a steady hand') + '</div>'
+        + '<p class="exp-note" id="expNote"></p>';
+    } else if (step === 'life') { expScene('glow');
+      html += '<p class="exp-prompt">Turn the gap into something you can feel. <b>What do you spend a month?</b></p>'
+        + '<div class="exp-grid">' + expBtn('e30', '₹30,000') + expBtn('e50', '₹50,000') + expBtn('e100', '₹1,00,000') + '</div>'
+        + '<p class="exp-note" id="expNote"></p>';
+    } else if (step === 'reveal') { expScene('glow');
+      html += '<p class="exp-prompt">One last thing.</p><div class="exp-grid"><button class="exp-btn wide" data-act="showline">Show me →</button></div><p class="exp-note" id="expNote"></p>';
+    } else if (step === 'seal') { expScene('glow');
+      html += '<div class="lbeat door"><p>The <b>door</b> you chose moved a dial you don’t control — about <b>' + inrShort(e.door) + '</b>. The <b>lever</b> you held — and whether someone helped you hold it — moved the only one you do: about <b>' + inrShort(e.gap) + '</b>, roughly <b>' + e.ratio + '×</b> more.</p><p class="life-cta">You will live exactly one of these futures. You’re choosing it now.</p></div>'
+        + '<div class="exp-grid two"><button class="exp-btn" data-act="again">Live it again</button><button class="exp-btn" data-act="close">Done</button></div>';
+    }
+    setHTML('lifeBeats', html);
+    const body = $('lifeBeats'); if (body) body.onclick = (ev) => { const b = ev.target.closest('button[data-act]'); if (b && !b.disabled) expClick(b.dataset.act, b); };
+  }
+  function expClick(act, btn) {
+    const e = state.exp; if (!e) return; Sound.ui();
+    if (act === 'next') { expRender(btn.dataset.next); return; }
+    if (act === 'guided') { e.oddsCount = 21; e.p = 0; Sound.tick(); btn.classList.add('chosen'); return; }
+    if (act === 'showline') { setHTML('expNote', '<span class="exp-line">You will live exactly <b>one</b> of these futures. You’re choosing it right now.</span> ' + nextBtn('seal')); Sound.resolve(); return; }
+    if (act === 'again') { hide($('luck')); stopLife(); const rb = $('replayBtn') || $('emReplay'); if (rb) rb.click(); return; }
+    if (act === 'close') { hide($('luck')); stopLife(); return; }
+    if (e.step === 'control') {
+      if (act === 'nerve') { btn.classList.add('chosen'); setHTML('expNote', '<b>This one.</b> The only thing that was ever in your hands. ' + nextBtn('guess')); Sound.resolve(); }
+      else { btn.classList.add('locked'); setTimeout(() => btn.classList.remove('locked'), 500); setHTML('expNote', 'No one controls that — not you, not the experts, not the man on TV. <span class="exp-dim">Try again.</span>'); }
+      return;
+    }
+    if (e.step === 'guess') {
+      const gl = { g70: '70 or more', g50: 'about 50', g30: 'about 30', g10: 'under 10' }[act];
+      e.oddsCount = 8; expScene('odds');
+      document.querySelectorAll('#lifeBeats .exp-grid .exp-btn').forEach((b) => { b.disabled = true; }); btn.classList.add('chosen');
+      setHTML('expNote', 'You guessed <b>' + gl + '</b>. The truth: about <b>8 in 100</b> who face it alone are still invested five years later. With a steady hand — about <b>21</b>. '
+        + '<button class="exp-link" data-act="guided">show “with a steady hand” →</button><br>' + nextBtn('lever'));
+      return;
+    }
+    if (e.step === 'lever') {
+      if (act === 'stay') { e.stay = true; btn.classList.add('chosen'); }
+      if (act === 'run') { e.run = true; btn.classList.add('chosen'); }
+      let note = '';
+      if (e.stay && !e.run) note = 'Stayed invested: a typical <b>' + inrShort(e.calmTyp) + '</b>. Now pull it the other way.';
+      else if (e.run && !e.stay) note = 'Ran to cash: a typical <b>' + inrShort(e.panicTyp) + '</b>. Now try staying.';
+      if (e.stay && e.run) note = 'Same money, same markets — the <b>only</b> thing you changed was the lever. It moved your typical future by <b>' + inrShort(e.gap) + '</b>. ' + nextBtn('hand');
+      setHTML('expNote', note); return;
+    }
+    if (e.step === 'hand') {
+      document.querySelectorAll('#lifeBeats .exp-grid .exp-btn').forEach((b) => { b.disabled = true; }); btn.classList.add('chosen');
+      const note = act === 'help'
+        ? 'A second hand closes over yours; the lever holds. <b>This</b> is what the fee actually buys — not tips, a second hand in the ten seconds yours can’t hold still.'
+        : 'Maybe you hold. Most don’t — alone, in the moment, fear usually wins. That isn’t weakness; it’s being alone.';
+      setHTML('expNote', note + ' ' + nextBtn('life')); return;
+    }
+    if (e.step === 'life') {
+      const exp = { e30: 30000, e50: 50000, e100: 100000 }[act], yrs = Math.max(1, Math.round(e.gap / (exp * 12)));
+      document.querySelectorAll('#lifeBeats .exp-grid .exp-btn').forEach((b) => { b.disabled = true; }); btn.classList.add('chosen');
+      setHTML('expNote', 'Then <b>' + inrShort(e.gap) + '</b> is about <b>' + yrs + ' years</b> you’d never have to work for money. <span class="exp-dim">(at ₹' + (exp / 1000) + 'k/mo — illustrative)</span> ' + nextBtn('reveal')); Sound.resolve(); return;
+    }
+  }
+  function stopLife() { cancelAnimationFrame(state._lifeRaf); state.exp = null; Voice.stop(); }
 
   /* ===================== Every choice (grid) ===================== */
   function openGrid() {
