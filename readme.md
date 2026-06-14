@@ -62,16 +62,17 @@ upfront so it's never a surprise.
   drawdown/emergency size are **inputs**. Nothing is invented.
 - **"Ten thousand lifetimes."** — the rigorous Monte Carlo engine (10,000
   paths; mean ≈ 12%/yr, vol ≈ 15–18%/yr, fat tails + clustered crashes) staged
-  as a cinematic reveal: ten thousand lives **spray** out from today and
-  **settle into a mountain** (the distribution of every future you could have);
-  a second mountain — the *panic* you, same markets — rises beside it, lower.
-  Then the plain truth, every figure **counted from those 10,000 lives**: in
-  *X of 10,000* the calm you came out ahead; most calm yous ended between ₹A
-  and ₹B; even the unluckiest 1-in-20 still held ₹C. An honest footnote sizes
-  the fee (the *door*) against behaviour (the *crowd*) in real rupees — the fee
-  is real; behaviour is bigger. *Note: a panic-seller who sits in cash ends
-  lower but no wider — so the tool never claims panic "makes you less
-  certain"; only that it ends behind, life after life.*
+  as a guided, *collapse-to-one* reveal (Section 10 of `BUILD_BRIEF.md`):
+  ten thousand lives **spray** out from today; then **9,999 dim to ghosts** and
+  the single life you're dealt **ignites**; the win-rate becomes **surgeon's
+  odds** made physical (100 dots — *X* steady, the rest flickering); the
+  **cruelest market in which calm still pulled through** replays as two lines
+  (calm climbs back above water, panic ends underwater); then a line lands in
+  **silence**. Every figure is **counted from the 10,000 lives** — the odds, the
+  worst life (reproducible by index), the door-vs-crowd gap — never asserted.
+  *Honesty notes: the genuinely worst markets ruin everyone, so the replay shows
+  the unluckiest market calm still **survived**, stated as such; and the closing
+  door/crowd line uses the real ~1.7× magnitude, not "moved everything."*
 - **Honest, not rigged** — across paths, Direct can finish **above, equal to,
   or below** Regular. The tool never claims one door is better — it proves the
   door was never the point.
