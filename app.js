@@ -633,7 +633,9 @@ if (typeof document !== 'undefined') (function () {
     let done = false;
     const finish = () => { if (done) return; done = true; document.body.classList.remove('narrating'); if (onDone) onDone(); };
     Voice.speak(spoken, opts, finish);
-    setTimeout(finish, Math.min(22000, 1800 + spoken.split(' ').length * 360));
+    // Safety release — never let a stalled/again silent speech engine keep the
+    // screen locked. Caps well below any real narration's length.
+    setTimeout(finish, Math.min(8000, 1400 + spoken.split(' ').length * 300));
   }
   // Reveal a quote word-by-word, as if spoken live on the call.
   function revealQuote(id, text, startMs, perWord) {
@@ -1207,12 +1209,12 @@ if (typeof document !== 'undefined') (function () {
       const other = [...document.querySelectorAll('#w_scenario .scn-card')].find((c) => c !== btn);
       if (other) other.classList.add('dismiss');
       Sound.whoosh();
-      const flash = $('doorFlash'); if (flash) { flash.classList.remove('show'); requestAnimationFrame(() => flash.classList.add('show')); setTimeout(() => flash.classList.remove('show'), 950); }
-      setTimeout(advance, 760);
+      const flash = $('doorFlash'); if (flash) { flash.classList.remove('show'); requestAnimationFrame(() => flash.classList.add('show')); setTimeout(() => flash.classList.remove('show'), 700); }
+      setTimeout(advance, 470);
       return;
     }
     // Other steps: a brief beat so the selection registers, then move on.
-    if (reduceMotion) advance(); else setTimeout(advance, 320);
+    if (reduceMotion) advance(); else setTimeout(advance, 260);
   }
   function wizBack() { if (state.wizIndex > 0) showWizStep(state.wizIndex - 1); }
   function wizLaunch() {
@@ -1813,20 +1815,18 @@ if (typeof document !== 'undefined') (function () {
       Sound.unlock(); Sound.openSwell(); hide($('intro'));
       const crash = document.querySelector('#w_scenario .crash-scn');
       const em = document.querySelector('#w_scenario .em-scn');
-      if (crash) crash.classList.remove('reveal-in');
-      if (em) em.classList.remove('reveal-in');
-      const unlock = (el) => { if (el && !el.classList.contains('reveal-in')) { el.classList.add('reveal-in'); Sound.ui(); if (navigator.vibrate) navigator.vibrate(10); } };
-      // The voice plays over the top; the doors reveal on a FIXED, identical
-      // cadence every run. (We don't gate visuals on speechSynthesis onstart —
-      // its timing is wildly inconsistent across mobile browsers, which caused
-      // the "voice first / doors first / both at once" randomness.)
+      // Reveal the doors PROMPTLY and identically every run (a quick stagger as
+      // the screen lands). We do NOT wait on speech: speechSynthesis gives no
+      // reliable start timing on mobile, so gating visuals on it produced the
+      // "doors late / voice after / both at once" randomness. The voice simply
+      // plays over the top.
+      const swing = (el, delay) => { if (!el) return; el.classList.remove('reveal-in'); void el.offsetWidth; setTimeout(() => { el.classList.add('reveal-in'); Sound.ui(); if (navigator.vibrate) navigator.vibrate(8); }, delay); };
+      swing(crash, 350); swing(em, 650);
       Voice.speakSequence([
         { text: 'What do you want to face?', rate: 0.9 },
         { text: 'A market crash.', rate: 0.92 },
         { text: 'Or… a personal emergency.', rate: 0.92 },
       ]);
-      setTimeout(() => unlock(crash), 700);
-      setTimeout(() => unlock(em), 1700);
     });
     // Premium tactile feedback on every tap: a soft click + a light haptic.
     document.addEventListener('pointerdown', (e) => {
