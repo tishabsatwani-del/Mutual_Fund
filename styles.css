@@ -507,7 +507,7 @@ body {
 .intro-foot { margin-top: 22px; font-size: 14px; color: var(--faint); }
 
 /* ===================== NARRATION LOCK ===================== */
-/* While the advisor/voice is speaking, choices and continue-buttons are
+/* While the MD / voice is speaking, choices and continue-buttons are
  * disabled (released on end/error/timeout/mute). */
 body.narrating .opt,
 body.narrating #youChoices button, body.narrating #emChoices button, body.narrating #pledgeChoices button,

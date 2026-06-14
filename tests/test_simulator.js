@@ -35,8 +35,9 @@ for (const evId of Object.keys(E.EVENTS)) {
   ok(`[${evId}] fee saving (direct-hold − regular-hold) > 0`, sim.feeSavingRupees > 0, `(${L(sim.feeSavingRupees)})`);
   ok(`[${evId}] panic (sellWait Direct) finishes BELOW calm Regular`,
     d.sellWait.final < r.hold.final, `(${L(d.sellWait.final)} < ${L(r.hold.final)})`);
-  ok(`[${evId}] staying invested beats a crash-free market (cheap units)`, d.hold.final > sim.directNoCrash);
-  ok(`[${evId}] index CAGR is EXACTLY 12% (heals to trend)`, Math.abs(sim.indexCagr - 0.12) < 1e-9, `(${(sim.indexCagr * 100).toFixed(3)}%)`);
+  ok(`[${evId}] held ends a little BELOW the no-crash baseline (round-trip cost), never near half`,
+    d.hold.final < sim.directNoCrash && d.hold.final > sim.directNoCrash * 0.78, `(${L(d.hold.final)} vs no-crash ${L(sim.directNoCrash)})`);
+  ok(`[${evId}] index CAGR is a little under 12% (regains the peak, not the trend)`, sim.indexCagr > 0.085 && sim.indexCagr < 0.12, `(${(sim.indexCagr * 100).toFixed(2)}%)`);
   ok(`[${evId}] XIRR finite and hold > sellWait`, isFinite(d.hold.xirr) && d.hold.xirr > d.sellWait.xirr);
 }
 
@@ -52,8 +53,9 @@ for (const Y of [15, 20, 30]) {
   const nav = E.buildEventNav(E.DIRECT_MONTHLY, N, ev, S);
   ok('NAV starts at 100', Math.abs(nav[0] - 100) < 1e-9);
   ok('GFC bottom is exactly (1−depth)×peak', Math.abs(nav[S + ev.fallMonths] - (1 - ev.depth) * nav[S]) < 1e-6);
-  const trend = nav[S] * Math.pow(1 + E.DIRECT_MONTHLY, ev.fallMonths + ev.recoveryMonths);
-  ok('NAV recovers exactly to trend at healed month', Math.abs(nav[S + ev.fallMonths + ev.recoveryMonths] - trend) < 1e-6);
+  ok('NAV recovers to the PRE-CRASH PEAK at the healed month (not the trend)', Math.abs(nav[S + ev.fallMonths + ev.recoveryMonths] - nav[S]) < 1e-6);
+  ok('after healing, NAV resumes trend growth FROM the peak (permanent gap below trend)',
+    Math.abs(nav[N] - nav[S] * Math.pow(1 + E.DIRECT_MONTHLY, N - (S + ev.fallMonths + ev.recoveryMonths))) < 1e-6 && nav[N] < 100 * Math.pow(1 + E.DIRECT_MONTHLY, N));
 }
 
 /* ---------------- CAGR & XIRR sanity ---------------- */
@@ -137,6 +139,21 @@ ok('XIRR 100→200 over 6y ≈ 12.25%', Math.abs(E.xirr([{ t: 0, amount: -100 },
   ok('worst life: even here the calm you ends above what was invested', wl.calmFinal > wl.invested, `(${Cr(wl.calmFinal)} > ${L(wl.invested)})`);
   ok('worst life: on that same unlucky market the panic you ended underwater, below calm', wl.panicFinal < wl.invested && wl.panicFinal < wl.calmFinal, `(panic ${Cr(wl.panicFinal)} underwater vs calm ${Cr(wl.calmFinal)})`);
   ok('worst life: buildWorstLife is deterministic for a given index', E.buildWorstLife(10000, 20, 4242, lf.worstIdx).calmFinal === wl.calmFinal);
+}
+
+/* ---------------- Acceptance: ₹10,000/mo · 15y · 2008 (corrected recovery) ---------------- */
+{
+  const s = E.runSinglePath(10000, 'gfc', 15), d = s.direct, N = 180;
+  const dN = E.buildTrendNav(E.DIRECT_MONTHLY, N), rN = E.buildTrendNav(E.REGULAR_MONTHLY, N);
+  let du = 0, ru = 0; for (let m = 0; m < N; m++) { du += 10000 / dN[m]; ru += 10000 / rN[m]; }
+  const ncD = du * dN[N], ncR = ru * rN[N];
+  console.log(`\nAcceptance ₹10k/15y/2008: no-crash D ${L(ncD)} R ${L(ncR)} | held D ${L(d.hold.final)} R ${L(s.regular.hold.final)} pause ${L(d.pause.final)} sellBack ${L(d.sellBack.final)} sellWait ${L(d.sellWait.final)}`);
+  ok('accept: no-crash Direct ≈ ₹47.6 L', Math.abs(ncD - 47.6e5) < 1.0e5, `(${L(ncD)})`);
+  ok('accept: no-crash Regular ≈ ₹43.7 L', Math.abs(ncR - 43.7e5) < 1.0e5, `(${L(ncR)})`);
+  ok('accept: held finishes high-30s..mid-40s lakh, NOT ~half', d.hold.final > 37e5 && d.hold.final < 46e5, `(${L(d.hold.final)})`);
+  ok('accept: ordering held ≥ Regular-held > paused > sold&rebuy > sold&stay-out',
+    d.hold.final >= s.regular.hold.final && s.regular.hold.final > d.pause.final && d.pause.final > d.sellBack.final && d.sellBack.final > d.sellWait.final);
+  ok('accept: sold-&-stay-out clearly below held (missed the rally)', d.sellWait.final < d.hold.final * 0.7, `(${L(d.sellWait.final)} vs ${L(d.hold.final)})`);
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`);
