@@ -814,10 +814,27 @@ if (typeof document !== 'undefined') (function () {
         window.speechSynthesis.speak(u);
       } catch (e) { if (onEnd) onEnd(); }
     }
+    // Queue several phrases; each fires onStart as IT begins speaking, so the
+    // visuals can sync to the actual words. Returns false if it won't speak.
+    function speakSequence(parts) {
+      if (!ok || !enabled) return false;
+      try {
+        window.speechSynthesis.cancel();
+        if (!picked) picked = pick();
+        parts.forEach((p) => {
+          const u = new SpeechSynthesisUtterance(p.text);
+          if (picked) u.voice = picked;
+          u.rate = p.rate || 0.92; u.pitch = 1; u.volume = 1;
+          if (p.onStart) u.onstart = p.onStart;
+          window.speechSynthesis.speak(u);
+        });
+        return true;
+      } catch (e) { return false; }
+    }
     function stop() { if (ok) try { window.speechSynthesis.cancel(); } catch (e) {} }
     function setEnabled(b) { enabled = b; if (!b) stop(); }
     function isEnabled() { return enabled; }
-    return { speak, stop, setEnabled, isEnabled, available: ok };
+    return { speak, speakSequence, stop, setEnabled, isEnabled, available: ok };
   })();
   let introSpoken = false;
   function speakIntro() { if (introSpoken) return; introSpoken = true; Voice.speak('What do you want to face? A market crash… or a personal emergency?', { rate: 0.88 }); }
@@ -1454,12 +1471,24 @@ if (typeof document !== 'undefined') (function () {
     // locked until that narration finishes (body.narrating).
     on('introBtn', 'click', () => {
       Sound.unlock(); Sound.openSwell(); hide($('intro'));
-      // Cards animate in (Crash, then Emergency) and are clickable immediately —
-      // the question is spoken but does NOT lock them.
-      const cards = document.querySelectorAll('#w_scenario .scn-card');
-      cards.forEach((c) => c.classList.remove('reveal-in'));
-      requestAnimationFrame(() => cards.forEach((c, i) => setTimeout(() => c.classList.add('reveal-in'), 140 + i * 280)));
-      setTimeout(() => say('What do you want to face? A market crash… or a personal emergency?', { rate: 0.9 }), 400);
+      const crash = document.querySelector('#w_scenario .crash-scn');
+      const em = document.querySelector('#w_scenario .em-scn');
+      if (crash) crash.classList.remove('reveal-in');
+      if (em) em.classList.remove('reveal-in');
+      const unlock = (el) => { if (el && !el.classList.contains('reveal-in')) { el.classList.add('reveal-in'); Sound.ui(); if (navigator.vibrate) navigator.vibrate(10); } };
+      // Each card unlocks the instant the voice SPEAKS its name.
+      const spoke = Voice.speakSequence([
+        { text: 'What do you want to face?', rate: 0.9 },
+        { text: 'A market crash.', rate: 0.92, onStart: () => unlock(crash) },
+        { text: 'Or… a personal emergency.', rate: 0.92, onStart: () => unlock(em) },
+      ]);
+      if (spoke) {
+        // Backstop: if a browser drops onstart, reveal both anyway.
+        setTimeout(() => { unlock(crash); unlock(em); }, 8000);
+      } else {
+        // No voice — stage them in.
+        setTimeout(() => unlock(crash), 500); setTimeout(() => unlock(em), 1500);
+      }
     });
     // Premium tactile feedback on every tap: a soft click + a light haptic.
     document.addEventListener('pointerdown', (e) => {

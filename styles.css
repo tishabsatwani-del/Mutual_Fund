@@ -314,15 +314,29 @@ body {
 .wstep { flex: 1; display: flex; flex-direction: column; justify-content: center; animation: rise .45s ease both; }
 .wstep .kicker { margin-bottom: 14px; }
 .wq { font-size: clamp(30px, 8.5vw, 44px); font-weight: 800; letter-spacing: -.02em; line-height: 1.15; margin-bottom: 30px; text-align: center; }
-.big-wq { font-size: clamp(30px, 8vw, 44px); }
+/* Title shimmer — soft metallic sheen drifting across the question. */
+.big-wq { font-size: clamp(30px, 8vw, 44px); background: linear-gradient(100deg, #ffffff 28%, #e6cf86 50%, #ffffff 72%); background-size: 220% auto; -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; animation: shimmerText 5s linear infinite; }
+@keyframes shimmerText { to { background-position: 220% center; } }
 
-/* Opening: two big, dazzling cards side by side — colour, glow, motion. */
-.scenario-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-/* Both cards share ONE premium theme; the chosen one washes to gold on select.
- * They stage in (Crash, then Emergency) and are tall, immersive panels. */
+/* Living aurora behind the opening. */
+#setup { position: relative; overflow: hidden; }
+#setup::before { content: ""; position: absolute; inset: -20%; z-index: 0; pointer-events: none;
+  background: radial-gradient(45% 40% at 22% 28%, rgba(62,224,164,0.14), transparent 60%), radial-gradient(45% 45% at 80% 72%, rgba(216,200,120,0.13), transparent 60%), radial-gradient(40% 40% at 60% 15%, rgba(126,147,212,0.12), transparent 60%);
+  filter: blur(8px); animation: aurora 16s ease-in-out infinite alternate; }
+@keyframes aurora { 0% { transform: translate(0,0) scale(1); } 100% { transform: translate(24px,-18px) scale(1.12); } }
+.wiz { position: relative; z-index: 1; }
+
+/* Opening: two tall, luxurious cards that UNLOCK as the voice names them. */
 .scenario-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-.scn-card { position: relative; overflow: hidden; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 14px; padding: 30px 16px; border-radius: 24px; border: 1px solid rgba(255,255,255,0.14); color: #fff; cursor: pointer; min-height: 46vh; justify-content: center; background: linear-gradient(165deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02)); box-shadow: 0 30px 70px -34px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.08); opacity: 0; transform: translateY(36px) scale(.93); transition: opacity .6s ease, transform .7s cubic-bezier(.16,1,.3,1), box-shadow .4s ease, border-color .4s ease, background .4s ease; }
-.scn-card.reveal-in { opacity: 1; transform: translateY(0) scale(1); }
+.scn-card { position: relative; overflow: hidden; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 14px; padding: 30px 16px; border-radius: 24px; border: 1px solid rgba(255,255,255,0.14); color: #fff; cursor: pointer; min-height: 46vh; justify-content: center; background: linear-gradient(165deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02)); box-shadow: 0 30px 70px -34px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.08); opacity: 0; transform: scale(.78); transition: transform .35s cubic-bezier(.2,.7,.2,1), box-shadow .4s ease, border-color .4s ease, background .4s ease; }
+/* Locked → unlocked: a spring-scale 'vault opening' (no forwards fill, so
+ * hover/select transforms still work afterwards). */
+.scn-card.reveal-in { opacity: 1; transform: scale(1); animation: vaultIn .9s cubic-bezier(.16,1,.3,1); }
+@keyframes vaultIn { 0% { opacity: 0; transform: scale(.72); filter: blur(12px); } 55% { opacity: 1; transform: scale(1.05); filter: blur(0); } 100% { transform: scale(1); } }
+/* Glow burst at the moment it unlocks. */
+.scn-card::before { content: ""; position: absolute; inset: 0; border-radius: 24px; pointer-events: none; opacity: 0; background: radial-gradient(circle at 50% 42%, rgba(236,217,134,0.55), transparent 62%); }
+.scn-card.reveal-in::before { animation: burst .9s ease-out; }
+@keyframes burst { 0% { opacity: 0; transform: scale(.6); } 28% { opacity: .85; } 100% { opacity: 0; transform: scale(1.25); } }
 .scn-card::after { content: ""; position: absolute; top: -60%; height: 220%; width: 45%; left: -50%; transform: rotate(18deg); background: linear-gradient(90deg, transparent, rgba(255,255,255,0.14), transparent); animation: sheen 5s ease-in-out infinite; pointer-events: none; }
 .em-scn::after { animation-delay: 1.4s; }
 @keyframes sheen { 0% { left: -55%; } 55% { left: 130%; } 100% { left: 130%; } }
