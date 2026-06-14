@@ -1838,12 +1838,9 @@ if (typeof document !== 'undefined') (function () {
   function backToSetup() { Sound.stopAll(); Voice.stop(); stopCallTimer(); cancelAnimationFrame(state.raf); hideAllOverlays(); hide($('stage')); hide($('emergency')); state.wizIndex = 0; showWizStep(0); show($('setup')); }
 
   function boot() {
-    // The intro gate is the first gesture — it unlocks audio AND lets the
-    // opening question be narrated (autoplay-safe). The scenario cards stay
-    // locked until that narration finishes (body.narrating).
-    // Warm the speech engine the instant Begin is pressed (pointerdown fires
-    // before click), so the opening voice starts with minimal cold-start lag.
-    on('introBtn', 'pointerdown', () => Voice.prime());
+    // Kick the voice list loading at startup so a fast LOCAL voice is already
+    // selected by the time Begin is pressed (avoids picking a slow default).
+    try { window.speechSynthesis && window.speechSynthesis.getVoices(); } catch (e) {}
     on('introBtn', 'click', () => {
       Sound.unlock(); Sound.openSwell(); hide($('intro'));
       const crash = document.querySelector('#w_scenario .crash-scn');
