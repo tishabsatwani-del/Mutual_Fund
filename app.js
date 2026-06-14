@@ -530,6 +530,14 @@ if (typeof document !== 'undefined') (function () {
   }
   // Speak text with finance terms pronounced correctly (SIP -> the full phrase).
   function say(text, opts) { Voice.speak(text.replace(/\bSIP\b/g, 'systematic investment plan'), opts); }
+  // A live, ticking call timer (mm:ss) for the "real phone call" feel.
+  function startCallTimer(id) {
+    const el = $(id); if (!el) return;
+    let s = 0; el.textContent = '00:00';
+    if (state._callTimer) clearInterval(state._callTimer);
+    state._callTimer = setInterval(() => { s++; el.textContent = String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0'); }, 1000);
+  }
+  function stopCallTimer() { if (state._callTimer) { clearInterval(state._callTimer); state._callTimer = 0; } }
   // Narrate AND lock interaction until it finishes — released on the first of
   // {onend, onerror, timeout, mute, no-voice}, so it can never dead-end.
   function narrate(text, opts, onDone) {
@@ -784,20 +792,15 @@ if (typeof document !== 'undefined') (function () {
     return { unlock, startPad, startRumble, stopRumble, impact, setHeart, stopHeart, silenceCut, stopPad, ring, tick, ui, whoosh, freeze, stinger, resolve, openSwell, strike, lossTone, stopAll, toggle, isOn };
   })();
 
-  /* ---- Voice narration (Web Speech API). Prefers a mature MALE English voice. ---- */
+  /* ---- Voice narration (Web Speech API — uses the device's default voice). ---- */
   const Voice = (function () {
     const ok = typeof window !== 'undefined' && 'speechSynthesis' in window;
     let enabled = true, picked = null;
-    const isMale = (n) => /\b(male|man)\b/i.test(n) || /(daniel|rishi|arthur|george|fred|alex|oliver|james|thomas|ravi|hemant|prabhat|aaron|guy|david|mark|microsoft (david|mark|guy|ravi)|google uk english male|google us english)/i.test(n);
-    const isFemale = (n) => /(female|woman|samantha|victoria|zira|heera|kalpana|veena|tessa|fiona|moira|karen|susan|catherine|serena|allison|ava|google uk english female)/i.test(n);
     function pick() {
       if (!ok) return null;
       const vs = window.speechSynthesis.getVoices() || [];
-      const en = vs.filter((v) => /^en/i.test(v.lang));
-      const males = en.filter((v) => isMale(v.name) && !isFemale(v.name));
-      // Prefer Indian-English male, then UK, then any male, then any English not-female.
-      return males.find((v) => /en[-_]?IN/i.test(v.lang)) || males.find((v) => /en[-_]?GB/i.test(v.lang)) || males[0]
-        || en.find((v) => !isFemale(v.name)) || en[0] || vs[0] || null;
+      return vs.find((v) => /en[-_]?IN/i.test(v.lang)) || vs.find((v) => /en[-_]?GB/i.test(v.lang))
+        || vs.find((v) => /^en/i.test(v.lang)) || vs[0] || null;
     }
     if (ok) { try { window.speechSynthesis.onvoiceschanged = () => { picked = pick(); }; } catch (e) {} }
     function speak(text, opts, onEnd) {
@@ -806,7 +809,7 @@ if (typeof document !== 'undefined') (function () {
         window.speechSynthesis.cancel();
         const u = new SpeechSynthesisUtterance(text);
         if (!picked) picked = pick(); if (picked) u.voice = picked;
-        u.rate = (opts && opts.rate) || 0.92; u.pitch = (opts && opts.pitch) || 0.82; u.volume = (opts && opts.volume) || 1; // lower pitch = older, authoritative
+        u.rate = (opts && opts.rate) || 0.92; u.pitch = (opts && opts.pitch) || 1; u.volume = (opts && opts.volume) || 1;
         if (onEnd) { u.onend = onEnd; u.onerror = onEnd; }
         window.speechSynthesis.speak(u);
       } catch (e) { if (onEnd) onEnd(); }
@@ -892,22 +895,15 @@ if (typeof document !== 'undefined') (function () {
         const g = c.createLinearGradient(0, p.t, 0, h - p.b); g.addColorStop(0, line.fill); g.addColorStop(1, 'rgba(0,0,0,0)'); c.fillStyle = g; c.fill();
       }
       const tracePath = (dx) => { c.beginPath(); for (let i = 0; i < pts.length; i++) { const [m, v] = pts[i]; const px = X(m) + (dx || 0), py = PY(m, v, tex); if (i === 0) c.moveTo(px, py); else c.lineTo(px, py); } };
-      // Chromatic glitch as the line cracks — a brief RGB split.
-      if (opts.glitch && line.glow) {
-        c.save(); c.globalCompositeOperation = 'screen'; c.lineWidth = (line.width || 2);
-        c.strokeStyle = 'rgba(255,40,40,0.5)'; tracePath(2.2); c.stroke();
-        c.strokeStyle = 'rgba(40,200,255,0.5)'; tracePath(-2.2); c.stroke();
-        c.restore();
-      }
+      // Crisp, restrained line — professional, not glowing/cartoonish.
       c.save(); c.globalAlpha = line.alpha == null ? 1 : line.alpha; c.strokeStyle = line.color; c.lineWidth = line.width || 2;
-      c.lineJoin = 'round'; c.lineCap = 'round'; if (line.dash) c.setLineDash(line.dash); if (line.glow) { c.shadowColor = line.color; c.shadowBlur = 14; }
+      c.lineJoin = 'round'; c.lineCap = 'round'; if (line.dash) c.setLineDash(line.dash); if (line.glow) { c.shadowColor = line.color; c.shadowBlur = 6; }
       tracePath(0); c.stroke(); c.restore();
       if (line.dot) {
-        const [m, v] = pts[pts.length - 1]; const px = X(m), py = PY(m, v, tex);
-        const pulse = 1 + Math.sin(performance.now() / 220) * 0.18; // living, breathing tip
-        c.save(); c.shadowColor = line.color; c.shadowBlur = 22; c.fillStyle = line.color;
-        c.globalAlpha = 0.22; c.beginPath(); c.arc(px, py, 12 * pulse, 0, Math.PI * 2); c.fill();
-        c.globalAlpha = 1; c.beginPath(); c.arc(px, py, 5 * pulse, 0, Math.PI * 2); c.fill();
+        const [m, v] = pts[pts.length - 1], px = X(m), py = PY(m, v, tex);
+        c.save();
+        c.strokeStyle = hexFill(line.color, 0.35); c.lineWidth = 1; c.beginPath(); c.arc(px, py, 7, 0, Math.PI * 2); c.stroke();
+        c.shadowColor = line.color; c.shadowBlur = 8; c.fillStyle = line.color; c.beginPath(); c.arc(px, py, 3.4, 0, Math.PI * 2); c.fill();
         c.restore();
       }
     }
@@ -957,16 +953,9 @@ if (typeof document !== 'undefined') (function () {
     if (btn) { document.querySelectorAll('#w_' + name + ' .opt').forEach((b) => b.classList.toggle('on', b === btn)); }
     const steps = wizSteps();
     const advance = () => { if (state.wizIndex >= steps.length - 1) wizLaunch(); else showWizStep(state.wizIndex + 1); };
-    // Choosing a storm or an emergency narrates its full context — and you can't
-    // move on until the voice finishes (so the lesson actually lands).
-    if (name === 'event') {
-      const ev = EVENTS[val] || drawCrash();
-      narrate(ev.name + '. ' + ev.what, { rate: 0.94 }, () => setTimeout(advance, 250));
-    } else if (name === 'emType') {
-      const em = EMERGENCIES[val] || EMERGENCIES.icu;
-      narrate(em.name + '. ' + em.what, { rate: 0.94 }, () => setTimeout(advance, 250));
-    } else if (reduceMotion) advance();
-    else setTimeout(advance, 300);
+    // No narration on the situation-choice screens — just a brief beat so the
+    // selection registers, then move on.
+    if (reduceMotion) advance(); else setTimeout(advance, 320);
   }
   function wizBack() { if (state.wizIndex > 0) showWizStep(state.wizIndex - 1); }
   function wizLaunch() {
@@ -999,15 +988,15 @@ if (typeof document !== 'undefined') (function () {
       const crashing = state.phase === 'crash', d = sim.direct.hold.value, r = sim.regular.hold.value;
       front = d;
       lines = [
-        { values: r, color: crashing ? hexFill(COL.cool, 0.9) : COL.regular, width: 2.4, alpha: 0.85, texture: true },
-        { values: d, color: crashing ? COL.cool : COL.direct, width: 3.4, glow: true, dot: true, texture: true, fill: crashing ? hexFill(COL.cool, 0.16) : hexFill(COL.direct, 0.16) },
+        { values: r, color: crashing ? hexFill(COL.cool, 0.85) : COL.regular, width: 1.8, alpha: 0.8, texture: true },
+        { values: d, color: crashing ? COL.cool : COL.direct, width: 2.4, glow: true, dot: true, texture: true, fill: crashing ? hexFill(COL.cool, 0.14) : hexFill(COL.direct, 0.14) },
       ];
     } else {
       const yours = sim.direct[state.choice], calm = sim.direct.hold;
       front = yours.value;
       lines = [
-        { values: calm.value, color: COL.ghost, width: 2.2, alpha: 0.4, dash: [5, 6] },
-        { values: yours.value, color: BEHAVIOURS[state.choice].color, width: 3.4, glow: true, dot: true, texture: true, fill: hexFill(BEHAVIOURS[state.choice].color, 0.16) },
+        { values: calm.value, color: COL.ghost, width: 1.8, alpha: 0.38, dash: [4, 5] },
+        { values: yours.value, color: BEHAVIOURS[state.choice].color, width: 2.4, glow: true, dot: true, texture: true, fill: hexFill(BEHAVIOURS[state.choice].color, 0.14) },
       ];
     }
     // Divergence shading — the gap between your path and the calm path, made
@@ -1018,7 +1007,7 @@ if (typeof document !== 'undefined') (function () {
       const behind = yours.final < calm.final;
       band = { a: yours.value, b: calm.value, color: hexFill(behind ? COL.crash : COL.direct, 0.16) };
     }
-    drawLines(c, w, h, N, state.yMax, lines, state.head, { l: 18, r: 18, t: 28, b: 32 }, band, { axis: true, axisYears: sim.years, glitch: state.phase === 'crash' });
+    drawLines(c, w, h, N, state.yMax, lines, state.head, { l: 18, r: 18, t: 28, b: 32 }, band, { axis: true, axisYears: sim.years });
     drawEmbers(c, w, h);
     const corpus = valueAt(front, state.head), months = Math.min(Math.floor(state.head), N);
     // A soft tick + light haptic each year the climb passes — time, felt.
@@ -1036,7 +1025,7 @@ if (typeof document !== 'undefined') (function () {
     for (let i = 0; i < n; i++) state.embers.push({ x: Math.random(), y: Math.random() * 0.3, vy: 0.0008 + Math.random() * 0.0016, vx: (Math.random() - 0.5) * 0.0008, r: 0.6 + Math.random() * 1.8, life: 1 });
   }
   function drawEmbers(c, w, h) {
-    if (state.phase === 'crash') { if (state.embers.length < 70 && Math.random() < 0.6) spawnEmbers(3); }
+    if (state.phase === 'crash') { if (state.embers.length < 36 && Math.random() < 0.5) spawnEmbers(2); }
     if (!state.embers.length) return;
     c.save();
     for (let i = state.embers.length - 1; i >= 0; i--) {
@@ -1045,7 +1034,7 @@ if (typeof document !== 'undefined') (function () {
       if (state.phase !== 'crash') e.life -= 0.012;
       if (e.y > 1.05 || e.life <= 0) { state.embers.splice(i, 1); continue; }
       const px = e.x * w, py = e.y * h;
-      c.globalAlpha = 0.5 * e.life * (1 - e.y * 0.4);
+      c.globalAlpha = 0.32 * e.life * (1 - e.y * 0.4);
       c.shadowColor = COL.crash; c.shadowBlur = 8; c.fillStyle = COL.crash;
       c.beginPath(); c.arc(px, py, e.r, 0, Math.PI * 2); c.fill();
     }
@@ -1060,7 +1049,7 @@ if (typeof document !== 'undefined') (function () {
     const e = ts - state.phaseStart, sim = state.sim, N = sim.N, S = sim.S, bottom = sim.navDirect._bottom;
     if (state.phase === 'climb') {
       const p = Math.min(e / CLIMB_MS, 1); state.head = S * easeInOut(p); renderStage();
-      if (p >= 1) { state.phase = 'crash'; state.phaseStart = null; $('stage').classList.add('crashing'); tensionCue(); Sound.startRumble(CRASH_MS); Sound.setHeart(110); spawnEmbers(40); }
+      if (p >= 1) { state.phase = 'crash'; state.phaseStart = null; $('stage').classList.add('crashing'); tensionCue(); Sound.startRumble(CRASH_MS); Sound.setHeart(110); spawnEmbers(20); }
       state.raf = requestAnimationFrame(loop);
     } else if (state.phase === 'crash') {
       const p = Math.min(e / CRASH_MS, 1); state.head = S + (bottom - S) * p; renderStage();
@@ -1102,6 +1091,7 @@ if (typeof document !== 'undefined') (function () {
   function openFriendReveal() {
     renderFriendPanel(); show($('friendReveal'));
     Sound.whoosh(); Sound.ring(); Sound.setHeart(60); setTimeout(() => Sound.stopHeart(), 4500);
+    startCallTimer('revealTimer');
     revealQuote('revealQuote', '"' + RM_CRASH_LINE + '"', 1600, 150);
     setTimeout(() => narrate(RM_CRASH_LINE, { rate: 0.96 }), 1500); // locks "See how it ends" until he finishes
   }
@@ -1137,7 +1127,7 @@ if (typeof document !== 'undefined') (function () {
     show($('collision'));
   }
   function afterCollision() {
-    hide($('collision')); show($('stage'));
+    stopCallTimer(); hide($('collision')); show($('stage'));
     // The regret beat: for sellers, the market visibly recovers without them.
     const reg = $('regretCaption');
     if (reg) {
@@ -1391,11 +1381,12 @@ if (typeof document !== 'undefined') (function () {
     state.emResponse = r; Sound.stopHeart(); Sound.tick();
     hide($('emDecision')); show($('emCall'));
     Sound.whoosh(); Sound.ring();
+    startCallTimer('emCallTimer');
     revealQuote('emQuote', '"' + RM_EM_LINE + '"', 1300, 150);
     setTimeout(() => narrate(RM_EM_LINE, { rate: 0.96 }), 1200); // locks "See how it ends" until he finishes
   }
   function emToResult() {
-    hide($('emCall')); Sound.whoosh(); Sound.resolve();
+    stopCallTimer(); hide($('emCall')); Sound.whoosh(); Sound.resolve();
     const sim = runEmergency(state.sip, state.emergencyId, state.emResponse, state.downturn, state.years, state.severity);
     state.sim = sim; renderEmergencyResult(sim); show($('emergency'));
     const a = { values: sim.you.value, color: COL.crash, width: 3, glow: true, dot: true, texture: true };
@@ -1455,7 +1446,7 @@ if (typeof document !== 'undefined') (function () {
   /* ===================== Wiring ===================== */
   function hideAllOverlays() { ['pledge', 'silence', 'youDecision', 'friendReveal', 'collision', 'result', 'luck', 'grid', 'emIntro', 'emStrike', 'emDecision', 'emCall', 'emergency'].forEach((id) => hide($(id))); }
   function on(id, type, fn) { const el = $(id); if (el) el.addEventListener(type, fn); }
-  function backToSetup() { Sound.stopAll(); Voice.stop(); cancelAnimationFrame(state.raf); hideAllOverlays(); hide($('stage')); hide($('emergency')); state.wizIndex = 0; showWizStep(0); show($('setup')); }
+  function backToSetup() { Sound.stopAll(); Voice.stop(); stopCallTimer(); cancelAnimationFrame(state.raf); hideAllOverlays(); hide($('stage')); hide($('emergency')); state.wizIndex = 0; showWizStep(0); show($('setup')); }
 
   function boot() {
     // The intro gate is the first gesture — it unlocks audio AND lets the
@@ -1463,7 +1454,12 @@ if (typeof document !== 'undefined') (function () {
     // locked until that narration finishes (body.narrating).
     on('introBtn', 'click', () => {
       Sound.unlock(); Sound.openSwell(); hide($('intro'));
-      setTimeout(() => narrate('What do you want to face? A market crash… or a personal emergency?', { rate: 0.9 }), 450);
+      // Cards animate in (Crash, then Emergency) and are clickable immediately —
+      // the question is spoken but does NOT lock them.
+      const cards = document.querySelectorAll('#w_scenario .scn-card');
+      cards.forEach((c) => c.classList.remove('reveal-in'));
+      requestAnimationFrame(() => cards.forEach((c, i) => setTimeout(() => c.classList.add('reveal-in'), 140 + i * 280)));
+      setTimeout(() => say('What do you want to face? A market crash… or a personal emergency?', { rate: 0.9 }), 400);
     });
     // Premium tactile feedback on every tap: a soft click + a light haptic.
     document.addEventListener('pointerdown', (e) => {
@@ -1483,7 +1479,7 @@ if (typeof document !== 'undefined') (function () {
 
     on('silenceContinue', 'click', openYouDecision);
     on('youChoices', 'click', (ev) => { const b = ev.target.closest('button[data-choice]'); if (b) choose(b.dataset.choice); });
-    on('friendRevealBtn', 'click', () => { hide($('friendReveal')); showCollision(); });
+    on('friendRevealBtn', 'click', () => { stopCallTimer(); hide($('friendReveal')); showCollision(); });
     on('collisionBtn', 'click', afterCollision);
 
     on('replayBtn', 'click', () => { hideAllOverlays(); showPledge(); });
