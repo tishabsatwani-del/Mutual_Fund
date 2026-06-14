@@ -560,8 +560,8 @@ if (typeof document !== 'undefined') (function () {
   }
   // A realistic relationship-manager response: behavioural coaching that also
   // takes a genuine cash need seriously (not just "never sell").
-  const RM_CRASH_LINE = "Breathe. I've seen this in 2008 and 2020 — it always came back. Don't sell a thing. We hold.";
-  const RM_EM_LINE = "Take only what you truly need — not a rupee more. We don't undo years of discipline for one hard week.";
+  const RM_CRASH_LINE = "Don't sell in fear; the market recovers. If you genuinely need money, we plan it — the right amount, the right fund, calmly.";
+  const RM_EM_LINE = "We withdraw strategically — exactly what you need, from the right place — so one hard week never costs your future.";
   // Make a rupee figure personal & exact: express it in the user's own SIP.
   function sipSpan(rupees) {
     const months = Math.abs(rupees) / state.sip, yrs = months / 12;
