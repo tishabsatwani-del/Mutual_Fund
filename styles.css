@@ -361,7 +361,7 @@ body {
 .wdot { width: 7px; height: 7px; border-radius: 50%; background: rgba(255,255,255,0.16); transition: all .3s ease; }
 .wdot.on { background: var(--direct); width: 22px; border-radius: 4px; }
 /* The active step fills the remaining height and centres its content. */
-.wstep { flex: 1; display: flex; flex-direction: column; justify-content: center; animation: rise .45s ease both; }
+.wstep { flex: 1; display: flex; flex-direction: column; justify-content: safe center; animation: rise .45s ease both; }
 .wstep .kicker { margin-bottom: 14px; }
 .wq { font-size: clamp(30px, 8.5vw, 44px); font-weight: 800; letter-spacing: -.02em; line-height: 1.15; margin-bottom: 30px; text-align: center; }
 /* Title shimmer — soft metallic sheen drifting across the question. */
@@ -370,7 +370,7 @@ body {
 @keyframes shimmerText { to { background-position: 220% center; } }
 
 /* Living aurora behind the opening. */
-#setup { position: relative; overflow: hidden; }
+#setup { position: relative; overflow-y: auto; overflow-x: hidden; }
 #setup::before { content: ""; position: absolute; inset: -20%; z-index: 0; pointer-events: none;
   background: radial-gradient(45% 40% at 22% 28%, rgba(62,224,164,0.14), transparent 60%), radial-gradient(45% 45% at 80% 72%, rgba(216,200,120,0.13), transparent 60%), radial-gradient(40% 40% at 60% 15%, rgba(126,147,212,0.12), transparent 60%);
   filter: blur(8px); animation: aurora 16s ease-in-out infinite alternate; }
@@ -380,7 +380,7 @@ body {
 /* ===== TWO DOORS — the opening rendered as two carved, arched doorways ===== */
 .scenario-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; perspective: 1400px; }
 .scn-card {
-  position: relative; overflow: hidden; cursor: pointer; min-height: 56vh;
+  position: relative; overflow: hidden; cursor: pointer; min-height: clamp(200px, 42vh, 340px);
   display: flex; align-items: center; justify-content: center; color: #fff;
   /* arched-top doorway */
   border-radius: 110px 110px 14px 14px;
