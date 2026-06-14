@@ -642,6 +642,8 @@ if (typeof document !== 'undefined') (function () {
   const setHTML = (id, h) => { const el = $(id); if (el) el.innerHTML = h; };
   const setText = (id, t) => { const el = $(id); if (el) el.textContent = t; };
   const easeInOut = (p) => p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
+  // The fall starts slow (dread builds), then accelerates — a crash you feel, not a blink.
+  const easeInCrash = (p) => p * p * (2.2 - 1.2 * p);
   const reduceMotion = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   const COL = { direct: '#34d399', regular: '#e8b257', crash: '#f37070', cool: '#7e93d4', ghost: '#cbb26b',
@@ -752,6 +754,30 @@ if (typeof document !== 'undefined') (function () {
       const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.setValueAtTime(3200, t); lp.frequency.exponentialRampToValueAtTime(500, t + 0.5);
       s.connect(lp); lp.connect(ng); ng.connect(master); s.start(t); s.stop(t + 0.55);
     }
+    // The CRACK — a powerful, authentic hit the instant the market breaks:
+    // a glass-like shatter, a gut sub-drop, and a dissonant alarm stab.
+    function crashHit() {
+      if (!init()) return; const t = T();
+      // shatter: bright noise burst sweeping down
+      const s = ctx.createBufferSource(); s.buffer = brown(0.7); s.playbackRate.value = 1.4;
+      const bp = ctx.createBiquadFilter(); bp.type = 'highpass'; bp.frequency.setValueAtTime(2600, t); bp.frequency.exponentialRampToValueAtTime(300, t + 0.6);
+      const sg = ctx.createGain(); sg.gain.setValueAtTime(0.7, t); sg.gain.exponentialRampToValueAtTime(0.0001, t + 0.7);
+      s.connect(bp); bp.connect(sg); sg.connect(master); s.start(t); s.stop(t + 0.75);
+      // gut sub-drop
+      const o = ctx.createOscillator(), g = ctx.createGain(); o.type = 'sine';
+      o.frequency.setValueAtTime(180, t); o.frequency.exponentialRampToValueAtTime(28, t + 0.8);
+      g.gain.setValueAtTime(0.95, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.0);
+      o.connect(g); g.connect(master); o.start(t); o.stop(t + 1.05);
+      // dissonant alarm stab (two clashing saws)
+      [233, 247].forEach((f) => { const so = ctx.createOscillator(), gg = ctx.createGain(); so.type = 'sawtooth'; so.frequency.value = f; gg.gain.setValueAtTime(0.18, t); gg.gain.exponentialRampToValueAtTime(0.0001, t + 0.9); const fl = ctx.createBiquadFilter(); fl.type = 'lowpass'; fl.frequency.value = 900; so.connect(fl); fl.connect(gg); gg.connect(master); so.start(t); so.stop(t + 0.95); });
+    }
+    // A heavy descending thud as each red candle drops during the fall.
+    function crashTick() {
+      if (!init()) return; const t = T(), o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'sine'; o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(48, t + 0.18);
+      g.gain.setValueAtTime(0.5, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.34);
+      o.connect(g); g.connect(master); o.start(t); o.stop(t + 0.36);
+    }
     function setHeart(bpm) {
       heartBpm = bpm;
       if (heartTimer) { clearInterval(heartTimer); heartTimer = 0; }
@@ -789,7 +815,7 @@ if (typeof document !== 'undefined') (function () {
     function stopAll() { stopRumble(); stopHeart(); stopPad(); }
     function toggle() { on = !on; if (master) master.gain.setTargetAtTime(on ? 0.95 : 0, T(), 0.05); return on; }
     function isOn() { return on; }
-    return { unlock, startPad, startRumble, stopRumble, impact, setHeart, stopHeart, silenceCut, stopPad, ring, tick, ui, whoosh, freeze, stinger, resolve, openSwell, strike, lossTone, stopAll, toggle, isOn };
+    return { unlock, startPad, startRumble, stopRumble, impact, crashHit, crashTick, setHeart, stopHeart, silenceCut, stopPad, ring, tick, ui, whoosh, freeze, stinger, resolve, openSwell, strike, lossTone, stopAll, toggle, isOn };
   })();
 
   /* ---- Voice narration (Web Speech API — uses the device's default voice). ---- */
@@ -1079,7 +1105,7 @@ if (typeof document !== 'undefined') (function () {
 
   function spawnEmbers() {} // removed — falling red dots read as childish
 
-  const CLIMB_MS = reduceMotion ? 200 : 7000, CRASH_MS = reduceMotion ? 150 : 5000, DIVERGE_MS = reduceMotion ? 200 : 6000;
+  const CLIMB_MS = reduceMotion ? 200 : 7000, CRASH_MS = reduceMotion ? 150 : 8200, DIVERGE_MS = reduceMotion ? 200 : 6000;
   function tensionCue() { if (!reduceMotion && navigator.vibrate) navigator.vibrate([20, 70, 30]); }
 
   function loop(ts) {
@@ -1087,10 +1113,13 @@ if (typeof document !== 'undefined') (function () {
     const e = ts - state.phaseStart, sim = state.sim, N = sim.N, S = sim.S, bottom = sim.navDirect._bottom;
     if (state.phase === 'climb') {
       const p = Math.min(e / CLIMB_MS, 1); state.head = S * easeInOut(p); renderStage();
-      if (p >= 1) { state.phase = 'crash'; state.phaseStart = null; $('stage').classList.add('crashing'); tensionCue(); Sound.startRumble(CRASH_MS); Sound.setHeart(110); spawnEmbers(20); }
+      if (p >= 1) { state.phase = 'crash'; state.phaseStart = null; state._lastTick = S; $('stage').classList.add('crashing'); tensionCue(); Sound.crashHit(); Sound.startRumble(CRASH_MS); Sound.setHeart(110); }
       state.raf = requestAnimationFrame(loop);
     } else if (state.phase === 'crash') {
-      const p = Math.min(e / CRASH_MS, 1); state.head = S + (bottom - S) * p; renderStage();
+      // ease into the fall so each red candle drops with weight, then a heavy crashTick as it lands
+      const p = Math.min(e / CRASH_MS, 1), q = easeInCrash(p); state.head = S + (bottom - S) * q; renderStage();
+      const cur = Math.floor(state.head);
+      if (cur > state._lastTick) { state._lastTick = cur; Sound.crashTick(); if (!reduceMotion && navigator.vibrate) navigator.vibrate(18); }
       if (p >= 1) { cancelAnimationFrame(state.raf); enterSilence(); return; }
       state.raf = requestAnimationFrame(loop);
     } else if (state.phase === 'diverge') {
