@@ -155,9 +155,15 @@ body {
 .luck-pick button:hover { border-color: rgba(255,255,255,0.3); }
 .luck-pick button.on { color: #06120c; background: linear-gradient(180deg, #4fe3ab, #25b487); border-color: transparent; }
 .luck-meter { text-align: center; }
-.luck-pct { font-family: var(--num); font-size: clamp(64px, 20vw, 96px); font-weight: 800; line-height: 1; letter-spacing: -.03em; color: var(--direct); }
-.luck-of { font-size: 14px; text-transform: uppercase; letter-spacing: .14em; color: var(--muted); margin-bottom: 16px; }
+.luck-pct { font-family: var(--num); font-size: clamp(42px, 13vw, 64px); font-weight: 800; line-height: 1; letter-spacing: -.02em; color: var(--direct); }
+.luck-of { font-size: 13.5px; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); margin-bottom: 16px; }
 .luck-bar { height: 16px; border-radius: 999px; background: rgba(255,255,255,0.08); overflow: hidden; margin-bottom: 16px; }
+.luck-foot-card { margin-top: 22px; padding: 18px; border-radius: 16px; border: 1px solid var(--line); background: rgba(255,255,255,0.03); }
+.luck-foot-line { font-size: 16px; line-height: 1.6; color: var(--ink); margin-bottom: 12px; }
+.luck-foot-line b { font-family: var(--num); }
+.luck-foot-line b.bad { color: var(--crash); }
+.luck-foot-note { font-size: 14px; line-height: 1.6; color: var(--muted); }
+.luck-foot-note i { color: var(--ink); font-style: italic; }
 .luck-fill { height: 100%; width: 0; border-radius: 999px; background: var(--direct); transition: width 1s cubic-bezier(.2,.7,.2,1), background .4s ease; box-shadow: 0 0 18px -2px currentColor; }
 .luck-line { font-size: 16.5px; line-height: 1.6; color: var(--ink); }
 .luck-line b { font-family: var(--num); color: var(--direct); }
@@ -179,8 +185,12 @@ body {
 .res-title { font-size: 14px; letter-spacing: .16em; text-transform: uppercase; color: var(--faint); margin-bottom: 18px; }
 .result-cols { display: flex; gap: 12px; margin-bottom: 16px; }
 .rcol { flex: 1; padding: 20px 12px; border-radius: 16px; border: 1px solid var(--line); background: rgba(255,255,255,0.02); display: flex; flex-direction: column; gap: 8px; }
-.rcol.friend { background: rgba(232,178,87,0.08); border-color: rgba(232,178,87,0.26); }
-.rcap { font-size: 11.5px; letter-spacing: .03em; text-transform: uppercase; color: var(--faint); line-height: 1.35; }
+.rcol.friend { background: rgba(232,178,87,0.07); border-color: rgba(232,178,87,0.22); }
+.rcol.steady { background: rgba(62,224,164,0.08); border-color: rgba(62,224,164,0.28); }
+.rcol.steady .rval { color: var(--direct); }
+.rcap { font-size: 14px; font-weight: 800; letter-spacing: .02em; text-transform: uppercase; color: var(--ink); line-height: 1.3; }
+.rcol.friend .rcap { color: var(--regular); }
+.rcol.steady .rcap { color: var(--direct); }
 .rval { font-family: var(--num); font-size: clamp(24px, 7.5vw, 34px); font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
 .rcol.friend .rval { color: var(--regular); }
 .gap-line { font-size: 17px; font-weight: 600; margin: 4px 0 14px; }
@@ -270,9 +280,9 @@ body {
 .em-need-cap { font-size: 13px; text-transform: uppercase; letter-spacing: .14em; color: var(--faint); margin-bottom: 4px; }
 .em-need { font-family: var(--num); font-size: clamp(40px, 12vw, 60px); font-weight: 700; color: var(--crash); letter-spacing: -.02em; margin-bottom: 20px; text-shadow: 0 0 36px rgba(243,112,112,0.35); }
 .em-choices { text-align: left; margin-top: 4px; }
-.friend-card { border-color: rgba(232,178,87,0.28); box-shadow: inset 0 0 90px -30px rgba(232,178,87,0.3), 0 40px 90px -30px rgba(0,0,0,0.85); }
-.em-quote { font-size: 18px; line-height: 1.65; font-style: italic; color: var(--regular); margin-bottom: 16px; text-align: left; font-weight: 500; }
-.em-quote b { font-style: normal; font-family: var(--num); color: #fff; }
+.friend-card { border-color: rgba(62,224,164,0.26); box-shadow: inset 0 0 90px -34px rgba(62,224,164,0.28), 0 40px 90px -30px rgba(0,0,0,0.85); }
+.em-quote { font-size: 18px; line-height: 1.65; font-style: italic; color: #fff; margin-bottom: 16px; text-align: left; font-weight: 500; }
+.em-quote b { font-style: normal; font-family: var(--num); color: var(--direct); }
 
 .emergency { position: absolute; inset: 0; min-height: 100vh; min-height: 100dvh; }
 .em-scroll { padding: calc(30px + env(safe-area-inset-top)) 24px calc(76px + env(safe-area-inset-bottom)); max-width: 600px; margin: 0 auto; animation: rise .7s ease both; }
