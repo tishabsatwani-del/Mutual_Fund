@@ -1591,9 +1591,25 @@ if (typeof document !== 'undefined') (function () {
 
   function verdictFor(choice, yours, friendFinal, sim) {
     const kept = CHOICE_CAT[choice] === state.pledge, youHeld = choice === 'hold', youAhead = yours >= friendFinal;
-    if (youHeld && youAhead)
+    if (youHeld && youAhead) {
+      // Two different things the reader must not conflate: the DECISION (holding)
+      // cost nothing — it was the right call (behaviourCost = 0) — while the CRASH
+      // EVENT itself still cost something against a market that never fell, and that
+      // part was never in the reader's control. Drive the wording off the SIGNED
+      // gap (held vs the crash-free trend): a cost in the normal case, a "wash" near
+      // zero, and a genuine "ahead" only if cheap units more than repaid the fall.
+      const signed = Math.round(sim.direct.hold.final - sim.directNoCrash);
+      const band = sim.directNoCrash * 0.005;
+      let crash;
+      if (signed > band)
+        crash = 'And because you held, the dip even paid you: you came out about <b>' + inrShort(signed) + '</b> ahead of a market that never fell — the cheap units more than repaid the fall.';
+      else if (signed < -band)
+        crash = 'Your decision cost you nothing — holding was the right call. The crash <i>itself</i> still cost about <b>' + inrShort(-signed) + '</b> against a market that never fell, and that part was never yours to control.';
+      else
+        crash = 'Your decision cost you nothing — holding was the right call. Against a market that never fell it was roughly a wash: the cheap units you bought gave back almost everything the fall took.';
       return 'You held. She held. You simply kept more.'
-        + '<span class="verdict-sub">The cheaper door quietly won — and holding even beat a crash-free market by <b>' + inrShort(Math.max(sim.direct.hold.final - sim.directNoCrash, 0)) + '</b> (the dip bought you cheap units).</span>';
+        + '<span class="verdict-sub">The cheaper door quietly won. ' + crash + '</span>';
+    }
     if (!youHeld && !youAhead)
       return 'You saved the fee — and lost far more.'
         + '<span class="verdict-sub">' + (kept ? 'You even did what you planned. It still hurt, because the plan itself was the mistake.' : 'Her plan bought one thing: a voice that said <i>don\'t sell</i>.') + ' She isn\'t smarter. She just wasn\'t alone.</span>';
@@ -1712,7 +1728,7 @@ if (typeof document !== 'undefined') (function () {
     const e = state.exp; if (!e) return; e.step = step; const idx = EXP_STEPS.indexOf(step);
     let html = progressDots(idx);
     if (step === 'control') { expScene('dials');
-      html += '<p class="exp-prompt">If you could control <b>one thing</b> about your next 20 years, which would it be?</p>'
+      html += '<p class="exp-prompt">If you could control <b>one thing</b> about your next ' + state.years + ' years, which would it be?</p>'
         + '<div class="exp-grid">' + expBtn('year', 'The year the crash hits') + expBtn('deep', 'How deep it falls') + expBtn('fund', 'Which fund wins') + expBtn('news', 'The news') + expBtn('nerve', 'Your own nerve') + '</div>'
         + '<p class="exp-note" id="expNote"></p>';
     } else if (step === 'guess') { expScene('dials');
@@ -1720,7 +1736,7 @@ if (typeof document !== 'undefined') (function () {
         + '<div class="exp-grid four">' + expBtn('g70', '70 or more') + expBtn('g50', 'About 50') + expBtn('g30', 'About 30') + expBtn('g10', 'Under 10') + '</div>'
         + '<p class="exp-note" id="expNote"></p>';
     } else if (step === 'lever') { expScene('cloud');
-      html += '<p class="exp-prompt">Your money, 10,000 markets, 20 years. <b>Pull the lever — both ways.</b></p>'
+      html += '<p class="exp-prompt">Your money, 10,000 markets, ' + state.years + ' years. <b>Pull the lever — both ways.</b></p>'
         + '<div class="exp-grid two">' + expBtn('stay', '▲ STAY invested', 'stay') + expBtn('run', '▼ RUN to cash', 'run') + '</div>'
         + '<p class="exp-note" id="expNote"></p>';
     } else if (step === 'hand') { expScene('glow');
@@ -1919,7 +1935,7 @@ if (typeof document !== 'undefined') (function () {
       ['Sleeve returns', 'Liquid 6% · Large-cap 12% · Mid/small 15%', 'assumption'],
       ['Idle cash earns', '4% a year (a bank / FD)', 'assumption'],
       ['Emergency size', sim.sev.label + ' (' + Math.round(need / you.corpusAtEmergency * 100) + '% of corpus)', 'assumption'],
-    ]) + '<p class="maths-note">Your friend on Regular finished with <b>' + inrShort(friend.final) + '</b> even after her 1% fee — the fee was never the point. The headline compares the same investor (only behaviour differs), so the fee can\'t flatter either side. A veteran\'s footnote: for a short gap, an RM might suggest a <b>loan against the funds</b> rather than selling at all. Every ₹ is computed from month-by-month units × NAV; only the labelled assumptions are inputs.</p>');
+    ]) + '<p class="maths-note">Your XIRR is <b>money-weighted</b>, so it reflects <i>when</i> money came and went, not just how the funds grew: taking cash from the steady 6% buffer mid-journey — while the higher-returning funds keep compounding — can lift it a little above the 12% assumption, just as being forced to sell fallen units in a downturn drags it below. Your friend on Regular finished with <b>' + inrShort(friend.final) + '</b> even after her 1% fee — the fee was never the point. The headline compares the same investor (only behaviour differs), so the fee can\'t flatter either side. A veteran\'s footnote: for a short gap, an RM might suggest a <b>loan against the funds</b> rather than selling at all. Every ₹ is computed from month-by-month units × NAV; only the labelled assumptions are inputs.</p>');
     closeMaths('emMathsPanel', 'emMathsToggle');
   }
 
