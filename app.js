@@ -1023,7 +1023,13 @@ if (typeof document !== 'undefined') (function () {
     function speak(text, opts, onEnd) {
       if (!ok || !enabled || !text) { if (onEnd) onEnd(); return; }
       try {
-        window.speechSynthesis.cancel();
+        // Only cancel when something is actually queued/speaking. A cancel()
+        // right before speak() adds startup latency (and can drop the first
+        // words) on mobile; when the engine is idle we just resume() and speak,
+        // which starts noticeably faster — this is what trims the lag on the
+        // pledge and emergency lines.
+        if (window.speechSynthesis.speaking || window.speechSynthesis.pending) window.speechSynthesis.cancel();
+        else { try { window.speechSynthesis.resume(); } catch (e2) {} }
         const u = new SpeechSynthesisUtterance(text);
         if (!picked) picked = pick(); if (picked) u.voice = picked;
         u.rate = (opts && opts.rate) || 0.92; u.pitch = (opts && opts.pitch) || 1; u.volume = (opts && opts.volume) || 1;
