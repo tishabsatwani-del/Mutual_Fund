@@ -1052,7 +1052,9 @@ if (typeof document !== 'undefined') (function () {
     // Warm the engine on the first touch so the opening line starts promptly
     // (mobile speech has a cold-start delay on the first utterance).
     let primed = false;
-    function prime() { if (!ok || !enabled || primed) return; primed = true; try { window.speechSynthesis.resume(); const u = new SpeechSynthesisUtterance(' '); u.volume = 0; u.rate = 2; window.speechSynthesis.speak(u); } catch (e) {} }
+    // resume() on every call keeps the engine awake (some mobiles let it sleep
+    // between utterances); the silent warm-up utterance is spoken just once.
+    function prime() { if (!ok || !enabled) return; try { window.speechSynthesis.resume(); if (!primed) { primed = true; const u = new SpeechSynthesisUtterance(' '); u.volume = 0; u.rate = 2; window.speechSynthesis.speak(u); } } catch (e) {} }
     function setEnabled(b) { enabled = b; if (!b) stop(); }
     function isEnabled() { return enabled; }
     // Speak ONE line and fire marks as the engine actually reaches each word
@@ -1955,7 +1957,7 @@ if (typeof document !== 'undefined') (function () {
     // doors are unlocked at those moments via the clip's own playback clock.
     const OPENING_SRC = 'voice/opening.mp3?v=20260618', OPEN_T1 = 2.22, OPEN_T2 = 3.47;
     on('introBtn', 'click', () => {
-      Sound.unlock(); Sound.openSwell(); hide($('intro'));
+      Sound.unlock(); Voice.prime(); Sound.openSwell(); hide($('intro'));
       const crash = document.querySelector('#w_scenario .crash-scn');
       const em = document.querySelector('#w_scenario .em-scn');
       // Both doors appear INSTANTLY, locked (closed, dim, padlock); each UNLOCKS
@@ -2010,7 +2012,7 @@ if (typeof document !== 'undefined') (function () {
     });
     // Premium tactile feedback on every tap: a soft click + a light haptic.
     document.addEventListener('pointerdown', (e) => {
-      if (e.target.closest('button') && e.target.id !== 'muteBtn') { Sound.ui(); if (navigator.vibrate) navigator.vibrate(8); }
+      if (e.target.closest('button') && e.target.id !== 'muteBtn') { Sound.ui(); Voice.prime(); if (navigator.vibrate) navigator.vibrate(8); }
     });
     // Scroll cue: tap to scroll down; keep it in sync with scrolling, resizing,
     // and any tap that can change page height (e.g. expanding "See the maths").
