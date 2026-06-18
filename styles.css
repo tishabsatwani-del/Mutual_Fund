@@ -667,6 +667,24 @@ body::after {
 #muteBtn:hover { border-color: rgba(255,255,255,0.3); transform: scale(1.05); }
 #muteBtn:active { transform: scale(0.95); }
 
+/* Scroll cue — appears only when there's more content below the fold. */
+.scroll-cue {
+  position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom)); z-index: 45;
+  transform: translateX(-50%) translateY(8px);
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 8px 16px; border-radius: 999px;
+  border: 1px solid rgba(216,200,120,0.5); background: rgba(10,14,20,0.74);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  color: var(--ink); font-family: var(--sans); font-size: 13px; font-weight: 600; letter-spacing: .04em;
+  cursor: pointer; opacity: 0; pointer-events: none;
+  box-shadow: 0 12px 32px -12px rgba(0,0,0,0.75);
+  transition: opacity .35s ease, transform .35s ease;
+}
+.scroll-cue.on { opacity: 1; pointer-events: auto; transform: translateX(-50%) translateY(0); }
+.scroll-cue .cue-arrow { font-size: 15px; line-height: 1; animation: cueBounce 1.5s ease-in-out infinite; }
+@keyframes cueBounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(3px); } }
+@media (prefers-reduced-motion: reduce) { .scroll-cue .cue-arrow { animation: none; } }
+
 /* The silence breathes a red heartbeat — synced to the audio pulse. */
 .silence.show::before {
   content: ""; position: absolute; inset: 0; pointer-events: none;
