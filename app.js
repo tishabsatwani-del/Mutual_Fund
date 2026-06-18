@@ -632,10 +632,31 @@ if (typeof document !== 'undefined') (function () {
     document.body.classList.add('narrating');
     let done = false;
     const finish = () => { if (done) return; done = true; document.body.classList.remove('narrating'); if (onDone) onDone(); };
-    Voice.speak(spoken, opts, finish);
-    // Safety release — never let a stalled/again silent speech engine keep the
-    // screen locked. Caps well below any real narration's length.
-    setTimeout(finish, Math.min(8000, 1400 + spoken.split(' ').length * 300));
+    const speakLive = () => {
+      Voice.speak(spoken, opts, finish);
+      // Safety release — never let a stalled/again silent speech engine keep the
+      // screen locked. Caps well below any real narration's length.
+      setTimeout(finish, Math.min(8000, 1400 + spoken.split(' ').length * 300));
+    };
+    // A recorded clip (instant + identically-timed on every device) when opts.clip
+    // is given; if it is missing/blocked we fall back to the live voice, so this
+    // can never dead-end.
+    const clipSrc = opts && opts.clip;
+    if (clipSrc) {
+      let started = false, fell = false;
+      const fallback = () => { if (started || fell || done) return; fell = true; speakLive(); };
+      try {
+        const a = new Audio(clipSrc); a.preload = 'auto';
+        a.addEventListener('playing', () => { started = true; });
+        a.addEventListener('ended', finish);
+        a.addEventListener('error', fallback);
+        const pr = a.play(); if (pr && pr.catch) pr.catch(fallback);
+        setTimeout(fallback, 600);        // clip never started → live voice
+        setTimeout(finish, 16000);        // absolute backstop if 'ended' never fires
+      } catch (e) { speakLive(); }
+      return;
+    }
+    speakLive();
   }
   // Reveal a quote word-by-word, as if spoken live on the call.
   function revealQuote(id, text, startMs, perWord) {
@@ -1373,7 +1394,7 @@ if (typeof document !== 'undefined') (function () {
     const wave = $('revealWave'); if (wave) wave.hidden = false;
     setText('revealStatus', 'Connected · MD');
     revealQuote('revealQuote', '"' + RM_CRASH_LINE + '"', 350, 130);
-    narrate(RM_CRASH_LINE, { rate: 0.98 }, () => { const go = $('friendRevealBtn'); if (go) go.hidden = false; });
+    narrate(RM_CRASH_LINE, { rate: 0.98, clip: 'voice/crash.mp3?v=20260618' }, () => { const go = $('friendRevealBtn'); if (go) go.hidden = false; });
   }
   function choose(choice) {
     state.choice = choice; Sound.stopHeart();
@@ -1771,7 +1792,7 @@ if (typeof document !== 'undefined') (function () {
     const wave = $('emCallWave'); if (wave) wave.hidden = false;
     setText('emCallStatus', 'Connected · MD');
     revealQuote('emQuote', '"' + RM_EM_LINE + '"', 350, 130);
-    narrate(RM_EM_LINE, { rate: 0.98 }, () => { const go = $('emCallBtn'); if (go) go.hidden = false; });
+    narrate(RM_EM_LINE, { rate: 0.98, clip: 'voice/emergency.mp3?v=20260618' }, () => { const go = $('emCallBtn'); if (go) go.hidden = false; });
   }
   function emToResult() {
     stopCallTimer(); hide($('emCall')); Sound.whoosh(); Sound.resolve();
@@ -1846,7 +1867,7 @@ if (typeof document !== 'undefined') (function () {
     // is missing/blocked, we fall back to the live voice. OPEN_M1/M2 are the
     // fractions of the clip at which each door unlocks (tune to the recording:
     // ~when "market crash" and "personal emergency" are spoken).
-    const OPENING_SRC = 'voice/opening.mp3?v=20260614ar', OPEN_M1 = 0.42, OPEN_M2 = 0.82;
+    const OPENING_SRC = 'voice/opening.mp3?v=20260618', OPEN_M1 = 0.49, OPEN_M2 = 0.76;
     on('introBtn', 'click', () => {
       Sound.unlock(); Sound.openSwell(); hide($('intro'));
       const crash = document.querySelector('#w_scenario .crash-scn');
