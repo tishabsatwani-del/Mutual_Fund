@@ -1054,10 +1054,21 @@ if (typeof document !== 'undefined') (function () {
     function stop() { if (ok) try { window.speechSynthesis.cancel(); } catch (e) {} }
     // Warm the engine on the first touch so the opening line starts promptly
     // (mobile speech has a cold-start delay on the first utterance).
-    let primed = false;
+    let primed = false, warmTimer = 0;
     // resume() on every call keeps the engine awake (some mobiles let it sleep
     // between utterances); the silent warm-up utterance is spoken just once.
-    function prime() { if (!ok || !enabled) return; try { window.speechSynthesis.resume(); if (!primed) { primed = true; const u = new SpeechSynthesisUtterance(' '); u.volume = 0; u.rate = 2; window.speechSynthesis.speak(u); } } catch (e) {} }
+    function prime() { if (!ok || !enabled) return; try { window.speechSynthesis.resume(); if (!primed) { primed = true; const u = new SpeechSynthesisUtterance(' '); u.volume = 0; u.rate = 2; window.speechSynthesis.speak(u); } keepWarm(); } catch (e) {} }
+    // Keep the engine from going cold while the user reads a long screen (the
+    // next spoken line otherwise pays a multi-second cold start). A tiny SILENT
+    // tick, fired ONLY when the engine is completely idle — so it can never
+    // interrupt or glitch a real line. Starts on the first prime, runs once.
+    function keepWarm() {
+      if (warmTimer || !ok) return;
+      warmTimer = setInterval(() => {
+        if (!enabled) return;
+        try { if (!window.speechSynthesis.speaking && !window.speechSynthesis.pending) { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; u.rate = 10; window.speechSynthesis.speak(u); } } catch (e) {}
+      }, 8000);
+    }
     function setEnabled(b) { enabled = b; if (!b) stop(); }
     function isEnabled() { return enabled; }
     // Speak ONE line and fire marks as the engine actually reaches each word
