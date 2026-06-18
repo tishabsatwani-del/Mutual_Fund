@@ -659,9 +659,10 @@ if (typeof document !== 'undefined') (function () {
         const tick = () => { if (done) return; cap.until((performance.now() - t0) / 1000); raf = requestAnimationFrame(tick); };
         raf = requestAnimationFrame(tick);
       } else if (cap) { cap.all(); }
-      // Safety release — never let a stalled/again silent speech engine keep the
-      // screen locked. Caps well below any real narration's length.
-      setTimeout(finish, Math.min(12000, 1400 + spoken.split(' ').length * 300));
+      // Safety release — only a backstop for a stalled/silent engine. The real
+      // release is onend; this must sit ABOVE any real narration's length so it
+      // never unlocks the options mid-sentence (the pledge is ~28 words ≈ 15s).
+      setTimeout(finish, Math.min(24000, 3000 + spoken.split(' ').length * 520));
     };
     // A recorded clip (instant + identically-timed on every device) when opts.clip
     // is given; if it is missing/blocked we fall back to the live voice, so this
@@ -1023,13 +1024,9 @@ if (typeof document !== 'undefined') (function () {
     function speak(text, opts, onEnd) {
       if (!ok || !enabled || !text) { if (onEnd) onEnd(); return; }
       try {
-        // Only cancel when something is actually queued/speaking. A cancel()
-        // right before speak() adds startup latency (and can drop the first
-        // words) on mobile; when the engine is idle we just resume() and speak,
-        // which starts noticeably faster — this is what trims the lag on the
-        // pledge and emergency lines.
-        if (window.speechSynthesis.speaking || window.speechSynthesis.pending) window.speechSynthesis.cancel();
-        else { try { window.speechSynthesis.resume(); } catch (e2) {} }
+        // A clean cancel() before each utterance keeps the engine stable — the
+        // idle skip/resume variant caused random mid-sentence pauses on mobile.
+        window.speechSynthesis.cancel();
         const u = new SpeechSynthesisUtterance(text);
         if (!picked) picked = pick(); if (picked) u.voice = picked;
         u.rate = (opts && opts.rate) || 0.92; u.pitch = (opts && opts.pitch) || 1; u.volume = (opts && opts.volume) || 1;
@@ -1868,7 +1865,7 @@ if (typeof document !== 'undefined') (function () {
     setText('emStrikeNeed', inrShort(ctx.need));
     setHTML('emStrikePressure', 'You never planned to touch your investments. Now you have to.');
     show($('emStrike'));
-    setTimeout(() => say('You need ' + amountWords(ctx.need) + ', now.', { rate: 0.92 }), 250);
+    setTimeout(() => say('You need ' + amountWords(ctx.need) + ', now.', { rate: 0.92 }), 450);
   }
   function emToDecision() { hide($('emStrike')); show($('emDecision')); Sound.setHeart(92); } // the clock, running
   function emChoose(r) {
