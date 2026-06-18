@@ -1849,7 +1849,7 @@ if (typeof document !== 'undefined') (function () {
   }
   function sleeveRow(name, val, note) { return '<div class="sleeve"><span class="sl-name">' + name + '</span><span class="sl-val">' + inrShort(val) + '</span><span class="sl-note">' + note + '</span></div>'; }
   function emToStrike() {
-    Sound.unlock(); Sound.strike();
+    Sound.unlock(); Sound.strike(); Voice.prime(); // wake the speech engine now (it may have slept on the corpus screen)
     hide($('emIntro'));
     const ctx = state.emCtx, em = ctx.em;
     const copy = {
@@ -1865,7 +1865,7 @@ if (typeof document !== 'undefined') (function () {
     setText('emStrikeNeed', inrShort(ctx.need));
     setHTML('emStrikePressure', 'You never planned to touch your investments. Now you have to.');
     show($('emStrike'));
-    setTimeout(() => say('You need ' + amountWords(ctx.need) + ', now.', { rate: 0.92 }), 450);
+    setTimeout(() => say('You need ' + amountWords(ctx.need) + ', now.', { rate: 0.92 }), 150);
   }
   function emToDecision() { hide($('emStrike')); show($('emDecision')); Sound.setHeart(92); } // the clock, running
   function emChoose(r) {
