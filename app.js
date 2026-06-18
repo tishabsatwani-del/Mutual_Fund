@@ -669,17 +669,27 @@ if (typeof document !== 'undefined') (function () {
     const clipSrc = opts && opts.clip;
     if (clipSrc) {
       let started = false, fell = false;
-      const fallback = () => { if (started || fell || done) return; fell = true; speakLive(); };
+      const a = new Audio(clipSrc); a.preload = 'auto';
+      const onStart = () => {
+        if (started || fell || done) return;
+        started = true;
+        if (cap) { const tick = () => { if (done) return; cap.until(a.currentTime); raf = requestAnimationFrame(tick); }; raf = requestAnimationFrame(tick); }
+      };
+      // Fall back to the live voice ONLY if the clip genuinely is not playing.
+      // On mobile the 'playing' event / play() promise can settle later than any
+      // fixed timer, so we verify real playback here — otherwise the live voice
+      // would start on top of the clip and you'd hear both (the mobile bug).
+      const fallback = () => {
+        if (started || fell || done) return;
+        if (!a.paused && a.currentTime > 0) { onStart(); return; }
+        fell = true; speakLive();
+      };
       try {
-        const a = new Audio(clipSrc); a.preload = 'auto';
-        a.addEventListener('playing', () => {
-          started = true;
-          if (cap) { const tick = () => { if (done) return; cap.until(a.currentTime); raf = requestAnimationFrame(tick); }; raf = requestAnimationFrame(tick); }
-        });
+        a.addEventListener('playing', onStart);
         a.addEventListener('ended', () => { if (cap) cap.all(); finish(); });
         a.addEventListener('error', fallback);
-        const pr = a.play(); if (pr && pr.catch) pr.catch(fallback);
-        setTimeout(fallback, 600);        // clip never started → live voice
+        const pr = a.play(); if (pr && pr.then) pr.then(onStart).catch(fallback);
+        setTimeout(fallback, 1200);       // last resort; the guard above prevents doubling
         setTimeout(finish, 16000);        // absolute backstop if 'ended' never fires
       } catch (e) { speakLive(); }
       return;
@@ -1923,26 +1933,35 @@ if (typeof document !== 'undefined') (function () {
         else { setTimeout(door1, 600); setTimeout(door2, 1100); }
       };
       let clipStarted = false, fellBack = false, openRaf = 0;
-      const useTTS = () => { if (clipStarted || fellBack) return; fellBack = true; ttsOpening(); };
+      const clip = new Audio(OPENING_SRC); clip.preload = 'auto';
+      // Drive the doors off the clip's own clock at ~60fps (not the coarse,
+      // ~4fps 'timeupdate' event), so each door opens frame-accurately on the
+      // spoken word — and identically on mobile, which shares this same clock.
+      const onPlay = () => {
+        if (clipStarted || fellBack) return;
+        clipStarted = true;
+        const tick = () => {
+          const t = clip.currentTime;
+          if (t >= OPEN_T1) door1();
+          if (t >= OPEN_T2) door2();
+          if (!f1 || !f2) openRaf = requestAnimationFrame(tick);
+        };
+        openRaf = requestAnimationFrame(tick);
+      };
+      // Use the live voice ONLY if the clip genuinely is not playing. On mobile
+      // the clip can start later than a fixed timer, so we verify real playback
+      // here — otherwise the live voice would play on top of the recording.
+      const useTTS = () => {
+        if (clipStarted || fellBack) return;
+        if (!clip.paused && clip.currentTime > 0) { onPlay(); return; }
+        fellBack = true; ttsOpening();
+      };
       try {
-        const clip = new Audio(OPENING_SRC); clip.preload = 'auto';
-        // Drive the doors off the clip's own clock at ~60fps (not the coarse,
-        // ~4fps 'timeupdate' event), so each door opens frame-accurately on the
-        // spoken word — and identically on mobile, which shares this same clock.
-        clip.addEventListener('playing', () => {
-          clipStarted = true;
-          const tick = () => {
-            const t = clip.currentTime;
-            if (t >= OPEN_T1) door1();
-            if (t >= OPEN_T2) door2();
-            if (!f1 || !f2) openRaf = requestAnimationFrame(tick);
-          };
-          openRaf = requestAnimationFrame(tick);
-        });
+        clip.addEventListener('playing', onPlay);
         clip.addEventListener('ended', () => { if (openRaf) cancelAnimationFrame(openRaf); door1(); door2(); });
         clip.addEventListener('error', useTTS);
-        const pr = clip.play(); if (pr && pr.catch) pr.catch(useTTS);
-        setTimeout(useTTS, 600); // clip hasn't started → use the live voice
+        const pr = clip.play(); if (pr && pr.then) pr.then(onPlay).catch(useTTS);
+        setTimeout(useTTS, 1200); // last resort; the guard above prevents doubling
       } catch (e) { useTTS(); }
     });
     // Premium tactile feedback on every tap: a soft click + a light haptic.
