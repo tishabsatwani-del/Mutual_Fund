@@ -673,25 +673,24 @@ if (typeof document !== 'undefined') (function () {
       const onStart = () => {
         if (started || fell || done) return;
         started = true;
+        Voice.stop(); // cancel any queued live speech — the clip wins, never both
         if (cap) { const tick = () => { if (done) return; cap.until(a.currentTime); raf = requestAnimationFrame(tick); }; raf = requestAnimationFrame(tick); }
       };
-      // Fall back to the live voice ONLY if the clip genuinely is not playing.
-      // On mobile the 'playing' event / play() promise can settle later than any
-      // fixed timer, so we verify real playback here — otherwise the live voice
-      // would start on top of the clip and you'd hear both (the mobile bug).
-      const fallback = () => {
-        if (started || fell || done) return;
-        if (!a.paused && a.currentTime > 0) { onStart(); return; }
-        fell = true; speakLive();
-      };
+      const fallback = () => { if (started || fell || done) return; fell = true; speakLive(); };
       try {
         a.addEventListener('playing', onStart);
         a.addEventListener('ended', () => { if (cap) cap.all(); finish(); });
         a.addEventListener('error', fallback);
-        const pr = a.play(); if (pr && pr.then) pr.then(onStart).catch(fallback);
-        setTimeout(fallback, 1200);       // last resort; the guard above prevents doubling
+        // The play() promise is authoritative: it RESOLVES only once the clip is
+        // actually playing and REJECTS only if it cannot. We fall back to the live
+        // voice solely on rejection/error — never on a timer. This is the real fix
+        // for the mobile double-voice: on slow decoders (e.g. Vivo) the clip just
+        // starts late, and a timer would wrongly fire the live voice on top of it.
+        const pr = a.play();
+        if (pr && pr.then) { pr.then(onStart).catch(fallback); }
+        else { setTimeout(() => { if (!started && (a.paused || a.currentTime === 0)) fallback(); }, 1800); } // legacy: no promise
         setTimeout(finish, 16000);        // absolute backstop if 'ended' never fires
-      } catch (e) { speakLive(); }
+      } catch (e) { fallback(); }
       return;
     }
     speakLive();
@@ -1940,6 +1939,7 @@ if (typeof document !== 'undefined') (function () {
       const onPlay = () => {
         if (clipStarted || fellBack) return;
         clipStarted = true;
+        Voice.stop(); // cancel any queued live speech — the clip wins, never both
         const tick = () => {
           const t = clip.currentTime;
           if (t >= OPEN_T1) door1();
@@ -1948,20 +1948,18 @@ if (typeof document !== 'undefined') (function () {
         };
         openRaf = requestAnimationFrame(tick);
       };
-      // Use the live voice ONLY if the clip genuinely is not playing. On mobile
-      // the clip can start later than a fixed timer, so we verify real playback
-      // here — otherwise the live voice would play on top of the recording.
-      const useTTS = () => {
-        if (clipStarted || fellBack) return;
-        if (!clip.paused && clip.currentTime > 0) { onPlay(); return; }
-        fellBack = true; ttsOpening();
-      };
+      const useTTS = () => { if (clipStarted || fellBack) return; fellBack = true; ttsOpening(); };
       try {
         clip.addEventListener('playing', onPlay);
         clip.addEventListener('ended', () => { if (openRaf) cancelAnimationFrame(openRaf); door1(); door2(); });
         clip.addEventListener('error', useTTS);
-        const pr = clip.play(); if (pr && pr.then) pr.then(onPlay).catch(useTTS);
-        setTimeout(useTTS, 1200); // last resort; the guard above prevents doubling
+        // The play() promise is authoritative — resolves only when the clip is
+        // truly playing, rejects only if it cannot. Fall back to the live voice
+        // solely on rejection/error, never on a timer, so a slow decoder (Vivo)
+        // can never make the live voice play on top of the recording.
+        const pr = clip.play();
+        if (pr && pr.then) { pr.then(onPlay).catch(useTTS); }
+        else { setTimeout(() => { if (!clipStarted && (clip.paused || clip.currentTime === 0)) useTTS(); }, 1800); } // legacy: no promise
       } catch (e) { useTTS(); }
     });
     // Premium tactile feedback on every tap: a soft click + a light haptic.
