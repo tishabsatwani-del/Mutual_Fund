@@ -626,17 +626,42 @@ if (typeof document !== 'undefined') (function () {
   function stopCallTimer() { if (state._callTimer) { clearInterval(state._callTimer); state._callTimer = 0; } }
   // Narrate AND lock interaction until it finishes — released on the first of
   // {onend, onerror, timeout, mute, no-voice}, so it can never dead-end.
+  // When opts.caption = { id, text, times } is given, the on-screen subtitle is
+  // revealed word-by-word IN LOCKSTEP with the audio: each reveal is driven by
+  // the clip's own playback clock (requestAnimationFrame polling currentTime),
+  // so it stays perfectly synced — identically on desktop and mobile — and
+  // never drifts. times[i] is the second at which word i is spoken in the clip.
+  function buildCaption(cap) {
+    if (!cap) return null;
+    const el = $(cap.id); if (!el) return null;
+    const words = cap.text.split(' ');
+    el.innerHTML = words.map((w) => '<span class="rw">' + w + '</span>').join(' ');
+    const spans = el.querySelectorAll('.rw');
+    if (reduceMotion) spans.forEach((s) => s.classList.add('on'));
+    return {
+      until(t) { const tt = cap.times || []; for (let i = 0; i < spans.length; i++) { if (tt[i] != null && t >= tt[i]) spans[i].classList.add('on'); } },
+      all() { spans.forEach((s) => s.classList.add('on')); }
+    };
+  }
   function narrate(text, opts, onDone) {
     const spoken = text.replace(/\bSIP\b/g, 'systematic investment plan');
-    if (!Voice.available || !Voice.isEnabled()) { if (onDone) onDone(); return; }
+    const cap = opts && opts.caption ? buildCaption(opts.caption) : null;
+    if (!Voice.available || !Voice.isEnabled()) { if (cap) cap.all(); if (onDone) onDone(); return; }
     document.body.classList.add('narrating');
-    let done = false;
-    const finish = () => { if (done) return; done = true; document.body.classList.remove('narrating'); if (onDone) onDone(); };
+    let done = false, raf = 0;
+    const finish = () => { if (done) return; done = true; if (raf) cancelAnimationFrame(raf); document.body.classList.remove('narrating'); if (onDone) onDone(); };
     const speakLive = () => {
       Voice.speak(spoken, opts, finish);
+      // No clip clock available — pace the caption off a real-time estimate that
+      // matches the clip's word timings, so the fallback still reads in step.
+      if (cap && opts.caption.times && opts.caption.times.length) {
+        const t0 = performance.now();
+        const tick = () => { if (done) return; cap.until((performance.now() - t0) / 1000); raf = requestAnimationFrame(tick); };
+        raf = requestAnimationFrame(tick);
+      } else if (cap) { cap.all(); }
       // Safety release — never let a stalled/again silent speech engine keep the
       // screen locked. Caps well below any real narration's length.
-      setTimeout(finish, Math.min(8000, 1400 + spoken.split(' ').length * 300));
+      setTimeout(finish, Math.min(12000, 1400 + spoken.split(' ').length * 300));
     };
     // A recorded clip (instant + identically-timed on every device) when opts.clip
     // is given; if it is missing/blocked we fall back to the live voice, so this
@@ -647,8 +672,11 @@ if (typeof document !== 'undefined') (function () {
       const fallback = () => { if (started || fell || done) return; fell = true; speakLive(); };
       try {
         const a = new Audio(clipSrc); a.preload = 'auto';
-        a.addEventListener('playing', () => { started = true; });
-        a.addEventListener('ended', finish);
+        a.addEventListener('playing', () => {
+          started = true;
+          if (cap) { const tick = () => { if (done) return; cap.until(a.currentTime); raf = requestAnimationFrame(tick); }; raf = requestAnimationFrame(tick); }
+        });
+        a.addEventListener('ended', () => { if (cap) cap.all(); finish(); });
         a.addEventListener('error', fallback);
         const pr = a.play(); if (pr && pr.catch) pr.catch(fallback);
         setTimeout(fallback, 600);        // clip never started → live voice
@@ -671,6 +699,11 @@ if (typeof document !== 'undefined') (function () {
   // takes a genuine cash need seriously (not just "never sell").
   const RM_CRASH_LINE = "Don't sell in fear; the market recovers. If you genuinely need money, we plan it — the right amount, the right fund, calmly.";
   const RM_EM_LINE = "We withdraw strategically — exactly what you need, from the right place — so one hard week never costs your future.";
+  // Word-onset times (seconds) measured in voice/crash.mp3 & voice/emergency.mp3.
+  // One entry per word of the QUOTED line (the leading/trailing quote attaches to
+  // the first/last word). Drives the subtitle reveal in lockstep with the clip.
+  const RM_CRASH_TIMES = [0.34, 0.59, 0.84, 1.08, 1.70, 1.94, 2.41, 3.21, 3.46, 3.71, 3.96, 4.21, 4.93, 5.09, 5.25, 5.64, 5.83, 6.01, 6.19, 6.61, 6.81, 7.01, 7.42];
+  const RM_EM_TIMES = [0.55, 1.16, 1.76, 2.36, 2.69, 3.08, 3.57, 3.81, 4.44, 4.65, 4.86, 5.21, 5.70, 5.86, 6.20, 6.55, 7.00, 7.30, 7.59, 7.89, 8.18];
   // Make a rupee figure personal & exact: express it in the user's own SIP.
   function sipSpan(rupees) {
     const months = Math.abs(rupees) / state.sip, yrs = months / 12;
@@ -1393,8 +1426,7 @@ if (typeof document !== 'undefined') (function () {
     const av = document.querySelector('#friendReveal .call-avatar'); if (av) av.classList.remove('ringing');
     const wave = $('revealWave'); if (wave) wave.hidden = false;
     setText('revealStatus', 'Connected · MD');
-    revealQuote('revealQuote', '"' + RM_CRASH_LINE + '"', 350, 130);
-    narrate(RM_CRASH_LINE, { rate: 0.98, clip: 'voice/crash.mp3?v=20260618' }, () => { const go = $('friendRevealBtn'); if (go) go.hidden = false; });
+    narrate(RM_CRASH_LINE, { rate: 0.98, clip: 'voice/crash.mp3?v=20260618', caption: { id: 'revealQuote', text: '"' + RM_CRASH_LINE + '"', times: RM_CRASH_TIMES } }, () => { const go = $('friendRevealBtn'); if (go) go.hidden = false; });
   }
   function choose(choice) {
     state.choice = choice; Sound.stopHeart();
@@ -1791,8 +1823,7 @@ if (typeof document !== 'undefined') (function () {
     const av = document.querySelector('#emCall .call-avatar'); if (av) av.classList.remove('ringing');
     const wave = $('emCallWave'); if (wave) wave.hidden = false;
     setText('emCallStatus', 'Connected · MD');
-    revealQuote('emQuote', '"' + RM_EM_LINE + '"', 350, 130);
-    narrate(RM_EM_LINE, { rate: 0.98, clip: 'voice/emergency.mp3?v=20260618' }, () => { const go = $('emCallBtn'); if (go) go.hidden = false; });
+    narrate(RM_EM_LINE, { rate: 0.98, clip: 'voice/emergency.mp3?v=20260618', caption: { id: 'emQuote', text: '"' + RM_EM_LINE + '"', times: RM_EM_TIMES } }, () => { const go = $('emCallBtn'); if (go) go.hidden = false; });
   }
   function emToResult() {
     stopCallTimer(); hide($('emCall')); Sound.whoosh(); Sound.resolve();
@@ -1864,10 +1895,10 @@ if (typeof document !== 'undefined') (function () {
     try { window.speechSynthesis && window.speechSynthesis.getVoices(); } catch (e) {}
     // Recorded opening clip (instant + identically-timed on every device). When
     // present at this path it is used and the doors sync to ITS playback; if it
-    // is missing/blocked, we fall back to the live voice. OPEN_M1/M2 are the
-    // fractions of the clip at which each door unlocks (tune to the recording:
-    // ~when "market crash" and "personal emergency" are spoken).
-    const OPENING_SRC = 'voice/opening.mp3?v=20260618', OPEN_M1 = 0.49, OPEN_M2 = 0.76;
+    // is missing/blocked, we fall back to the live voice. OPEN_T1/T2 are the
+    // exact seconds in the clip at which "crash" and "emergency" are spoken — the
+    // doors are unlocked at those moments via the clip's own playback clock.
+    const OPENING_SRC = 'voice/opening.mp3?v=20260618', OPEN_T1 = 2.22, OPEN_T2 = 3.47;
     on('introBtn', 'click', () => {
       Sound.unlock(); Sound.openSwell(); hide($('intro'));
       const crash = document.querySelector('#w_scenario .crash-scn');
@@ -1891,13 +1922,24 @@ if (typeof document !== 'undefined') (function () {
         if (spoke) { setTimeout(door1, 2400); setTimeout(door2, 4400); }
         else { setTimeout(door1, 600); setTimeout(door2, 1100); }
       };
-      let clipStarted = false, fellBack = false;
+      let clipStarted = false, fellBack = false, openRaf = 0;
       const useTTS = () => { if (clipStarted || fellBack) return; fellBack = true; ttsOpening(); };
       try {
         const clip = new Audio(OPENING_SRC); clip.preload = 'auto';
-        clip.addEventListener('playing', () => { clipStarted = true; });
-        clip.addEventListener('timeupdate', () => { const d = clip.duration; if (d && isFinite(d)) { if (clip.currentTime >= d * OPEN_M1) door1(); if (clip.currentTime >= d * OPEN_M2) door2(); } });
-        clip.addEventListener('ended', () => { door1(); door2(); });
+        // Drive the doors off the clip's own clock at ~60fps (not the coarse,
+        // ~4fps 'timeupdate' event), so each door opens frame-accurately on the
+        // spoken word — and identically on mobile, which shares this same clock.
+        clip.addEventListener('playing', () => {
+          clipStarted = true;
+          const tick = () => {
+            const t = clip.currentTime;
+            if (t >= OPEN_T1) door1();
+            if (t >= OPEN_T2) door2();
+            if (!f1 || !f2) openRaf = requestAnimationFrame(tick);
+          };
+          openRaf = requestAnimationFrame(tick);
+        });
+        clip.addEventListener('ended', () => { if (openRaf) cancelAnimationFrame(openRaf); door1(); door2(); });
         clip.addEventListener('error', useTTS);
         const pr = clip.play(); if (pr && pr.catch) pr.catch(useTTS);
         setTimeout(useTTS, 600); // clip hasn't started → use the live voice
