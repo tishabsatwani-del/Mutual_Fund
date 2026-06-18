@@ -788,14 +788,44 @@ if (typeof document !== 'undefined') (function () {
   }
 
   const $ = (id) => document.getElementById(id);
-  const show = (el) => { if (!el) return; el.hidden = false; requestAnimationFrame(() => el.classList.add('show')); };
-  const hide = (el) => { if (!el) return; el.classList.remove('show'); el.hidden = true; };
+  const show = (el) => { if (!el) return; el.hidden = false; requestAnimationFrame(() => { el.classList.add('show'); cueRefresh(); }); setTimeout(cueRefresh, 90); setTimeout(cueRefresh, 450); };
+  const hide = (el) => { if (!el) return; el.classList.remove('show'); el.hidden = true; cueRefresh(); };
   const setHTML = (id, h) => { const el = $(id); if (el) el.innerHTML = h; };
   const setText = (id, t) => { const el = $(id); if (el) el.textContent = t; };
   const easeInOut = (p) => p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
   // The fall starts slow (dread builds), then accelerates — a crash you feel, not a blink.
   const easeInCrash = (p) => p * p * (2.2 - 1.2 * p);
   const reduceMotion = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ---- Scroll cue: a "Scroll ↓" pill shown ONLY when the active screen has more
+   * content below the fold. It hides as the user nears the bottom, and tapping it
+   * scrolls down. Works for both scroll models here — overlays scroll internally,
+   * the wizard/emergency screens scroll the page — by detecting whichever applies. */
+  function cueScroller() {
+    const ov = document.querySelector('.overlay.show:not([hidden])');
+    if (ov && ov.scrollHeight - ov.clientHeight > 24) return ov;
+    const doc = document.scrollingElement || document.documentElement;
+    if (doc && doc.scrollHeight - doc.clientHeight > 24) return doc;
+    return null;
+  }
+  let cuePending = false;
+  function cueRefresh() {
+    if (cuePending) return; cuePending = true;
+    requestAnimationFrame(() => {
+      cuePending = false;
+      const cue = $('scrollCue'); if (!cue) return;
+      const s = cueScroller();
+      if (!s) { cue.classList.remove('on'); return; }
+      const remaining = (s.scrollHeight - s.clientHeight) - (s.scrollTop || 0);
+      cue.classList.toggle('on', remaining > 60);
+    });
+  }
+  function cueScrollDown() {
+    const s = cueScroller(); if (!s) return;
+    const by = Math.max(180, s.clientHeight * 0.7);
+    try { s.scrollBy({ top: by, behavior: reduceMotion ? 'auto' : 'smooth' }); }
+    catch (e) { s.scrollTop += by; }
+  }
 
   const COL = { direct: '#34d399', regular: '#e8b257', crash: '#f37070', cool: '#7e93d4', ghost: '#cbb26b',
     pause: '#5b9cf0', sellBack: '#a78bfa', sellWait: '#f37070' };
@@ -1966,6 +1996,13 @@ if (typeof document !== 'undefined') (function () {
     document.addEventListener('pointerdown', (e) => {
       if (e.target.closest('button') && e.target.id !== 'muteBtn') { Sound.ui(); if (navigator.vibrate) navigator.vibrate(8); }
     });
+    // Scroll cue: tap to scroll down; keep it in sync with scrolling, resizing,
+    // and any tap that can change page height (e.g. expanding "See the maths").
+    on('scrollCue', 'click', cueScrollDown);
+    window.addEventListener('scroll', cueRefresh, true); // capture: also catches overlay scrolls
+    window.addEventListener('resize', cueRefresh);
+    document.addEventListener('click', () => setTimeout(cueRefresh, 60), true);
+    cueRefresh();
     on('muteBtn', 'click', () => { const onNow = Sound.toggle(); Voice.setEnabled(onNow); if (!onNow) document.body.classList.remove('narrating'); const b = $('muteBtn'); if (b) b.textContent = onNow ? '🔊' : '🔇'; });
 
     // Wizard: each step is a group of .opt buttons.
