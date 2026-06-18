@@ -1862,7 +1862,7 @@ if (typeof document !== 'undefined') (function () {
     setText('emStrikeNeed', inrShort(ctx.need));
     setHTML('emStrikePressure', 'You never planned to touch your investments. Now you have to.');
     show($('emStrike'));
-    setTimeout(() => say('You need ' + amountWords(ctx.need) + ', now.', { rate: 0.92 }), 700);
+    setTimeout(() => say('You need ' + amountWords(ctx.need) + ', now.', { rate: 0.92 }), 250);
   }
   function emToDecision() { hide($('emStrike')); show($('emDecision')); Sound.setHeart(92); } // the clock, running
   function emChoose(r) {
@@ -1950,6 +1950,13 @@ if (typeof document !== 'undefined') (function () {
     // Kick the voice list loading at startup so a fast LOCAL voice is already
     // selected by the time Begin is pressed (avoids picking a slow default).
     try { window.speechSynthesis && window.speechSynthesis.getVoices(); } catch (e) {}
+    // Preload the recorded voice clips at startup so they are already in cache and
+    // start INSTANTLY on tap — otherwise the file is only fetched when the call
+    // screen opens, which on mobile delays the voice by a few seconds. Kept
+    // referenced (state._clipPreload) so the browser doesn't discard them.
+    state._clipPreload = ['voice/opening.mp3?v=20260618', 'voice/crash.mp3?v=20260618', 'voice/emergency.mp3?v=20260618'].map((src) => {
+      try { const a = new Audio(); a.preload = 'auto'; a.src = src; a.load(); return a; } catch (e) { return null; }
+    });
     // Recorded opening clip (instant + identically-timed on every device). When
     // present at this path it is used and the doors sync to ITS playback; if it
     // is missing/blocked, we fall back to the live voice. OPEN_T1/T2 are the
