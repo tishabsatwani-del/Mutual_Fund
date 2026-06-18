@@ -266,10 +266,11 @@ body {
 .maths-toggle:hover { color: var(--gold); border-color: rgba(216,200,120,0.6); }
 .maths-panel { text-align: left; border: 1px solid var(--line); border-radius: 14px; padding: 6px 14px 14px; margin-bottom: 16px; background: rgba(0,0,0,0.18); }
 .maths-rows { display: flex; flex-direction: column; }
-.maths-row { display: grid; grid-template-columns: 1fr auto auto; gap: 6px 10px; align-items: baseline; padding: 11px 0; border-bottom: 1px dashed var(--line); font-size: 14.5px; }
+.maths-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 4px 12px; align-items: baseline; padding: 11px 0; border-bottom: 1px dashed var(--line); font-size: 14.5px; }
 .maths-row:last-child { border-bottom: none; }
-.mr-label { color: var(--muted); line-height: 1.4; }
-.mr-val { font-family: var(--num); font-weight: 700; font-size: 15.5px; white-space: nowrap; }
+.mr-label { color: var(--muted); line-height: 1.4; min-width: 0; overflow-wrap: break-word; }
+.mr-right { display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px 8px; min-width: 0; }
+.mr-val { font-family: var(--num); font-weight: 700; font-size: 15.5px; min-width: 0; overflow-wrap: break-word; }
 .mr-tag { font-size: 9px; text-transform: uppercase; letter-spacing: .05em; padding: 2px 6px; border-radius: 6px; }
 .mr-tag.computed { color: var(--direct); background: rgba(52,211,153,0.12); }
 .mr-tag.assumption { color: var(--regular); background: rgba(232,178,87,0.12); }
@@ -573,7 +574,13 @@ body {
 .intro-sub { margin: 26px 0 40px; font-size: clamp(16px, 4.6vw, 20px); line-height: 1.6; color: var(--muted); font-weight: 300; }
 .intro-cta { max-width: 320px; margin-left: auto; margin-right: auto; color: #1a1404; background: linear-gradient(180deg, #f0dd9a, #d8bd72); box-shadow: 0 16px 44px -16px rgba(216,200,120,0.7), inset 0 1px 0 rgba(255,255,255,0.5); letter-spacing: .02em; }
 .intro-cta:hover { box-shadow: 0 20px 52px -16px rgba(216,200,120,0.85), inset 0 1px 0 rgba(255,255,255,0.5); }
-.intro-foot { margin-top: 22px; font-size: 14px; color: var(--faint); }
+.intro-sound { display: inline-flex; align-items: center; gap: 12px; margin-top: 26px; padding: 13px 22px; max-width: min(92vw, 430px); border-radius: 16px; border: 1px solid rgba(226,200,120,0.55); background: rgba(226,200,120,0.12); text-align: left; animation: soundPulse 2.4s ease-in-out infinite; }
+.intro-sound-ico { font-size: 24px; line-height: 1; flex-shrink: 0; }
+.intro-sound-txt { display: flex; flex-direction: column; color: var(--ink); font-size: clamp(15px, 4vw, 17px); font-weight: 700; letter-spacing: .01em; line-height: 1.2; }
+.intro-sound-txt b { color: var(--gold); font-weight: 800; }
+.intro-sound-sub { font-size: 12.5px; font-weight: 500; color: var(--muted); letter-spacing: .01em; line-height: 1.4; margin-top: 4px; }
+@keyframes soundPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(226,200,120,0.40); } 50% { box-shadow: 0 0 0 9px rgba(226,200,120,0); } }
+@media (prefers-reduced-motion: reduce) { .intro-sound { animation: none; } }
 
 /* ===================== NARRATION LOCK ===================== */
 /* While the MD / voice is speaking, choices and continue-buttons are

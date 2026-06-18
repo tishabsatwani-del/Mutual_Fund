@@ -1584,7 +1584,7 @@ if (typeof document !== 'undefined') (function () {
   }
 
   function mathsRows(rows) {
-    return '<div class="maths-rows">' + rows.map((r) => '<div class="maths-row"><span class="mr-label">' + r[0] + '</span><span class="mr-val">' + r[1] + '</span><span class="mr-tag ' + r[2] + '">' + (r[2] === 'computed' ? 'computed' : 'assumption') + '</span></div>').join('') + '</div>';
+    return '<div class="maths-rows">' + rows.map((r) => '<div class="maths-row"><span class="mr-label">' + r[0] + '</span><span class="mr-right"><span class="mr-val">' + r[1] + '</span><span class="mr-tag ' + r[2] + '">' + (r[2] === 'computed' ? 'computed' : 'assumption') + '</span></span></div>').join('') + '</div>';
   }
   function closeMaths(panelId, toggleId) { const p = $(panelId), t = $(toggleId); if (p) p.hidden = true; if (t) t.textContent = 'See the maths ▾'; }
   function wireMaths(toggleId, panelId) { on(toggleId, 'click', () => { const p = $(panelId), t = $(toggleId); if (!p) return; p.hidden = !p.hidden; t.textContent = p.hidden ? 'See the maths ▾' : 'Hide the maths ▴'; }); }
