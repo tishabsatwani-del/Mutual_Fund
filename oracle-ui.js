@@ -30,12 +30,158 @@
   const today = '2026-06-20';
   let portfolio = null;
   const inputs = { yearsToGoal: 3, monthlySip: 30000, currentMonthlyExpense: 50000, niftyPE: 27, customEquityShock: -0.40 };
+  let mode = 'deck';     // 'deck' = the full-screen guided experience, 'dash' = details
+  let deckIndex = 0;
 
   const dash = document.getElementById('dash');
   const empty = document.getElementById('empty');
   const controls = document.getElementById('controls');
+  // Full-screen guided deck overlay (created once, lives above the page).
+  let deck = document.getElementById('deck');
+  if (!deck) { deck = document.createElement('section'); deck.id = 'deck'; deck.className = 'deck'; deck.hidden = true; document.body.appendChild(deck); }
 
-  /* ---------- top-level render ----------
+  /* ---------- entry point: render whichever mode is active ---------- */
+  function show(animate) {
+    if (!portfolio || !portfolio.holdings.length) {
+      mode = 'dash'; deck.hidden = true; document.body.classList.remove('deckmode');
+      dash.hidden = true; empty.hidden = false; controls.hidden = true; return;
+    }
+    if (mode === 'deck') {
+      deck.hidden = false; document.body.classList.add('deckmode');
+      renderDeck(animate);
+    } else {
+      deck.hidden = true; document.body.classList.remove('deckmode');
+      render(animate);
+    }
+  }
+
+  /* ===================================================================
+   * THE GUIDED DECK — a full-screen, swipeable, one-decision-per-screen
+   * experience. Big type, plain words, giant tap-to-act buttons. Built for
+   * anyone, any age, no scrolling.
+   * =================================================================== */
+  const SEV = {
+    critical: { label: 'Fix this now', color: 'var(--down)', icon: '⚠' },
+    warn: { label: 'Worth a look', color: 'var(--warn)', icon: '◑' },
+    opportunity: { label: 'Easy win', color: 'var(--up)', icon: '✦' },
+    good: { label: 'All clear', color: 'var(--up)', icon: '✓' },
+  };
+
+  function deckPanels(A) {
+    const score = A.score, c = scoreColor(score.overall);
+    const ffn = A.pr.ffn, sp = A.dx.spendable;
+    const gfc = A.pr.stress.find((s) => s.scenario.id === 'gfc2008');
+    const panels = [];
+
+    // 1 — the score reveal
+    panels.push({ accent: c, html: `
+      <div class="dp-kick">Your portfolio health</div>
+      <div class="dp-gauge">${CH ? CH.gauge(score.overall, { color: c, size: 280 }) : score.overall.toFixed(1)}</div>
+      <div class="dp-grade" style="color:${c}">${esc(score.grade)}</div>
+      <p class="dp-say">${INR(A.dx.summary.current)} across ${A.dx.funds.length} funds. ${ffn.onTrack ? "You're on track for your goal." : "Not yet on track for your goal — but that's fixable."}</p>
+      <button class="dp-cta" data-next>Show me what to do →</button>` });
+
+    // 2..n — one big action per screen
+    const acts = A.actions.filter((a) => a.severity !== 'good').slice(0, 3);
+    acts.forEach((a, i) => {
+      const s = SEV[a.severity] || SEV.warn;
+      panels.push({ accent: s.color, html: `
+        <div class="dp-kick">Action ${i + 1} of ${acts.length} · <span style="color:${s.color}">${s.label}</span></div>
+        <div class="dp-icon" style="color:${s.color}">${s.icon}</div>
+        <div class="dp-big">${esc(a.issue)}</div>
+        <p class="dp-say">${esc(a.advice)}</p>
+        <button class="dp-cta act-btn" data-label="${esc(a.button)}">${esc(a.button)}</button>
+        <button class="dp-skip" data-next>${i < acts.length - 1 ? 'Next →' : 'Continue →'}</button>` });
+    });
+
+    // money — what's really yours
+    panels.push({ accent: 'var(--up)', html: `
+      <div class="dp-kick">If you sold everything today</div>
+      <div class="dp-huge up">${INR(sp.net)}</div>
+      <p class="dp-say">actually reaches your bank — after <b>${INR(sp.gross - sp.net)}</b> in exit load &amp; tax. Apps show ${INR(sp.gross)}; this is the real number.</p>
+      <button class="dp-cta" data-next>Next →</button>` });
+
+    // future — will you make it?
+    if (SIM) {
+      const mc = SIM.simulatePortfolio(portfolio, { years: inputs.yearsToGoal, monthlySip: inputs.monthlySip, target: ffn.requiredCorpus, paths: 1500, seed: 12345 });
+      const prob = mc.probReachTarget, pcol = prob >= 0.7 ? 'var(--up)' : prob >= 0.4 ? 'var(--gold)' : 'var(--down)';
+      panels.push({ accent: pcol, html: `
+        <div class="dp-kick">In ${inputs.yearsToGoal} years</div>
+        <div class="dp-huge" style="color:${pcol}">${pct(prob, 0)}</div>
+        <p class="dp-say">chance of reaching your goal. Most likely you'll have <b>${INR(mc.median)}</b>.</p>
+        <div class="dp-chart">${CH ? CH.fan(mc.bands, { samples: mc.samples, baseline: mc.invested, height: 150 }) : ''}</div>
+        <button class="dp-cta" data-next>Next →</button>` });
+    }
+
+    // crash — the gut check
+    panels.push({ accent: 'var(--down)', html: `
+      <div class="dp-kick">If a 2008-style crash hit tomorrow</div>
+      <div class="dp-huge down">${pct(gfc.drawdownPct, 0)}</div>
+      <p class="dp-say">You'd still have <b>${INR(gfc.troughValue)}</b>, and history says it recovers in about <b>${gfc.scenario.recoveryMonths} months</b>. A dip — not the end.</p>
+      <button class="dp-cta" data-next>Finish →</button>` });
+
+    // finish
+    panels.push({ accent: 'var(--gold)', html: `
+      <div class="dp-kick">That's your portfolio, decoded</div>
+      <div class="dp-big">You're in control.</div>
+      <p class="dp-say">Health <b>${score.overall.toFixed(1)}/10</b> · <b>${acts.length}</b> things to act on · <b>${INR(sp.net)}</b> truly yours.</p>
+      <button class="dp-cta" data-details>See the full details</button>
+      <button class="dp-skip" data-restart>↺ Start again</button>` });
+
+    return panels;
+  }
+
+  function renderDeck(animate) {
+    const A = W.analyze(portfolio, inputs);
+    const panels = deckPanels(A);
+    if (deckIndex >= panels.length) deckIndex = 0;
+    deck.innerHTML = `
+      <div class="deck-top">
+        <button class="deck-back" aria-label="Go back"${deckIndex === 0 ? ' style="visibility:hidden"' : ''}>‹</button>
+        <div class="deck-dots" role="tablist">${panels.map((p, i) => `<button class="dot${i === deckIndex ? ' on' : ''}" data-goi="${i}" aria-label="Step ${i + 1} of ${panels.length}"></button>`).join('')}</div>
+        <button class="deck-exit" data-details aria-label="Open full details">Details ›</button>
+      </div>
+      <div class="deck-track" style="transform:translateX(-${deckIndex * 100}%)">
+        ${panels.map((p, i) => `<section class="dpanel${i === deckIndex ? ' on' : ''}" style="--accent:${p.accent}" aria-hidden="${i === deckIndex ? 'false' : 'true'}"><div class="dp-inner">${p.html}</div></section>`).join('')}
+      </div>`;
+    deck.classList.toggle('anim', !!animate);
+
+    const goDeck = (i) => {
+      const list = deck.querySelectorAll('.dpanel');
+      i = Math.max(0, Math.min(list.length - 1, i));
+      deckIndex = i;
+      const track = deck.querySelector('.deck-track');
+      if (track) track.style.transform = `translateX(-${i * 100}%)`;
+      list.forEach((p, k) => { p.classList.toggle('on', k === i); p.setAttribute('aria-hidden', k !== i); });
+      deck.querySelectorAll('.dot').forEach((d, k) => d.classList.toggle('on', k === i));
+      const back = deck.querySelector('.deck-back'); if (back) back.style.visibility = i === 0 ? 'hidden' : 'visible';
+    };
+    deckNav = goDeck;
+
+    deck.querySelectorAll('[data-next]').forEach((b) => b.addEventListener('click', () => goDeck(deckIndex + 1)));
+    deck.querySelectorAll('[data-goi]').forEach((b) => b.addEventListener('click', () => goDeck(+b.dataset.goi)));
+    const back = deck.querySelector('.deck-back'); if (back) back.addEventListener('click', () => goDeck(deckIndex - 1));
+    deck.querySelectorAll('[data-details]').forEach((b) => b.addEventListener('click', () => { mode = 'dash'; show(true); }));
+    deck.querySelectorAll('[data-restart]').forEach((b) => b.addEventListener('click', () => goDeck(0)));
+    deck.querySelectorAll('.act-btn').forEach((b) => b.addEventListener('click', () =>
+      toast(`“${b.dataset.label}” — illustrative. A connected build routes this exact transaction to your AMC / broker, pre-filled.`)));
+
+    // swipe
+    let x0 = null;
+    const track = deck.querySelector('.deck-track');
+    if (track) {
+      track.addEventListener('touchstart', (e) => { x0 = e.touches[0].clientX; }, { passive: true });
+      track.addEventListener('touchend', (e) => {
+        if (x0 == null) return; const dx = e.changedTouches[0].clientX - x0;
+        if (Math.abs(dx) > 45) goDeck(deckIndex + (dx < 0 ? 1 : -1));
+        x0 = null;
+      }, { passive: true });
+    }
+    saveState();
+  }
+  let deckNav = null;
+
+  /* ---------- top-level render (DETAILS dashboard) ----------
    * `animate` plays the entrance/draw-in motion. It's true on meaningful
    * changes (load, import, add/remove) and false on slider drags so live
    * tweaking stays snappy and flicker-free. */
@@ -558,7 +704,7 @@
       navHistory: null, underlying: null,
     });
     addForm.reset();
-    render(true);
+    show(true);
   });
 
   function emptyPortfolio() {
@@ -621,7 +767,7 @@
       portfolio.holdings.push(holding);
       toast(`Added “${holding.scheme}” with ${holding.navHistory.length} months of real NAV history.`);
       rfForm.reset(); rfChosen = null;
-      render(true);
+      show(true);
     });
   } else if (document.getElementById('btn-realfund')) {
     document.getElementById('btn-realfund').addEventListener('click', () => toast('Live fund data unavailable in this build.'));
@@ -686,7 +832,7 @@
             ? `Imported ${holdings.length} holdings; skipped ${errors.length} bad row(s): ${errors[0]}`
             : `Imported ${holdings.length} holdings from CSV.`);
         }
-        render(true);
+        show(true);
       } catch (e) {
         toast('Could not read that file: ' + e.message);
       }
@@ -709,8 +855,16 @@
   });
 
   /* ---------- toolbar + toast ---------- */
-  document.getElementById('btn-sample').addEventListener('click', () => { portfolio = O.samplePortfolio(today); render(true); });
-  document.getElementById('btn-clear').addEventListener('click', () => { portfolio = null; saveState(); render(); });
+  document.getElementById('btn-sample').addEventListener('click', () => { portfolio = O.samplePortfolio(today); deckIndex = 0; show(true); });
+  document.getElementById('btn-clear').addEventListener('click', () => { portfolio = null; saveState(); show(); });
+  const guidedBtn = document.getElementById('btn-guided');
+  if (guidedBtn) guidedBtn.addEventListener('click', () => { mode = 'deck'; deckIndex = 0; show(true); });
+  // Keyboard navigation for the deck (arrows / Enter advance).
+  document.addEventListener('keydown', (e) => {
+    if (mode !== 'deck' || !deckNav) return;
+    if (e.key === 'ArrowRight') deckNav(deckIndex + 1);
+    else if (e.key === 'ArrowLeft') deckNav(deckIndex - 1);
+  });
 
   let toastTimer = null;
   function toast(msg) {
@@ -746,8 +900,12 @@
   const restored = loadState();
   portfolio = restored || O.samplePortfolio(today);
   buildControls();
-  render(true);
+  show(true);
 
-  // Headless hook for tests / server-side rendering: render a named tab.
-  window.__ORACLE_UI = { tabs: TABS.map((t) => t.id), renderTab: (t) => { activeTab = t; render(false); } };
+  // Headless hook for tests / server-side rendering.
+  window.__ORACLE_UI = {
+    tabs: TABS.map((t) => t.id),
+    renderDeck: () => { mode = 'deck'; deckIndex = 0; show(false); },
+    renderTab: (t) => { mode = 'dash'; deck.hidden = true; activeTab = t; render(false); },
+  };
 })();

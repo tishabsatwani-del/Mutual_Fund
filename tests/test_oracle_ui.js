@@ -37,22 +37,26 @@ global.localStorage = { getItem: (k) => (k in store ? store[k] : null), setItem:
 global.document = {
   getElementById: () => stubEl(), createElement: () => stubEl(), body: stubEl(),
   documentElement: stubEl(), querySelector: () => stubEl(), querySelectorAll: () => [],
+  addEventListener: () => {},
 };
 
 let pass = 0, fail = 0;
 const ok = (n, c) => { if (c) { pass++; console.log('  ✓ ' + n); } else { fail++; console.log('  ✗ ' + n); } };
 
 try {
-  require('../oracle-ui.js');
-  // Render every tab so the smoke covers all cards, not just the default view.
-  for (const t of ['current', 'future', 'actions', 'overview']) global.window.__ORACLE_UI.renderTab(t);
+  require('../oracle-ui.js');          // default mode renders the guided deck
+  global.window.__ORACLE_UI.renderDeck();
+  // Then render every dashboard tab so the smoke covers all cards too.
+  for (const t of ['overview', 'current', 'future', 'actions']) global.window.__ORACLE_UI.renderTab(t);
 } catch (e) {
   console.log('  ✗ UI render threw: ' + e.message + '\n' + e.stack);
   process.exit(1);
 }
 const html = captured.join('\n');
 const must = [
-  // overview (default tab)
+  // guided deck
+  'Your portfolio health', 'Show me what to do', 'a 2008-style crash', 'decoded',
+  // overview (dashboard default tab)
   'Portfolio Health', 'What to do next', 'If you sold everything today',
   // actions tab
   'Unified Portfolio Health Score', 'Live Action Board',

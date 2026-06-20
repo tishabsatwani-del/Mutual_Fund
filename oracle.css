@@ -318,7 +318,7 @@ dialog .hint { font-size: 12.5px; color: var(--faint); margin: 0 0 16px; line-he
 .rm-btn:hover { border-color: rgba(255, 122, 122, 0.5); color: var(--down); background: rgba(255, 122, 122, 0.08); }
 
 /* ---------- toast ---------- */
-.toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(20px); max-width: 520px; width: calc(100% - 32px); background: rgba(18, 24, 35, 0.98); border: 1px solid var(--gold); color: var(--ink); padding: 13px 18px; border-radius: 12px; font-size: 13.5px; line-height: 1.5; box-shadow: 0 20px 50px -16px rgba(0, 0, 0, 0.8); opacity: 0; pointer-events: none; transition: opacity .25s ease, transform .25s ease; z-index: 50; }
+.toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(20px); max-width: 520px; width: calc(100% - 32px); background: var(--card-solid); border: 1px solid var(--gold); color: var(--ink); padding: 14px 18px; border-radius: 12px; font-size: 13.5px; line-height: 1.5; box-shadow: 0 20px 50px -16px rgba(0, 0, 0, 0.8); opacity: 0; pointer-events: none; transition: opacity .25s ease, transform .25s ease; z-index: 300; }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
 /* ---------- charts (SVG) ---------- */
@@ -412,6 +412,74 @@ dialog .hint { font-size: 12.5px; color: var(--faint); margin: 0 0 16px; line-he
 .ovmc b { font-family: var(--num); font-size: 15px; }
 .seeall { margin-top: 12px; font-family: var(--sans); font-size: 13.5px; font-weight: 600; color: var(--gold); background: none; border: 0; cursor: pointer; padding: 4px 0; }
 .seeall:hover { text-decoration: underline; }
+
+/* ===================================================================
+ * THE GUIDED DECK — full-screen, one-decision-per-screen experience
+ * =================================================================== */
+body.deckmode { overflow: hidden; }
+.deck {
+  position: fixed; inset: 0; z-index: 200; display: flex; flex-direction: column;
+  background:
+    radial-gradient(1100px 700px at 80% -10%, var(--mesh1), transparent 60%),
+    radial-gradient(900px 620px at -8% 12%, var(--mesh2), transparent 58%),
+    radial-gradient(700px 560px at 50% 115%, var(--accent, var(--mesh3)), transparent 55%),
+    var(--bg);
+  color: var(--ink); overflow: hidden;
+}
+.deck-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 18px; }
+.deck-back, .deck-exit {
+  font-family: var(--sans); cursor: pointer; border: 1px solid var(--line); background: var(--card);
+  -webkit-backdrop-filter: var(--glass); backdrop-filter: var(--glass); color: var(--muted);
+  border-radius: 999px; transition: all .2s ease;
+}
+.deck-back { width: 44px; height: 44px; font-size: 26px; line-height: 1; }
+.deck-exit { padding: 0 16px; height: 40px; font-size: 13.5px; font-weight: 600; }
+.deck-back:hover, .deck-exit:hover { color: var(--ink); border-color: var(--ink); }
+.deck-dots { display: flex; gap: 9px; align-items: center; }
+.dot { width: 9px; height: 9px; border-radius: 999px; border: 0; padding: 0; cursor: pointer; background: var(--track); transition: all .25s ease; }
+.dot.on { width: 26px; background: var(--accent, var(--gold)); }
+
+.deck-track { display: flex; flex: 1; min-height: 0; transition: transform .55s cubic-bezier(.4, .0, .1, 1); }
+.dpanel {
+  flex: 0 0 100%; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
+  padding: 16px 22px 40px; opacity: .25; transition: opacity .5s ease;
+}
+.dpanel.on { opacity: 1; }
+.dp-inner {
+  width: 100%; max-width: 540px; text-align: center; display: flex; flex-direction: column; align-items: center;
+  gap: 18px; max-height: 100%;
+}
+.dp-kick { font-size: clamp(13px, 3.4vw, 15px); text-transform: uppercase; letter-spacing: .16em; color: var(--faint); font-weight: 700; }
+.dp-gauge { width: min(78vw, 300px); }
+.dp-gauge .gauge { width: 100%; height: auto; }
+.dp-grade { font-size: clamp(40px, 12vw, 72px); font-weight: 800; letter-spacing: -.02em; line-height: 1; }
+.dp-icon { font-size: clamp(54px, 16vw, 84px); line-height: 1; }
+.dp-big { font-size: clamp(27px, 7vw, 42px); font-weight: 800; letter-spacing: -.02em; line-height: 1.1; color: var(--ink); }
+.dp-huge { font-family: var(--num); font-size: clamp(56px, 19vw, 124px); font-weight: 800; letter-spacing: -.03em; line-height: .95; }
+.dp-say { font-size: clamp(16px, 4.6vw, 21px); line-height: 1.55; color: var(--muted); margin: 0; max-width: 460px; }
+.dp-say b { color: var(--ink); font-weight: 700; }
+.dp-chart { width: 100%; }
+.dp-chart .fan { width: 100%; height: auto; }
+.dp-cta {
+  margin-top: 6px; width: 100%; max-width: 380px; min-height: 62px; padding: 0 24px;
+  font-family: var(--sans); font-size: clamp(17px, 4.6vw, 20px); font-weight: 800; cursor: pointer;
+  color: #0a0c12; background: var(--accent, var(--gold)); border: 0; border-radius: 16px;
+  box-shadow: 0 18px 44px -16px color-mix(in srgb, var(--accent, var(--gold)) 70%, transparent);
+  transition: transform .16s ease, filter .2s ease;
+}
+.dp-cta:hover { transform: translateY(-2px); filter: brightness(1.07); }
+.dp-cta:active { transform: translateY(0); }
+.dp-skip { font-family: var(--sans); font-size: 15px; font-weight: 600; color: var(--faint); background: none; border: 0; cursor: pointer; padding: 6px 12px; }
+.dp-skip:hover { color: var(--ink); }
+
+/* deck entrance motion */
+.deck.anim .dpanel.on .dp-inner > * { animation: rise .55s cubic-bezier(.2, .7, .2, 1) both; }
+.deck.anim .dpanel.on .dp-inner > *:nth-child(2) { animation-delay: .06s; }
+.deck.anim .dpanel.on .dp-inner > *:nth-child(3) { animation-delay: .12s; }
+.deck.anim .dpanel.on .dp-inner > *:nth-child(4) { animation-delay: .18s; }
+.deck.anim .dpanel.on .dp-inner > *:nth-child(n+5) { animation-delay: .24s; }
+.deck.anim .gauge path:last-of-type { stroke-dasharray: 620; animation: draw 1.2s ease .2s both; }
+@media (prefers-reduced-motion: reduce) { .deck.anim .dpanel.on .dp-inner > *, .deck.anim .gauge path { animation: none !important; } }
 
 /* ---------- theme switcher ---------- */
 .themebar { display: flex; align-items: center; gap: 9px; margin: 6px 0 18px; flex-wrap: wrap; }
