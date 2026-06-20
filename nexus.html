@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#05060f">
+<title>ORACLE NEXUS — Autonomous Portfolio Command Center</title>
+<meta name="description" content="The Ultimate Autonomous Portfolio Oracle & Stress-Simulator — a living command center that diagnoses, forecasts and acts on your mutual-fund portfolio. Every number computed live.">
+<link rel="stylesheet" href="nexus.css?v=1">
+</head>
+<body>
+
+<!-- ============ COMMAND BRIDGE (fixed cinematic header) ============ -->
+<header id="bridge" class="bridge" hidden>
+  <div class="bridge-ticker" id="ticker" aria-label="Live macro ticker"></div>
+  <div class="bridge-core">
+    <button class="orb" id="orb" aria-label="Portfolio health — open command board">
+      <svg id="orb-gauge" viewBox="0 0 200 200" aria-hidden="true"></svg>
+      <span class="orb-num" id="orb-num">—</span>
+      <span class="orb-lab">HEALTH</span>
+    </button>
+    <div class="vitals" id="vitals"></div>
+  </div>
+  <nav class="rail" id="rail" aria-label="Chapters"></nav>
+</header>
+
+<!-- ============ BOOT SCREEN (first run) ============ -->
+<section id="boot" class="boot">
+  <div class="boot-aurora" aria-hidden="true"></div>
+  <div class="boot-inner">
+    <p class="boot-kicker">The Ultimate Autonomous Portfolio</p>
+    <h1 class="boot-title">ORACLE&nbsp;<span>NEXUS</span></h1>
+    <p class="boot-sub">A living command center that <b>diagnoses</b>, <b>forecasts</b> and <b>acts</b> on your mutual-fund portfolio — no broker, no agent, no jargon. Every number you see is computed live, in front of you.</p>
+    <div class="boot-actions">
+      <button class="cta primary big" id="boot-sample">▶ &nbsp;Launch with a demo portfolio</button>
+      <button class="cta ghost" id="boot-upload">⤴ &nbsp;Upload my CAS / CSV</button>
+    </div>
+    <p class="boot-foot">Runs entirely in your browser · nothing leaves your device · zero dependencies</p>
+  </div>
+</section>
+
+<!-- ============ CHAPTER STREAM ============ -->
+<main id="stream" class="stream" hidden></main>
+
+<!-- hidden file input for import -->
+<input type="file" id="file-in" accept=".csv,.json,.pdf" hidden>
+
+<!-- toast -->
+<div id="toast" class="toast" hidden></div>
+
+<!-- engines (reused, unchanged) -->
+<script src="oracle.js?v=5"></script>
+<script src="oracle-future.js?v=5"></script>
+<script src="oracle-sim.js?v=5"></script>
+<script src="oracle-dsmc.js?v=1"></script>
+<script src="oracle-workflow.js?v=5"></script>
+<script src="oracle-io.js?v=5"></script>
+<script src="oracle-data.js?v=5"></script>
+<script src="oracle-charts.js?v=5"></script>
+<!-- the new flagship experience -->
+<script src="nexus.js?v=1"></script>
+</body>
+</html>
