@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Autonomous Portfolio Oracle — Current Diagnostics</title>
+<meta name="description" content="A live X-ray of a mutual-fund portfolio: XIRR, rolling returns, Alpha/Beta/Sharpe, downside capture, hidden cost leakage, scheme overlap, and the real in-hand cash after exit load and tax. Every figure is computed, nothing invented." />
+<meta name="theme-color" content="#05070b" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔮</text></svg>" />
+<link rel="stylesheet" href="oracle.css?v=1" />
+</head>
+<body>
+<noscript>
+<div style="max-width:760px;margin:24px auto;padding:24px;font-family:Georgia,serif;line-height:1.6;color:#e6eef8;background:#05070b">
+<h1>Autonomous Portfolio Oracle — "Current" Diagnostics</h1>
+<p>This is Part 1 of the Autonomous Portfolio Oracle: a live diagnostic X-ray of an existing mutual-fund portfolio. It runs in JavaScript. It computes, for a portfolio of holdings: Absolute return, CAGR, XIRR and 3y/5y rolling returns; the risk-and-quality stats Alpha (Jensen), Beta, Sharpe ratio and Downside Capture; hidden cost leakage between Direct and Regular plans (TER vs BER) in absolute rupees; the percentage stock overlap between schemes (the "Zoo of Schemes" filter); and a Spendable Wealth Counter — the real in-hand cash if you liquidated today, after exit load and STCG/LTCG tax with the ₹1.25 lakh exemption. Every figure is computed from the holdings; the bundled sample portfolio uses clearly-labelled illustrative NAV histories. Educational tool — not investment advice.</p>
+</div>
+</noscript>
+
+<header class="hd">
+  <div class="wrap">
+    <p class="kicker">Autonomous Portfolio Oracle · Part 1</p>
+    <h1>The “Current” Diagnostic X-Ray</h1>
+    <p class="sub">A live, penny-by-penny X-ray of an existing portfolio — returns, risk, hidden costs, overlap, and the real cash you’d actually pocket today. Every number is <b>computed</b>; nothing is invented.</p>
+    <div class="toolbar">
+      <button id="btn-sample" class="btn btn-primary">Load sample portfolio</button>
+      <button id="btn-add" class="btn">+ Add a holding</button>
+      <button id="btn-clear" class="btn btn-ghost">Clear</button>
+      <a class="btn btn-ghost" href="index.html">← Two Doors, One Storm</a>
+    </div>
+  </div>
+</header>
+
+<main id="app" class="wrap">
+  <p class="empty" id="empty">No holdings yet. <b>Load the sample portfolio</b> to see the full diagnostic, or add your own holdings.</p>
+  <section id="dash" hidden></section>
+</main>
+
+<!-- Add-holding dialog -->
+<dialog id="add-dialog">
+  <form method="dialog" id="add-form">
+    <h2>Add a holding</h2>
+    <p class="hint">Returns and the spendable-cash maths work from these fields. Risk stats (Alpha/Beta/Sharpe) and rolling returns need a NAV history, which a data feed / CAS import supplies in a later module — they’ll show “—” for manual entries.</p>
+    <div class="grid2">
+      <label>Scheme name<input name="scheme" required placeholder="e.g. Bluechip Large Cap Fund" /></label>
+      <label>AMC<input name="amc" placeholder="e.g. AMC One" /></label>
+      <label>Category
+        <select name="category">
+          <option>Large Cap Equity</option><option>Mid Cap Equity</option><option>Small Cap Equity</option>
+          <option>Multi Cap Equity</option><option>Flexi Cap Equity</option><option>ELSS Equity</option>
+          <option>Index Equity</option><option>Hybrid</option>
+          <option>Debt — Short Duration</option><option>Debt — Liquid</option><option>Debt — Other</option>
+        </select>
+      </label>
+      <label>Plan
+        <select name="plan"><option>Direct</option><option>Regular</option></select>
+      </label>
+      <label>Units<input name="units" type="number" step="any" min="0" required placeholder="1234.567" /></label>
+      <label>Current NAV (₹)<input name="nav" type="number" step="any" min="0" required placeholder="100.00" /></label>
+      <label>Avg cost NAV (₹)<input name="avgCost" type="number" step="any" min="0" required placeholder="70.00" /></label>
+      <label>Invested amount (₹)<input name="invested" type="number" step="any" min="0" placeholder="(optional — else units×avgCost)" /></label>
+      <label>Purchase date<input name="purchaseDate" type="date" required /></label>
+      <label>TER (%)<input name="ter" type="number" step="any" min="0" placeholder="e.g. 0.55 or 1.75" /></label>
+    </div>
+    <div class="dialog-actions">
+      <button value="cancel" class="btn btn-ghost">Cancel</button>
+      <button value="ok" class="btn btn-primary" id="add-submit">Add holding</button>
+    </div>
+  </form>
+</dialog>
+
+<footer class="ft wrap">
+  <p>All outputs are <b>illustrative</b> and <b>computed live</b> from the holdings shown. Tax and exit-load rules are the current Indian rules (FY2024-25), held as overridable constants. The bundled sample portfolio uses seeded, clearly-labelled NAV histories so the demo is reproducible — it does not contain real fund NAVs. <b>Educational tool — not investment advice.</b></p>
+  <p class="src">Part 1 of the Autonomous Portfolio Oracle &amp; Stress-Simulator. Part 2 (Future / Glide-Path / Valuation rebalancing / What-If stress tests) and Part 3 (Health Score, Action Board, CAS import) build on this same engine.</p>
+</footer>
+
+<script src="oracle.js?v=1"></script>
+<script src="oracle-ui.js?v=1"></script>
+</body>
+</html>

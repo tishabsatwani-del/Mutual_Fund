@@ -9,6 +9,51 @@ install — just clone and run.
 
 ---
 
+## 🔮 Autonomous Portfolio Oracle — "Current" Diagnostics (Part 1)
+
+A second, self-contained web tool (**`oracle.html`**) — a live, penny-by-penny
+**X-ray of an existing mutual-fund portfolio**. It is Part 1 ("Current"
+diagnostics) of the *Autonomous Portfolio Oracle & Stress-Simulator* master
+spec, and it ships a pure, unit-tested math engine (**`oracle.js`**) plus a
+mobile-first dashboard (**`oracle-ui.js`**, **`oracle.css`**). Open
+`oracle.html`, hit **Load sample portfolio**, and every figure is **computed
+live** from the holdings:
+
+- **Advanced return metrics** — Absolute return, CAGR, **XIRR** (dated,
+  irregular cash flows; Newton–Raphson + bisection), and **3y/5y rolling
+  returns** (average + worst…best across every overlapping window, with a
+  consistency score).
+- **Statistical risk & quality** — **Beta** (market sensitivity), **Jensen's
+  Alpha** (annualised return above CAPM), **Sharpe ratio**, and **Downside
+  Capture** (how much of the market's *falls* the fund absorbed).
+- **Leakage & structure control** — **TER vs BER** hidden-cost leakage between
+  Direct and Regular plans, projected to **absolute rupees** over 15 years; and
+  the **"Zoo of Schemes" overlap filter** — the % of underlying stocks two
+  schemes share, red-flagged above 50% (double fees for one bet).
+- **Spendable Wealth Counter** — the *real* in-hand cash if you liquidated
+  today: `gross − exit load − STCG − LTCG`, with the **₹1.25 L LTCG exemption**
+  applied (current FY2024-25 rules, held as overridable constants).
+
+The bundled sample portfolio uses **seeded, clearly-labelled** NAV histories
+(benchmark-correlated, so Beta/Alpha actually mean something) — it contains no
+real fund NAVs; it exists so the math has real series to compute on. The engine
+accepts real holdings via a manual add-holding form, and is structured so a
+later CAS-PDF import (Part 3) plugs into the same data model.
+
+> **Roadmap:** Part 2 (Dynamic FFN, Autonomous Glide-Path, Valuation-based
+> Rebalancing, "What-If" stress tests) and Part 3 (0–10 Health Score, live
+> Action Board, CAS import) build on this same `oracle.js` engine.
+
+```bash
+python -m http.server 8000     # then open http://localhost:8000/oracle.html
+node tests/test_oracle.js      # verify the engine: 39 checks, every metric
+```
+
+> All outputs are **illustrative** and **computed live**. Educational tool —
+> **not investment advice.**
+
+---
+
 ## 🌐 Live web tool — "Two Doors, One Storm"
 
 A self-contained, **mobile-first**, **behaviour-driven** investing simulator.
