@@ -219,6 +219,42 @@ input[type=range]::-moz-range-thumb { width: 26px; height: 26px; border: none; b
 .frow-tap { width: 100%; border: none; background: none; cursor: pointer; }
 .frow-tap:hover .fn { color: var(--next); }
 
+/* category chips + search status + spinner */
+.catrow { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 12px; }
+.catchip { font-size: 13px; font-weight: 650; padding: 9px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--glass); color: var(--ink); transition: border-color .2s, background .2s; }
+.catchip:hover { border-color: var(--next); background: rgba(110,231,255,0.08); }
+.bstatus { font-size: 13px; color: var(--muted); margin: 8px 0; min-height: 18px; }
+.bstatus .spin { display: inline-block; width: 13px; height: 13px; border: 2px solid var(--line); border-top-color: var(--next); border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -2px; margin-right: 6px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.resitem { color: var(--ink); }
+.resitem:hover { color: #fff; }
+
+/* allocation step cards + risk profile chips */
+.step-card { border: 1px solid var(--line); border-radius: 16px; padding: 16px; margin: 14px 0; background: var(--glass); }
+.step-card.warnstep { border-color: rgba(255,107,138,.4); }
+.step-card.okstep { border-color: rgba(52,245,197,.35); }
+.step-h { font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.step-n { font-size: 11px; letter-spacing: .14em; color: var(--faint); font-weight: 800; }
+.profrow { display: flex; gap: 8px; margin: 12px 0 2px; flex-wrap: wrap; }
+.profchip { flex: 1; min-width: 92px; font-size: 13.5px; font-weight: 650; padding: 11px 8px; border-radius: 11px; border: 1px solid var(--line); background: var(--glass); color: var(--muted); transition: all .18s; }
+.profchip.on { border-color: var(--next); background: rgba(110,231,255,.12); color: var(--ink); }
+.reasons { margin: 12px 0 0; padding-left: 18px; font-size: 13px; color: var(--muted); line-height: 1.6; }
+.reasons li { margin: 3px 0; }
+.mixbar .gd { background: linear-gradient(90deg, rgba(255,207,107,.9), rgba(255,207,107,.6)); color: #2a1d00; display: flex; align-items: center; padding-left: 8px; }
+
+/* fund quality scorecard */
+.scorehead { display: flex; align-items: center; gap: 16px; margin: 16px 0; }
+.scorering { width: 80px; height: 80px; border-radius: 50%; display: grid; place-items: center; flex: 0 0 auto; position: relative; border: 3px solid var(--c); box-shadow: 0 0 18px -4px var(--c); background: rgba(255,255,255,0.02); }
+.scorering b { font-family: var(--serif); font-size: 30px; line-height: 1; color: var(--c); }
+.scorering small { position: absolute; bottom: 12px; font-size: 9px; color: var(--faint); }
+.scoregrade { font-size: 20px; font-weight: 750; }
+.scorebars { display: grid; gap: 9px; margin: 8px 0 4px; }
+.scorebar { display: grid; grid-template-columns: 120px 1fr 28px; align-items: center; gap: 10px; font-size: 12.5px; color: var(--muted); }
+.sbtrack { height: 8px; border-radius: 999px; background: rgba(255,255,255,0.07); overflow: hidden; }
+.sbtrack i { display: block; height: 100%; border-radius: 999px; }
+.sbv { text-align: right; font-weight: 700; color: var(--ink); }
+@media (max-width: 460px) { .scorebar { grid-template-columns: 96px 1fr 24px; } }
+
 .demo-pill { display: inline-block; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--gold); border: 1px solid rgba(255,207,107,.4); border-radius: 999px; padding: 2px 8px; margin-left: 8px; vertical-align: middle; }
 .micro { font-size: 12.5px; color: var(--faint); line-height: 1.55; margin: 14px 0 0; }
 

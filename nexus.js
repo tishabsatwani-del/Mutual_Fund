@@ -13,7 +13,7 @@
  * ===================================================================== */
 'use strict';
 (function () {
-  const O = window.ORACLE, F = window.FUTURE, W = window.WORKFLOW;
+  const O = window.ORACLE, F = window.FUTURE, W = window.WORKFLOW, ADV = window.ADVICE;
   const SIM = window.SIM, DSMC = window.DSMC, CH = window.ORACLE_CHARTS;
   const IO = window.ORACLE_IO, DATA = window.ORACLE_DATA;
   if (!O || !F || !W) { console.error('Oracle: engines missing'); return; }
@@ -39,7 +39,9 @@
   const inputs = {
     yearsToGoal: 18, monthlySip: 30000, currentMonthlyExpense: 50000, sipStepUp: 0.10,
     niftyPE: 27, fedRate: 4.5, crude: 82, cpi: 6.1, goalAmount: 5000000,
+    riskProfile: 'Moderate', liquidSavings: 0,
   };
+  const planOpts = () => ({ profile: inputs.riskProfile, yearsToGoal: inputs.yearsToGoal, monthlyExpense: inputs.currentMonthlyExpense, liquidSavings: inputs.liquidSavings });
 
   /* ---------------- persistence (localStorage; never leaves the device) ---- */
   const PKEY = 'oracle.nexus.pf', IKEY = 'oracle.nexus.inputs', SKEY = 'oracle.nexus.src';
@@ -155,7 +157,9 @@
   /* ---- HOME ---- */
   SCREENS.home = () => {
     const A = analyze();
-    const urgent = A.actions.filter((a) => a.severity === 'critical' || a.severity === 'warn').length;
+    const plan = ADV.allocationPlan(portfolio, planOpts());
+    let urgent = A.actions.filter((a) => a.severity === 'critical' || a.severity === 'warn').length;
+    if (!plan.emergency.ok || plan.direction !== 'on-track') urgent += 1;
     const verdict = urgent === 0
       ? `Your money looks healthy. <b>Nothing urgent</b> right now.`
       : `Your money is in <b>${A.score.grade.toLowerCase()}</b> shape — but <b>${urgent} thing${urgent > 1 ? 's' : ''}</b> need${urgent > 1 ? '' : 's'} your attention.`;
@@ -203,11 +207,12 @@
   SCREENS['room-next'] = () => {
     const A = analyze();
     const prob = mcRun(700, 7).probReachTarget || 0;
-    const g = A.pr.glide;
+    const plan = ADV.allocationPlan(portfolio, planOpts());
+    const allocChip = !plan.emergency.ok ? '<span class="chip bad">emergency fund first</span>' : plan.direction === 'on-track' ? '<span class="chip good">well allocated</span>' : '<span class="chip warn">rebalance</span>';
     const q = [
       ['next-freedom', 'When can I be financially free?', 'The corpus that funds your life — and your odds', `<span class="chip ${prob >= 0.6 ? 'good' : prob >= 0.35 ? 'warn' : 'bad'}">${pct(prob, 0)} likely</span>`],
       ['next-crash', 'What if the market crashes tomorrow?', 'Live a real crash on your money — and choose', '<span class="chip warn">feel it</span>'],
-      ['next-glide', 'Am I on the safe path as my goal nears?', 'Whether your risk is winding down in time', g.direction === 'on-track' ? '<span class="chip good">on path</span>' : '<span class="chip warn">drifted</span>'],
+      ['next-glide', 'Is my money allocated safely?', 'Emergency fund first, then a risk-suited mix', allocChip],
       ['next-weather', 'Is the market expensive right now?', 'The valuation & global weather, in one read', `<span class="chip">PE ${inputs.niftyPE.toFixed(0)}</span>`],
     ];
     return el(`<section class="screen"><div class="wrap">
@@ -222,13 +227,22 @@
   /* ---- ROOM: DO (action board) ---- */
   SCREENS['room-do'] = () => {
     const A = analyze();
-    const acts = A.actions.slice();
+    const plan = ADV.allocationPlan(portfolio, planOpts());
+    // Drop the workflow's allocation/equity actions — ADVICE owns allocation now,
+    // so we never show an un-guarded "add equity" suggestion.
+    const acts = A.actions.filter((a) => !/equity|allocation|glide/i.test(a.issue));
+    // Safety-first actions, prepended in priority order.
+    const safety = [];
+    if (!plan.emergency.ok) safety.push({ severity: 'critical', issue: 'Build your emergency fund first',
+      advice: `Park about ${INR(plan.emergency.gap)} more in a liquid fund to reach ${plan.emergency.months} months of expenses. This must come before any equity — it's what keeps an emergency from forcing a bad sale.`, button: 'How to do this' });
+    else if (plan.direction !== 'on-track') safety.push({ severity: 'warn', issue: plan.direction === 'trim-equity' ? 'Trim equity to a safer mix' : 'Add to equity (gradually)',
+      advice: `Your ${pct(plan.currentEquity, 0)} equity vs a suitable ${pct(plan.targetEquity, 0)} (${inputs.riskProfile}, ${inputs.yearsToGoal}y). Move about ${INR(plan.moveRupees)} ${plan.direction === 'trim-equity' ? 'into debt/gold' : 'in via a phased STP, never a lump sum'}.`, button: 'See allocation plan', _go: 'next-glide' });
     // a couple of always-useful rare moves, framed as actions
     const extra = [
       { _go: 'do-tax', severity: 'info', issue: 'Plan a tax-free exit', advice: 'When you withdraw at your goal, splitting it across two financial years can legally cut the tax — often to ₹0.', button: 'Open tax router' },
       { _go: 'do-dust', severity: 'info', issue: 'Find forgotten money', advice: 'Old folios from a dead email or phone number may still hold units in your name. Sweep them into one place.', button: 'Scan for lost folios' },
     ];
-    const all = acts.concat(extra);
+    const all = safety.concat(acts, extra);
     const body = all.length ? all.map((a) => {
       const sev = a.severity === 'critical' ? 'critical' : a.severity === 'warn' ? 'warn' : '';
       const ic = a.severity === 'critical' ? '🔴' : a.severity === 'warn' ? '🟡' : '🔧';
@@ -281,8 +295,10 @@
     const funds = A.dx.funds.slice().sort((a, b) => b.current - a.current);
     const kyc = `<div class="action warn" style="margin:8px 0 18px"><div class="aico">🟡</div><div><div class="ah">SIP safety: Re-KYC due soon ${DEMO}</div><div class="ad">A pending KYC can freeze next month's SIP. Fixing it takes 2 minutes.</div><button class="cta sm" data-go="room-do">Fix it in the DO room →</button></div></div>`;
     const rows = funds.map((f) => {
-      const chip = f.deadwood ? '<span class="chip bad">lagging</span>' : '<span class="chip good">healthy</span>';
-      return `<button class="frow frow-tap" data-fund="${esc(f.scheme)}"><div style="text-align:left"><div class="fn">${esc(f.scheme)} ${chip}</div><div class="fm">${esc(f.amc || f.category)} · ${esc(f.plan)} · tap for detail ›</div></div>
+      const sc = ADV.fundScore(f);
+      const cls = sc.score >= 75 ? 'good' : sc.score >= 60 ? 'good' : sc.score >= 45 ? 'warn' : 'bad';
+      const chip = `<span class="chip ${cls}">${sc.score}/100 ${sc.grade}</span>`;
+      return `<button class="frow frow-tap" data-fund="${esc(f.scheme)}"><div style="text-align:left"><div class="fn">${esc(f.scheme)} ${chip}</div><div class="fm">${esc(f.amc || f.category)} · ${esc(f.plan)} · tap for full scorecard ›</div></div>
         <div class="fr"><b class="${f.xirr >= 0 ? 'up' : 'down'}">${pct(f.xirr)}</b>XIRR</div></button>`;
     }).join('');
     const mrows = funds.map((f) => f.risk ? `<div class="row"><span>${esc(f.scheme)}</span><b>α ${spct(f.risk.alpha, 1)} · β ${num(f.risk.beta, 2)} · Sharpe ${num(f.risk.sharpe, 2)}</b></div>` : `<div class="row"><span>${esc(f.scheme)}</span><b>no history</b></div>`).join('');
@@ -434,23 +450,46 @@
   }
 
   SCREENS['next-glide'] = () => {
-    const A = analyze(); const g = A.pr.glide; const onTrack = g.direction === 'on-track';
-    const yrs = inputs.yearsToGoal;
-    const cells = []; for (let y = 0; y <= Math.min(yrs, 20); y++) cells.push(DSMC ? DSMC.glideEquity(yrs - y) : 1);
-    const strip = `<div class="gstrip">${cells.map((eqi) => `<span class="gt" title="${(eqi * 100).toFixed(0)}%"><i style="height:${(eqi * 100).toFixed(0)}%"></i></span>`).join('')}</div>`;
-    return el(`<section class="screen answer"><div class="wrap">
+    const plan = ADV.allocationPlan(portfolio, planOpts());
+    const ef = plan.emergency, t = plan.target;
+    const onTrack = plan.direction === 'on-track';
+    const profChips = ['Conservative', 'Moderate', 'Aggressive'].map((p) =>
+      `<button class="profchip${p === inputs.riskProfile ? ' on' : ''}" data-prof="${p}">${p}</button>`).join('');
+    const n = el(`<section class="screen answer"><div class="wrap">
       ${topbar('next', 'NEXT · YOUR FUTURE')}
-      ${guide(`As your goal nears, the safe move is to slowly shift from risky equity to steady debt — so a late crash can't undo years of saving.`)}
-      <h2 class="atitle">Am I on the safe path?</h2>
-      <div class="bignum ${onTrack ? 'up' : 'gold'}" style="font-size:clamp(34px,9vw,64px)">${onTrack ? 'On the safe path' : 'Slightly off path'}</div>
-      <p class="subnum">the bars show how your equity should taper, year by year</p>
-      ${strip}
-      <div style="margin-top:14px"><div class="subnum">YOUR MIX NOW</div>${mixBar(g.currentEquity)}<div class="subnum" style="margin-top:10px">RECOMMENDED FOR ${g.yearsToGoal}Y OUT</div>${mixBar(g.targetEquity)}</div>
-      <p class="means">${onTrack ? 'Your equity/debt split already matches the safe path — nothing to change. ✅'
-        : `You're holding <b>${pct(g.currentEquity, 0)}</b> equity; the safe path here is <b>${pct(g.targetEquity, 0)}</b>. Shifting <b>${INR(g.rupeesToShift)}</b> ${g.direction === 'equity->debt' ? 'into debt' : 'into equity'} gets you back on track — see the <b>DO</b> room.`}</p>
+      ${guide(`Real planning has an order: <b>build an emergency fund first</b>, then choose an allocation that fits your risk — <b>never 100% equity</b>, so an emergency can't force you to sell at the worst time.`)}
+      <h2 class="atitle">Is my money allocated safely?</h2>
+
+      <div class="step-card ${ef.ok ? 'okstep' : 'warnstep'}">
+        <div class="step-h"><span class="step-n">STEP 1</span> Emergency fund ${ef.ok ? '<span class="chip good">funded ✓</span>' : '<span class="chip bad">not yet</span>'}</div>
+        <p class="means" style="margin:8px 0 0;border-color:${ef.ok ? 'var(--up)' : 'var(--down)'}">${ef.ok
+          ? `You hold about <b>${INR(ef.have)}</b> in safe, liquid money — at least <b>${ef.months} months</b> of expenses. Good. Now we can invest the rest for growth.`
+          : `You need about <b>${INR(ef.needed)}</b> (<b>${ef.months} months</b> of your ${R0(inputs.currentMonthlyExpense)} expenses) parked in a <b>liquid fund first</b>. You're short by <b>${INR(ef.gap)}</b>. <b>Build this before adding equity</b> — it's what protects you in a personal emergency.`}</p>
+      </div>
+
+      <div class="step-card">
+        <div class="step-h"><span class="step-n">STEP 2</span> Your right allocation</div>
+        <div class="profrow">${profChips}</div>
+        <div class="subnum" style="margin-top:10px">RECOMMENDED (${inputs.riskProfile}, ${inputs.yearsToGoal}y goal)</div>
+        ${tripleBar(t.equity, t.debt, t.gold)}
+        <div class="subnum" style="margin-top:10px">YOUR MIX NOW</div>
+        ${mixBar(plan.currentEquity)}
+        <ul class="reasons">${t.reasoning.map((r) => `<li>${r}</li>`).join('')}</ul>
+      </div>
+
+      <p class="means">${plan.firstAction === 'build-emergency'
+        ? `<b>First, build your emergency fund.</b> Allocation changes come after that safety net is in place.`
+        : onTrack ? 'Your mix already matches a safe, suitable allocation — nothing to change. ✅'
+          : `You're holding <b>${pct(plan.currentEquity, 0)}</b> equity vs a suitable <b>${pct(plan.targetEquity, 0)}</b>. Move about <b>${INR(plan.moveRupees)}</b> ${plan.direction === 'trim-equity' ? 'from equity into debt/gold' : 'into equity (gradually, via STP)'} — see the <b>DO</b> room.`}</p>
+      <p class="micro">Educational, not advice. Caps are sensible planner defaults (aggressive tops out near 85% equity); your real adviser may tailor them.</p>
     </div></section>`);
+    n.querySelectorAll('.profchip').forEach((b) => b.onclick = () => { inputs.riskProfile = b.dataset.prof; save(); render('fwd'); stack[stack.length - 1] = { id: 'next-glide' }; });
+    return n;
   };
   function mixBar(eq) { return `<div class="mixbar"><span class="eq" style="width:${(eq * 100).toFixed(0)}%">${(eq * 100).toFixed(0)}% equity</span><span class="dt" style="width:${((1 - eq) * 100).toFixed(0)}%">${((1 - eq) * 100).toFixed(0)}% debt</span></div>`; }
+  function tripleBar(eq, dt, gold) {
+    return `<div class="mixbar"><span class="eq" style="width:${(eq * 100).toFixed(0)}%">${(eq * 100).toFixed(0)}% equity</span><span class="dt" style="width:${(dt * 100).toFixed(0)}%">${(dt * 100).toFixed(0)}% debt</span><span class="gd" style="width:${(gold * 100).toFixed(0)}%">${(gold * 100).toFixed(0)}% gold</span></div>`;
+  }
 
   SCREENS['next-weather'] = () => {
     const A = analyze(); const v = A.pr.valuation;
@@ -523,29 +562,47 @@
   /* =====================================================================
    * BUILD — assemble a real portfolio from live fund data (mfapi.in)
    * ===================================================================== */
-  let bs = { results: null, picks: [], selected: null, busy: false, err: '' };
+  let bs = { results: null, picks: [], selected: null, status: '', q: '' };
   function dateYearsAgo(y) { const d = new Date(TODAY); d.setFullYear(d.getFullYear() - Math.round(y)); return d.toISOString().slice(0, 10); }
+  function withTimeout(promise, ms) { return Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]); }
+  // single-fetch with one retry + timeout (the free API is sometimes slow)
+  async function robust(fn, ms = 11000) { try { return await withTimeout(fn(), ms); } catch (e) { return await withTimeout(fn(), ms); } }
+  // quick standalone stats from a fund's NAV history (no benchmark needed)
+  function quickStats(hist) {
+    if (!hist || hist.length < 13) return null;
+    const rets = O.periodReturns(hist);
+    const yrs = (hist.length - 1) / 12;
+    const cagr = Math.pow(hist[hist.length - 1] / hist[0], 1 / yrs) - 1;
+    return { cagr, vol: O.annualizedVol(rets, 12), mdd: O.maxDrawdown(hist).maxDrawdown, sharpe: O.sharpe(rets, 0.065, 12), years: yrs };
+  }
+  const CATS = [['Flexi Cap', 'flexi cap'], ['Large Cap', 'large cap'], ['Mid Cap', 'mid cap'], ['Small Cap', 'small cap'], ['ELSS (tax)', 'elss'], ['Index', 'index fund'], ['Balanced', 'balanced advantage'], ['Liquid/Debt', 'liquid fund']];
 
   SCREENS.build = () => {
     const n = el(`<section class="screen"><div class="wrap">
       ${topbar('now', 'BUILD · REAL FUNDS')}
       <h2 class="roomtitle">Build your real portfolio</h2>
-      <p class="roomguide">Search a fund, say how much you put in and roughly when — we pull its <b>real NAV history</b> so every number is genuinely yours.</p>
-      <div class="search"><input class="search-in" id="q" placeholder="Search a fund — e.g. Parag Parikh Flexi Cap" autocomplete="off"><button class="cta sm" id="qbtn">Search</button></div>
-      <div id="bmsg" class="micro"></div>
+      <p class="roomguide">Browse a category or search by name. We pull each fund's <b>real NAV history</b> so every number is genuinely yours.</p>
+      <div class="catrow">${CATS.map(([lab, q]) => `<button class="catchip" data-q="${q}">${lab}</button>`).join('')}</div>
+      <div class="search"><input class="search-in" id="q" placeholder="…or search a name — e.g. Parag Parikh" autocomplete="off"><button class="cta sm" id="qbtn">Search</button></div>
+      <div id="bmsg" class="bstatus"></div>
       <div id="picksec"></div>
       <div id="ressec"></div>
       <div id="bfoot"></div>
     </div></section>`);
     const $ = (s) => n.querySelector(s);
     const paint = () => {
-      // picks
       $('#picksec').innerHTML = bs.picks.length ? `<h3 style="font-size:15px;margin:16px 0 6px">Your funds (${bs.picks.length})</h3>` +
         bs.picks.map((h, i) => `<div class="frow"><div><div class="fn">${esc(h.scheme)}</div><div class="fm">${esc(h.amc)} · invested ${INR(h.invested)}</div></div><div class="fr"><button class="linkbtn" data-rm="${i}">remove</button></div></div>`).join('') : '';
-      // selected add-form OR results
       if (bs.selected) {
-        const p = bs.selected;
+        const p = bs.selected; const st = quickStats(p.navHistory);
+        const stats = st ? `<div class="tiles" style="margin:12px 0">
+          <div class="tile"><span class="tl">Return p.a. (${st.years.toFixed(0)}y)</span><b class="${st.cagr >= 0 ? 'up' : 'down'}">${pct(st.cagr)}</b></div>
+          <div class="tile"><span class="tl">Volatility</span><b>${pct(st.vol, 0)}</b></div>
+          <div class="tile"><span class="tl">Sharpe</span><b>${num(st.sharpe, 2)}</b></div>
+          <div class="tile"><span class="tl">Worst fall</span><b class="down">${pct(st.mdd, 0)}</b></div></div>
+          <p class="micro">Computed live from this fund's real NAV history — so you choose informed, not blind.</p>` : '<p class="micro">Limited history for stats; you can still add it.</p>';
         $('#ressec').innerHTML = `<div class="addform"><div class="fn">${esc(p.scheme)}</div><div class="fm">${esc(p.amc)} · ${esc(p.category)} · NAV ${num(p.latestNav, 2)}</div>
+          ${stats}
           <div class="ctrl"><label>How much have you invested?</label><input class="search-in" id="amt" type="number" min="1000" step="1000" placeholder="₹ amount" value="100000"></div>
           <div class="ctrl"><label>Roughly how long ago did you start? <b id="ya-lab">3 years</b></label><input type="range" id="ya" min="0" max="5" step="1" value="3"></div>
           <div class="search"><button class="cta sm primary" id="addf">Add this fund</button><button class="cta sm ghost" id="cancelf">Cancel</button></div></div>`;
@@ -562,40 +619,45 @@
         };
         $('#cancelf').onclick = () => { bs.selected = null; paint(); };
       } else if (bs.results) {
-        $('#ressec').innerHTML = bs.results.length ? `<div class="reslist">` + bs.results.slice(0, 12).map((r) =>
-          `<button class="resitem" data-code="${r.schemeCode}">${esc(r.schemeName)}</button>`).join('') + '</div>' : '<p class="micro">No funds matched. Try a shorter name.</p>';
+        // sort Direct + Growth first (the variants most people want)
+        const sorted = bs.results.slice().sort((a, b) => score(b) - score(a));
+        function score(r) { const s = r.schemeName.toLowerCase(); return (/direct/.test(s) ? 2 : 0) + (/growth/.test(s) ? 1 : 0) - (/idcw|dividend/.test(s) ? 1 : 0); }
+        $('#ressec').innerHTML = sorted.length ? `<div class="reslist">` + sorted.slice(0, 20).map((r) =>
+          `<button class="resitem" data-code="${r.schemeCode}">${esc(r.schemeName)}</button>`).join('') + '</div>' : `<p class="bstatus">No funds matched “${esc(bs.q)}”. Try a shorter name (e.g. just “Parag Parikh”) or a category above.</p>`;
         $('#ressec').querySelectorAll('.resitem').forEach((b) => b.onclick = async () => {
-          b.textContent = 'Loading…'; try { bs.selected = await DATA.fetchFund(b.dataset.code, 60); paint(); }
-          catch (e) { toast('Could not load that fund. ' + e.message); b.textContent = b.textContent.replace('Loading…', ''); }
+          b.textContent = 'Loading…'; b.disabled = true;
+          try { bs.selected = await robust(() => DATA.fetchFund(b.dataset.code, 60)); paint(); }
+          catch (e) { toast('Could not load that fund — the data server is slow. Try again.'); b.textContent = b.dataset.code; b.disabled = false; }
         });
       } else $('#ressec').innerHTML = '';
-      // foot
       $('#bfoot').innerHTML = bs.picks.length ? `<button class="cta primary block" id="analyze" style="margin-top:18px">Analyze my ${bs.picks.length} fund${bs.picks.length > 1 ? 's' : ''} →</button>` : '';
       n.querySelectorAll('[data-rm]').forEach((b) => b.onclick = () => { bs.picks.splice(+b.dataset.rm, 1); paint(); });
       const az = $('#analyze'); if (az) az.onclick = analyzeReal;
-      $('#bmsg').textContent = bs.err || '';
+      $('#bmsg').innerHTML = bs.status || '';
     };
-    const doSearch = async () => {
-      const q = $('#q').value.trim(); if (q.length < 3) return toast('Type at least 3 letters.');
-      bs.err = ''; $('#bmsg').textContent = 'Searching…'; bs.selected = null;
-      try { bs.results = await DATA.searchFunds(q); bs.err = ''; }
-      catch (e) { bs.err = 'Live search needs internet. You can still use a demo or upload a CSV.'; bs.results = []; }
+    const doSearch = async (q) => {
+      q = (q || $('#q').value).trim(); if (q.length < 3) return toast('Type at least 3 letters.');
+      bs.q = q; bs.selected = null; bs.results = null;
+      bs.status = '<span class="spin"></span> Searching live fund data… (can take a few seconds)'; paint();
+      try { const r = await robust(() => DATA.searchFunds(q)); bs.results = r; bs.status = r.length ? `${r.length} funds found` : ''; }
+      catch (e) { bs.results = null; bs.status = '⚠ Couldn\'t reach the fund server. Check your connection and retry — or use a demo / CSV from the start screen.'; }
       paint();
     };
     async function analyzeReal() {
       const az = $('#analyze'); if (az) { az.textContent = 'Crunching live data…'; az.disabled = true; }
       let benchmark;
       try {
-        const r = await DATA.searchFunds('nifty 50 index fund');
+        const r = await robust(() => DATA.searchFunds('nifty 50 index fund'));
         const pick = r.find((x) => /direct/i.test(x.schemeName) && /growth/i.test(x.schemeName)) || r[0];
-        const bf = await DATA.fetchFund(pick.schemeCode, 60); benchmark = { name: bf.scheme, navHistory: bf.navHistory };
+        const bf = await robust(() => DATA.fetchFund(pick.schemeCode, 60)); benchmark = { name: bf.scheme, navHistory: bf.navHistory };
       } catch (e) { benchmark = O.samplePortfolio(TODAY).benchmark; }
       const holds = (portfolio && portfolio.holdings ? portfolio.holdings.slice() : []).concat(bs.picks);
       portfolio = { name: 'My Portfolio', asOf: TODAY, benchmark, holdings: holds };
-      dataSource = 'real'; bs = { results: null, picks: [], selected: null, busy: false, err: '' };
+      dataSource = 'real'; bs = { results: null, picks: [], selected: null, status: '', q: '' };
       home();
     }
-    $('#qbtn').onclick = doSearch;
+    n.querySelectorAll('.catchip').forEach((c) => c.onclick = () => { $('#q').value = ''; doSearch(c.dataset.q); });
+    $('#qbtn').onclick = () => doSearch();
     $('#q').onkeydown = (e) => { if (e.key === 'Enter') doSearch(); };
     paint();
     return n;
@@ -611,20 +673,28 @@
     const n = el(`<section class="screen"><div class="wrap">
       ${topbar('now', 'MY PLAN')}
       <h2 class="roomtitle">My plan &amp; holdings</h2>
-      <p class="roomguide">Set your real goal and SIP — everything in NEXT recalculates from these. Saved on your device.</p>
+      <p class="roomguide">Set your real goal, risk comfort and safety buffer — every recommendation recalculates from these. Saved on your device.</p>
+      <div class="ctrl"><label>My risk comfort</label><div class="profrow">${['Conservative', 'Moderate', 'Aggressive'].map((p) => `<button class="profchip${p === inputs.riskProfile ? ' on' : ''}" data-prof="${p}">${p}</button>`).join('')}</div><div class="micro" id="prof-desc" style="margin-top:6px">${esc(ADV.PROFILES[inputs.riskProfile].blurb)}</div></div>
       ${f('p-y', 'Years until my goal', inputs.yearsToGoal, 1, 1)}
       ${f('p-sip', 'Monthly SIP (₹)', inputs.monthlySip, 1000)}
       ${f('p-exp', 'Monthly expense today (₹)', inputs.currentMonthlyExpense, 1000)}
+      ${f('p-liq', 'Safe/liquid savings I already have (₹)', inputs.liquidSavings, 5000)}
       ${f('p-step', 'Yearly SIP step-up (%)', Math.round(inputs.sipStepUp * 100), 1)}
       <button class="cta primary block" id="psave" style="margin-top:8px">Save my plan</button>
       <h3 style="font-size:16px;margin:24px 0 6px">Holdings ${holds.length ? '(' + holds.length + ')' : ''}</h3>
       ${rows || '<p class="micro">No holdings yet.</p>'}
       <button class="cta sm" id="addmore" style="margin-top:12px">＋ Add funds</button>
     </div></section>`);
+    n.querySelectorAll('.profchip').forEach((b) => b.onclick = () => {
+      inputs.riskProfile = b.dataset.prof;
+      n.querySelectorAll('.profchip').forEach((x) => x.classList.toggle('on', x === b));
+      n.querySelector('#prof-desc').textContent = ADV.PROFILES[inputs.riskProfile].blurb;
+    });
     n.querySelector('#psave').onclick = () => {
       inputs.yearsToGoal = +n.querySelector('#p-y').value || inputs.yearsToGoal;
       inputs.monthlySip = +n.querySelector('#p-sip').value || 0;
       inputs.currentMonthlyExpense = +n.querySelector('#p-exp').value || 0;
+      inputs.liquidSavings = +n.querySelector('#p-liq').value || 0;
       inputs.sipStepUp = (+n.querySelector('#p-step').value || 0) / 100;
       save(); toast('Plan saved.'); back();
     };
@@ -651,18 +721,26 @@
       <div class="tile"><span class="tl">Sharpe</span><b>${num(r.sharpe, 2)}</b></div>
       <div class="tile"><span class="tl">Worst fall</span><b class="down">${pct(r.maxDrawdown, 0)}</b></div></div>` : '<p class="micro">No NAV history for deeper risk stats on this fund.</p>';
     const r3 = f.rolling && f.rolling['3y'] && isFinite(f.rolling['3y'].avg) ? f.rolling['3y'] : null;
-    const verdict = f.deadwood
-      ? `This fund keeps <b>lagging its benchmark</b> for the risk it carries. A better-rated peer (or its Direct plan) would likely serve you better — see the <b>DO</b> room.`
-      : `This fund is <b>pulling its weight</b> — beating its benchmark for the risk it takes. Nothing to change here.`;
+    const sc = ADV.fundScore(f);
+    const scol = sc.score >= 60 ? 'var(--up)' : sc.score >= 45 ? 'var(--gold)' : 'var(--down)';
+    const labels = { returns: 'Returns', riskAdj: 'Risk-adjusted', downside: 'Downside protection', consistency: 'Consistency', cost: 'Low cost', alpha: 'Alpha vs index' };
+    const bars = Object.keys(labels).map((k) => {
+      const v = Math.round(sc.breakdown[k]);
+      return `<div class="scorebar"><span class="sbl">${labels[k]}</span><div class="sbtrack"><i style="width:${v}%;background:${v >= 60 ? 'var(--up)' : v >= 45 ? 'var(--gold)' : 'var(--down)'}"></i></div><span class="sbv">${v}</span></div>`;
+    }).join('');
+    const verdict = sc.score >= 60
+      ? `Overall this is a <b>${sc.grade.toLowerCase()}</b> fund — it earns its place. ${sc.cautions.length ? 'Watch: ' + sc.cautions[0] + '.' : 'No red flags.'}`
+      : `This fund scores <b>${sc.grade.toLowerCase()}</b> (${sc.score}/100). ${sc.cautions.length ? 'Concerns: ' + sc.cautions.join('; ') + '.' : ''} A higher-scoring peer (or its Direct plan) may serve you better — weigh it in the <b>DO</b> room.`;
     return el(`<section class="screen answer"><div class="wrap">
       ${topbar('now', 'NOW · ONE FUND')}
-      ${guide(`Everything about this one holding, plain and deep.`)}
+      ${guide(`A fund isn't one number. Here's the full scorecard — returns, risk, downside, consistency, cost and skill.`)}
       <h2 class="atitle">${esc(f.scheme)}</h2>
       <div class="subnum">${esc(f.amc || f.category)} · ${esc(f.plan)} plan · ${esc(f.assetClass)}</div>
+      <div class="scorehead"><div class="scorering" style="--c:${scol}"><b>${sc.score}</b><small>/100</small></div><div><div class="scoregrade" style="color:${scol}">${sc.grade}</div><div class="micro" style="margin:0">weighted across 6 professional factors</div></div></div>
+      <div class="scorebars">${bars}</div>
       ${spark}
       <div class="tiles">
         <div class="tile"><span class="tl">Value now</span><b>${INR(f.current)}</b></div>
-        <div class="tile"><span class="tl">Invested</span><b>${INR(f.invested)}</b></div>
         <div class="tile"><span class="tl">Total return</span><b class="${f.absoluteReturn >= 0 ? 'up' : 'down'}">${spct(f.absoluteReturn)}</b></div>
         <div class="tile"><span class="tl">XIRR</span><b class="${f.xirr >= 0 ? 'up' : 'down'}">${pct(f.xirr)}</b></div>
       </div>
