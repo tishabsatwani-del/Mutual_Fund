@@ -9,6 +9,7 @@
 (function () {
   const O = window.ORACLE, F = window.FUTURE, W = window.WORKFLOW, IO = window.ORACLE_IO;
   const SIM = window.SIM, DATA = window.ORACLE_DATA, CH = window.ORACLE_CHARTS;
+  const DSMC = window.DSMC;
   if (!O || !F || !W || !IO) return;
 
   /* ---------- formatting helpers ---------- */
@@ -29,7 +30,7 @@
   /* ---------- app state ---------- */
   const today = '2026-06-20';
   let portfolio = null;
-  const inputs = { yearsToGoal: 3, monthlySip: 30000, currentMonthlyExpense: 50000, niftyPE: 27, customEquityShock: -0.40 };
+  const inputs = { yearsToGoal: 3, monthlySip: 30000, currentMonthlyExpense: 50000, niftyPE: 27, customEquityShock: -0.40, sipStepUp: 0.10, dsMode: 'glide' };
   let mode = 'deck';     // 'deck' = the full-screen guided experience, 'dash' = details
   let deckIndex = 0;
 
@@ -210,7 +211,16 @@
     controls.hidden = !(activeTab === 'overview' || activeTab === 'future');
     wireActionButtons();
     wireRemoveButtons();
+    wireDsMode();
     saveState();
+  }
+
+  // Toggle the Dynamic Stochastic Simulator between glide-path and static mix.
+  function wireDsMode() {
+    dash.querySelectorAll('.dsmode-btn').forEach((b) => b.addEventListener('click', () => {
+      if (inputs.dsMode === b.dataset.dsmode) return;
+      inputs.dsMode = b.dataset.dsmode; render(false);
+    }));
   }
 
   // span helper: add a card to the bento grid with a column span class.
@@ -232,6 +242,7 @@
     } else if (tab === 'future') {
       place(grid, ffnCard(A.pr.ffn), 6);
       if (SIM) place(grid, monteCarloCard(A.pr.ffn), 6);
+      if (DSMC) place(grid, dynamicSimCard(), 12);
       place(grid, glideCard(A.pr.glide), 6);
       place(grid, valuationCard(A.pr.valuation), 6);
       place(grid, stressCard(A.pr.stress), 12);
@@ -455,6 +466,55 @@
     </section>`);
   }
 
+  /* The headline of the spec: a Dynamic Stochastic Monte Carlo. Allocation
+   * glides down as the goal nears, volatility switches between calm and crisis
+   * regimes (so crashes cluster), the SIP steps up each year, and the FFN
+   * finish line itself drifts on a stochastic inflation path. */
+  function dynamicSimCard() {
+    const glideMode = inputs.dsMode !== 'static';
+    const mc = DSMC.simulatePortfolioDynamic(portfolio, {
+      years: inputs.yearsToGoal, monthlySip: inputs.monthlySip, stepUpRate: inputs.sipStepUp,
+      mode: glideMode ? 'glide' : 'static', regimes: true, stochasticInflation: true,
+      currentMonthlyExpense: inputs.currentMonthlyExpense, paths: 2000, seed: 12345,
+    });
+    const fanSvg = CH ? CH.fan(mc.bands, { samples: mc.samples, baseline: mc.invested, height: 230 }) : '';
+    const prob = mc.probReachTarget;
+    const probColor = prob >= 0.7 ? 'var(--up)' : prob >= 0.4 ? 'var(--gold)' : 'var(--down)';
+    const last = mc.bands[mc.bands.length - 1];
+    // Compact glide-path strip: one equity-weight bar per year.
+    const glideStrip = mc.glide.map((w, y) => `<span class="gtick" title="Year ${y}: ${(w * 100).toFixed(0)}% equity"><i style="height:${(w * 100).toFixed(0)}%"></i></span>`).join('');
+    const crisisMonths = mc.avgCrisisMonths;
+    return el(`<section class="card">
+      <h2>Dynamic Stochastic Simulator <span class="asof">${mc.paths.toLocaleString()} regime-switching futures · ${inputs.yearsToGoal}y</span></h2>
+      <p class="lead">The full spec, in motion: allocation <b>glides</b> ${glideMode ? '100→50% equity' : 'held static'} as the goal nears, volatility <b>switches</b> between calm and crisis regimes so crashes cluster like 2008/COVID, your SIP <b>steps up ${pct(inputs.sipStepUp, 0)}/yr</b>, and the FFN target itself <b>drifts</b> on a live-inflation path.</p>
+      <div class="dsmodebar">
+        <button class="dsmode-btn${glideMode ? ' on' : ''}" data-dsmode="glide">Glide-path allocation</button>
+        <button class="dsmode-btn${!glideMode ? ' on' : ''}" data-dsmode="static">Hold current mix</button>
+      </div>
+      <div class="fanwrap">${fanSvg}</div>
+      <div class="fanlegend"><span><i class="band b3"></i>middle 50%</span><span><i class="band b2"></i>80%</span><span><i class="band b1"></i>90%</span><span><i class="medianline"></i>median</span><span><i class="baseline"></i>invested</span></div>
+      <div class="tiles">
+        <div class="tile"><span class="tl">Pessimistic (p10)</span><b>${INR(last.p10)}</b></div>
+        <div class="tile"><span class="tl">Median (p50)</span><b>${INR(mc.median)}</b></div>
+        <div class="tile"><span class="tl">Optimistic (p90)</span><b>${INR(last.p90)}</b></div>
+        <div class="tile"><span class="tl">Chance of hitting your FFN</span><b style="color:${probColor}">${pct(prob, 0)}</b></div>
+      </div>
+      <div class="dsmeta">
+        <div class="dsglide">
+          <span class="tl">Equity glide-path (per year)</span>
+          <div class="gstrip">${glideStrip}</div>
+          <span class="micro">${(mc.glide[0] * 100).toFixed(0)}% → ${(mc.glide[mc.glide.length - 1] * 100).toFixed(0)}% equity</span>
+        </div>
+        <div class="dstargets">
+          <div class="kpiline"><span>Moving FFN target (p10–p90)</span><b>${INR(mc.targetPercentiles.p10)} – ${INR(mc.targetPercentiles.p90)}</b></div>
+          <div class="kpiline"><span>Avg. months in crisis</span><b>${crisisMonths.toFixed(1)} of ${inputs.yearsToGoal * 12}</b></div>
+          <div class="kpiline"><span>Finishing below cost</span><b>${pct(mc.probLoseMoney, 0)}</b></div>
+        </div>
+      </div>
+      <p class="micro">Equity/debt sleeves estimated from ${mc.source === 'history' ? 'your funds’ own NAV history' : 'asset-class assumptions'}; regimes, inflation (mean-reverting CPI) and the glide schedule are named, overridable assumptions. A whole cone of possibility — never a prediction.</p>
+    </section>`);
+  }
+
   function glideCard(g) {
     const onTrack = g.direction === 'on-track';
     const dirText = onTrack ? 'On the glide-path' : (g.direction === 'equity->debt' ? 'Too much equity for this horizon' : 'Room for more growth');
@@ -659,6 +719,7 @@
       <div class="ctrlrow">
         <label>Years to goal<input id="c-years" type="number" min="1" max="40" step="1" value="${inputs.yearsToGoal}"></label>
         <label>Monthly SIP (₹)<input id="c-sip" type="number" min="0" step="1000" value="${inputs.monthlySip}"></label>
+        <label>Annual SIP step-up (<b id="c-step-val">${Math.round(inputs.sipStepUp * 100)}%</b>)<input id="c-step" type="range" min="0" max="25" step="1" value="${Math.round(inputs.sipStepUp * 100)}"></label>
         <label>Monthly expense today (₹)<input id="c-exp" type="number" min="0" step="1000" value="${inputs.currentMonthlyExpense}"></label>
         <label>Nifty PE (<b id="c-pe-val">${inputs.niftyPE}</b>)<input id="c-pe" type="range" min="12" max="32" step="0.5" value="${inputs.niftyPE}"></label>
         <label>Custom crash (<b id="c-crash-val">${Math.round(inputs.customEquityShock * 100)}%</b> equity)<input id="c-crash" type="range" min="-70" max="-5" step="5" value="${Math.round(inputs.customEquityShock * 100)}"></label>
@@ -672,6 +733,7 @@
     };
     bind('c-years', 'yearsToGoal', parseFloat);
     bind('c-sip', 'monthlySip', parseFloat);
+    bind('c-step', 'sipStepUp', (s) => parseFloat(s) / 100, (v) => { document.getElementById('c-step-val').textContent = Math.round(v * 100) + '%'; });
     bind('c-exp', 'currentMonthlyExpense', parseFloat);
     bind('c-pe', 'niftyPE', parseFloat, (v) => { document.getElementById('c-pe-val').textContent = v; });
     bind('c-crash', 'customEquityShock', (s) => parseFloat(s) / 100, (v) => { document.getElementById('c-crash-val').textContent = Math.round(v * 100) + '%'; });

@@ -64,6 +64,17 @@ figure is **computed live** from the holdings.
   the portfolio's *own* estimated return/vol, drawn as a percentile **fan
   chart**, with the **probability of reaching your FFN** and of finishing below
   what you put in.
+- **Dynamic Stochastic Simulator** (`oracle-dsmc.js`) — the spec's headline,
+  *in motion*. Where the projection above holds everything constant, this engine
+  makes every lever move with time and chance: the **Autonomous Glide-Path**
+  dials equity 100 → 50% as the goal nears (each month simulated at the mix
+  you'd actually hold), a **2-state regime-switching** volatility model makes
+  crashes *cluster* like 2008 / COVID (fat tails emerge from the dynamics, not a
+  cosmetic shock), a **step-up SIP** grows contributions yearly, and a
+  **mean-reverting stochastic-inflation** path moves the FFN finish line on
+  every run — so success is scored against each path's *own* inflated target,
+  itself reported as a distribution. Toggle glide-path vs. holding your current
+  mix and watch the cone re-shape live.
 - **CFA-grade metrics** — Sortino, **max drawdown**, Calmar, **R²**, tracking
   error and information ratio, alongside Alpha/Beta/Sharpe in the fund table.
 - **Custom what-if** — dial your own crash depth and watch the allocation-aware
@@ -101,6 +112,7 @@ node tests/test_oracle.js               # Part 1 engine + quant metrics — 49 c
 node tests/test_oracle_future.js        # Part 2 engine — 35 checks
 node tests/test_oracle_workflow.js      # Part 3 engine — 21 checks
 node tests/test_oracle_sim.js           # Monte Carlo + custom stress — 21 checks
+node tests/test_oracle_dsmc.js          # Dynamic Stochastic Monte Carlo — 33 checks
 node tests/test_oracle_data.js          # real-data adapter (mfapi.in) — 19 checks
 node tests/test_oracle_io.js            # CSV/JSON import-export — 20 checks
 node tests/test_oracle_ui.js            # dashboard render smoke — 25 checks

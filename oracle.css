@@ -343,6 +343,24 @@ dialog .hint { font-size: 12.5px; color: var(--faint); margin: 0 0 16px; line-he
 .fanlegend .medianline { background: var(--gold); height: 3px; }
 .fanlegend .baseline { background: repeating-linear-gradient(90deg, rgba(255,255,255,0.5) 0 4px, transparent 4px 8px); height: 2px; }
 
+/* dynamic stochastic simulator — mode toggle, glide strip, meta grid */
+.dsmodebar { display: inline-flex; gap: 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; margin: 2px 0 12px; }
+.dsmode-btn { font-family: var(--sans); font-size: 12.5px; font-weight: 600; padding: 8px 14px; border: none; background: transparent; color: var(--muted); cursor: pointer; transition: background .15s, color .15s; }
+.dsmode-btn + .dsmode-btn { border-left: 1px solid var(--line); }
+.dsmode-btn:hover { color: var(--ink); }
+.dsmode-btn.on { background: rgba(143, 162, 221, 0.18); color: var(--ink); }
+.dsmeta { display: grid; grid-template-columns: 1.1fr 1fr; gap: 18px; margin-top: 14px; align-items: start; }
+@media (max-width: 560px) { .dsmeta { grid-template-columns: 1fr; } }
+.dsglide .tl, .dstargets .tl { display: block; font-size: 11.5px; color: var(--faint); margin-bottom: 6px; }
+.gstrip { display: flex; align-items: flex-end; gap: 2px; height: 46px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 10px; background: rgba(255, 255, 255, 0.015); }
+.gtick { flex: 1; height: 100%; display: flex; align-items: flex-end; }
+.gtick i { display: block; width: 100%; background: linear-gradient(180deg, rgba(62, 224, 164, 0.85), rgba(111, 180, 240, 0.7)); border-radius: 2px 2px 0 0; min-height: 2px; }
+.dsglide .micro { margin-top: 6px; }
+.dstargets .kpiline { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.dstargets .kpiline:last-child { border-bottom: none; }
+.dstargets .kpiline span { color: var(--muted); }
+.dstargets .kpiline b { color: var(--ink); }
+
 /* stress bars + custom row */
 .stressbars { margin: 4px 0 14px; }
 .stressrow.custom { border-color: rgba(240, 168, 90, 0.5); background: rgba(240, 168, 90, 0.06); }
