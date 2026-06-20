@@ -363,6 +363,56 @@ dialog .hint { font-size: 12.5px; color: var(--faint); margin: 0 0 16px; line-he
 .rf-chosen { font-size: 14px; margin: 0 0 12px; }
 .rf-meta { font-size: 12px; color: var(--faint); }
 
+/* ---------- tabs + bento grid (minimal-scroll layout) ---------- */
+.tabbar {
+  position: sticky; top: 0; z-index: 20; display: flex; gap: 4px; padding: 6px;
+  margin: 0 0 18px; border-radius: 14px; border: 1px solid var(--line);
+  background: var(--card); -webkit-backdrop-filter: var(--glass); backdrop-filter: var(--glass);
+}
+.tab {
+  flex: 1; font-family: var(--sans); font-size: 14px; font-weight: 700; cursor: pointer;
+  padding: 11px 12px; border-radius: 10px; border: 0; background: transparent; color: var(--faint);
+  transition: all .2s ease; display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+}
+.tab:hover { color: var(--ink); }
+.tab.on { background: linear-gradient(180deg, var(--gold), var(--gold-2)); color: var(--cta-ink); box-shadow: 0 8px 22px -12px color-mix(in srgb, var(--gold) 60%, transparent); }
+.tabcount { font-size: 11px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--down); color: #fff; display: inline-flex; align-items: center; justify-content: center; }
+.tab.on .tabcount { background: rgba(0, 0, 0, 0.28); color: var(--cta-ink); }
+
+.bento { display: grid; grid-template-columns: repeat(12, 1fr); gap: 18px; align-items: start; }
+.bento > .card { margin: 0; grid-column: span 12; }
+.bento > .card.sp4 { grid-column: span 4; }
+.bento > .card.sp5 { grid-column: span 5; }
+.bento > .card.sp6 { grid-column: span 6; }
+.bento > .card.sp7 { grid-column: span 7; }
+.bento > .card.sp8 { grid-column: span 8; }
+.bento > .card.sp12 { grid-column: span 12; }
+
+/* overview command deck */
+.ovhero .ovhero-top { display: flex; gap: 18px; align-items: center; }
+.ovhero .scoregauge { width: 150px; flex: none; }
+.verdict { font-size: 15.5px; line-height: 1.55; color: var(--muted); margin: 4px 0 0; }
+.verdict b { color: var(--ink); }
+.opills { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 18px; margin-top: 16px; }
+.opill { display: grid; grid-template-columns: 96px 1fr 30px; align-items: center; gap: 10px; font-size: 12.5px; color: var(--muted); }
+.opill b { font-family: var(--num); text-align: right; }
+.ovkpi { display: flex; flex-direction: column; }
+.bignum { font-family: var(--num); font-size: clamp(30px, 6vw, 42px); font-weight: 700; letter-spacing: -.02em; line-height: 1.05; margin: 2px 0 6px; }
+.kpisub { font-size: 13px; color: var(--muted); margin: 0 0 14px; }
+.kpisub b { color: var(--ink); }
+.kpiline { display: flex; justify-content: space-between; font-size: 13.5px; padding: 8px 0; border-top: 1px solid var(--hair); color: var(--muted); }
+.kpiline b { font-family: var(--num); color: var(--ink); }
+.ovalloc { display: flex; gap: 16px; align-items: center; }
+.ovalloc-leg { display: flex; flex-direction: column; gap: 8px; font-size: 12.5px; color: var(--muted); }
+.ovalloc-leg .lg { display: inline-flex; align-items: center; gap: 7px; }
+.ovalloc-leg .lg.dim { color: var(--faint); margin-top: 4px; }
+.ovalloc-leg i { width: 10px; height: 10px; border-radius: 3px; }
+.ovmc { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 6px; }
+.ovmc .tl { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); display: block; margin-bottom: 4px; }
+.ovmc b { font-family: var(--num); font-size: 15px; }
+.seeall { margin-top: 12px; font-family: var(--sans); font-size: 13.5px; font-weight: 600; color: var(--gold); background: none; border: 0; cursor: pointer; padding: 4px 0; }
+.seeall:hover { text-decoration: underline; }
+
 /* ---------- theme switcher ---------- */
 .themebar { display: flex; align-items: center; gap: 9px; margin: 6px 0 18px; flex-wrap: wrap; }
 .themebar .tl2 { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--faint); margin-right: 2px; }
@@ -420,6 +470,10 @@ dialog .hint { font-size: 12.5px; color: var(--faint); margin: 0 0 16px; line-he
 }
 
 /* ---------- responsive ---------- */
+@media (max-width: 980px) {
+  /* Bento collapses to a simple 2-then-1 column flow on smaller screens. */
+  .bento > .card.sp4, .bento > .card.sp5, .bento > .card.sp6, .bento > .card.sp7, .bento > .card.sp8 { grid-column: span 12; }
+}
 @media (max-width: 860px) {
   .summarygrid { grid-template-columns: 1fr; }
   .donutwrap { margin-bottom: 6px; }
@@ -433,6 +487,9 @@ dialog .hint { font-size: 12.5px; color: var(--faint); margin: 0 0 16px; line-he
   .action { flex-direction: column; align-items: stretch; }
   .act-btn { align-self: flex-start; }
   .sstat { text-align: left; }
+  .ovhero .ovhero-top { flex-direction: column; align-items: flex-start; gap: 10px; }
+  .opills, .ovmc { grid-template-columns: 1fr; }
+  .tab { font-size: 13px; padding: 10px 8px; }
 }
 @media (max-width: 460px) {
   .grid2 { grid-template-columns: 1fr; }
