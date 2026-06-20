@@ -44,17 +44,26 @@ const ok = (n, c) => { if (c) { pass++; console.log('  ✓ ' + n); } else { fail
 
 try {
   require('../oracle-ui.js');
+  // Render every tab so the smoke covers all cards, not just the default view.
+  for (const t of ['current', 'future', 'actions', 'overview']) global.window.__ORACLE_UI.renderTab(t);
 } catch (e) {
   console.log('  ✗ UI render threw: ' + e.message + '\n' + e.stack);
   process.exit(1);
 }
 const html = captured.join('\n');
 const must = [
-  'Unified Portfolio Health Score', 'Live Action Board', 'Dynamic Financial Freedom Number',
-  'Autonomous Glide-Path', 'Valuation-Based Rebalancing', 'What-If', 'Portfolio at a glance',
-  'Spendable Wealth Counter', 'Fund-by-fund X-ray', 'Zoo of Schemes', 'Hidden cost leakage',
-  'DEADWOOD', 'RED FLAG', 'Book profit', 'Harvest tax now', 'Rebalance portfolio',
-  'Monte Carlo projection', 'Chance of hitting your FFN', 'Max DD', 'Sortino', 'Your custom crash',
+  // overview (default tab)
+  'Portfolio Health', 'What to do next', 'If you sold everything today',
+  // actions tab
+  'Unified Portfolio Health Score', 'Live Action Board',
+  // future tab
+  'Dynamic Financial Freedom Number', 'Autonomous Glide-Path', 'Valuation-Based Rebalancing',
+  'What-If', 'Monte Carlo projection', 'Chance of hitting your FFN', 'Your custom crash',
+  // current tab
+  'Portfolio at a glance', 'Spendable Wealth Counter', 'Fund-by-fund X-ray', 'Zoo of Schemes',
+  'Hidden cost leakage', 'DEADWOOD', 'RED FLAG', 'Max DD', 'Sortino',
+  // actions content
+  'Book profit', 'Harvest tax now', 'Rebalance portfolio',
 ];
 for (const m of must) ok('renders: ' + m, html.includes(m));
 ok('no NaN/undefined leaked into output', !/NaN|undefined/.test(html));

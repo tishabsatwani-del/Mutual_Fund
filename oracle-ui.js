@@ -39,31 +39,73 @@
    * `animate` plays the entrance/draw-in motion. It's true on meaningful
    * changes (load, import, add/remove) and false on slider drags so live
    * tweaking stays snappy and flicker-free. */
+  let activeTab = 'overview';
+  const TABS = [
+    { id: 'overview', label: 'Overview' },
+    { id: 'current', label: 'Diagnostics' },
+    { id: 'future', label: 'Future' },
+    { id: 'actions', label: 'Actions' },
+  ];
+
   function render(animate) {
     if (!portfolio || !portfolio.holdings.length) {
       dash.hidden = true; empty.hidden = false; controls.hidden = true; return;
     }
-    empty.hidden = true; dash.hidden = false; controls.hidden = false;
+    empty.hidden = true; dash.hidden = false;
     const A = W.analyze(portfolio, inputs);
     dash.classList.toggle('anim', !!animate);
     dash.innerHTML = '';
-    dash.appendChild(healthCard(A.score, A.dx));
-    dash.appendChild(actionCard(A.actions));
-    dash.appendChild(sectionHead('The “Future” plan', 'Prognostic engine — Part 2'));
-    dash.appendChild(ffnCard(A.pr.ffn));
-    if (SIM) dash.appendChild(monteCarloCard(A.pr.ffn));
-    dash.appendChild(glideCard(A.pr.glide));
-    dash.appendChild(valuationCard(A.pr.valuation));
-    dash.appendChild(stressCard(A.pr.stress));
-    dash.appendChild(sectionHead('The “Current” diagnostic X-ray', 'Diagnostic engine — Part 1'));
-    dash.appendChild(summaryCard(A.dx));
-    dash.appendChild(spendableCard(A.dx));
-    dash.appendChild(fundsCard(A.dx));
-    if (A.dx.overlaps.length) dash.appendChild(overlapCard(A.dx));
-    dash.appendChild(leakageCard(A.dx));
+    dash.appendChild(tabBar(A));
+    const grid = el('<div class="bento"></div>');
+    dash.appendChild(grid);
+    buildTab(activeTab, grid, A);
+    // The sliders only matter to the forward-looking views — hide them elsewhere
+    // to keep each screen clean and short.
+    controls.hidden = !(activeTab === 'overview' || activeTab === 'future');
     wireActionButtons();
     wireRemoveButtons();
     saveState();
+  }
+
+  // span helper: add a card to the bento grid with a column span class.
+  function place(grid, node, span) { if (node) { if (span) node.classList.add('sp' + span); grid.appendChild(node); } }
+
+  function buildTab(tab, grid, A) {
+    if (tab === 'overview') {
+      place(grid, ovHero(A), 7);
+      place(grid, ovSpendable(A.dx), 5);
+      place(grid, ovAlloc(A.dx), 4);
+      place(grid, SIM ? ovMonte(A) : ovStress(A.pr), 8);
+      place(grid, ovActions(A.actions), 12);
+    } else if (tab === 'current') {
+      place(grid, summaryCard(A.dx), 6);
+      place(grid, spendableCard(A.dx), 6);
+      place(grid, fundsCard(A.dx), 12);
+      if (A.dx.overlaps.length) place(grid, overlapCard(A.dx), 6);
+      place(grid, leakageCard(A.dx), A.dx.overlaps.length ? 6 : 12);
+    } else if (tab === 'future') {
+      place(grid, ffnCard(A.pr.ffn), 6);
+      if (SIM) place(grid, monteCarloCard(A.pr.ffn), 6);
+      place(grid, glideCard(A.pr.glide), 6);
+      place(grid, valuationCard(A.pr.valuation), 6);
+      place(grid, stressCard(A.pr.stress), 12);
+    } else if (tab === 'actions') {
+      place(grid, healthCard(A.score, A.dx), 12);
+      place(grid, actionCard(A.actions), 12);
+    }
+  }
+
+  function tabBar(A) {
+    const urgent = A.actions.filter((a) => a.severity === 'critical' || a.severity === 'warn').length;
+    const bar = el(`<nav class="tabbar" role="tablist">${TABS.map((t) =>
+      `<button class="tab${t.id === activeTab ? ' on' : ''}" role="tab" data-tab="${t.id}" aria-selected="${t.id === activeTab}">${esc(t.label)}${t.id === 'actions' && urgent ? `<span class="tabcount">${urgent}</span>` : ''}</button>`
+    ).join('')}</nav>`);
+    bar.querySelectorAll('.tab').forEach((b) => b.addEventListener('click', () => {
+      if (activeTab === b.dataset.tab) return;
+      activeTab = b.dataset.tab; render(true);
+      dash.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }));
+    return bar;
   }
 
   function wireRemoveButtons() {
@@ -83,7 +125,90 @@
   }
 
   /* ===================================================================
-   * PART 3 — Health Score + Action Board (the command center)
+   * OVERVIEW — the one-screen command deck (plain-language, minimal scroll)
+   * =================================================================== */
+  function ovHero(A) {
+    const score = A.score, c = scoreColor(score.overall);
+    const gaugeSvg = CH ? CH.gauge(score.overall, { color: c, size: 150 }) : `<b>${score.overall.toFixed(1)}</b>`;
+    const gfc = A.pr.stress.find((s) => s.scenario.id === 'gfc2008');
+    const ffn = A.pr.ffn;
+    const verdict = ffn.onTrack
+      ? `On track for your goal. You'd weather a 2008-style crash with <b>${INR(gfc.troughValue)}</b> left, then recover in about ${gfc.scenario.recoveryMonths} months.`
+      : `You're <b>${INR(ffn.gap)}</b> short of your goal — lifting your SIP by <b>${rupees0(ffn.sipTopUp)}/mo</b> closes it. A 2008-style crash would leave <b>${INR(gfc.troughValue)}</b>.`;
+    const pills = [['Performance', score.pillars.performance], ['Cost', score.pillars.cost], ['Diversification', score.pillars.diversification], ['Alignment', score.pillars.alignment]]
+      .map(([n, v]) => `<div class="opill"><span>${n}</span><div class="pbar"><span style="width:${v * 10}%;background:${scoreColor(v)}"></span></div><b style="color:${scoreColor(v)}">${v.toFixed(1)}</b></div>`).join('');
+    return el(`<section class="card hero ovhero">
+      <div class="ovhero-top">
+        <div class="scoregauge">${gaugeSvg}</div>
+        <div>
+          <p class="kick2">Portfolio Health</p>
+          <h2 style="color:${c};margin:0 0 6px">${esc(score.grade)}</h2>
+          <p class="verdict">${verdict}</p>
+        </div>
+      </div>
+      <div class="opills">${pills}</div>
+    </section>`);
+  }
+
+  function ovSpendable(dx) {
+    const sp = dx.spendable, haircut = sp.gross - sp.net;
+    return el(`<section class="card ovkpi">
+      <p class="kick2">If you sold everything today</p>
+      <div class="bignum up">${INR(sp.net)}</div>
+      <p class="kpisub">actually reaches your bank — after <b>${INR(haircut)}</b> in exit load &amp; tax (${pct(haircut / sp.gross, 1)}).</p>
+      <div class="kpiline"><span>Gross value</span><b>${INR(sp.gross)}</b></div>
+      <div class="kpiline"><span>Invested</span><b>${INR(dx.summary.invested)}</b></div>
+    </section>`);
+  }
+
+  function ovAlloc(dx) {
+    const s = dx.summary;
+    const alloc = Object.entries(s.allocation).sort((a, b) => b[1] - a[1]);
+    const colors = { Equity: 'var(--equity)', Debt: 'var(--debt)', Hybrid: 'var(--gold)' };
+    const donutSvg = CH ? CH.donut(alloc.map(([k, v]) => ({ label: k, value: v, color: colors[k] || 'var(--cool)' })), { size: 132, stroke: 22, centerLabel: pct(dx.portfolioXirr, 1), centerSub: 'XIRR' }) : '';
+    const legend = alloc.map(([k, v]) => `<span class="lg"><i style="background:${colors[k] || 'var(--cool)'}"></i>${esc(k)} ${pct(v, 0)}</span>`).join('');
+    return el(`<section class="card ovkpi">
+      <p class="kick2">Allocation &amp; return</p>
+      <div class="ovalloc">${donutSvg}<div class="ovalloc-leg">${legend}<span class="lg dim">Direct ${pct(s.planSplit.Direct, 0)} · Regular ${pct(s.planSplit.Regular, 0)}</span></div></div>
+    </section>`);
+  }
+
+  function ovMonte(A) {
+    const ffn = A.pr.ffn;
+    const mc = SIM.simulatePortfolio(portfolio, { years: inputs.yearsToGoal, monthlySip: inputs.monthlySip, target: ffn.requiredCorpus, paths: 1500, seed: 12345 });
+    const fanSvg = CH ? CH.fan(mc.bands, { samples: mc.samples, baseline: mc.invested, height: 170 }) : '';
+    const prob = mc.probReachTarget, probColor = prob >= 0.7 ? 'var(--up)' : prob >= 0.4 ? 'var(--gold)' : 'var(--down)';
+    return el(`<section class="card">
+      <h2>In ${inputs.yearsToGoal} years <span class="asof">${mc.paths.toLocaleString()} simulated futures</span></h2>
+      <div class="fanwrap">${fanSvg}</div>
+      <div class="ovmc">
+        <div><span class="tl">Likely (median)</span><b>${INR(mc.median)}</b></div>
+        <div><span class="tl">Range p10–p90</span><b>${INR(mc.bands[mc.bands.length - 1].p10)} – ${INR(mc.bands[mc.bands.length - 1].p90)}</b></div>
+        <div><span class="tl">Reach your goal</span><b style="color:${probColor}">${pct(prob, 0)}</b></div>
+      </div>
+    </section>`);
+  }
+
+  function ovStress(pr) {
+    const all = pr.stress;
+    const barSvg = CH ? CH.bars(all.filter((s) => s.flatYears === 0).map((s) => ({ label: s.scenario.name.replace(/\s*\(.*\)/, '').slice(0, 20), value: s.drawdownPct, color: 'var(--down)', caption: pct(s.drawdownPct, 0) + ' · ' + INR(s.troughValue) })), { labelW: 140 }) : '';
+    return el(`<section class="card"><h2>Your portfolio in a crash</h2><div class="stressbars">${barSvg}</div></section>`);
+  }
+
+  function ovActions(actions) {
+    const sevLabel = { critical: 'Act now', warn: 'Review', opportunity: 'Opportunity', good: 'All clear' };
+    const top = actions.slice(0, 3).map((a) => `<div class="action ${a.severity}">
+      <div class="acol"><span class="sev">${sevLabel[a.severity] || a.severity}</span><div class="aissue">${esc(a.issue)}</div><div class="aadvice">${esc(a.advice)}</div></div>
+      <button class="btn act-btn" data-label="${esc(a.button)}">${esc(a.button)}</button></div>`).join('');
+    const more = actions.length > 3 ? `<button class="seeall" data-goto="actions">See all ${actions.length} actions →</button>` : '';
+    const card = el(`<section class="card actionboard"><h2>What to do next <span class="asof">your top priorities</span></h2><div class="actions">${top}</div>${more}</section>`);
+    const seeBtn = card.querySelector('.seeall');
+    if (seeBtn) seeBtn.addEventListener('click', () => { activeTab = 'actions'; render(true); });
+    return card;
+  }
+
+  /* ===================================================================
+   * Health Score + Action Board (full, on the Actions tab)
    * =================================================================== */
   function scoreColor(v) { return v >= 8 ? 'var(--up)' : v >= 6 ? 'var(--gold)' : v >= 4 ? 'var(--warn)' : 'var(--down)'; }
 
@@ -622,4 +747,7 @@
   portfolio = restored || O.samplePortfolio(today);
   buildControls();
   render(true);
+
+  // Headless hook for tests / server-side rendering: render a named tab.
+  window.__ORACLE_UI = { tabs: TABS.map((t) => t.id), renderTab: (t) => { activeTab = t; render(false); } };
 })();
