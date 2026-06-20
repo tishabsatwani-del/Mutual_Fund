@@ -9,44 +9,69 @@ install — just clone and run.
 
 ---
 
-## 🔮 Autonomous Portfolio Oracle — "Current" Diagnostics (Part 1)
+## 🔮 Autonomous Portfolio Oracle — Diagnose · Forecast · Act
 
-A second, self-contained web tool (**`oracle.html`**) — a live, penny-by-penny
-**X-ray of an existing mutual-fund portfolio**. It is Part 1 ("Current"
-diagnostics) of the *Autonomous Portfolio Oracle & Stress-Simulator* master
-spec, and it ships a pure, unit-tested math engine (**`oracle.js`**) plus a
-mobile-first dashboard (**`oracle-ui.js`**, **`oracle.css`**). Open
-`oracle.html`, hit **Load sample portfolio**, and every figure is **computed
-live** from the holdings:
+A second, self-contained web tool (**`oracle.html`**) — a live X-ray **and** AI
+co-pilot for an existing mutual-fund portfolio. It is a full implementation of
+the *Autonomous Portfolio Oracle & Stress-Simulator* master spec across three
+pure, unit-tested engines (**`oracle.js`**, **`oracle-future.js`**,
+**`oracle-workflow.js`**) and a mobile-first dashboard (**`oracle-ui.js`**,
+**`oracle.css`**). Open `oracle.html`, hit **Load sample portfolio**, and every
+figure is **computed live** from the holdings.
+
+**Part 1 — "Current" diagnostics** (`oracle.js`)
 
 - **Advanced return metrics** — Absolute return, CAGR, **XIRR** (dated,
   irregular cash flows; Newton–Raphson + bisection), and **3y/5y rolling
-  returns** (average + worst…best across every overlapping window, with a
-  consistency score).
-- **Statistical risk & quality** — **Beta** (market sensitivity), **Jensen's
-  Alpha** (annualised return above CAPM), **Sharpe ratio**, and **Downside
-  Capture** (how much of the market's *falls* the fund absorbed).
-- **Leakage & structure control** — **TER vs BER** hidden-cost leakage between
-  Direct and Regular plans, projected to **absolute rupees** over 15 years; and
-  the **"Zoo of Schemes" overlap filter** — the % of underlying stocks two
-  schemes share, red-flagged above 50% (double fees for one bet).
+  returns** (average + worst…best across every window, with a consistency
+  score).
+- **Statistical risk & quality** — **Beta**, **Jensen's Alpha**, **Sharpe
+  ratio**, and **Downside Capture** (how much of the market's *falls* the fund
+  absorbed).
+- **Leakage & structure** — **TER vs BER** hidden-cost leakage between Direct
+  and Regular plans in **absolute rupees** over 15 years; and the **"Zoo of
+  Schemes" overlap filter** (the % of underlying stocks two schemes share,
+  red-flagged above 50%).
 - **Spendable Wealth Counter** — the *real* in-hand cash if you liquidated
   today: `gross − exit load − STCG − LTCG`, with the **₹1.25 L LTCG exemption**
-  applied (current FY2024-25 rules, held as overridable constants).
+  applied (current FY2024-25 rules, overridable constants).
+
+**Part 2 — "Future" prognostics** (`oracle-future.js`)
+
+- **Dynamic Financial Freedom Number** — inflation-grows today's expense, sizes
+  the corpus needed to fund it for life, projects your current corpus + SIP
+  forward, and computes the exact **SIP top-up** to close any gap.
+- **Autonomous Glide-Path** — the spec's 100 → 85 → 70 → 50% equity countdown
+  (interpolated for any horizon), compared live to your actual mix, sizing the
+  **STP** needed to get back on path.
+- **Valuation-based rebalancing** — book-profit / buy-the-dip signals from the
+  Nifty PE (overvalued > 25, undervalued < 18), sized against your portfolio.
+- **"What-If" stress tests** — replays **2008**, **COVID-2020** and a **sideways
+  market** on *your* allocation (equity takes the hit, debt cushions, so the
+  drawdown number is yours, not generic).
+
+**Part 3 — workflow** (`oracle-workflow.js`)
+
+- **Unified Health Score (0–10)** across four pillars — Performance, Cost,
+  Diversification, Alignment — a weighted roll-up of everything above.
+- **Live Action Board** — each flagged issue paired with plain-language advice
+  and one decision button (switch to Direct, rebalance, book profit, harvest
+  LTCG tax-free, increase SIP …), ranked by urgency.
 
 The bundled sample portfolio uses **seeded, clearly-labelled** NAV histories
-(benchmark-correlated, so Beta/Alpha actually mean something) — it contains no
-real fund NAVs; it exists so the math has real series to compute on. The engine
-accepts real holdings via a manual add-holding form, and is structured so a
-later CAS-PDF import (Part 3) plugs into the same data model.
-
-> **Roadmap:** Part 2 (Dynamic FFN, Autonomous Glide-Path, Valuation-based
-> Rebalancing, "What-If" stress tests) and Part 3 (0–10 Health Score, live
-> Action Board, CAS import) build on this same `oracle.js` engine.
+(benchmark-correlated, so Beta/Alpha actually mean something) — no real fund
+NAVs; they exist so the math has real series to compute on. Real holdings go in
+via a manual add-holding form; the next step, **one-click CAS-PDF import**,
+plugs into the same data model without touching the engines. Action-board
+buttons are illustrative — a connected build would route transactions to your
+AMC / RTA.
 
 ```bash
-python -m http.server 8000     # then open http://localhost:8000/oracle.html
-node tests/test_oracle.js      # verify the engine: 39 checks, every metric
+python -m http.server 8000              # open http://localhost:8000/oracle.html
+node tests/test_oracle.js               # Part 1 engine — 39 checks
+node tests/test_oracle_future.js        # Part 2 engine — 35 checks
+node tests/test_oracle_workflow.js      # Part 3 engine — 21 checks
+node tests/test_oracle_ui.js            # dashboard render smoke — 17 checks
 ```
 
 > All outputs are **illustrative** and **computed live**. Educational tool —

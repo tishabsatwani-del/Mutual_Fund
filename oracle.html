@@ -3,25 +3,25 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-<title>Autonomous Portfolio Oracle — Current Diagnostics</title>
-<meta name="description" content="A live X-ray of a mutual-fund portfolio: XIRR, rolling returns, Alpha/Beta/Sharpe, downside capture, hidden cost leakage, scheme overlap, and the real in-hand cash after exit load and tax. Every figure is computed, nothing invented." />
+<title>Autonomous Portfolio Oracle — Diagnose, Forecast &amp; Act</title>
+<meta name="description" content="A live X-ray and AI co-pilot for a mutual-fund portfolio: a 0-10 health score and action board, XIRR / rolling returns / Alpha-Beta-Sharpe, downside capture, hidden cost leakage, scheme overlap, the real in-hand cash after exit load and tax, plus a dynamic FFN, glide-path, valuation rebalancing and what-if stress tests. Every figure is computed, nothing invented." />
 <meta name="theme-color" content="#05070b" />
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔮</text></svg>" />
-<link rel="stylesheet" href="oracle.css?v=1" />
+<link rel="stylesheet" href="oracle.css?v=2" />
 </head>
 <body>
 <noscript>
 <div style="max-width:760px;margin:24px auto;padding:24px;font-family:Georgia,serif;line-height:1.6;color:#e6eef8;background:#05070b">
-<h1>Autonomous Portfolio Oracle — "Current" Diagnostics</h1>
-<p>This is Part 1 of the Autonomous Portfolio Oracle: a live diagnostic X-ray of an existing mutual-fund portfolio. It runs in JavaScript. It computes, for a portfolio of holdings: Absolute return, CAGR, XIRR and 3y/5y rolling returns; the risk-and-quality stats Alpha (Jensen), Beta, Sharpe ratio and Downside Capture; hidden cost leakage between Direct and Regular plans (TER vs BER) in absolute rupees; the percentage stock overlap between schemes (the "Zoo of Schemes" filter); and a Spendable Wealth Counter — the real in-hand cash if you liquidated today, after exit load and STCG/LTCG tax with the ₹1.25 lakh exemption. Every figure is computed from the holdings; the bundled sample portfolio uses clearly-labelled illustrative NAV histories. Educational tool — not investment advice.</p>
+<h1>Autonomous Portfolio Oracle</h1>
+<p>The Autonomous Portfolio Oracle is a self-contained tool that diagnoses an existing mutual-fund portfolio, forecasts its future, and tells you exactly what to do. It runs in JavaScript. <b>Part 1 (Current diagnostics)</b> computes: Absolute return, CAGR, XIRR and 3y/5y rolling returns; the risk-and-quality stats Alpha (Jensen), Beta, Sharpe ratio and Downside Capture; hidden cost leakage between Direct and Regular plans (TER vs BER) in absolute rupees; the percentage stock overlap between schemes (the "Zoo of Schemes" filter); and a Spendable Wealth Counter — the real in-hand cash if you liquidated today, after exit load and STCG/LTCG tax with the ₹1.25 lakh exemption. <b>Part 2 (Future)</b> computes a dynamic, inflation-aware Financial Freedom Number and the SIP needed to reach it; an autonomous glide-path that dials equity down as the goal nears; valuation-based rebalancing signals from the Nifty PE; and what-if stress tests that replay 2008, COVID-2020 and a sideways market on your actual allocation. <b>Part 3 (Workflow)</b> rolls it all into a single 0–10 health score across four pillars (performance, cost, diversification, alignment) and a live action board pairing each issue with one decision button. Every figure is computed from the holdings; the bundled sample portfolio uses clearly-labelled illustrative NAV histories. Educational tool — not investment advice.</p>
 </div>
 </noscript>
 
 <header class="hd">
   <div class="wrap">
-    <p class="kicker">Autonomous Portfolio Oracle · Part 1</p>
-    <h1>The “Current” Diagnostic X-Ray</h1>
-    <p class="sub">A live, penny-by-penny X-ray of an existing portfolio — returns, risk, hidden costs, overlap, and the real cash you’d actually pocket today. Every number is <b>computed</b>; nothing is invented.</p>
+    <p class="kicker">Autonomous Portfolio Oracle</p>
+    <h1>Diagnose · Forecast · Act</h1>
+    <p class="sub">A live X-ray <em>and</em> an AI co-pilot for an existing portfolio: a single <b>health score</b> and an <b>action board</b>, on top of full return/risk/cost diagnostics, a dynamic <b>financial-freedom number</b>, a protective <b>glide-path</b>, <b>valuation-based</b> rebalancing and real-history <b>stress tests</b>. Every number is <b>computed</b>; nothing is invented.</p>
     <div class="toolbar">
       <button id="btn-sample" class="btn btn-primary">Load sample portfolio</button>
       <button id="btn-add" class="btn">+ Add a holding</button>
@@ -33,6 +33,7 @@
 
 <main id="app" class="wrap">
   <p class="empty" id="empty">No holdings yet. <b>Load the sample portfolio</b> to see the full diagnostic, or add your own holdings.</p>
+  <section id="controls" class="controls" hidden></section>
   <section id="dash" hidden></section>
 </main>
 
@@ -71,10 +72,12 @@
 
 <footer class="ft wrap">
   <p>All outputs are <b>illustrative</b> and <b>computed live</b> from the holdings shown. Tax and exit-load rules are the current Indian rules (FY2024-25), held as overridable constants. The bundled sample portfolio uses seeded, clearly-labelled NAV histories so the demo is reproducible — it does not contain real fund NAVs. <b>Educational tool — not investment advice.</b></p>
-  <p class="src">Part 1 of the Autonomous Portfolio Oracle &amp; Stress-Simulator. Part 2 (Future / Glide-Path / Valuation rebalancing / What-If stress tests) and Part 3 (Health Score, Action Board, CAS import) build on this same engine.</p>
+  <p class="src">The full Autonomous Portfolio Oracle &amp; Stress-Simulator: Part 1 (Current diagnostics), Part 2 (Future — FFN / Glide-Path / Valuation rebalancing / What-If stress tests) and Part 3 (Unified Health Score &amp; live Action Board). Action-board buttons are illustrative; a connected build would route transactions to your AMC / RTA. The next step, one-click CAS-PDF import, plugs into the same manual-entry data model.</p>
 </footer>
 
-<script src="oracle.js?v=1"></script>
-<script src="oracle-ui.js?v=1"></script>
+<script src="oracle.js?v=2"></script>
+<script src="oracle-future.js?v=2"></script>
+<script src="oracle-workflow.js?v=2"></script>
+<script src="oracle-ui.js?v=2"></script>
 </body>
 </html>

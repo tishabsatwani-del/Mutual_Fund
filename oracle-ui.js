@@ -1,12 +1,14 @@
 /* =====================================================================
- * Autonomous Portfolio Oracle — Part 1 dashboard (browser only)
- * Renders what oracle.js computes. No figure is produced here; this file
- * only formats and lays out the engine's diagnose() output.
+ * Autonomous Portfolio Oracle — unified dashboard (browser only)
+ * Renders the full workflow: Health Score -> Action Board -> Future plan
+ * -> Current diagnostics. Every figure comes from the engines
+ * (oracle.js / oracle-future.js / oracle-workflow.js); this file only
+ * formats and lays out. No number is produced here.
  * ===================================================================== */
 'use strict';
 (function () {
-  const O = window.ORACLE;
-  if (!O) return;
+  const O = window.ORACLE, F = window.FUTURE, W = window.WORKFLOW;
+  if (!O || !F || !W) return;
 
   /* ---------- formatting helpers ---------- */
   const INR = (v) => {
@@ -24,28 +26,179 @@
   const el = (html) => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstElementChild; };
 
   /* ---------- app state ---------- */
-  let portfolio = null; // { name, asOf, benchmark, holdings }
   const today = '2026-06-20';
+  let portfolio = null;
+  const inputs = { yearsToGoal: 3, monthlySip: 30000, currentMonthlyExpense: 50000, niftyPE: 27 };
 
   const dash = document.getElementById('dash');
   const empty = document.getElementById('empty');
+  const controls = document.getElementById('controls');
 
   /* ---------- top-level render ---------- */
   function render() {
     if (!portfolio || !portfolio.holdings.length) {
-      dash.hidden = true; empty.hidden = false; return;
+      dash.hidden = true; empty.hidden = false; controls.hidden = true; return;
     }
-    empty.hidden = true; dash.hidden = false;
-    const dx = O.diagnose(portfolio, { asOf: portfolio.asOf || today });
+    empty.hidden = true; dash.hidden = false; controls.hidden = false;
+    const A = W.analyze(portfolio, inputs);
     dash.innerHTML = '';
-    dash.appendChild(summaryCard(dx));
-    dash.appendChild(spendableCard(dx));
-    dash.appendChild(fundsCard(dx));
-    if (dx.overlaps.length) dash.appendChild(overlapCard(dx));
-    dash.appendChild(leakageCard(dx));
+    dash.appendChild(healthCard(A.score, A.dx));
+    dash.appendChild(actionCard(A.actions));
+    dash.appendChild(sectionHead('The “Future” plan', 'Prognostic engine — Part 2'));
+    dash.appendChild(ffnCard(A.pr.ffn));
+    dash.appendChild(glideCard(A.pr.glide));
+    dash.appendChild(valuationCard(A.pr.valuation));
+    dash.appendChild(stressCard(A.pr.stress));
+    dash.appendChild(sectionHead('The “Current” diagnostic X-ray', 'Diagnostic engine — Part 1'));
+    dash.appendChild(summaryCard(A.dx));
+    dash.appendChild(spendableCard(A.dx));
+    dash.appendChild(fundsCard(A.dx));
+    if (A.dx.overlaps.length) dash.appendChild(overlapCard(A.dx));
+    dash.appendChild(leakageCard(A.dx));
+    wireActionButtons();
   }
 
-  /* ---------- 1. Portfolio summary ---------- */
+  function sectionHead(title, kicker) {
+    return el(`<div class="sechead"><span class="seckick">${esc(kicker)}</span><h2>${esc(title)}</h2></div>`);
+  }
+
+  /* ===================================================================
+   * PART 3 — Health Score + Action Board (the command center)
+   * =================================================================== */
+  function scoreColor(v) { return v >= 8 ? 'var(--up)' : v >= 6 ? 'var(--gold)' : v >= 4 ? '#f0a85a' : 'var(--down)'; }
+
+  function healthCard(score, dx) {
+    const pillars = [
+      ['Performance', score.pillars.performance, 'Underperforming “deadwood” funds'],
+      ['Cost', score.pillars.cost, 'High TER / Regular-plan drag'],
+      ['Diversification', score.pillars.diversification, 'Scheme overlap & concentration'],
+      ['Alignment', score.pillars.alignment, 'On track for the future FFN?'],
+    ];
+    const bars = pillars.map(([name, v, hint]) => `
+      <div class="pillar">
+        <div class="ptop"><span>${name}</span><b style="color:${scoreColor(v)}">${v.toFixed(1)}</b></div>
+        <div class="pbar"><span style="width:${v * 10}%;background:${scoreColor(v)}"></span></div>
+        <div class="phint">${esc(hint)}</div>
+      </div>`).join('');
+    const c = scoreColor(score.overall);
+    return el(`<section class="card hero score-card">
+      <div class="scorewrap">
+        <div class="scoredial" style="--c:${c};--p:${score.overall * 10}">
+          <div class="scorenum"><b style="color:${c}">${score.overall.toFixed(1)}</b><span>/ 10</span></div>
+        </div>
+        <div class="scoremeta">
+          <p class="kick2">Unified Portfolio Health Score</p>
+          <h2 style="color:${c}">${esc(score.grade)}</h2>
+          <p class="lead">One number across four pillars — recomputed live from everything below. ${INR(dx.summary.current)} across ${dx.funds.length} funds, as of ${esc(dx.asOf)}.</p>
+        </div>
+      </div>
+      <div class="pillars">${bars}</div>
+    </section>`);
+  }
+
+  function actionCard(actions) {
+    const sevLabel = { critical: 'Act now', warn: 'Review', opportunity: 'Opportunity', good: 'All clear' };
+    const rows = actions.map((a, i) => `
+      <div class="action ${a.severity}">
+        <div class="acol">
+          <span class="sev">${sevLabel[a.severity] || a.severity}</span>
+          <div class="aissue">${esc(a.issue)}</div>
+          <div class="aadvice">${esc(a.advice)}</div>
+        </div>
+        <button class="btn act-btn" data-i="${i}" data-label="${esc(a.button)}">${esc(a.button)}</button>
+      </div>`).join('');
+    return el(`<section class="card actionboard">
+      <h2>Live Action Board <span class="asof">every issue → one decision</span></h2>
+      <p class="lead">No jargon — just what to do next, ranked by urgency. Each button is the autonomous decision you’d execute (illustrative here; real execution would route to your AMC / broker).</p>
+      <div class="actions">${rows}</div>
+    </section>`);
+  }
+
+  function wireActionButtons() {
+    dash.querySelectorAll('.act-btn').forEach((b) => {
+      b.addEventListener('click', () => toast(`“${b.dataset.label}” — illustrative. In a connected build this routes the exact transaction to your AMC / broker (RTA), pre-filled.`));
+    });
+  }
+
+  /* ===================================================================
+   * PART 2 — Future cards
+   * =================================================================== */
+  function ffnCard(f) {
+    const ratio = Math.max(0, Math.min(1.2, f.alignmentRatio));
+    const onTrack = f.onTrack;
+    return el(`<section class="card">
+      <h2>Dynamic Financial Freedom Number <span class="asof">live, inflation-aware</span></h2>
+      <p class="lead">Today’s ${rupees0(f.currentMonthlyExpense)}/mo becomes <b>${rupees0(f.futureMonthlyExpense)}/mo</b> in ${f.yearsToGoal} years at 6% inflation. To fund that for life you need:</p>
+      <div class="tiles">
+        <div class="tile"><span class="tl">FFN corpus needed</span><b>${INR(f.requiredCorpus)}</b></div>
+        <div class="tile"><span class="tl">Projected at goal</span><b class="${onTrack ? 'up' : 'down'}">${INR(f.projectedCorpus)}</b></div>
+        <div class="tile"><span class="tl">${onTrack ? 'Surplus' : 'Shortfall'}</span><b class="${onTrack ? 'up' : 'down'}">${INR(Math.abs(f.gap))}</b></div>
+      </div>
+      <div class="ffnbar"><span style="width:${ratio * 100}%;background:${onTrack ? 'var(--up)' : 'var(--gold)'}"></span><i style="left:83.333%">FFN</i></div>
+      <p class="micro">${onTrack
+        ? `On track — today’s ${rupees0(f.monthlySip)}/mo SIP reaches the goal with room to spare.`
+        : `<b>Off track.</b> Increase your SIP by <b>${rupees0(f.sipTopUp)}/month</b> to close the gap. Corpus from current holdings: ${INR(f.fromCurrent)} · from future SIP: ${INR(f.fromSip)}.`}</p>
+    </section>`);
+  }
+
+  function glideCard(g) {
+    const onTrack = g.direction === 'on-track';
+    const dirText = onTrack ? 'On the glide-path' : (g.direction === 'equity->debt' ? 'Too much equity for this horizon' : 'Room for more growth');
+    return el(`<section class="card">
+      <h2>Autonomous Glide-Path <span class="asof">${g.yearsToGoal} years to goal</span></h2>
+      <p class="lead">As the goal nears, equity is dialled down so a last-minute crash can’t undo the plan.</p>
+      <div class="glidegrid">
+        <div class="gcol"><span class="tl">Your mix now</span>${mixBar(g.currentEquity)}</div>
+        <div class="gcol"><span class="tl">Glide-path target</span>${mixBar(g.targetEquity)}</div>
+      </div>
+      <p class="micro ${onTrack ? '' : 'warnline'}">${onTrack
+        ? 'Your equity/debt split matches the target — no move needed.'
+        : `${dirText}. Move <b>${INR(g.rupeesToShift)}</b> ${g.direction === 'equity->debt' ? 'from equity into safe debt (a phased STP)' : 'from debt into equity'} to get back on path.`}</p>
+    </section>`);
+  }
+
+  function mixBar(eq) {
+    return `<div class="mixbar"><span class="eq" style="width:${eq * 100}%">${(eq * 100).toFixed(0)}% eq</span><span class="dt" style="width:${(1 - eq) * 100}%">${((1 - eq) * 100).toFixed(0)}% debt</span></div>`;
+  }
+
+  function valuationCard(v) {
+    const tone = v.zone === 'overvalued' ? 'down' : v.zone === 'undervalued' ? 'up' : '';
+    const zoneColor = v.zone === 'overvalued' ? 'var(--down)' : v.zone === 'undervalued' ? 'var(--up)' : 'var(--gold)';
+    return el(`<section class="card">
+      <h2>Valuation-Based Rebalancing <span class="asof">Nifty PE ${v.pe.toFixed(1)} (illustrative)</span></h2>
+      <div class="valzone" style="border-color:${zoneColor}">
+        <div class="valhead" style="color:${zoneColor}">${esc(v.headline)}</div>
+        <p class="valrat">${esc(v.rationale)}</p>
+        ${v.moveRupees > 0 ? `<div class="valmove ${tone}">Suggested move: <b>${INR(v.moveRupees)}</b> ${v.action === 'equity->debt' ? 'equity → debt' : 'debt → equity'}</div>` : '<div class="valmove">No valuation-driven move needed.</div>'}
+      </div>
+      <p class="micro">Drag the Nifty PE control above to see profit-booking (PE &gt; 25) and buy-the-dip (PE &lt; 18) triggers. A live build would feed real PE / PB / MarketCap-to-GDP.</p>
+    </section>`);
+  }
+
+  function stressCard(stress) {
+    const rows = stress.map((s) => {
+      const sc = s.scenario;
+      const flat = s.flatYears > 0;
+      return `<div class="stressrow">
+        <div class="sname"><b>${esc(sc.name)}</b><span>${esc(sc.blurb)}</span></div>
+        <div class="sstat">
+          <span class="sdd ${flat ? '' : 'down'}">${flat ? '0% (flat ' + s.flatYears + 'y)' : pct(s.drawdownPct, 0)}</span>
+          <span class="sval">${flat ? 'patience test' : 'trough ' + INR(s.troughValue)}</span>
+          <span class="srec">${flat ? '—' : (sc.recoveryMonths + ' mo to recover')}</span>
+        </div>
+      </div>`;
+    }).join('');
+    return el(`<section class="card">
+      <h2>“What-If” Stress Tests <span class="asof">your portfolio in real history</span></h2>
+      <p class="lead">What three real crises would do to <b>your</b> current mix today — equity takes the hit, debt cushions, so the number is yours, not a generic figure.</p>
+      <div class="stresslist">${rows}</div>
+      <p class="micro">Shock depths are illustrative, anchored to real index drawdowns and applied allocation-aware. Recovery times are historical, not predictions.</p>
+    </section>`);
+  }
+
+  /* ===================================================================
+   * PART 1 — Current diagnostic cards
+   * =================================================================== */
   function summaryCard(dx) {
     const s = dx.summary;
     const alloc = Object.entries(s.allocation).sort((a, b) => b[1] - a[1]);
@@ -66,7 +219,6 @@
     </section>`);
   }
 
-  /* ---------- 2. Spendable Wealth Counter ---------- */
   function spendableCard(dx) {
     const sp = dx.spendable;
     const haircut = sp.gross - sp.net;
@@ -90,7 +242,6 @@
     </section>`);
   }
 
-  /* ---------- 3. Per-fund diagnostic table ---------- */
   function fundsCard(dx) {
     const rows = dx.funds.map((f) => {
       const r = f.risk;
@@ -124,11 +275,10 @@
         <tbody>${rows}</tbody>
       </table>
       </div>
-      <p class="micro">β = market sensitivity · α = skill above the benchmark (annualised) · Sharpe = return per unit of risk · Down-capture = how much of the market’s falls the fund absorbed (e.g. 70% ⇒ it fell ~7% when the market fell ~10%) · 3y roll = average annualised return across every rolling 3-year window, with the worst…best in small text. Risk stats need a NAV history; manual entries without one show “—”.</p>
+      <p class="micro">β = market sensitivity · α = skill above the benchmark (annualised) · Sharpe = return per unit of risk · Down-capture = how much of the market’s falls the fund absorbed (e.g. 70% ⇒ it fell ~7% when the market fell ~10%) · 3y roll = average annualised return across every rolling 3-year window (worst…best in small text). Risk stats need a NAV history; manual entries show “—”.</p>
     </section>`);
   }
 
-  /* ---------- 4. Overlap (Zoo of Schemes) ---------- */
   function overlapCard(dx) {
     const rows = dx.overlaps.map((o) => {
       const shared = o.shared.slice(0, 6).map((s) => esc(s.stock)).join(', ');
@@ -146,7 +296,6 @@
     </section>`);
   }
 
-  /* ---------- 5. Cost leakage (TER vs BER) ---------- */
   function leakageCard(dx) {
     const lk = dx.leakage;
     if (!(lk.regularValueToday > 0)) {
@@ -164,6 +313,31 @@
     </section>`);
   }
 
+  /* ===================================================================
+   * Controls (future inputs) — persistent, not re-rendered, so typing
+   * never loses focus; changing any value re-renders the dash.
+   * =================================================================== */
+  function buildControls() {
+    controls.innerHTML = `
+      <div class="ctrlrow">
+        <label>Years to goal<input id="c-years" type="number" min="1" max="40" step="1" value="${inputs.yearsToGoal}"></label>
+        <label>Monthly SIP (₹)<input id="c-sip" type="number" min="0" step="1000" value="${inputs.monthlySip}"></label>
+        <label>Monthly expense today (₹)<input id="c-exp" type="number" min="0" step="1000" value="${inputs.currentMonthlyExpense}"></label>
+        <label>Nifty PE (live: <b id="c-pe-val">${inputs.niftyPE}</b>)<input id="c-pe" type="range" min="12" max="32" step="0.5" value="${inputs.niftyPE}"></label>
+      </div>`;
+    const bind = (id, key, cast) => {
+      const node = document.getElementById(id);
+      node.addEventListener('input', () => {
+        const v = cast(node.value);
+        if (!isNaN(v)) { inputs[key] = v; if (id === 'c-pe') document.getElementById('c-pe-val').textContent = v; render(); }
+      });
+    };
+    bind('c-years', 'yearsToGoal', parseFloat);
+    bind('c-sip', 'monthlySip', parseFloat);
+    bind('c-exp', 'currentMonthlyExpense', parseFloat);
+    bind('c-pe', 'niftyPE', parseFloat);
+  }
+
   /* ---------- add-holding dialog ---------- */
   const dialog = document.getElementById('add-dialog');
   const addForm = document.getElementById('add-form');
@@ -172,18 +346,17 @@
     dialog.showModal();
   });
   addForm.addEventListener('submit', (e) => {
-    // Only the OK button commits; Cancel just closes.
     if (e.submitter && e.submitter.value === 'cancel') { addForm.reset(); return; }
     const fd = new FormData(addForm);
     const g = (k) => fd.get(k);
-    const num_ = (k) => { const v = parseFloat(g(k)); return isNaN(v) ? null : v; };
-    const units = num_('units'), nav = num_('nav'), avgCost = num_('avgCost');
+    const n = (k) => { const v = parseFloat(g(k)); return isNaN(v) ? null : v; };
+    const units = n('units'), nav = n('nav'), avgCost = n('avgCost');
     if (units == null || nav == null || avgCost == null) return;
-    const invested = num_('invested');
-    const ter = num_('ter');
+    const invested = n('invested'), ter = n('ter');
     portfolio.holdings.push({
       scheme: g('scheme') || 'Unnamed fund', amc: g('amc') || '',
-      category: g('category'), assetClass: /Debt/i.test(g('category')) ? 'Debt' : (/Hybrid/i.test(g('category')) ? 'Hybrid' : 'Equity'),
+      category: g('category'),
+      assetClass: /Debt/i.test(g('category')) ? 'Debt' : (/Hybrid/i.test(g('category')) ? 'Hybrid' : 'Equity'),
       plan: g('plan'), ter: ter != null ? ter / 100 : null,
       units, nav, avgCost,
       invested: invested != null ? invested : units * avgCost,
@@ -199,11 +372,21 @@
     return { name: 'My Portfolio', asOf: today, benchmark: O.samplePortfolio(today).benchmark, holdings: [] };
   }
 
-  /* ---------- toolbar ---------- */
+  /* ---------- toolbar + toast ---------- */
   document.getElementById('btn-sample').addEventListener('click', () => { portfolio = O.samplePortfolio(today); render(); });
   document.getElementById('btn-clear').addEventListener('click', () => { portfolio = null; render(); });
 
-  // Start on the sample so first-time visitors see the full diagnostic immediately.
+  let toastTimer = null;
+  function toast(msg) {
+    let t = document.getElementById('toast');
+    if (!t) { t = el('<div id="toast" class="toast"></div>'); document.body.appendChild(t); }
+    t.textContent = msg; t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('show'), 4200);
+  }
+
+  /* ---------- init ---------- */
+  buildControls();
   portfolio = O.samplePortfolio(today);
   render();
 })();
