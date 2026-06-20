@@ -15,7 +15,7 @@
 (function () {
   const O = window.ORACLE, F = window.FUTURE, W = window.WORKFLOW;
   const SIM = window.SIM, DSMC = window.DSMC, CH = window.ORACLE_CHARTS;
-  const IO = window.ORACLE_IO;
+  const IO = window.ORACLE_IO, DATA = window.ORACLE_DATA;
   if (!O || !F || !W) { console.error('Oracle: engines missing'); return; }
   const TODAY = '2026-06-20';
   const app = document.getElementById('app');
@@ -35,10 +35,30 @@
 
   /* ---------------- state ---------------- */
   let portfolio = null;
+  let dataSource = 'demo'; // 'demo' | 'real' | 'imported'
   const inputs = {
     yearsToGoal: 18, monthlySip: 30000, currentMonthlyExpense: 50000, sipStepUp: 0.10,
     niftyPE: 27, fedRate: 4.5, crude: 82, cpi: 6.1, goalAmount: 5000000,
   };
+
+  /* ---------------- persistence (localStorage; never leaves the device) ---- */
+  const PKEY = 'oracle.nexus.pf', IKEY = 'oracle.nexus.inputs', SKEY = 'oracle.nexus.src';
+  function save() {
+    try {
+      if (portfolio && portfolio.holdings.length) localStorage.setItem(PKEY, IO.portfolioToJSON(portfolio));
+      else localStorage.removeItem(PKEY);
+      localStorage.setItem(IKEY, JSON.stringify(inputs));
+      localStorage.setItem(SKEY, dataSource);
+    } catch (e) { /* storage full / disabled — non-fatal */ }
+  }
+  function loadSaved() {
+    try {
+      const ij = localStorage.getItem(IKEY); if (ij) Object.assign(inputs, JSON.parse(ij));
+      const pj = localStorage.getItem(PKEY);
+      if (pj) { portfolio = ensureBench(IO.parsePortfolioJSON(pj)); dataSource = localStorage.getItem(SKEY) || 'imported'; return true; }
+    } catch (e) { /* ignore corrupt state */ }
+    return false;
+  }
 
   /* ---------------- router (screen stack) ---------------- */
   let stack = [{ id: 'boot' }];
@@ -62,6 +82,7 @@
       b.textContent = (open ? 'Hide the maths ▴' : b.dataset.label || 'Show me the maths ▾');
     });
     node.scrollTop = 0;
+    if (portfolio) save();
   }
 
   function analyze() { return W.analyze(portfolio, inputs); }
@@ -99,13 +120,15 @@
       <h1 class="boot-title">The <span>Oracle</span></h1>
       <p class="boot-sub">Ask your money anything. In one calm room you'll see — in plain language — <b>where you stand today</b>, <b>whether you'll be okay</b>, and <b>exactly what to do</b>. One screen at a time. Nothing confusing.</p>
       <div class="boot-actions">
-        <button class="cta primary" id="b-sample">▶ &nbsp;Start with a demo portfolio</button>
-        <button class="cta ghost" id="b-up">⤴ &nbsp;Upload my CAS / CSV</button>
+        <button class="cta primary" id="b-build">🔎 &nbsp;Build my real portfolio</button>
+        <button class="cta ghost" id="b-up">⤴ &nbsp;Upload CAS / CSV</button>
+        <button class="cta ghost" id="b-sample">▶ &nbsp;Try a demo</button>
       </div>
-      <p class="boot-foot">Runs in your browser · nothing leaves your device · every number computed live</p>
+      <p class="boot-foot">Real fund data is pulled live from public NAV records · your portfolio is saved only on this device</p>
       <input type="file" id="file-in" accept=".csv,.json,.pdf" hidden>
     </div></section>`);
-    n.querySelector('#b-sample').onclick = () => { portfolio = O.samplePortfolio(TODAY); home(); };
+    n.querySelector('#b-build').onclick = () => go('build');
+    n.querySelector('#b-sample').onclick = () => { portfolio = O.samplePortfolio(TODAY); dataSource = 'demo'; home(); };
     n.querySelector('#b-up').onclick = () => n.querySelector('#file-in').click();
     n.querySelector('#file-in').onchange = (e) => importFile(e.target.files[0]);
     return n;
@@ -115,13 +138,13 @@
     if (!file) return; const reader = new FileReader();
     reader.onload = () => {
       try {
-        if (/\.json$/i.test(file.name)) portfolio = ensureBench(IO.parsePortfolioJSON(reader.result));
+        if (/\.json$/i.test(file.name)) { portfolio = ensureBench(IO.parsePortfolioJSON(reader.result)); dataSource = 'imported'; }
         else if (/\.csv$/i.test(file.name)) {
           const { holdings, errors } = IO.parseHoldingsCSV(reader.result);
           if (!holdings.length) return toast('Could not read that CSV.');
-          portfolio = ensureBench({ name: 'Imported', asOf: TODAY, holdings });
+          portfolio = ensureBench({ name: 'Imported', asOf: TODAY, holdings }); dataSource = 'imported';
           if (errors.length) toast(errors.length + ' row(s) skipped.');
-        } else { portfolio = O.samplePortfolio(TODAY); toast('CAS PDF parsing is a live-build feature — loaded a demo so you can explore.'); }
+        } else { portfolio = O.samplePortfolio(TODAY); dataSource = 'demo'; toast('CAS PDF parsing needs a backend — loaded a demo so you can explore. Use “Build my real portfolio” to add live funds.'); }
         home();
       } catch (err) { toast('Import failed: ' + err.message); }
     };
@@ -136,8 +159,11 @@
     const verdict = urgent === 0
       ? `Your money looks healthy. <b>Nothing urgent</b> right now.`
       : `Your money is in <b>${A.score.grade.toLowerCase()}</b> shape — but <b>${urgent} thing${urgent > 1 ? 's' : ''}</b> need${urgent > 1 ? '' : 's'} your attention.`;
+    const srcLabel = dataSource === 'real' ? '● Live fund data' : dataSource === 'imported' ? '● Your imported data' : '○ Demo data';
+    const srcCls = dataSource === 'real' ? 'up' : dataSource === 'imported' ? 'up' : 'gold';
     const n = el(`<section class="screen center"><div class="wrap">
       <div class="orb">${ring(A.score.overall)}<b>${A.score.overall.toFixed(1)}</b><small>HEALTH</small></div>
+      <div class="srcbadge ${srcCls}">${srcLabel}</div>
       <h2 class="home-verdict">${verdict}</h2>
       <p class="home-sub">Pick a door. Each one answers a plain question, one screen at a time.</p>
       <div class="doors">
@@ -145,9 +171,10 @@
         <button class="door next" data-go="room-next"><span class="dico">🔭</span><span><span class="dtitle">Will I be okay?</span><span class="dsub">Your future — projections, clearly marked</span></span><span class="darrow">›</span></button>
         <button class="door do" data-go="room-do"><span class="dico">✅</span><span><span class="dtitle">What should I do?</span><span class="dsub">Your to-do list — one tap each</span></span>${urgent ? `<span class="dbadge">${urgent}</span>` : '<span class="darrow">›</span>'}</button>
       </div>
-      <div class="home-foot"><button class="linkbtn" id="restart">↺ Use a different portfolio</button></div>
+      <div class="home-foot"><button class="linkbtn" id="plan">⚙ My plan &amp; holdings</button><button class="linkbtn" id="restart">↺ Use a different portfolio</button></div>
     </div></section>`);
-    n.querySelector('#restart').onclick = () => { portfolio = null; stack = [{ id: 'boot' }]; render('back'); };
+    n.querySelector('#plan').onclick = () => go('plan');
+    n.querySelector('#restart').onclick = () => { try { localStorage.removeItem(PKEY); } catch (e) {} portfolio = null; dataSource = 'demo'; stack = [{ id: 'boot' }]; render('back'); };
     return n;
   };
 
@@ -255,8 +282,8 @@
     const kyc = `<div class="action warn" style="margin:8px 0 18px"><div class="aico">🟡</div><div><div class="ah">SIP safety: Re-KYC due soon ${DEMO}</div><div class="ad">A pending KYC can freeze next month's SIP. Fixing it takes 2 minutes.</div><button class="cta sm" data-go="room-do">Fix it in the DO room →</button></div></div>`;
     const rows = funds.map((f) => {
       const chip = f.deadwood ? '<span class="chip bad">lagging</span>' : '<span class="chip good">healthy</span>';
-      return `<div class="frow"><div><div class="fn">${esc(f.scheme)} ${chip}</div><div class="fm">${esc(f.amc || f.category)} · ${esc(f.plan)} · SIP active</div></div>
-        <div class="fr"><b class="${f.xirr >= 0 ? 'up' : 'down'}">${pct(f.xirr)}</b>XIRR</div></div>`;
+      return `<button class="frow frow-tap" data-fund="${esc(f.scheme)}"><div style="text-align:left"><div class="fn">${esc(f.scheme)} ${chip}</div><div class="fm">${esc(f.amc || f.category)} · ${esc(f.plan)} · tap for detail ›</div></div>
+        <div class="fr"><b class="${f.xirr >= 0 ? 'up' : 'down'}">${pct(f.xirr)}</b>XIRR</div></button>`;
     }).join('');
     const mrows = funds.map((f) => f.risk ? `<div class="row"><span>${esc(f.scheme)}</span><b>α ${spct(f.risk.alpha, 1)} · β ${num(f.risk.beta, 2)} · Sharpe ${num(f.risk.sharpe, 2)}</b></div>` : `<div class="row"><span>${esc(f.scheme)}</span><b>no history</b></div>`).join('');
     const n = el(`<section class="screen answer"><div class="wrap">
@@ -267,9 +294,10 @@
       <div class="subnum">your whole-portfolio XIRR (counts every SIP date)</div>
       ${kyc}
       ${rows}
-      <p class="means">A <b>🟢 healthy</b> fund is beating its benchmark for the risk it takes. A <b>🔴 lagging</b> one keeps falling behind — consider switching it. Your SIPs are all running.</p>
+      <p class="means">Tap any fund for the full story. A <b>🟢 healthy</b> fund is beating its benchmark for the risk it takes; a <b>🔴 lagging</b> one keeps falling behind — consider switching it. Your SIPs are all running.</p>
       ${maths(mrows + `<div class="row"><span>α=Alpha (skill) · β=Beta (swing) · Sharpe=reward per risk</span><b></b></div>`, 'Show the pro metrics ▾')}
     </div></section>`);
+    n.querySelectorAll('.frow-tap').forEach((b) => b.onclick = () => go('fund-detail', { scheme: b.dataset.fund }));
     return n;
   };
 
@@ -492,10 +520,164 @@
     return n;
   };
 
+  /* =====================================================================
+   * BUILD — assemble a real portfolio from live fund data (mfapi.in)
+   * ===================================================================== */
+  let bs = { results: null, picks: [], selected: null, busy: false, err: '' };
+  function dateYearsAgo(y) { const d = new Date(TODAY); d.setFullYear(d.getFullYear() - Math.round(y)); return d.toISOString().slice(0, 10); }
+
+  SCREENS.build = () => {
+    const n = el(`<section class="screen"><div class="wrap">
+      ${topbar('now', 'BUILD · REAL FUNDS')}
+      <h2 class="roomtitle">Build your real portfolio</h2>
+      <p class="roomguide">Search a fund, say how much you put in and roughly when — we pull its <b>real NAV history</b> so every number is genuinely yours.</p>
+      <div class="search"><input class="search-in" id="q" placeholder="Search a fund — e.g. Parag Parikh Flexi Cap" autocomplete="off"><button class="cta sm" id="qbtn">Search</button></div>
+      <div id="bmsg" class="micro"></div>
+      <div id="picksec"></div>
+      <div id="ressec"></div>
+      <div id="bfoot"></div>
+    </div></section>`);
+    const $ = (s) => n.querySelector(s);
+    const paint = () => {
+      // picks
+      $('#picksec').innerHTML = bs.picks.length ? `<h3 style="font-size:15px;margin:16px 0 6px">Your funds (${bs.picks.length})</h3>` +
+        bs.picks.map((h, i) => `<div class="frow"><div><div class="fn">${esc(h.scheme)}</div><div class="fm">${esc(h.amc)} · invested ${INR(h.invested)}</div></div><div class="fr"><button class="linkbtn" data-rm="${i}">remove</button></div></div>`).join('') : '';
+      // selected add-form OR results
+      if (bs.selected) {
+        const p = bs.selected;
+        $('#ressec').innerHTML = `<div class="addform"><div class="fn">${esc(p.scheme)}</div><div class="fm">${esc(p.amc)} · ${esc(p.category)} · NAV ${num(p.latestNav, 2)}</div>
+          <div class="ctrl"><label>How much have you invested?</label><input class="search-in" id="amt" type="number" min="1000" step="1000" placeholder="₹ amount" value="100000"></div>
+          <div class="ctrl"><label>Roughly how long ago did you start? <b id="ya-lab">3 years</b></label><input type="range" id="ya" min="0" max="5" step="1" value="3"></div>
+          <div class="search"><button class="cta sm primary" id="addf">Add this fund</button><button class="cta sm ghost" id="cancelf">Cancel</button></div></div>`;
+        $('#ya').oninput = (e) => $('#ya-lab').textContent = (+e.target.value) + (e.target.value === '1' ? ' year' : ' years');
+        $('#addf').onclick = () => {
+          const amt = parseFloat($('#amt').value); if (!(amt > 0)) return toast('Enter how much you invested.');
+          const ya = +$('#ya').value; const hist = p.navHistory;
+          const mo = Math.min(hist.length - 1, Math.round(ya * 12)); const idx = hist.length - 1 - mo;
+          const avgCost = hist[idx] || p.latestNav; const units = amt / avgCost; const pd = dateYearsAgo(ya);
+          bs.picks.push({ scheme: p.scheme, amc: p.amc, category: p.category, assetClass: p.assetClass, plan: p.plan, ter: null,
+            units, nav: p.latestNav, avgCost, invested: amt, purchaseDate: pd, transactions: [{ date: pd, amount: amt }], navHistory: hist, underlying: null, schemeCode: p.schemeCode });
+          bs.selected = null; bs.results = null; toast('Added ' + p.scheme.slice(0, 40));
+          paint();
+        };
+        $('#cancelf').onclick = () => { bs.selected = null; paint(); };
+      } else if (bs.results) {
+        $('#ressec').innerHTML = bs.results.length ? `<div class="reslist">` + bs.results.slice(0, 12).map((r) =>
+          `<button class="resitem" data-code="${r.schemeCode}">${esc(r.schemeName)}</button>`).join('') + '</div>' : '<p class="micro">No funds matched. Try a shorter name.</p>';
+        $('#ressec').querySelectorAll('.resitem').forEach((b) => b.onclick = async () => {
+          b.textContent = 'Loading…'; try { bs.selected = await DATA.fetchFund(b.dataset.code, 60); paint(); }
+          catch (e) { toast('Could not load that fund. ' + e.message); b.textContent = b.textContent.replace('Loading…', ''); }
+        });
+      } else $('#ressec').innerHTML = '';
+      // foot
+      $('#bfoot').innerHTML = bs.picks.length ? `<button class="cta primary block" id="analyze" style="margin-top:18px">Analyze my ${bs.picks.length} fund${bs.picks.length > 1 ? 's' : ''} →</button>` : '';
+      n.querySelectorAll('[data-rm]').forEach((b) => b.onclick = () => { bs.picks.splice(+b.dataset.rm, 1); paint(); });
+      const az = $('#analyze'); if (az) az.onclick = analyzeReal;
+      $('#bmsg').textContent = bs.err || '';
+    };
+    const doSearch = async () => {
+      const q = $('#q').value.trim(); if (q.length < 3) return toast('Type at least 3 letters.');
+      bs.err = ''; $('#bmsg').textContent = 'Searching…'; bs.selected = null;
+      try { bs.results = await DATA.searchFunds(q); bs.err = ''; }
+      catch (e) { bs.err = 'Live search needs internet. You can still use a demo or upload a CSV.'; bs.results = []; }
+      paint();
+    };
+    async function analyzeReal() {
+      const az = $('#analyze'); if (az) { az.textContent = 'Crunching live data…'; az.disabled = true; }
+      let benchmark;
+      try {
+        const r = await DATA.searchFunds('nifty 50 index fund');
+        const pick = r.find((x) => /direct/i.test(x.schemeName) && /growth/i.test(x.schemeName)) || r[0];
+        const bf = await DATA.fetchFund(pick.schemeCode, 60); benchmark = { name: bf.scheme, navHistory: bf.navHistory };
+      } catch (e) { benchmark = O.samplePortfolio(TODAY).benchmark; }
+      const holds = (portfolio && portfolio.holdings ? portfolio.holdings.slice() : []).concat(bs.picks);
+      portfolio = { name: 'My Portfolio', asOf: TODAY, benchmark, holdings: holds };
+      dataSource = 'real'; bs = { results: null, picks: [], selected: null, busy: false, err: '' };
+      home();
+    }
+    $('#qbtn').onclick = doSearch;
+    $('#q').onkeydown = (e) => { if (e.key === 'Enter') doSearch(); };
+    paint();
+    return n;
+  };
+
+  /* =====================================================================
+   * MY PLAN — edit goal/SIP/expense and manage holdings (remembers you)
+   * ===================================================================== */
+  SCREENS.plan = () => {
+    const f = (id, label, val, step, min) => `<div class="ctrl"><label>${label}</label><input class="search-in" id="${id}" type="number" value="${val}" step="${step}" min="${min || 0}"></div>`;
+    const holds = portfolio ? portfolio.holdings : [];
+    const rows = holds.map((h, i) => `<div class="frow"><div><div class="fn">${esc(h.scheme)}</div><div class="fm">${esc(h.amc || h.category)} · ${INR(h.units * h.nav)}</div></div><div class="fr"><button class="linkbtn" data-rm="${i}">remove</button></div></div>`).join('');
+    const n = el(`<section class="screen"><div class="wrap">
+      ${topbar('now', 'MY PLAN')}
+      <h2 class="roomtitle">My plan &amp; holdings</h2>
+      <p class="roomguide">Set your real goal and SIP — everything in NEXT recalculates from these. Saved on your device.</p>
+      ${f('p-y', 'Years until my goal', inputs.yearsToGoal, 1, 1)}
+      ${f('p-sip', 'Monthly SIP (₹)', inputs.monthlySip, 1000)}
+      ${f('p-exp', 'Monthly expense today (₹)', inputs.currentMonthlyExpense, 1000)}
+      ${f('p-step', 'Yearly SIP step-up (%)', Math.round(inputs.sipStepUp * 100), 1)}
+      <button class="cta primary block" id="psave" style="margin-top:8px">Save my plan</button>
+      <h3 style="font-size:16px;margin:24px 0 6px">Holdings ${holds.length ? '(' + holds.length + ')' : ''}</h3>
+      ${rows || '<p class="micro">No holdings yet.</p>'}
+      <button class="cta sm" id="addmore" style="margin-top:12px">＋ Add funds</button>
+    </div></section>`);
+    n.querySelector('#psave').onclick = () => {
+      inputs.yearsToGoal = +n.querySelector('#p-y').value || inputs.yearsToGoal;
+      inputs.monthlySip = +n.querySelector('#p-sip').value || 0;
+      inputs.currentMonthlyExpense = +n.querySelector('#p-exp').value || 0;
+      inputs.sipStepUp = (+n.querySelector('#p-step').value || 0) / 100;
+      save(); toast('Plan saved.'); back();
+    };
+    n.querySelectorAll('[data-rm]').forEach((b) => b.onclick = () => {
+      portfolio.holdings.splice(+b.dataset.rm, 1); save();
+      if (!portfolio.holdings.length) { toast('All holdings removed.'); }
+      render('fwd'); stack[stack.length - 1] = { id: 'plan' };
+    });
+    n.querySelector('#addmore').onclick = () => go('build');
+    return n;
+  };
+
+  /* =====================================================================
+   * FUND DETAIL — drill into one fund (deeper, still simple)
+   * ===================================================================== */
+  SCREENS['fund-detail'] = (params) => {
+    const A = analyze();
+    const f = A.dx.funds.find((x) => x.scheme === params.scheme) || A.dx.funds[0];
+    const spark = (CH && f.navHistory && f.navHistory.length > 2) ? `<div class="chartwrap">${CH.line(f.navHistory, { height: 120, color: '#6ee7ff' })}</div>` : '';
+    const r = f.risk;
+    const gauges = r ? `<div class="tiles">
+      <div class="tile"><span class="tl">Alpha (skill)</span><b class="${r.alpha >= 0 ? 'up' : 'down'}">${spct(r.alpha, 1)}</b></div>
+      <div class="tile"><span class="tl">Beta (swing)</span><b>${num(r.beta, 2)}</b></div>
+      <div class="tile"><span class="tl">Sharpe</span><b>${num(r.sharpe, 2)}</b></div>
+      <div class="tile"><span class="tl">Worst fall</span><b class="down">${pct(r.maxDrawdown, 0)}</b></div></div>` : '<p class="micro">No NAV history for deeper risk stats on this fund.</p>';
+    const r3 = f.rolling && f.rolling['3y'] && isFinite(f.rolling['3y'].avg) ? f.rolling['3y'] : null;
+    const verdict = f.deadwood
+      ? `This fund keeps <b>lagging its benchmark</b> for the risk it carries. A better-rated peer (or its Direct plan) would likely serve you better — see the <b>DO</b> room.`
+      : `This fund is <b>pulling its weight</b> — beating its benchmark for the risk it takes. Nothing to change here.`;
+    return el(`<section class="screen answer"><div class="wrap">
+      ${topbar('now', 'NOW · ONE FUND')}
+      ${guide(`Everything about this one holding, plain and deep.`)}
+      <h2 class="atitle">${esc(f.scheme)}</h2>
+      <div class="subnum">${esc(f.amc || f.category)} · ${esc(f.plan)} plan · ${esc(f.assetClass)}</div>
+      ${spark}
+      <div class="tiles">
+        <div class="tile"><span class="tl">Value now</span><b>${INR(f.current)}</b></div>
+        <div class="tile"><span class="tl">Invested</span><b>${INR(f.invested)}</b></div>
+        <div class="tile"><span class="tl">Total return</span><b class="${f.absoluteReturn >= 0 ? 'up' : 'down'}">${spct(f.absoluteReturn)}</b></div>
+        <div class="tile"><span class="tl">XIRR</span><b class="${f.xirr >= 0 ? 'up' : 'down'}">${pct(f.xirr)}</b></div>
+      </div>
+      <p class="means">${verdict}</p>
+      <h3 style="font-size:15px;margin:18px 0 6px">Risk &amp; consistency</h3>
+      ${gauges}
+      ${r3 ? `<p class="micro">Over rolling 3-year windows this fund returned <b>${pct(r3.avg)}</b> on average (worst ${pct(r3.min)}, best ${pct(r3.max)}), beating its hurdle <b>${pct(r3.consistency, 0)}</b> of the time.</p>` : ''}
+    </div></section>`);
+  };
+
   /* ---------------- toast ---------------- */
   let tT;
   function toast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.hidden = false; requestAnimationFrame(() => t.classList.add('show')); clearTimeout(tT); tT = setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.hidden = true, 300); }, 4200); }
 
   /* ---------------- boot ---------------- */
+  if (loadSaved() && portfolio) stack = [{ id: 'home' }];
   render('fwd');
 })();
