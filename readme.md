@@ -58,6 +58,24 @@ figure is **computed live** from the holdings.
   and one decision button (switch to Direct, rebalance, book profit, harvest
   LTCG tax-free, increase SIP …), ranked by urgency.
 
+**Professional layer** (`oracle-sim.js`, `oracle-data.js`, `oracle-charts.js`)
+
+- **Monte Carlo projection** — thousands of seeded, fat-tailed future paths off
+  the portfolio's *own* estimated return/vol, drawn as a percentile **fan
+  chart**, with the **probability of reaching your FFN** and of finishing below
+  what you put in.
+- **CFA-grade metrics** — Sortino, **max drawdown**, Calmar, **R²**, tracking
+  error and information ratio, alongside Alpha/Beta/Sharpe in the fund table.
+- **Custom what-if** — dial your own crash depth and watch the allocation-aware
+  drawdown update live, next to 2008 / COVID / sideways.
+- **Real live data** — search actual Indian funds and pull their **real NAV
+  history** (via the public `mfapi.in` API) so risk stats are computed from
+  genuine performance; degrades gracefully offline (everything else needs no
+  network).
+- **Visuals & report** — hand-rolled inline-SVG charts (score gauge, allocation
+  donut, NAV sparklines, Monte Carlo fan, stress bars) with **zero
+  dependencies**, plus a **print / PDF-ready** report layout.
+
 **Run it on your own portfolio** (`oracle-io.js`)
 
 - **CSV import / export** — a documented, validated format
@@ -79,11 +97,13 @@ transactions to your AMC / RTA.
 
 ```bash
 python -m http.server 8000              # open http://localhost:8000/oracle.html
-node tests/test_oracle.js               # Part 1 engine — 39 checks
+node tests/test_oracle.js               # Part 1 engine + quant metrics — 49 checks
 node tests/test_oracle_future.js        # Part 2 engine — 35 checks
 node tests/test_oracle_workflow.js      # Part 3 engine — 21 checks
+node tests/test_oracle_sim.js           # Monte Carlo + custom stress — 21 checks
+node tests/test_oracle_data.js          # real-data adapter (mfapi.in) — 19 checks
 node tests/test_oracle_io.js            # CSV/JSON import-export — 20 checks
-node tests/test_oracle_ui.js            # dashboard render smoke — 19 checks
+node tests/test_oracle_ui.js            # dashboard render smoke — 25 checks
 ```
 
 > All outputs are **illustrative** and **computed live**. Educational tool —

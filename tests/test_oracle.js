@@ -65,6 +65,25 @@ const dc = O.downsideCapture(half, br);
 ok('downsideCapture: half-the-fall fund captures exactly 50% of downside', close(dc, 50, 1e-9), `(${dc.toFixed(1)}%)`);
 ok('downsideCapture of benchmark vs itself == 100', close(O.downsideCapture(br, br), 100, 1e-6));
 
+/* ---------------- 2b. Advanced quant metrics ---------------- */
+console.log('\n2b. Advanced risk-adjusted metrics');
+// Sortino >= Sharpe in general (only downside vol penalised); both finite.
+const calmRets = O.periodReturns(calm);
+ok('sortino: finite and >= Sharpe for a steady fund', isFinite(O.sortino(calmRets, 0.065)) && O.sortino(calmRets, 0.065) >= O.sharpe(calmRets, 0.065) - 1e-9);
+// Max drawdown: a known peak->trough series.
+const dd = O.maxDrawdown([100, 120, 60, 90, 130]); // worst is 120->60 = -50%
+ok('maxDrawdown: finds the worst peak->trough (-50%)', close(dd.maxDrawdown, -0.5) && dd.peakIndex === 1 && dd.troughIndex === 2);
+ok('maxDrawdown: a monotonically rising series has 0 drawdown', close(O.maxDrawdown([1, 2, 3, 4]).maxDrawdown, 0));
+ok('calmar: annReturn / |maxDD|', close(O.calmar(0.15, -0.30), 0.5));
+// R²: a fund identical to the benchmark is fully explained (R²=1); a 2x-levered one too.
+ok('rSquared: fund == benchmark => R² = 1', close(O.rSquared(br, br), 1, 1e-9));
+ok('rSquared: perfectly-correlated 2x series => R² = 1', close(O.rSquared(br.map((r) => 2 * r), br), 1, 1e-9));
+ok('rSquared: between 0 and 1 for a noisy fund', (() => { const v = O.rSquared(O.periodReturns(wild), br); return v >= 0 && v <= 1; })());
+// Tracking error: zero when fund == benchmark; positive otherwise.
+ok('trackingError: 0 when fund tracks benchmark exactly', close(O.trackingError(br, br), 0, 1e-12));
+ok('trackingError: positive when the fund deviates', O.trackingError(O.periodReturns(wild), br) > 0);
+ok('informationRatio: finite when there is tracking error', isFinite(O.informationRatio(O.periodReturns(calm), br)));
+
 /* ---------------- 3. Leakage & structure ---------------- */
 console.log('\n3. Leakage & Structure Control');
 const leak = O.expenseLeakage({ lumpsum: 1000000, years: 20, grossAnnualReturn: 0.12, directTer: 0.005, regularTer: 0.015 });

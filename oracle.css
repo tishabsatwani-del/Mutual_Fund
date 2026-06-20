@@ -259,8 +259,69 @@ dialog .hint { font-size: 12.5px; color: var(--faint); margin: 0 0 16px; line-he
 .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(20px); max-width: 520px; width: calc(100% - 32px); background: rgba(18, 24, 35, 0.98); border: 1px solid var(--gold); color: var(--ink); padding: 13px 18px; border-radius: 12px; font-size: 13.5px; line-height: 1.5; box-shadow: 0 20px 50px -16px rgba(0, 0, 0, 0.8); opacity: 0; pointer-events: none; transition: opacity .25s ease, transform .25s ease; z-index: 50; }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
+/* ---------- charts (SVG) ---------- */
+.chart { display: block; max-width: 100%; }
+.scoregauge { flex: none; width: 168px; }
+.scoregauge .gauge { width: 168px; height: auto; }
+
+/* summary: donut + tiles */
+.summarygrid { display: grid; grid-template-columns: 170px 1fr; gap: 18px; align-items: center; }
+.donutwrap { display: flex; justify-content: center; }
+.tiles-2 { grid-template-columns: 1fr 1fr; }
+
+/* Monte Carlo fan */
+.fanwrap { border: 1px solid var(--line); border-radius: 12px; padding: 8px; background: rgba(255, 255, 255, 0.015); margin: 4px 0 10px; }
+.fanwrap .fan { width: 100%; height: auto; }
+.fanlegend { display: flex; flex-wrap: wrap; gap: 16px; font-size: 11.5px; color: var(--faint); margin-bottom: 16px; }
+.fanlegend span { display: inline-flex; align-items: center; gap: 6px; }
+.fanlegend i { width: 14px; height: 10px; border-radius: 2px; display: inline-block; }
+.fanlegend .b1 { background: rgba(143, 162, 221, 0.30); }
+.fanlegend .b2 { background: rgba(143, 162, 221, 0.45); }
+.fanlegend .b3 { background: rgba(143, 162, 221, 0.65); }
+.fanlegend .medianline { background: var(--gold); height: 3px; }
+.fanlegend .baseline { background: repeating-linear-gradient(90deg, rgba(255,255,255,0.5) 0 4px, transparent 4px 8px); height: 2px; }
+
+/* stress bars + custom row */
+.stressbars { margin: 4px 0 14px; }
+.stressrow.custom { border-color: rgba(240, 168, 90, 0.5); background: rgba(240, 168, 90, 0.06); }
+
+/* fund-row sparkline */
+.spark { display: block; margin-top: 5px; opacity: 0.85; }
+.spark .line { width: 84px; height: 24px; }
+
+/* real-fund dialog */
+.rf-search { display: flex; gap: 10px; margin-bottom: 12px; }
+.rf-search input { flex: 1; font-family: var(--sans); font-size: 15px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.05); color: var(--ink); }
+.rf-search input:focus { outline: none; border-color: var(--gold); }
+.rf-results { display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow-y: auto; margin-bottom: 8px; }
+.rf-item { text-align: left; font-family: var(--sans); font-size: 13.5px; padding: 10px 12px; border-radius: 9px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.03); color: var(--muted); cursor: pointer; }
+.rf-item:hover { border-color: var(--gold); color: var(--ink); }
+.rf-hint { font-size: 12.5px; color: var(--faint); padding: 6px 2px; }
+.rf-position { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 6px; }
+.rf-chosen { font-size: 14px; margin: 0 0 12px; }
+.rf-meta { font-size: 12px; color: var(--faint); }
+
+/* ---------- print / PDF report ---------- */
+@media print {
+  body { background: #fff; color: #111; }
+  .hd { border: 0; padding-bottom: 0; }
+  .toolbar, .controls, .autosave, .ft .src, .rm-btn, #empty, dialog, .toast { display: none !important; }
+  .kicker, .seckick { color: #666; }
+  .hd h1, .sechead h2, .card h2 { color: #111; }
+  .sub, .lead, .micro, .asof, .phint, .fmeta { color: #444; }
+  .card { background: #fff; border: 1px solid #ccc; box-shadow: none; break-inside: avoid; page-break-inside: avoid; margin-bottom: 14px; }
+  .card.hero, .score-card, .actionboard { border-color: #999; }
+  .up { color: #0a7d4f !important; }
+  .down { color: #c0392b !important; }
+  .wrap { max-width: none; }
+  a[href]:after { content: ""; }
+  .ftable { font-size: 10px; }
+}
+
 /* ---------- responsive ---------- */
 @media (max-width: 860px) {
+  .summarygrid { grid-template-columns: 1fr; }
+  .donutwrap { margin-bottom: 6px; }
   .pillars { grid-template-columns: 1fr 1fr; }
   .ctrlrow { grid-template-columns: 1fr 1fr; }
 }

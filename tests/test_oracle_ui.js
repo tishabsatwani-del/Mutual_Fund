@@ -8,6 +8,9 @@ const O = require('../oracle.js');
 const F = require('../oracle-future.js');
 const Wf = require('../oracle-workflow.js');
 const IO = require('../oracle-io.js');
+const SIM = require('../oracle-sim.js');
+const DATA = require('../oracle-data.js');
+const CH = require('../oracle-charts.js');
 
 const captured = [];
 function stubEl() {
@@ -26,7 +29,7 @@ function stubEl() {
     set(t, p, v) { if (p === 'innerHTML') { t._html = v; captured.push(String(v)); } else t[p] = v; return true; },
   });
 }
-global.window = { ORACLE: O, FUTURE: F, WORKFLOW: Wf, ORACLE_IO: IO };
+global.window = { ORACLE: O, FUTURE: F, WORKFLOW: Wf, ORACLE_IO: IO, SIM, ORACLE_DATA: DATA, ORACLE_CHARTS: CH, print() {} };
 global.FormData = class { get() { return null; } };
 const store = {};
 global.localStorage = { getItem: (k) => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); }, removeItem: (k) => { delete store[k]; } };
@@ -47,9 +50,11 @@ const must = [
   'Autonomous Glide-Path', 'Valuation-Based Rebalancing', 'What-If', 'Portfolio at a glance',
   'Spendable Wealth Counter', 'Fund-by-fund X-ray', 'Zoo of Schemes', 'Hidden cost leakage',
   'DEADWOOD', 'RED FLAG', 'Book profit', 'Harvest tax now', 'Rebalance portfolio',
+  'Monte Carlo projection', 'Chance of hitting your FFN', 'Max DD', 'Sortino', 'Your custom crash',
 ];
 for (const m of must) ok('renders: ' + m, html.includes(m));
 ok('no NaN/undefined leaked into output', !/NaN|undefined/.test(html));
+ok('embeds SVG charts (gauge/donut/fan)', (html.match(/<svg/g) || []).length >= 4);
 // Init renders the sample, which should autosave to localStorage and restore.
 ok('autosaves the portfolio to localStorage', !!store['oracle.portfolio.v1']);
 ok('saved portfolio round-trips back through the importer', (() => {

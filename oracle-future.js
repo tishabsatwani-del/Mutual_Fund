@@ -260,6 +260,22 @@
     return Object.keys(SCENARIOS).map((id) => stressTest(portfolio, id));
   }
 
+  /** Custom what-if: the user dials their own crash. `equityShock`/`debtShock`
+   *  are negative fractions; recoveryMonths is informational. Allocation-aware,
+   *  so the portfolio-level drawdown emerges from the actual mix. */
+  function customStress(portfolio, { equityShock = -0.4, debtShock = -0.02, recoveryMonths = 12, name = 'Custom scenario' }) {
+    const summary = ORACLE.portfolioSummary(portfolio.holdings);
+    const eqFrac = equityFraction(summary);
+    const drawdown = eqFrac * equityShock + (1 - eqFrac) * debtShock;
+    const troughValue = summary.current * (1 + drawdown);
+    return {
+      scenario: { id: 'custom', name, equityShock, debtShock, recoveryMonths, blurb: 'Your own what-if shock.' },
+      currentValue: summary.current, equityFraction: eqFrac,
+      drawdownPct: drawdown, troughValue, lossRupees: summary.current - troughValue,
+      recoveryMonths, flatYears: 0,
+    };
+  }
+
   /* =====================================================================
    * Aggregate Part-2 run for a portfolio + a set of "future" inputs.
    * ===================================================================== */
@@ -287,7 +303,7 @@
     futureMonthlyExpense, ffnCorpus, projectCorpus, requiredSipTopUp, ffnPlan,
     glidePath, equityFraction, glidePlan,
     valuationSignal,
-    stressTest, stressAll,
+    stressTest, stressAll, customStress,
     prognose,
   };
 });

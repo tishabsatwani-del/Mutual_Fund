@@ -7,7 +7,7 @@
 <meta name="description" content="A live X-ray and AI co-pilot for a mutual-fund portfolio: a 0-10 health score and action board, XIRR / rolling returns / Alpha-Beta-Sharpe, downside capture, hidden cost leakage, scheme overlap, the real in-hand cash after exit load and tax, plus a dynamic FFN, glide-path, valuation rebalancing and what-if stress tests. Every figure is computed, nothing invented." />
 <meta name="theme-color" content="#05070b" />
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔮</text></svg>" />
-<link rel="stylesheet" href="oracle.css?v=3" />
+<link rel="stylesheet" href="oracle.css?v=4" />
 </head>
 <body>
 <noscript>
@@ -25,10 +25,12 @@
     <div class="toolbar">
       <button id="btn-sample" class="btn btn-primary">Load sample portfolio</button>
       <button id="btn-add" class="btn">+ Add a holding</button>
+      <button id="btn-realfund" class="btn">🔍 Add a real fund</button>
       <button id="btn-import" class="btn">⤓ Import CSV / JSON</button>
       <button id="btn-export-csv" class="btn btn-ghost">Export CSV</button>
       <button id="btn-export-json" class="btn btn-ghost">Save (.json)</button>
       <button id="btn-template" class="btn btn-ghost">CSV template</button>
+      <button id="btn-print" class="btn btn-ghost">🖨 Report</button>
       <button id="btn-clear" class="btn btn-ghost">Clear</button>
       <a class="btn btn-ghost" href="index.html">← Two Doors, One Storm</a>
       <input id="file-input" type="file" accept=".csv,.json,text/csv,application/json" hidden />
@@ -76,15 +78,44 @@
   </form>
 </dialog>
 
+<!-- Real-fund search dialog (live data via mfapi.in) -->
+<dialog id="realfund-dialog">
+  <form method="dialog" id="realfund-form">
+    <h2>Add a real fund</h2>
+    <p class="hint">Searches live Indian mutual-fund data (mfapi.in) and pulls the fund’s <b>real NAV history</b> — so Alpha/Beta/Sharpe, rolling returns and drawdowns are computed from actual performance. Needs an internet connection; everything else in the tool works offline.</p>
+    <div class="rf-search">
+      <input id="rf-query" type="search" placeholder="Search e.g. “HDFC Flexi Cap Direct”, “Parag Parikh”…" autocomplete="off" />
+      <button type="button" id="rf-go" class="btn btn-primary">Search</button>
+    </div>
+    <div id="rf-results" class="rf-results"></div>
+    <div id="rf-position" class="rf-position" hidden>
+      <p class="rf-chosen" id="rf-chosen"></p>
+      <div class="grid2">
+        <label>Units held<input id="rf-units" type="number" step="any" min="0" placeholder="e.g. 1234.567" /></label>
+        <label>Invested amount (₹)<input id="rf-invested" type="number" step="any" min="0" placeholder="optional if units given" /></label>
+        <label>Avg cost NAV (₹)<input id="rf-avgcost" type="number" step="any" min="0" placeholder="optional — defaults to live NAV" /></label>
+        <label>Purchase date<input id="rf-date" type="date" /></label>
+      </div>
+    </div>
+    <div class="dialog-actions">
+      <button value="cancel" class="btn btn-ghost">Cancel</button>
+      <button value="ok" class="btn btn-primary" id="rf-add" disabled>Add this fund</button>
+    </div>
+  </form>
+</dialog>
+
 <footer class="ft wrap">
   <p>All outputs are <b>illustrative</b> and <b>computed live</b> from the holdings shown. Tax and exit-load rules are the current Indian rules (FY2024-25), held as overridable constants. The bundled sample portfolio uses seeded, clearly-labelled NAV histories so the demo is reproducible — it does not contain real fund NAVs. <b>Educational tool — not investment advice.</b></p>
   <p class="src">The full Autonomous Portfolio Oracle &amp; Stress-Simulator: Part 1 (Current diagnostics), Part 2 (Future — FFN / Glide-Path / Valuation rebalancing / What-If stress tests) and Part 3 (Unified Health Score &amp; live Action Board). Action-board buttons are illustrative; a connected build would route transactions to your AMC / RTA. The next step, one-click CAS-PDF import, plugs into the same manual-entry data model.</p>
 </footer>
 
-<script src="oracle.js?v=3"></script>
-<script src="oracle-future.js?v=3"></script>
-<script src="oracle-workflow.js?v=3"></script>
-<script src="oracle-io.js?v=3"></script>
-<script src="oracle-ui.js?v=3"></script>
+<script src="oracle.js?v=4"></script>
+<script src="oracle-future.js?v=4"></script>
+<script src="oracle-sim.js?v=4"></script>
+<script src="oracle-workflow.js?v=4"></script>
+<script src="oracle-io.js?v=4"></script>
+<script src="oracle-data.js?v=4"></script>
+<script src="oracle-charts.js?v=4"></script>
+<script src="oracle-ui.js?v=4"></script>
 </body>
 </html>

@@ -8,6 +8,7 @@
 'use strict';
 (function () {
   const O = window.ORACLE, F = window.FUTURE, W = window.WORKFLOW, IO = window.ORACLE_IO;
+  const SIM = window.SIM, DATA = window.ORACLE_DATA, CH = window.ORACLE_CHARTS;
   if (!O || !F || !W || !IO) return;
 
   /* ---------- formatting helpers ---------- */
@@ -28,7 +29,7 @@
   /* ---------- app state ---------- */
   const today = '2026-06-20';
   let portfolio = null;
-  const inputs = { yearsToGoal: 3, monthlySip: 30000, currentMonthlyExpense: 50000, niftyPE: 27 };
+  const inputs = { yearsToGoal: 3, monthlySip: 30000, currentMonthlyExpense: 50000, niftyPE: 27, customEquityShock: -0.40 };
 
   const dash = document.getElementById('dash');
   const empty = document.getElementById('empty');
@@ -46,6 +47,7 @@
     dash.appendChild(actionCard(A.actions));
     dash.appendChild(sectionHead('The “Future” plan', 'Prognostic engine — Part 2'));
     dash.appendChild(ffnCard(A.pr.ffn));
+    if (SIM) dash.appendChild(monteCarloCard(A.pr.ffn));
     dash.appendChild(glideCard(A.pr.glide));
     dash.appendChild(valuationCard(A.pr.valuation));
     dash.appendChild(stressCard(A.pr.stress));
@@ -95,11 +97,10 @@
         <div class="phint">${esc(hint)}</div>
       </div>`).join('');
     const c = scoreColor(score.overall);
+    const gaugeSvg = CH ? CH.gauge(score.overall, { color: c, size: 168 }) : `<div class="scorenum"><b style="color:${c}">${score.overall.toFixed(1)}</b><span>/ 10</span></div>`;
     return el(`<section class="card hero score-card">
       <div class="scorewrap">
-        <div class="scoredial" style="--c:${c};--p:${score.overall * 10}">
-          <div class="scorenum"><b style="color:${c}">${score.overall.toFixed(1)}</b><span>/ 10</span></div>
-        </div>
+        <div class="scoregauge">${gaugeSvg}</div>
         <div class="scoremeta">
           <p class="kick2">Unified Portfolio Health Score</p>
           <h2 style="color:${c}">${esc(score.grade)}</h2>
@@ -155,6 +156,30 @@
     </section>`);
   }
 
+  function monteCarloCard(ffn) {
+    const target = ffn.requiredCorpus;
+    const mc = SIM.simulatePortfolio(portfolio, {
+      years: inputs.yearsToGoal, monthlySip: inputs.monthlySip, target,
+      paths: 2000, seed: 12345,
+    });
+    const fanSvg = CH ? CH.fan(mc.bands, { samples: mc.samples, baseline: mc.invested, height: 230 }) : '';
+    const prob = mc.probReachTarget;
+    const probColor = prob >= 0.7 ? 'var(--up)' : prob >= 0.4 ? 'var(--gold)' : 'var(--down)';
+    return el(`<section class="card">
+      <h2>Monte Carlo projection <span class="asof">${mc.paths.toLocaleString()} simulated futures · ${inputs.yearsToGoal}y</span></h2>
+      <p class="lead">Not one guess — a whole cone of outcomes. Each path compounds your ${INR(mc.startValue)} + ${rupees0(inputs.monthlySip)}/mo at this portfolio’s own return (${pct(mc.params.annualReturn, 1)}) and volatility (${pct(mc.params.annualVol, 1)}), with fat-tailed shocks.</p>
+      <div class="fanwrap">${fanSvg}</div>
+      <div class="fanlegend"><span><i class="band b3"></i>middle 50%</span><span><i class="band b2"></i>80%</span><span><i class="band b1"></i>90%</span><span><i class="medianline"></i>median</span><span><i class="baseline"></i>invested</span></div>
+      <div class="tiles">
+        <div class="tile"><span class="tl">Pessimistic (p10)</span><b>${INR(mc.bands[mc.bands.length - 1].p10)}</b></div>
+        <div class="tile"><span class="tl">Median (p50)</span><b>${INR(mc.median)}</b></div>
+        <div class="tile"><span class="tl">Optimistic (p90)</span><b>${INR(mc.bands[mc.bands.length - 1].p90)}</b></div>
+        <div class="tile"><span class="tl">Chance of hitting your FFN</span><b style="color:${probColor}">${pct(prob, 0)}</b></div>
+      </div>
+      <p class="micro">Probability of finishing below what you invested: <b>${pct(mc.probLoseMoney, 0)}</b>. Parameters estimated from ${mc.params.source === 'assumption' ? 'asset-class assumptions' : 'your funds’ own NAV history'}. Illustrative ranges of possibility, never a prediction.</p>
+    </section>`);
+  }
+
   function glideCard(g) {
     const onTrack = g.direction === 'on-track';
     const dirText = onTrack ? 'On the glide-path' : (g.direction === 'equity->debt' ? 'Too much equity for this horizon' : 'Room for more growth');
@@ -190,10 +215,13 @@
   }
 
   function stressCard(stress) {
-    const rows = stress.map((s) => {
+    const custom = F.customStress(portfolio, { equityShock: inputs.customEquityShock, name: 'Your custom crash' });
+    const all = stress.concat([custom]);
+    const rows = all.map((s) => {
       const sc = s.scenario;
       const flat = s.flatYears > 0;
-      return `<div class="stressrow">
+      const isCustom = sc.id === 'custom';
+      return `<div class="stressrow${isCustom ? ' custom' : ''}">
         <div class="sname"><b>${esc(sc.name)}</b><span>${esc(sc.blurb)}</span></div>
         <div class="sstat">
           <span class="sdd ${flat ? '' : 'down'}">${flat ? '0% (flat ' + s.flatYears + 'y)' : pct(s.drawdownPct, 0)}</span>
@@ -202,11 +230,18 @@
         </div>
       </div>`;
     }).join('');
+    const barSvg = CH ? CH.bars(all.filter((s) => s.flatYears === 0).map((s) => ({
+      label: s.scenario.name.replace(/\s*\(.*\)/, '').slice(0, 22),
+      value: s.drawdownPct,
+      color: s.scenario.id === 'custom' ? '#f0a85a' : '#ff7a7a',
+      caption: pct(s.drawdownPct, 0) + ' · ' + INR(s.troughValue),
+    })), { labelW: 150 }) : '';
     return el(`<section class="card">
       <h2>“What-If” Stress Tests <span class="asof">your portfolio in real history</span></h2>
-      <p class="lead">What three real crises would do to <b>your</b> current mix today — equity takes the hit, debt cushions, so the number is yours, not a generic figure.</p>
+      <p class="lead">What real crises would do to <b>your</b> current mix today — equity takes the hit, debt cushions, so the number is yours, not generic. The last bar is <b>your own</b> crash (set its depth with the “Custom crash” control above).</p>
+      <div class="stressbars">${barSvg}</div>
       <div class="stresslist">${rows}</div>
-      <p class="micro">Shock depths are illustrative, anchored to real index drawdowns and applied allocation-aware. Recovery times are historical, not predictions.</p>
+      <p class="micro">Historical shock depths are illustrative, anchored to real index drawdowns and applied allocation-aware. Recovery times are historical, not predictions.</p>
     </section>`);
   }
 
@@ -220,13 +255,17 @@
     const bar = alloc.map(([k, v]) => `<span class="seg" style="width:${(v * 100).toFixed(1)}%;background:${colors[k] || 'var(--cool)'}" title="${esc(k)} ${pct(v)}"></span>`).join('');
     const legend = alloc.map(([k, v]) => `<span class="lg"><i style="background:${colors[k] || 'var(--cool)'}"></i>${esc(k)} ${pct(v, 0)}</span>`).join('');
     const pnlClass = s.pnl >= 0 ? 'up' : 'down';
+    const donutSvg = CH ? CH.donut(alloc.map(([k, v]) => ({ label: k, value: v, color: colors[k] || '#8fa2dd' })), { size: 150, stroke: 24, centerLabel: INR(s.current), centerSub: 'value' }) : '';
     return el(`<section class="card">
       <h2>Portfolio at a glance <span class="asof">as of ${esc(dx.asOf)}</span></h2>
-      <div class="tiles">
-        <div class="tile"><span class="tl">Invested</span><b>${INR(s.invested)}</b></div>
-        <div class="tile"><span class="tl">Current value</span><b>${INR(s.current)}</b></div>
-        <div class="tile"><span class="tl">Profit / loss</span><b class="${pnlClass}">${signPct(s.absoluteReturn)} · ${INR(s.pnl)}</b></div>
-        <div class="tile"><span class="tl">Portfolio XIRR</span><b class="${dx.portfolioXirr >= 0 ? 'up' : 'down'}">${pct(dx.portfolioXirr)}</b></div>
+      <div class="summarygrid">
+        <div class="donutwrap">${donutSvg}</div>
+        <div class="tiles tiles-2">
+          <div class="tile"><span class="tl">Invested</span><b>${INR(s.invested)}</b></div>
+          <div class="tile"><span class="tl">Current value</span><b>${INR(s.current)}</b></div>
+          <div class="tile"><span class="tl">Profit / loss</span><b class="${pnlClass}">${signPct(s.absoluteReturn)} · ${INR(s.pnl)}</b></div>
+          <div class="tile"><span class="tl">Portfolio XIRR</span><b class="${dx.portfolioXirr >= 0 ? 'up' : 'down'}">${pct(dx.portfolioXirr)}</b></div>
+        </div>
       </div>
       <div class="allocbar">${bar}</div>
       <div class="legend">${legend}<span class="lg" style="margin-left:auto"><i style="background:var(--gold)"></i>Direct ${pct(s.planSplit.Direct, 0)} · Regular ${pct(s.planSplit.Regular, 0)}</span></div>
@@ -261,8 +300,9 @@
       const r = f.risk;
       const roll3 = f.rolling && f.rolling['3y'] && f.rolling['3y'].count ? f.rolling['3y'] : null;
       const flag = f.deadwood ? `<span class="badge bad" title="Chronic underperformer: negative risk-adjusted alpha and below-benchmark return">DEADWOOD</span>` : '';
+      const spark = (CH && f.navHistory && f.navHistory.length > 2) ? CH.line(f.navHistory, { width: 84, height: 24, color: f.deadwood ? '#ff7a7a' : '#3ee0a4' }) : '';
       return `<tr class="${f.deadwood ? 'rowbad' : ''}">
-        <td class="fname"><b>${esc(f.scheme)}</b>${flag}<span class="fmeta">${esc(f.category)} · ${esc(f.plan)}${f.ter != null ? ' · TER ' + (f.ter * 100).toFixed(2) + '%' : ''}</span></td>
+        <td class="fname"><b>${esc(f.scheme)}</b>${flag}<span class="fmeta">${esc(f.category)} · ${esc(f.plan)}${f.ter != null ? ' · TER ' + (f.ter * 100).toFixed(2) + '%' : ''}</span><span class="spark">${spark}</span></td>
         <td>${INR(f.current)}</td>
         <td class="${f.absoluteReturn >= 0 ? 'up' : 'down'}">${signPct(f.absoluteReturn, 0)}</td>
         <td>${pct(f.cagr)}</td>
@@ -270,6 +310,9 @@
         <td>${r ? num(r.beta) : '—'}</td>
         <td class="${r && r.alpha >= 0 ? 'up' : r ? 'down' : ''}">${r ? signPct(r.alpha) : '—'}</td>
         <td>${r ? num(r.sharpe) : '—'}</td>
+        <td>${r ? num(r.sortino) : '—'}</td>
+        <td class="${r ? 'down' : ''}">${r && isFinite(r.maxDrawdown) ? pct(r.maxDrawdown, 0) : '—'}</td>
+        <td>${r && isFinite(r.rSquared) ? num(r.rSquared, 2) : '—'}</td>
         <td>${r && isFinite(r.downsideCapture) ? r.downsideCapture.toFixed(0) + '%' : '—'}</td>
         <td class="rollcell">${roll3 ? pct(roll3.avg, 1) + '<span class="rmm">' + pct(roll3.min, 0) + '…' + pct(roll3.max, 0) + '</span>' : '—'}</td>
         <td><button class="rm-btn" data-rm="${i}" title="Remove this holding" aria-label="Remove ${esc(f.scheme)}">✕</button></td>
@@ -283,7 +326,10 @@
           <th>Scheme</th><th>Value</th><th>Abs</th><th>CAGR</th><th>XIRR</th>
           <th title="Sensitivity to the benchmark">β</th>
           <th title="Jensen's alpha — annualised return above CAPM expectation">α</th>
-          <th title="Excess return per unit of risk">Sharpe</th>
+          <th title="Excess return per unit of total risk">Sharpe</th>
+          <th title="Excess return per unit of DOWNSIDE risk">Sortino</th>
+          <th title="Worst peak-to-trough fall in the NAV history">Max DD</th>
+          <th title="Share of the fund's moves explained by the benchmark (0–1)">R²</th>
           <th title="Share of market falls the fund took — lower is safer">Down-cap</th>
           <th title="3-year rolling return: average (min…max across windows)">3y roll</th>
           <th></th>
@@ -291,7 +337,7 @@
         <tbody>${rows}</tbody>
       </table>
       </div>
-      <p class="micro">β = market sensitivity · α = skill above the benchmark (annualised) · Sharpe = return per unit of risk · Down-capture = how much of the market’s falls the fund absorbed (e.g. 70% ⇒ it fell ~7% when the market fell ~10%) · 3y roll = average annualised return across every rolling 3-year window (worst…best in small text). Risk stats need a NAV history; manual entries show “—”.</p>
+      <p class="micro">β = market sensitivity · α = skill above the benchmark · Sharpe = return per unit of total risk · Sortino = per unit of downside risk · Max DD = worst peak-to-trough fall · R² = how benchmark-like the fund is · Down-capture = how much of the market’s falls it absorbed · 3y roll = average annualised return across every rolling 3-year window (worst…best in small text). Risk stats need a NAV history; manual entries show “—”.</p>
     </section>`);
   }
 
@@ -339,19 +385,21 @@
         <label>Years to goal<input id="c-years" type="number" min="1" max="40" step="1" value="${inputs.yearsToGoal}"></label>
         <label>Monthly SIP (₹)<input id="c-sip" type="number" min="0" step="1000" value="${inputs.monthlySip}"></label>
         <label>Monthly expense today (₹)<input id="c-exp" type="number" min="0" step="1000" value="${inputs.currentMonthlyExpense}"></label>
-        <label>Nifty PE (live: <b id="c-pe-val">${inputs.niftyPE}</b>)<input id="c-pe" type="range" min="12" max="32" step="0.5" value="${inputs.niftyPE}"></label>
+        <label>Nifty PE (<b id="c-pe-val">${inputs.niftyPE}</b>)<input id="c-pe" type="range" min="12" max="32" step="0.5" value="${inputs.niftyPE}"></label>
+        <label>Custom crash (<b id="c-crash-val">${Math.round(inputs.customEquityShock * 100)}%</b> equity)<input id="c-crash" type="range" min="-70" max="-5" step="5" value="${Math.round(inputs.customEquityShock * 100)}"></label>
       </div>`;
-    const bind = (id, key, cast) => {
+    const bind = (id, key, cast, after) => {
       const node = document.getElementById(id);
       node.addEventListener('input', () => {
         const v = cast(node.value);
-        if (!isNaN(v)) { inputs[key] = v; if (id === 'c-pe') document.getElementById('c-pe-val').textContent = v; render(); }
+        if (!isNaN(v)) { inputs[key] = v; if (after) after(v); render(); }
       });
     };
     bind('c-years', 'yearsToGoal', parseFloat);
     bind('c-sip', 'monthlySip', parseFloat);
     bind('c-exp', 'currentMonthlyExpense', parseFloat);
-    bind('c-pe', 'niftyPE', parseFloat);
+    bind('c-pe', 'niftyPE', parseFloat, (v) => { document.getElementById('c-pe-val').textContent = v; });
+    bind('c-crash', 'customEquityShock', (s) => parseFloat(s) / 100, (v) => { document.getElementById('c-crash-val').textContent = Math.round(v * 100) + '%'; });
   }
 
   /* ---------- add-holding dialog ---------- */
@@ -387,6 +435,72 @@
   function emptyPortfolio() {
     return { name: 'My Portfolio', asOf: today, benchmark: O.samplePortfolio(today).benchmark, holdings: [] };
   }
+
+  /* ---------- real-fund search dialog (live data) ---------- */
+  const rfDialog = document.getElementById('realfund-dialog');
+  const rfForm = document.getElementById('realfund-form');
+  let rfChosen = null; // parsed fund awaiting a position
+  if (rfDialog && DATA) {
+    document.getElementById('btn-realfund').addEventListener('click', () => {
+      if (!portfolio) portfolio = emptyPortfolio();
+      rfChosen = null;
+      document.getElementById('rf-results').innerHTML = '';
+      document.getElementById('rf-position').hidden = true;
+      document.getElementById('rf-add').disabled = true;
+      rfDialog.showModal();
+    });
+    const doSearch = async () => {
+      const q = document.getElementById('rf-query').value.trim();
+      const box = document.getElementById('rf-results');
+      if (q.length < 3) { box.innerHTML = '<p class="rf-hint">Type at least 3 characters.</p>'; return; }
+      box.innerHTML = '<p class="rf-hint">Searching live data…</p>';
+      try {
+        const list = await DATA.searchFunds(q);
+        if (!list.length) { box.innerHTML = '<p class="rf-hint">No matches. Try a different name.</p>'; return; }
+        box.innerHTML = list.slice(0, 12).map((x) =>
+          `<button type="button" class="rf-item" data-code="${x.schemeCode}">${esc(x.schemeName)}</button>`).join('');
+        box.querySelectorAll('.rf-item').forEach((b) => b.addEventListener('click', () => chooseFund(b.dataset.code, b.textContent)));
+      } catch (e) {
+        box.innerHTML = `<p class="rf-hint">Couldn’t reach live data (${esc(e.message)}). You can still add this fund manually via “+ Add a holding”.</p>`;
+      }
+    };
+    document.getElementById('rf-go').addEventListener('click', doSearch);
+    document.getElementById('rf-query').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); doSearch(); } });
+
+    async function chooseFund(code, name) {
+      const box = document.getElementById('rf-results');
+      box.innerHTML = `<p class="rf-hint">Loading NAV history for “${esc(name)}”…</p>`;
+      try {
+        rfChosen = await DATA.fetchFund(code);
+        box.innerHTML = '';
+        document.getElementById('rf-chosen').innerHTML = `<b>${esc(rfChosen.scheme)}</b><br><span class="rf-meta">${esc(rfChosen.category)} · live NAV ₹${rfChosen.latestNav} (${esc(rfChosen.latestDate)}) · ${rfChosen.navHistory.length} months of history</span>`;
+        document.getElementById('rf-position').hidden = false;
+        document.getElementById('rf-add').disabled = false;
+      } catch (e) {
+        box.innerHTML = `<p class="rf-hint">Couldn’t load that fund (${esc(e.message)}).</p>`;
+      }
+    }
+
+    rfForm.addEventListener('submit', (e) => {
+      if (e.submitter && e.submitter.value === 'cancel') { rfForm.reset(); return; }
+      if (!rfChosen) return;
+      const val = (id) => { const v = parseFloat(document.getElementById(id).value); return isNaN(v) ? null : v; };
+      const holding = DATA.buildHolding(rfChosen, {
+        units: val('rf-units'), invested: val('rf-invested'), avgCost: val('rf-avgcost'),
+        purchaseDate: document.getElementById('rf-date').value || undefined,
+      });
+      portfolio.holdings.push(holding);
+      toast(`Added “${holding.scheme}” with ${holding.navHistory.length} months of real NAV history.`);
+      rfForm.reset(); rfChosen = null;
+      render();
+    });
+  } else if (document.getElementById('btn-realfund')) {
+    document.getElementById('btn-realfund').addEventListener('click', () => toast('Live fund data unavailable in this build.'));
+  }
+
+  /* ---------- print / report ---------- */
+  const printBtn = document.getElementById('btn-print');
+  if (printBtn) printBtn.addEventListener('click', () => { if (!portfolio || !portfolio.holdings.length) { toast('Load or add holdings first.'); return; } window.print(); });
 
   /* ---------- persistence (localStorage; never leaves the device) ---------- */
   const PKEY = 'oracle.portfolio.v1', IKEY = 'oracle.inputs.v1';

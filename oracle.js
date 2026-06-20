@@ -219,6 +219,74 @@ function downsideCapture(fundRets, benchRets) {
   return (sf / sb) * 100;
 }
 
+/* ---- Advanced risk-adjusted metrics (the CFA-grade set) ------------ */
+
+/** Downside deviation — volatility of only the returns below a minimum
+ *  acceptable return (MAR, per-period). The denominator of Sortino. */
+function downsideDeviation(periodRets, marPerPeriod = 0) {
+  if (!periodRets.length) return NaN;
+  let s = 0;
+  for (const r of periodRets) { const d = Math.min(0, r - marPerPeriod); s += d * d; }
+  return Math.sqrt(s / periodRets.length);
+}
+
+/** Sortino ratio — excess return per unit of DOWNSIDE risk (annualised).
+ *  Like Sharpe but only penalises harmful volatility. */
+function sortino(periodRets, annualRiskFree = 0.065, periodsPerYear = 12) {
+  const rp = annualizedReturn(periodRets, periodsPerYear);
+  const dd = downsideDeviation(periodRets, Math.pow(1 + annualRiskFree, 1 / periodsPerYear) - 1) * Math.sqrt(periodsPerYear);
+  if (dd === 0) return NaN;
+  return (rp - annualRiskFree) / dd;
+}
+
+/** Maximum drawdown of a value/NAV series — the worst peak-to-trough fall.
+ *  Returns the (negative) fraction plus the peak/trough indices. */
+function maxDrawdown(series) {
+  if (!series || series.length < 2) return { maxDrawdown: 0, peakIndex: 0, troughIndex: 0 };
+  let peak = series[0], peakIdx = 0, worst = 0, wPeak = 0, wTrough = 0;
+  for (let i = 1; i < series.length; i++) {
+    if (series[i] > peak) { peak = series[i]; peakIdx = i; }
+    const dd = series[i] / peak - 1;
+    if (dd < worst) { worst = dd; wPeak = peakIdx; wTrough = i; }
+  }
+  return { maxDrawdown: worst, peakIndex: wPeak, troughIndex: wTrough };
+}
+
+/** Calmar ratio — annualised return divided by the magnitude of max drawdown.
+ *  Reward per unit of worst-case pain. */
+function calmar(annualReturn, maxDD) {
+  const mag = Math.abs(maxDD);
+  if (mag === 0) return NaN;
+  return annualReturn / mag;
+}
+
+/** R² — share of the fund's movement explained by the benchmark (0..1). */
+function rSquared(fundRets, benchRets) {
+  const n = Math.min(fundRets.length, benchRets.length);
+  const sf = stdev(fundRets.slice(0, n)), sb = stdev(benchRets.slice(0, n));
+  if (sf === 0 || sb === 0) return NaN;
+  const corr = covariance(fundRets, benchRets) / (sf * sb);
+  return corr * corr;
+}
+
+/** Tracking error — annualised volatility of the fund-minus-benchmark return.
+ *  How tightly the fund hugs its benchmark. */
+function trackingError(fundRets, benchRets, periodsPerYear = 12) {
+  const n = Math.min(fundRets.length, benchRets.length);
+  const diff = [];
+  for (let i = 0; i < n; i++) diff.push(fundRets[i] - benchRets[i]);
+  return stdev(diff) * Math.sqrt(periodsPerYear);
+}
+
+/** Information ratio — active return per unit of tracking error (annualised).
+ *  The manager's consistency of out/under-performance. */
+function informationRatio(fundRets, benchRets, periodsPerYear = 12) {
+  const te = trackingError(fundRets, benchRets, periodsPerYear);
+  if (te === 0) return NaN;
+  const active = annualizedReturn(fundRets, periodsPerYear) - annualizedReturn(benchRets, periodsPerYear);
+  return active / te;
+}
+
 /* =====================================================================
  * 3. LEAKAGE & STRUCTURE CONTROL ENGINE
  * ===================================================================== */
@@ -410,10 +478,17 @@ function diagnose(portfolio, opts = {}) {
     const risk = fundRets
       ? (() => {
           const ja = jensenAlpha(fundRets, benchRets, rf);
+          const mdd = maxDrawdown(h.navHistory);
           return {
             alpha: ja.alpha, beta: ja.beta,
             sharpe: sharpe(fundRets, rf),
+            sortino: sortino(fundRets, rf),
             downsideCapture: downsideCapture(fundRets, benchRets),
+            maxDrawdown: mdd.maxDrawdown,
+            calmar: calmar(ja.fundReturn, mdd.maxDrawdown),
+            rSquared: rSquared(fundRets, benchRets),
+            trackingError: trackingError(fundRets, benchRets),
+            informationRatio: informationRatio(fundRets, benchRets),
             annReturn: ja.fundReturn, annVol: annualizedVol(fundRets),
           };
         })()
@@ -428,6 +503,7 @@ function diagnose(portfolio, opts = {}) {
       cagr: yearsHeld > 0 ? cagr(invested, current, yearsHeld) : NaN,
       xirr: portfolioXirr([h], asOf),
       yearsHeld, risk, rolling,
+      navHistory: h.navHistory || null,
       underlying: h.underlying || null,
       // Deadwood flag: chronic underperformer vs benchmark on a risk-adjusted basis.
       deadwood: !!(risk && risk.alpha < -0.01 && risk.annReturn < jensenAlpha(benchRets, benchRets, rf).fundReturn),
@@ -601,6 +677,7 @@ const ORACLE = {
   absoluteReturn, cagr, xirr, rollingReturns,
   // risk
   annualizedReturn, annualizedVol, beta, jensenAlpha, sharpe, downsideCapture,
+  downsideDeviation, sortino, maxDrawdown, calmar, rSquared, trackingError, informationRatio,
   // leakage & structure
   expenseLeakage, portfolioOverlap,
   // spendable
