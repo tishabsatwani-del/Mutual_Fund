@@ -1,33 +1,88 @@
 /* =====================================================================
- * Autonomous Portfolio Oracle — Part 1 dashboard styles
- * Reuses the "Two Doors, One Storm" dark palette for a consistent site.
+ * Autonomous Portfolio Oracle — dashboard styles + theme system
+ * A live, switchable theme system. The DEFAULT is "Aurora Noir": an obsidian
+ * canvas lit by a violet/teal aurora mesh, champagne-gold + aqua accents and
+ * frosted-glass cards — rare, eye-catching, premium. Four more curated themes
+ * are selectable live (data-theme on <html>); every colour is a variable so
+ * charts and UI recolour together.
  * ===================================================================== */
-:root {
-  --bg: #05070b;
-  --ink: #f4f7fb;
-  --muted: #c4cdd9;
-  --faint: #97a2b2;
-  --gold: #e2c878;
-  --cool: #8fa2dd;
-  --equity: #3ee0a4;
-  --debt: #6fb4f0;
-  --up: #3ee0a4;
-  --down: #ff7a7a;
-  --card: rgba(18, 24, 35, 0.96);
-  --line: rgba(255, 255, 255, 0.11);
+:root, [data-theme="aurora"] {
+  --bg: #070912;
+  --mesh1: rgba(124, 92, 255, 0.16);   /* violet */
+  --mesh2: rgba(50, 224, 200, 0.12);   /* teal   */
+  --mesh3: rgba(235, 208, 138, 0.07);  /* gold   */
+  --ink: #F2F5FB;
+  --muted: #BAC3D6;
+  --faint: #8B94AA;
+  --gold: #EBD08A;        /* champagne — primary accent / score */
+  --gold-2: #d8b65f;
+  --cool: #9A8CF5;        /* periwinkle — chart accent */
+  --equity: #3FE0B2;
+  --debt: #6FB4F0;
+  --up: #3FE0B2;
+  --down: #FF7E8A;
+  --warn: #F2B45C;
+  --card: rgba(20, 24, 38, 0.62);
+  --card-solid: #131726;
+  --line: rgba(255, 255, 255, 0.10);
+  --hair: rgba(255, 255, 255, 0.06);
+  --track: rgba(255, 255, 255, 0.08);
+  --glass: blur(14px) saturate(1.3);
+  --shadow: 0 30px 80px -36px rgba(0, 0, 0, 0.85);
+  --cta-ink: #15110a;
   --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --num: "SF Mono", "SFMono-Regular", ui-monospace, "Menlo", "Consolas", monospace;
+}
+
+/* Obsidian & Gold — understated private-wealth dark */
+[data-theme="obsidian"] {
+  --bg: #07090E; --mesh1: rgba(226, 200, 120, 0.08); --mesh2: rgba(62, 224, 164, 0.05); --mesh3: rgba(226, 200, 120, 0.05);
+  --ink: #F4F7FB; --muted: #C4CDD9; --faint: #97A2B2;
+  --gold: #E8C879; --gold-2: #d0ad59; --cool: #8FA2DD; --equity: #3EE0A4; --debt: #6FB4F0;
+  --up: #3EE0A4; --down: #FF7A7A; --warn: #F0A85A;
+  --card: rgba(18, 24, 35, 0.72); --card-solid: #121823; --line: rgba(255,255,255,0.11); --hair: rgba(255,255,255,0.06);
+  --track: rgba(255,255,255,0.08); --glass: blur(10px) saturate(1.1); --shadow: 0 30px 70px -38px rgba(0,0,0,0.82); --cta-ink: #1a1404;
+}
+/* Royal Indigo — modern, vivid fintech */
+[data-theme="indigo"] {
+  --bg: #0A0E24; --mesh1: rgba(139, 156, 240, 0.18); --mesh2: rgba(79, 227, 176, 0.10); --mesh3: rgba(139, 156, 240, 0.08);
+  --ink: #EEF1FF; --muted: #B9C0E0; --faint: #828AB0;
+  --gold: #8B9CF0; --gold-2: #6c7fe0; --cool: #A9B4FF; --equity: #4FE3B0; --debt: #66C2F5;
+  --up: #4FE3B0; --down: #FF8585; --warn: #F4C26B;
+  --card: rgba(22, 28, 56, 0.62); --card-solid: #141a36; --line: rgba(255,255,255,0.11); --hair: rgba(255,255,255,0.06);
+  --track: rgba(255,255,255,0.09); --glass: blur(14px) saturate(1.3); --shadow: 0 30px 80px -36px rgba(0,0,0,0.8); --cta-ink: #0a0e24;
+}
+/* Emerald Vault — old-money brass & jade */
+[data-theme="emerald"] {
+  --bg: #06120D; --mesh1: rgba(201, 168, 106, 0.12); --mesh2: rgba(70, 214, 160, 0.10); --mesh3: rgba(201, 168, 106, 0.06);
+  --ink: #EFF6F1; --muted: #BBCABF; --faint: #87988C;
+  --gold: #C9A86A; --gold-2: #b08f50; --cool: #7FB89A; --equity: #46D6A0; --debt: #6BB8D6;
+  --up: #46D6A0; --down: #E8806B; --warn: #DDB46A;
+  --card: rgba(14, 30, 22, 0.66); --card-solid: #0c1d15; --line: rgba(255,255,255,0.10); --hair: rgba(255,255,255,0.06);
+  --track: rgba(255,255,255,0.08); --glass: blur(12px) saturate(1.2); --shadow: 0 30px 76px -38px rgba(0,0,0,0.84); --cta-ink: #0a160f;
+}
+/* Platinum Light — crisp daylight, report-ready */
+[data-theme="light"] {
+  --bg: #F4F6FA; --mesh1: rgba(59, 76, 224, 0.08); --mesh2: rgba(10, 157, 92, 0.06); --mesh3: rgba(59, 76, 224, 0.04);
+  --ink: #0E1422; --muted: #44506A; --faint: #6B7790;
+  --gold: #3B4CE0; --gold-2: #2c3bc0; --cool: #6573E6; --equity: #0A9D5C; --debt: #2C7FD6;
+  --up: #0A9D5C; --down: #D64545; --warn: #C8810F;
+  --card: rgba(255, 255, 255, 0.80); --card-solid: #ffffff; --line: rgba(14, 20, 34, 0.12); --hair: rgba(14,20,34,0.07);
+  --track: rgba(14, 20, 34, 0.10); --glass: blur(12px) saturate(1.2); --shadow: 0 24px 60px -30px rgba(20, 32, 60, 0.28); --cta-ink: #ffffff;
 }
 
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
 body {
   background:
-    radial-gradient(1200px 600px at 80% -10%, rgba(226, 200, 120, 0.07), transparent 60%),
-    radial-gradient(900px 500px at -10% 10%, rgba(143, 162, 221, 0.07), transparent 55%),
+    radial-gradient(1100px 620px at 82% -8%, var(--mesh1), transparent 60%),
+    radial-gradient(900px 560px at -8% 12%, var(--mesh2), transparent 58%),
+    radial-gradient(800px 500px at 50% 110%, var(--mesh3), transparent 60%),
     var(--bg);
+  background-attachment: fixed;
   color: var(--ink); font-family: var(--sans); font-size: 16px; line-height: 1.5;
   -webkit-font-smoothing: antialiased; min-height: 100vh;
+  transition: background-color .4s ease, color .4s ease;
 }
 .wrap { max-width: 1080px; margin: 0 auto; padding: 0 18px; }
 b { font-weight: 700; }
@@ -50,10 +105,10 @@ b { font-weight: 700; }
 }
 .btn:hover { border-color: rgba(255, 255, 255, 0.28); color: var(--ink); }
 .btn-primary {
-  background: linear-gradient(180deg, #f0dd9a, #d8bd72); color: #1a1404; border-color: rgba(255, 255, 255, 0.25);
-  box-shadow: 0 10px 30px -12px rgba(216, 200, 120, 0.6);
+  background: linear-gradient(180deg, var(--gold), var(--gold-2)); color: var(--cta-ink); border-color: var(--gold);
+  box-shadow: 0 12px 30px -12px color-mix(in srgb, var(--gold) 60%, transparent); font-weight: 700;
 }
-.btn-primary:hover { color: #1a1404; transform: translateY(-1px); }
+.btn-primary:hover { color: var(--cta-ink); transform: translateY(-1px); filter: brightness(1.06); }
 .btn-ghost { background: transparent; }
 
 /* ---------- layout ---------- */
@@ -62,9 +117,16 @@ main { padding: 26px 18px 60px; }
 .empty b { color: var(--ink); }
 
 .card {
-  background: var(--card); border: 1px solid var(--line); border-radius: 20px;
-  padding: 24px 22px; margin: 0 0 20px; box-shadow: 0 30px 70px -40px rgba(0, 0, 0, 0.8);
+  position: relative; background: var(--card); border: 1px solid var(--line); border-radius: 20px;
+  padding: 24px 22px; margin: 0 0 20px; box-shadow: var(--shadow);
+  -webkit-backdrop-filter: var(--glass); backdrop-filter: var(--glass);
 }
+/* a hairline of light along the top edge — the "expensive" glass tell */
+.card::before {
+  content: ""; position: absolute; inset: 0 0 auto 0; height: 1px; border-radius: 20px 20px 0 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.22), transparent); pointer-events: none;
+}
+[data-theme="light"] .card::before { background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.9), transparent); }
 .card h2 {
   font-size: 18px; margin: 0 0 16px; letter-spacing: -.01em; display: flex;
   align-items: baseline; gap: 10px; flex-wrap: wrap;
@@ -300,6 +362,45 @@ dialog .hint { font-size: 12.5px; color: var(--faint); margin: 0 0 16px; line-he
 .rf-position { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 6px; }
 .rf-chosen { font-size: 14px; margin: 0 0 12px; }
 .rf-meta { font-size: 12px; color: var(--faint); }
+
+/* ---------- theme switcher ---------- */
+.themebar { display: flex; align-items: center; gap: 9px; margin: 6px 0 18px; flex-wrap: wrap; }
+.themebar .tl2 { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--faint); margin-right: 2px; }
+.swatch {
+  width: 26px; height: 26px; border-radius: 50%; cursor: pointer; padding: 0;
+  border: 2px solid transparent; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+  transition: transform .18s ease, border-color .18s ease; position: relative;
+}
+.swatch:hover { transform: scale(1.12); }
+.swatch[aria-pressed="true"] { border-color: var(--ink); transform: scale(1.12); }
+.sw-aurora   { background: conic-gradient(from 200deg, #7c5cff, #32e0c8, #ebd08a, #7c5cff); }
+.sw-obsidian { background: conic-gradient(from 200deg, #0b0e14, #e8c879, #3ee0a4, #0b0e14); }
+.sw-indigo   { background: conic-gradient(from 200deg, #0a0e24, #8b9cf0, #4fe3b0, #0a0e24); }
+.sw-emerald  { background: conic-gradient(from 200deg, #06120d, #c9a86a, #46d6a0, #06120d); }
+.sw-light    { background: conic-gradient(from 200deg, #ffffff, #3b4ce0, #0a9d5c, #ffffff); }
+
+/* ---------- motion (only on full renders, gated by #dash.anim) ---------- */
+@keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes draw { from { stroke-dashoffset: var(--len, 600); } to { stroke-dashoffset: 0; } }
+@keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
+#dash.anim > .card, #dash.anim > .sechead { animation: rise .5s cubic-bezier(.2, .7, .2, 1) both; }
+#dash.anim > .card:nth-child(1) { animation-delay: .02s; }
+#dash.anim > .card:nth-child(2) { animation-delay: .08s; }
+#dash.anim > .card:nth-child(3) { animation-delay: .14s; }
+#dash.anim > .card:nth-child(4) { animation-delay: .18s; }
+#dash.anim > *:nth-child(n+5) { animation-delay: .22s; }
+#dash.anim .gauge path:last-of-type { stroke-dasharray: 520; animation: draw 1.1s ease .15s both; }
+#dash.anim .fan polygon { animation: fadein .9s ease .2s both; }
+#dash.anim .fan polyline:last-of-type { stroke-dasharray: 1400; animation: draw 1.2s ease .25s both; }
+#dash.anim .donut circle { animation: fadein .8s ease .15s both; }
+@media (prefers-reduced-motion: reduce) { #dash.anim > *, #dash.anim .gauge path, #dash.anim .fan polygon, #dash.anim .fan polyline, #dash.anim .donut circle { animation: none !important; } }
+
+/* refined fan legend (theme-aware) */
+.fanlegend .b1 { background: var(--cool); opacity: .30; }
+.fanlegend .b2 { background: var(--cool); opacity: .48; }
+.fanlegend .b3 { background: var(--cool); opacity: .66; }
+.fanlegend .medianline { background: var(--gold); height: 3px; opacity: 1; }
+.fanlegend .baseline { background: var(--faint); height: 2px; }
 
 /* ---------- print / PDF report ---------- */
 @media print {

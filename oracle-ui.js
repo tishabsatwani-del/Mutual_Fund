@@ -35,13 +35,17 @@
   const empty = document.getElementById('empty');
   const controls = document.getElementById('controls');
 
-  /* ---------- top-level render ---------- */
-  function render() {
+  /* ---------- top-level render ----------
+   * `animate` plays the entrance/draw-in motion. It's true on meaningful
+   * changes (load, import, add/remove) and false on slider drags so live
+   * tweaking stays snappy and flicker-free. */
+  function render(animate) {
     if (!portfolio || !portfolio.holdings.length) {
       dash.hidden = true; empty.hidden = false; controls.hidden = true; return;
     }
     empty.hidden = true; dash.hidden = false; controls.hidden = false;
     const A = W.analyze(portfolio, inputs);
+    dash.classList.toggle('anim', !!animate);
     dash.innerHTML = '';
     dash.appendChild(healthCard(A.score, A.dx));
     dash.appendChild(actionCard(A.actions));
@@ -69,7 +73,7 @@
         const removed = portfolio.holdings[i];
         portfolio.holdings.splice(i, 1);
         toast(removed ? `Removed “${removed.scheme}”.` : 'Holding removed.');
-        render();
+        render(true);
       });
     });
   }
@@ -81,7 +85,7 @@
   /* ===================================================================
    * PART 3 — Health Score + Action Board (the command center)
    * =================================================================== */
-  function scoreColor(v) { return v >= 8 ? 'var(--up)' : v >= 6 ? 'var(--gold)' : v >= 4 ? '#f0a85a' : 'var(--down)'; }
+  function scoreColor(v) { return v >= 8 ? 'var(--up)' : v >= 6 ? 'var(--gold)' : v >= 4 ? 'var(--warn)' : 'var(--down)'; }
 
   function healthCard(score, dx) {
     const pillars = [
@@ -392,7 +396,7 @@
       const node = document.getElementById(id);
       node.addEventListener('input', () => {
         const v = cast(node.value);
-        if (!isNaN(v)) { inputs[key] = v; if (after) after(v); render(); }
+        if (!isNaN(v)) { inputs[key] = v; if (after) after(v); render(false); }
       });
     };
     bind('c-years', 'yearsToGoal', parseFloat);
@@ -429,7 +433,7 @@
       navHistory: null, underlying: null,
     });
     addForm.reset();
-    render();
+    render(true);
   });
 
   function emptyPortfolio() {
@@ -492,7 +496,7 @@
       portfolio.holdings.push(holding);
       toast(`Added “${holding.scheme}” with ${holding.navHistory.length} months of real NAV history.`);
       rfForm.reset(); rfChosen = null;
-      render();
+      render(true);
     });
   } else if (document.getElementById('btn-realfund')) {
     document.getElementById('btn-realfund').addEventListener('click', () => toast('Live fund data unavailable in this build.'));
@@ -557,7 +561,7 @@
             ? `Imported ${holdings.length} holdings; skipped ${errors.length} bad row(s): ${errors[0]}`
             : `Imported ${holdings.length} holdings from CSV.`);
         }
-        render();
+        render(true);
       } catch (e) {
         toast('Could not read that file: ' + e.message);
       }
@@ -580,7 +584,7 @@
   });
 
   /* ---------- toolbar + toast ---------- */
-  document.getElementById('btn-sample').addEventListener('click', () => { portfolio = O.samplePortfolio(today); render(); });
+  document.getElementById('btn-sample').addEventListener('click', () => { portfolio = O.samplePortfolio(today); render(true); });
   document.getElementById('btn-clear').addEventListener('click', () => { portfolio = null; saveState(); render(); });
 
   let toastTimer = null;
@@ -592,11 +596,30 @@
     toastTimer = setTimeout(() => t.classList.remove('show'), 4200);
   }
 
+  /* ---------- theme switcher (live, persisted) ---------- */
+  const THEMES = ['aurora', 'obsidian', 'indigo', 'emerald', 'light'];
+  const TKEY = 'oracle.theme.v1';
+  const THEME_META = { aurora: '#070912', obsidian: '#07090E', indigo: '#0A0E24', emerald: '#06120D', light: '#F4F6FA' };
+  function applyTheme(name) {
+    const t = THEMES.includes(name) ? name : 'aurora';
+    document.documentElement.setAttribute('data-theme', t);
+    try { localStorage.setItem(TKEY, t); } catch (e) { /* ignore */ }
+    document.querySelectorAll('.swatch[data-theme-set]').forEach((b) =>
+      b.setAttribute('aria-pressed', b.dataset.themeSet === t ? 'true' : 'false'));
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta && THEME_META[t]) meta.setAttribute('content', THEME_META[t]);
+  }
+  document.querySelectorAll('.swatch[data-theme-set]').forEach((b) =>
+    b.addEventListener('click', () => applyTheme(b.dataset.themeSet)));
+  let savedTheme = 'aurora';
+  try { savedTheme = localStorage.getItem(TKEY) || 'aurora'; } catch (e) { /* ignore */ }
+  applyTheme(savedTheme);
+
   /* ---------- init ---------- */
   // Restore a saved portfolio if present; otherwise open on the sample so a
   // first-time visitor sees the full diagnostic immediately.
   const restored = loadState();
   portfolio = restored || O.samplePortfolio(today);
   buildControls();
-  render();
+  render(true);
 })();

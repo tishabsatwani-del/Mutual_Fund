@@ -7,7 +7,7 @@
 <meta name="description" content="A live X-ray and AI co-pilot for a mutual-fund portfolio: a 0-10 health score and action board, XIRR / rolling returns / Alpha-Beta-Sharpe, downside capture, hidden cost leakage, scheme overlap, the real in-hand cash after exit load and tax, plus a dynamic FFN, glide-path, valuation rebalancing and what-if stress tests. Every figure is computed, nothing invented." />
 <meta name="theme-color" content="#05070b" />
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔮</text></svg>" />
-<link rel="stylesheet" href="oracle.css?v=4" />
+<link rel="stylesheet" href="oracle.css?v=5" />
 </head>
 <body>
 <noscript>
@@ -34,6 +34,14 @@
       <button id="btn-clear" class="btn btn-ghost">Clear</button>
       <a class="btn btn-ghost" href="index.html">← Two Doors, One Storm</a>
       <input id="file-input" type="file" accept=".csv,.json,text/csv,application/json" hidden />
+    </div>
+    <div class="themebar" id="themebar" role="group" aria-label="Colour theme">
+      <span class="tl2">Theme</span>
+      <button type="button" class="swatch sw-aurora"   data-theme-set="aurora"   title="Aurora Noir" aria-label="Aurora Noir theme"></button>
+      <button type="button" class="swatch sw-obsidian" data-theme-set="obsidian" title="Obsidian & Gold" aria-label="Obsidian and Gold theme"></button>
+      <button type="button" class="swatch sw-indigo"   data-theme-set="indigo"   title="Royal Indigo" aria-label="Royal Indigo theme"></button>
+      <button type="button" class="swatch sw-emerald"  data-theme-set="emerald"  title="Emerald Vault" aria-label="Emerald Vault theme"></button>
+      <button type="button" class="swatch sw-light"    data-theme-set="light"    title="Platinum Light" aria-label="Platinum Light theme"></button>
     </div>
     <p class="autosave" id="autosave-note" hidden>✓ Your portfolio is saved in this browser and restored automatically. It never leaves your device.</p>
   </div>
@@ -109,13 +117,13 @@
   <p class="src">The full Autonomous Portfolio Oracle &amp; Stress-Simulator: Part 1 (Current diagnostics), Part 2 (Future — FFN / Glide-Path / Valuation rebalancing / What-If stress tests) and Part 3 (Unified Health Score &amp; live Action Board). Action-board buttons are illustrative; a connected build would route transactions to your AMC / RTA. The next step, one-click CAS-PDF import, plugs into the same manual-entry data model.</p>
 </footer>
 
-<script src="oracle.js?v=4"></script>
-<script src="oracle-future.js?v=4"></script>
-<script src="oracle-sim.js?v=4"></script>
-<script src="oracle-workflow.js?v=4"></script>
-<script src="oracle-io.js?v=4"></script>
-<script src="oracle-data.js?v=4"></script>
-<script src="oracle-charts.js?v=4"></script>
-<script src="oracle-ui.js?v=4"></script>
+<script src="oracle.js?v=5"></script>
+<script src="oracle-future.js?v=5"></script>
+<script src="oracle-sim.js?v=5"></script>
+<script src="oracle-workflow.js?v=5"></script>
+<script src="oracle-io.js?v=5"></script>
+<script src="oracle-data.js?v=5"></script>
+<script src="oracle-charts.js?v=5"></script>
+<script src="oracle-ui.js?v=5"></script>
 </body>
 </html>
