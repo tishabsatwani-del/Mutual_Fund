@@ -1,5 +1,7 @@
 /* =====================================================================
  * "Two Doors, One Storm"
+ * © 2026 Tisha Satwani. All rights reserved. Proprietary — no copying,
+ * modification, or redistribution without written permission (see LICENSE).
  * An advanced, behaviour-driven Monte Carlo investing simulator.
  * ---------------------------------------------------------------------
  * Two people invest the same money, in the same market. One chose a REGULAR
