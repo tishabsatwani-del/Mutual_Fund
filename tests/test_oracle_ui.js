@@ -14,12 +14,13 @@ const CH = require('../oracle-charts.js');
 
 const captured = [];
 function stubEl() {
-  return new Proxy({ children: [], _html: '', classList: { add() {}, remove() {} }, dataset: {}, style: {} }, {
+  return new Proxy({ children: [], _html: '', classList: { add() {}, remove() {}, toggle() {} }, dataset: {}, style: {} }, {
     get(t, p) {
       if (p === 'appendChild') return (c) => { t.children.push(c); return c; };
       if (p === 'addEventListener') return () => {};
       if (p === 'querySelectorAll') return () => [];
       if (p === 'querySelector') return () => stubEl();
+      if (p === 'setAttribute' || p === 'getAttribute') return () => {};
       if (p === 'innerHTML') return t._html;
       if (p === 'content') return { firstElementChild: stubEl() };
       if (p === 'reset' || p === 'showModal') return () => {};
@@ -33,7 +34,10 @@ global.window = { ORACLE: O, FUTURE: F, WORKFLOW: Wf, ORACLE_IO: IO, SIM, ORACLE
 global.FormData = class { get() { return null; } };
 const store = {};
 global.localStorage = { getItem: (k) => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); }, removeItem: (k) => { delete store[k]; } };
-global.document = { getElementById: () => stubEl(), createElement: () => stubEl(), body: stubEl() };
+global.document = {
+  getElementById: () => stubEl(), createElement: () => stubEl(), body: stubEl(),
+  documentElement: stubEl(), querySelector: () => stubEl(), querySelectorAll: () => [],
+};
 
 let pass = 0, fail = 0;
 const ok = (n, c) => { if (c) { pass++; console.log('  ✓ ' + n); } else { fail++; console.log('  ✗ ' + n); } };

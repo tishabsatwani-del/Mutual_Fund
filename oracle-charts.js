@@ -42,7 +42,7 @@
       return seg;
     }).join('');
     const center = opts.centerLabel
-      ? `<text x="${cx}" y="${cy - 2}" text-anchor="middle" font-size="${opts.centerSize || 19}" font-weight="700" fill="${opts.centerColor || '#f4f7fb'}">${esc(opts.centerLabel)}</text>${opts.centerSub ? `<text x="${cx}" y="${cy + 16}" text-anchor="middle" font-size="11" fill="#97a2b2">${esc(opts.centerSub)}</text>` : ''}`
+      ? `<text x="${cx}" y="${cy - 2}" text-anchor="middle" font-size="${opts.centerSize || 19}" font-weight="700" fill="${opts.centerColor || 'var(--ink)'}">${esc(opts.centerLabel)}</text>${opts.centerSub ? `<text x="${cx}" y="${cy + 16}" text-anchor="middle" font-size="11" fill="var(--faint)">${esc(opts.centerSub)}</text>` : ''}`
       : '';
     return `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" role="img" class="chart donut">${rings}${center}</svg>`;
   }
@@ -54,12 +54,12 @@
     const START = -120, END = 120, span = END - START;
     const v = Math.max(0, Math.min(max, value));
     const valDeg = START + span * (v / max);
-    const color = opts.color || '#e2c878';
+    const color = opts.color || 'var(--gold)';
     return `<svg viewBox="0 0 ${size} ${h}" width="${size}" height="${h}" role="img" class="chart gauge">
-      <path d="${arc(cx, cy, r, START, END)}" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="${sw}" stroke-linecap="round"/>
+      <path d="${arc(cx, cy, r, START, END)}" fill="none" stroke="var(--track)" stroke-width="${sw}" stroke-linecap="round"/>
       <path d="${arc(cx, cy, r, START, valDeg)}" fill="none" stroke="${color}" stroke-width="${sw}" stroke-linecap="round"/>
       <text x="${cx}" y="${cy + 2}" text-anchor="middle" font-size="${size * 0.22}" font-weight="700" fill="${color}">${fmt(value)}</text>
-      <text x="${cx}" y="${cy + size * 0.16}" text-anchor="middle" font-size="${size * 0.07}" fill="#97a2b2">/ ${max}</text>
+      <text x="${cx}" y="${cy + size * 0.16}" text-anchor="middle" font-size="${size * 0.07}" fill="var(--faint)">/ ${max}</text>
     </svg>`;
   }
 
@@ -73,8 +73,8 @@
     const x = (i) => pad + (w - 2 * pad) * (i / (series.length - 1));
     const y = (val) => h - pad - (h - 2 * pad) * (val - lo) / (hi - lo);
     const pts = series.map((v, i) => `${fmt(x(i))},${fmt(y(v))}`).join(' ');
-    const color = opts.color || '#3ee0a4';
-    const zero = (opts.includeZero && lo < 0 && hi > 0) ? `<line x1="${pad}" y1="${fmt(y(0))}" x2="${w - pad}" y2="${fmt(y(0))}" stroke="rgba(255,255,255,0.14)" stroke-width="1" stroke-dasharray="3 3"/>` : '';
+    const color = opts.color || 'var(--up)';
+    const zero = (opts.includeZero && lo < 0 && hi > 0) ? `<line x1="${pad}" y1="${fmt(y(0))}" x2="${w - pad}" y2="${fmt(y(0))}" stroke="var(--line)" stroke-width="1" stroke-dasharray="3 3"/>` : '';
     const area = opts.fill ? `<polygon points="${fmt(x(0))},${fmt(h - pad)} ${pts} ${fmt(x(series.length - 1))},${fmt(h - pad)}" fill="${color}" opacity="0.10"/>` : '';
     return `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" preserveAspectRatio="none" class="chart line">${zero}${area}<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round"/></svg>`;
   }
@@ -96,13 +96,13 @@
       const bot = bands.map((b, i) => `${fmt(x(i))},${fmt(y(b[loKey]))}`).reverse().join(' ');
       return `<polygon points="${top} ${bot}" fill="${fill}" opacity="${op}"/>`;
     };
-    const a1 = bandArea('p5', 'p95', opts.color || '#8fa2dd', 0.14);
-    const a2 = bandArea('p10', 'p90', opts.color || '#8fa2dd', 0.18);
-    const a3 = bandArea('p25', 'p75', opts.color || '#8fa2dd', 0.26);
-    const median = `<polyline points="${bands.map((b, i) => `${fmt(x(i))},${fmt(y(b.p50))}`).join(' ')}" fill="none" stroke="${opts.medianColor || '#e2c878'}" stroke-width="2.4"/>`;
-    const base = opts.baseline ? `<line x1="${padL}" y1="${fmt(y(opts.baseline))}" x2="${w - padR}" y2="${fmt(y(opts.baseline))}" stroke="rgba(255,255,255,0.22)" stroke-width="1" stroke-dasharray="4 4"/>` : '';
+    const a1 = bandArea('p5', 'p95', opts.color || 'var(--cool)', 0.14);
+    const a2 = bandArea('p10', 'p90', opts.color || 'var(--cool)', 0.18);
+    const a3 = bandArea('p25', 'p75', opts.color || 'var(--cool)', 0.26);
+    const median = `<polyline points="${bands.map((b, i) => `${fmt(x(i))},${fmt(y(b.p50))}`).join(' ')}" fill="none" stroke="${opts.medianColor || 'var(--gold)'}" stroke-width="2.4"/>`;
+    const base = opts.baseline ? `<line x1="${padL}" y1="${fmt(y(opts.baseline))}" x2="${w - padR}" y2="${fmt(y(opts.baseline))}" stroke="var(--faint)" stroke-width="1" stroke-dasharray="4 4"/>` : '';
     const samples = (opts.samples || []).slice(0, 12).map((p) =>
-      `<polyline points="${p.map((v, i) => `${fmt(x(i))},${fmt(y(v))}`).join(' ')}" fill="none" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>`
+      `<polyline points="${p.map((v, i) => `${fmt(x(i))},${fmt(y(v))}`).join(' ')}" fill="none" stroke="var(--line)" stroke-width="1"/>`
     ).join('');
     return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" preserveAspectRatio="none" class="chart fan">${a1}${a2}${a3}${samples}${base}${median}</svg>`;
   }
@@ -117,9 +117,9 @@
       const yy = i * (rowH + gap);
       const bw = (w - labelW - 70) * Math.abs(it.value) / maxAbs;
       return `<g transform="translate(0 ${yy})">
-        <text x="0" y="${rowH / 2 + 4}" font-size="12.5" fill="#c4cdd9">${esc(it.label)}</text>
-        <rect x="${labelW}" y="4" width="${fmt(bw)}" height="${rowH - 8}" rx="5" fill="${it.color || '#3ee0a4'}"/>
-        <text x="${labelW + bw + 8}" y="${rowH / 2 + 4}" font-size="12.5" font-weight="700" fill="#f4f7fb">${esc(it.caption || '')}</text>
+        <text x="0" y="${rowH / 2 + 4}" font-size="12.5" fill="var(--muted)">${esc(it.label)}</text>
+        <rect x="${labelW}" y="4" width="${fmt(bw)}" height="${rowH - 8}" rx="5" fill="${it.color || 'var(--up)'}"/>
+        <text x="${labelW + bw + 8}" y="${rowH / 2 + 4}" font-size="12.5" font-weight="700" fill="var(--ink)">${esc(it.caption || '')}</text>
       </g>`;
     }).join('');
     return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" class="chart bars">${rows}</svg>`;
