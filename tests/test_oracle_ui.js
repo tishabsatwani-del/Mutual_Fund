@@ -7,6 +7,7 @@
 const O = require('../oracle.js');
 const F = require('../oracle-future.js');
 const Wf = require('../oracle-workflow.js');
+const IO = require('../oracle-io.js');
 
 const captured = [];
 function stubEl() {
@@ -25,8 +26,10 @@ function stubEl() {
     set(t, p, v) { if (p === 'innerHTML') { t._html = v; captured.push(String(v)); } else t[p] = v; return true; },
   });
 }
-global.window = { ORACLE: O, FUTURE: F, WORKFLOW: Wf };
+global.window = { ORACLE: O, FUTURE: F, WORKFLOW: Wf, ORACLE_IO: IO };
 global.FormData = class { get() { return null; } };
+const store = {};
+global.localStorage = { getItem: (k) => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); }, removeItem: (k) => { delete store[k]; } };
 global.document = { getElementById: () => stubEl(), createElement: () => stubEl(), body: stubEl() };
 
 let pass = 0, fail = 0;
@@ -47,6 +50,11 @@ const must = [
 ];
 for (const m of must) ok('renders: ' + m, html.includes(m));
 ok('no NaN/undefined leaked into output', !/NaN|undefined/.test(html));
+// Init renders the sample, which should autosave to localStorage and restore.
+ok('autosaves the portfolio to localStorage', !!store['oracle.portfolio.v1']);
+ok('saved portfolio round-trips back through the importer', (() => {
+  try { return IO.parsePortfolioJSON(store['oracle.portfolio.v1']).holdings.length === 6; } catch (e) { return false; }
+})());
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

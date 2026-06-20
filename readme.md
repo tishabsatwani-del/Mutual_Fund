@@ -58,20 +58,32 @@ figure is **computed live** from the holdings.
   and one decision button (switch to Direct, rebalance, book profit, harvest
   LTCG tax-free, increase SIP …), ranked by urgency.
 
+**Run it on your own portfolio** (`oracle-io.js`)
+
+- **CSV import / export** — a documented, validated format
+  (`scheme,amc,category,plan,units,nav,avgCost,invested,purchaseDate,ter`); bad
+  rows are skipped with line-numbered errors. Grab the **CSV template** from the
+  toolbar, fill it in, import it back.
+- **Save / load** a whole portfolio as **JSON** (round-trips losslessly).
+- **Autosave** — your portfolio persists in `localStorage` and restores on
+  reload. It **never leaves your device** (no backend, no upload).
+- **Editable** — remove any holding from the dashboard with one tap.
+
 The bundled sample portfolio uses **seeded, clearly-labelled** NAV histories
 (benchmark-correlated, so Beta/Alpha actually mean something) — no real fund
-NAVs; they exist so the math has real series to compute on. Real holdings go in
-via a manual add-holding form; the next step, **one-click CAS-PDF import**,
-plugs into the same data model without touching the engines. Action-board
-buttons are illustrative — a connected build would route transactions to your
-AMC / RTA.
+NAVs; they exist so the math has real series to compute on. A future **one-click
+CAS-PDF import** only has to emit the same holding objects the CSV/JSON parsers
+already produce, so it plugs into this proven data model without touching the
+engines. Action-board buttons are illustrative — a connected build would route
+transactions to your AMC / RTA.
 
 ```bash
 python -m http.server 8000              # open http://localhost:8000/oracle.html
 node tests/test_oracle.js               # Part 1 engine — 39 checks
 node tests/test_oracle_future.js        # Part 2 engine — 35 checks
 node tests/test_oracle_workflow.js      # Part 3 engine — 21 checks
-node tests/test_oracle_ui.js            # dashboard render smoke — 17 checks
+node tests/test_oracle_io.js            # CSV/JSON import-export — 20 checks
+node tests/test_oracle_ui.js            # dashboard render smoke — 19 checks
 ```
 
 > All outputs are **illustrative** and **computed live**. Educational tool —

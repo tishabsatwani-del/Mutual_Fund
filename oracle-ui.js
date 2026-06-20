@@ -7,8 +7,8 @@
  * ===================================================================== */
 'use strict';
 (function () {
-  const O = window.ORACLE, F = window.FUTURE, W = window.WORKFLOW;
-  if (!O || !F || !W) return;
+  const O = window.ORACLE, F = window.FUTURE, W = window.WORKFLOW, IO = window.ORACLE_IO;
+  if (!O || !F || !W || !IO) return;
 
   /* ---------- formatting helpers ---------- */
   const INR = (v) => {
@@ -56,6 +56,20 @@
     if (A.dx.overlaps.length) dash.appendChild(overlapCard(A.dx));
     dash.appendChild(leakageCard(A.dx));
     wireActionButtons();
+    wireRemoveButtons();
+    saveState();
+  }
+
+  function wireRemoveButtons() {
+    dash.querySelectorAll('.rm-btn').forEach((b) => {
+      b.addEventListener('click', () => {
+        const i = +b.dataset.rm;
+        const removed = portfolio.holdings[i];
+        portfolio.holdings.splice(i, 1);
+        toast(removed ? `Removed “${removed.scheme}”.` : 'Holding removed.');
+        render();
+      });
+    });
   }
 
   function sectionHead(title, kicker) {
@@ -243,7 +257,7 @@
   }
 
   function fundsCard(dx) {
-    const rows = dx.funds.map((f) => {
+    const rows = dx.funds.map((f, i) => {
       const r = f.risk;
       const roll3 = f.rolling && f.rolling['3y'] && f.rolling['3y'].count ? f.rolling['3y'] : null;
       const flag = f.deadwood ? `<span class="badge bad" title="Chronic underperformer: negative risk-adjusted alpha and below-benchmark return">DEADWOOD</span>` : '';
@@ -258,10 +272,11 @@
         <td>${r ? num(r.sharpe) : '—'}</td>
         <td>${r && isFinite(r.downsideCapture) ? r.downsideCapture.toFixed(0) + '%' : '—'}</td>
         <td class="rollcell">${roll3 ? pct(roll3.avg, 1) + '<span class="rmm">' + pct(roll3.min, 0) + '…' + pct(roll3.max, 0) + '</span>' : '—'}</td>
+        <td><button class="rm-btn" data-rm="${i}" title="Remove this holding" aria-label="Remove ${esc(f.scheme)}">✕</button></td>
       </tr>`;
     }).join('');
     return el(`<section class="card">
-      <h2>Fund-by-fund X-ray</h2>
+      <h2>Fund-by-fund X-ray <span class="asof">tap ✕ to remove a holding</span></h2>
       <div class="tablewrap">
       <table class="ftable">
         <thead><tr>
@@ -271,6 +286,7 @@
           <th title="Excess return per unit of risk">Sharpe</th>
           <th title="Share of market falls the fund took — lower is safer">Down-cap</th>
           <th title="3-year rolling return: average (min…max across windows)">3y roll</th>
+          <th></th>
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
@@ -372,9 +388,86 @@
     return { name: 'My Portfolio', asOf: today, benchmark: O.samplePortfolio(today).benchmark, holdings: [] };
   }
 
+  /* ---------- persistence (localStorage; never leaves the device) ---------- */
+  const PKEY = 'oracle.portfolio.v1', IKEY = 'oracle.inputs.v1';
+  function saveState() {
+    try {
+      if (portfolio && portfolio.holdings.length) localStorage.setItem(PKEY, IO.portfolioToJSON(portfolio));
+      else localStorage.removeItem(PKEY);
+      localStorage.setItem(IKEY, JSON.stringify(inputs));
+      const note = document.getElementById('autosave-note');
+      if (note) note.hidden = !(portfolio && portfolio.holdings.length);
+    } catch (e) { /* storage unavailable (private mode) — run in-memory */ }
+  }
+  function loadState() {
+    try {
+      const ij = localStorage.getItem(IKEY);
+      if (ij) Object.assign(inputs, JSON.parse(ij));
+      const pj = localStorage.getItem(PKEY);
+      if (pj) { const p = IO.parsePortfolioJSON(pj); if (!p.benchmark) p.benchmark = emptyPortfolio().benchmark; return p; }
+    } catch (e) { /* ignore corrupt/blocked storage */ }
+    return null;
+  }
+
+  /* ---------- file download helper ---------- */
+  function download(filename, text, mime) {
+    const blob = new Blob([text], { type: mime || 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 0);
+  }
+
+  /* ---------- import / export ---------- */
+  const fileInput = document.getElementById('file-input');
+  document.getElementById('btn-import').addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files && fileInput.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = String(reader.result);
+      try {
+        if (/\.json$/i.test(file.name) || text.trim().startsWith('{')) {
+          const p = IO.parsePortfolioJSON(text);
+          if (!p.benchmark) p.benchmark = emptyPortfolio().benchmark;
+          p.asOf = p.asOf || today;
+          portfolio = p;
+          toast(`Loaded portfolio “${p.name || 'imported'}” — ${p.holdings.length} holdings.`);
+        } else {
+          const { holdings, errors } = IO.parseHoldingsCSV(text);
+          if (!holdings.length) { toast('Import failed: ' + (errors[0] || 'no valid rows found.')); return; }
+          portfolio = emptyPortfolio();
+          portfolio.holdings = holdings;
+          toast(errors.length
+            ? `Imported ${holdings.length} holdings; skipped ${errors.length} bad row(s): ${errors[0]}`
+            : `Imported ${holdings.length} holdings from CSV.`);
+        }
+        render();
+      } catch (e) {
+        toast('Could not read that file: ' + e.message);
+      }
+      fileInput.value = '';
+    };
+    reader.readAsText(file);
+  });
+
+  document.getElementById('btn-export-csv').addEventListener('click', () => {
+    if (!portfolio || !portfolio.holdings.length) { toast('Nothing to export — load or add holdings first.'); return; }
+    download('portfolio.csv', IO.holdingsToCSV(portfolio.holdings), 'text/csv');
+  });
+  document.getElementById('btn-export-json').addEventListener('click', () => {
+    if (!portfolio || !portfolio.holdings.length) { toast('Nothing to save — load or add holdings first.'); return; }
+    download('portfolio.json', IO.portfolioToJSON(portfolio), 'application/json');
+  });
+  document.getElementById('btn-template').addEventListener('click', () => {
+    download('portfolio-template.csv', IO.csvTemplate(), 'text/csv');
+    toast('Downloaded a CSV template — fill it in and Import it back.');
+  });
+
   /* ---------- toolbar + toast ---------- */
   document.getElementById('btn-sample').addEventListener('click', () => { portfolio = O.samplePortfolio(today); render(); });
-  document.getElementById('btn-clear').addEventListener('click', () => { portfolio = null; render(); });
+  document.getElementById('btn-clear').addEventListener('click', () => { portfolio = null; saveState(); render(); });
 
   let toastTimer = null;
   function toast(msg) {
@@ -386,7 +479,10 @@
   }
 
   /* ---------- init ---------- */
+  // Restore a saved portfolio if present; otherwise open on the sample so a
+  // first-time visitor sees the full diagnostic immediately.
+  const restored = loadState();
+  portfolio = restored || O.samplePortfolio(today);
   buildControls();
-  portfolio = O.samplePortfolio(today);
   render();
 })();

@@ -7,7 +7,7 @@
 <meta name="description" content="A live X-ray and AI co-pilot for a mutual-fund portfolio: a 0-10 health score and action board, XIRR / rolling returns / Alpha-Beta-Sharpe, downside capture, hidden cost leakage, scheme overlap, the real in-hand cash after exit load and tax, plus a dynamic FFN, glide-path, valuation rebalancing and what-if stress tests. Every figure is computed, nothing invented." />
 <meta name="theme-color" content="#05070b" />
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔮</text></svg>" />
-<link rel="stylesheet" href="oracle.css?v=2" />
+<link rel="stylesheet" href="oracle.css?v=3" />
 </head>
 <body>
 <noscript>
@@ -25,9 +25,15 @@
     <div class="toolbar">
       <button id="btn-sample" class="btn btn-primary">Load sample portfolio</button>
       <button id="btn-add" class="btn">+ Add a holding</button>
+      <button id="btn-import" class="btn">⤓ Import CSV / JSON</button>
+      <button id="btn-export-csv" class="btn btn-ghost">Export CSV</button>
+      <button id="btn-export-json" class="btn btn-ghost">Save (.json)</button>
+      <button id="btn-template" class="btn btn-ghost">CSV template</button>
       <button id="btn-clear" class="btn btn-ghost">Clear</button>
       <a class="btn btn-ghost" href="index.html">← Two Doors, One Storm</a>
+      <input id="file-input" type="file" accept=".csv,.json,text/csv,application/json" hidden />
     </div>
+    <p class="autosave" id="autosave-note" hidden>✓ Your portfolio is saved in this browser and restored automatically. It never leaves your device.</p>
   </div>
 </header>
 
@@ -75,9 +81,10 @@
   <p class="src">The full Autonomous Portfolio Oracle &amp; Stress-Simulator: Part 1 (Current diagnostics), Part 2 (Future — FFN / Glide-Path / Valuation rebalancing / What-If stress tests) and Part 3 (Unified Health Score &amp; live Action Board). Action-board buttons are illustrative; a connected build would route transactions to your AMC / RTA. The next step, one-click CAS-PDF import, plugs into the same manual-entry data model.</p>
 </footer>
 
-<script src="oracle.js?v=2"></script>
-<script src="oracle-future.js?v=2"></script>
-<script src="oracle-workflow.js?v=2"></script>
-<script src="oracle-ui.js?v=2"></script>
+<script src="oracle.js?v=3"></script>
+<script src="oracle-future.js?v=3"></script>
+<script src="oracle-workflow.js?v=3"></script>
+<script src="oracle-io.js?v=3"></script>
+<script src="oracle-ui.js?v=3"></script>
 </body>
 </html>
