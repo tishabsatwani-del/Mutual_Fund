@@ -1,5 +1,9 @@
 # Mutual Fund Portfolio Tracker
 
+> © 2026 Tisha Satwani. All rights reserved. This project, including the
+> "Two Doors, One Storm" simulator, is proprietary — no copying, modifying,
+> or redistribution without written permission. See the [LICENSE](LICENSE).
+
 A small, **dependency-free** Python toolkit for modelling mutual fund
 holdings, tracking portfolio value and returns, and running common
 investment calculators (lumpsum, SIP, CAGR, XIRR).
