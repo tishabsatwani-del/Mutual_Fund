@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>FinGuardian AI — Autonomous Wealth Lifecycle Guardian</title>
+<meta name="description" content="An interactive prototype of FinGuardian AI: an autonomous 'financial bodyguard' built on a 100% serverless, event-driven AWS architecture. Eight working pillar demos — family wealth consent, regulatory watchdog, KYC guard, dead man's switch, buy-the-dip, commission scanner, emergency LAMF and an anti-panic shield." />
+<meta name="theme-color" content="#05070b" />
+<meta property="og:title" content="FinGuardian AI" />
+<meta property="og:description" content="Your money has a bodyguard now. An interactive prototype of a zero-ops, serverless wealth guardian." />
+<meta property="og:type" content="website" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>" />
+<link rel="stylesheet" href="styles.css?v=20260626a" />
+</head>
+<body>
+<noscript>
+<article style="max-width:780px;margin:0 auto;padding:24px;font-family:Georgia,serif;line-height:1.6;color:#e6eef8;background:#05070b">
+<h1>FinGuardian AI — Autonomous Wealth Lifecycle Guardian</h1>
+<p><em>This is an interactive prototype that runs in JavaScript. Below is a complete account of what it contains, so it can be read without running the app.</em></p>
+<p>FinGuardian AI is an autonomous "financial bodyguard" for mutual-fund investors and their families. Unlike apps that stop at onboarding and transactions, it watches over money <strong>after</strong> it is invested — guarding against behavioural mistakes, operational lock-ups, regulatory drift and the bureaucratic ordeal of inheritance. The reference architecture is 100% serverless and event-driven on AWS (API Gateway + Cognito, Lambda in Python, Step Functions, DynamoDB, Amazon Bedrock, KMS/Secrets Manager, SQS, EventBridge, CloudTrail/CloudWatch), localised to the AWS Mumbai region for SEBI/RBI compliance, with public/private subnet isolation.</p>
+<h2>The eight pillars</h2>
+<ol>
+<li><strong>Family Wealth Cloud &amp; Dynamic Consent</strong> — a single DynamoDB table (FamilyID partition key, UserID sort key) maps a multi-generational household under roles (Admin, Co-Owner, View-Only, Minor) into one consolidated asset view; cross-member visibility requires an explicit consent handshake orchestrated by Step Functions, and no member can ever move another's assets.</li>
+<li><strong>AI Regulatory Watchdog</strong> — an EventBridge nightly job scans SEBI / AMFI / Income-Tax portals; Bedrock parses new circulars into exact rule changes (e.g. LTCG shifts); an administrator approves via a human-in-the-loop card and the live config tables update with no redeploy.</li>
+<li><strong>KYC Health Watchdog</strong> — continuously polls KRA APIs (CVL, NDML) for every family member; detects a looming "Hold"/"Suspended" status (PAN–Aadhaar, address mismatch) months early and sends a re-verification link so SIPs never stop.</li>
+<li><strong>Automated Legal Claim Engine (Dead Man's Switch)</strong> — after 180 days of zero interaction, a 15-day countdown with three check-ins begins; if unanswered, the engine pre-fills mutual-fund transmission paperwork (Form T3, indemnity bond, AMC letters) into a print-ready package for the nominee.</li>
+<li><strong>Buy-the-Dip &amp; Dynamic De-risking</strong> — idle lump sums sit in liquid funds; at 4:00 PM IST a Lambda checks the index, and a fall of 4%+ from the 52-week high triggers a Systematic Transfer Plan into equity; as a goal nears its final two years, capital glides automatically from equity to debt.</li>
+<li><strong>Hidden Commission Scanner</strong> — Bedrock parses an uploaded Consolidated Account Statement, isolates "Regular" plans carrying broker commissions, projects the 20-year compounding loss, and offers a one-tap switch to zero-commission Direct plans.</li>
+<li><strong>Emergency LAMF (Loan Against Mutual Fund)</strong> — pledge units digitally through banking-partner APIs for an instant overdraft (credited within minutes) instead of breaking long-term compounding.</li>
+<li><strong>Anti-Panic Shield</strong> — a panic-sell during a steep drop triggers a mandatory 24-hour cooling-off period with historical recovery simulations.</li>
+</ol>
+<p>Every figure shown in the live app is computed in clearly commented JavaScript from the on-screen inputs. All outputs are illustrative — educational, not investment advice.</p>
+</article>
+</noscript>
+
+<div id="app">
+  <header id="topbar">
+    <a class="brand" href="#/" aria-label="FinGuardian AI home">
+      <span class="brand-mark" aria-hidden="true">🛡️</span>
+      <span class="brand-text">FinGuardian<span class="brand-ai">AI</span></span>
+    </a>
+    <nav id="nav">
+      <a href="#/" data-nav="home">Pillars</a>
+      <a href="#/architecture" data-nav="architecture">Architecture</a>
+      <a href="#/about" data-nav="about">About</a>
+    </nav>
+  </header>
+
+  <main id="stage" tabindex="-1"><!-- rendered by app.js --></main>
+
+  <footer id="footer">
+    <p class="discl">Interactive prototype · simulated data &amp; in-browser logic, no live AWS backend. Every figure is computed from on-screen inputs. <strong>Educational tool — not investment advice.</strong></p>
+    <p class="discl faint">FinGuardian AI reference design · AWS serverless · localised to ap-south-1 (Mumbai) · built to SEBI / RBI guardrails.</p>
+  </footer>
+</div>
+
+<script src="app.js?v=20260626a"></script>
+</body>
+</html>
