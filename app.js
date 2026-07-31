@@ -845,11 +845,14 @@ if (typeof document !== 'undefined') (function () {
    * content below the fold. It hides as the user nears the bottom, and tapping it
    * scrolls down. Works for both scroll models here — overlays scroll internally,
    * the wizard/emergency screens scroll the page — by detecting whichever applies. */
-  // A screen must have THIS much genuinely hidden below before the cue appears.
-  // Deliberately well above the few stray pixels that 100vh/safe-area rounding
-  // can leave behind on mobile — otherwise almost every screen looks scrollable
-  // and the cue shows where there is nothing to see.
-  const CUE_MIN = 120;
+  // Measured on a real mobile browser: #setup's scrollHeight sits 170–210px past
+  // the viewport on EVERY wizard step, because of the trailing legal line and
+  // padding — even when every choice is already on screen. So raw scroll height
+  // cannot decide this; the cue instead asks the only question that matters:
+  // "is there another CHOICE below the fold?" (see cueRefresh).
+  const CUE_MIN = 24;                       // the surface must be scrollable at all
+  const CUE_HIDDEN = 8;                     // …and something must really sit below
+  const CUE_SEL = '.opt, .cta, .ghost-btn, .exp-btn, .maths-toggle, .choices button';
   function canScroll(el) { return !!el && el.scrollHeight - el.clientHeight > CUE_MIN; }
   function cueScroller() {
     // An open overlay covers everything behind it, so it is the ONLY surface the
@@ -877,8 +880,29 @@ if (typeof document !== 'undefined') (function () {
       const cue = $('scrollCue'); if (!cue) return;
       const s = cueScroller();
       if (!s) { cue.classList.remove('on'); return; }
-      const remaining = (s.scrollHeight - s.clientHeight) - (s.scrollTop || 0);
-      cue.classList.toggle('on', remaining > CUE_MIN);
+      // Show the cue only when an actual choice/button is still below the fold.
+      const isPage = s === document.scrollingElement || s === document.documentElement || s === document.body;
+      // The "fold" is whichever comes first: the bottom of the scrolling box, or
+      // the bottom of the screen. Measured on a real device, #setup's own box can
+      // be 872px tall inside a 640px viewport — so trusting its rect alone said
+      // "visible" for an option the user could not actually see.
+      const vh = window.innerHeight || document.documentElement.clientHeight || 0;
+      const viewBottom = isPage ? vh : Math.min(s.getBoundingClientRect().bottom, vh || Infinity);
+      const scope = isPage ? document : s;
+      let lowest = null;
+      const items = scope.querySelectorAll(CUE_SEL);
+      for (let i = 0; i < items.length; i++) {
+        const el = items[i];
+        if (el.hidden || el.offsetParent === null) continue;   // not rendered
+        const r = el.getBoundingClientRect();
+        if (!r.height) continue;
+        if (lowest === null || r.bottom > lowest) lowest = r.bottom;
+      }
+      // Nothing actionable found (a pure reading screen) → fall back to raw scroll.
+      const below = lowest === null
+        ? (s.scrollHeight - s.clientHeight) - (s.scrollTop || 0)
+        : lowest - viewBottom;
+      cue.classList.toggle('on', below > CUE_HIDDEN);
     });
   }
   function cueScrollDown() {
