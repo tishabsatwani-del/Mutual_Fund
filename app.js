@@ -1459,13 +1459,29 @@ if (typeof document !== 'undefined') (function () {
   }
 
   /* ===================== THE PLEDGE (commit) ===================== */
+  let pledgePending = false;
   function showPledge() {
-    hide($('setup')); hideAllOverlays();
+    if (pledgePending) return;      // a second tap during the wait must not re-fire the line
+    pledgePending = true;
     state.pledge = null;
     setText('pledgeYears', state.years);
-    Voice.prime(); // wake the engine before the screen, so the line follows closely
-    show($('pledge'));
-    narrate('Sometime in your ' + state.years + ' years, a crash will come. Swear it now, while you are calm. When your savings are deep in the red, what will you do?', { rate: 0.92 });
+    Voice.prime();                  // wake the engine before anything is shown
+    // The screen, the lock and the voice must arrive TOGETHER. Showing the screen
+    // first and waiting for speech left it sitting unlocked for seconds, then
+    // locking just before she spoke. So the line is started FIRST and the screen
+    // is revealed at the moment it actually goes live — from a real speech-start
+    // event, or from assumeLiveAfterMs on phones that never send one. The choices
+    // are locked from that same instant and free the moment she stops.
+    let shown = false;
+    const reveal = () => {
+      if (shown) return;
+      shown = true; pledgePending = false;
+      hide($('setup')); hideAllOverlays(); show($('pledge'));
+    };
+    narrate('Sometime in your ' + state.years + ' years, a crash will come. Swear it now, while you are calm. When your savings are deep in the red, what will you do?',
+      { rate: 0.92, onSpeechStart: reveal, assumeLiveAfterMs: 2400 });
+    if (!Voice.available || !Voice.isEnabled()) reveal();  // muted: nothing to wait for
+    setTimeout(reveal, 3000);                              // hard cap — never hang
   }
   function makePledge(p) {
     state.pledge = p;
