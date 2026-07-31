@@ -650,17 +650,34 @@ if (typeof document !== 'undefined') (function () {
     const cap = opts && opts.caption ? buildCaption(opts.caption) : null;
     if (!Voice.available || !Voice.isEnabled()) { if (cap) cap.all(); if (onDone) onDone(); return; }
     document.body.classList.add('narrating');
-    let done = false, raf = 0;
-    const finish = () => { if (done) return; done = true; if (raf) cancelAnimationFrame(raf); document.body.classList.remove('narrating'); if (onDone) onDone(); };
+    let done = false, raf = 0, live = false;
+    // 'narrating' locks the choices IMMEDIATELY (so nobody can skip ahead), but
+    // 'voice-live' — which drives the "she is speaking" badge — is only set when
+    // audio TRULY starts. Otherwise the badge claims she is talking while the
+    // screen sits silent, which reads as a sync fault.
+    let startCap = null;
+    const goLive = () => {
+      if (done) return;
+      live = true; document.body.classList.add('voice-live');
+      if (startCap) { const f = startCap; startCap = null; f(); }
+    };
+    const finish = () => { if (done) return; done = true; if (raf) cancelAnimationFrame(raf); document.body.classList.remove('narrating', 'voice-live'); if (onDone) onDone(); };
     const speakLive = () => {
-      Voice.speak(spoken, opts, finish);
-      // No clip clock available — pace the caption off a real-time estimate that
-      // matches the clip's word timings, so the fallback still reads in step.
-      if (cap && opts.caption.times && opts.caption.times.length) {
-        const t0 = performance.now();
-        const tick = () => { if (done) return; cap.until((performance.now() - t0) / 1000); raf = requestAnimationFrame(tick); };
-        raf = requestAnimationFrame(tick);
-      } else if (cap) { cap.all(); }
+      // No clip clock available — pace the caption off real time. Crucially the
+      // clock starts when speech ACTUALLY begins (goLive), not when we ask for
+      // it: a slow engine would otherwise leave the words running ahead of the
+      // voice by however long it took to start.
+      startCap = () => {
+        if (cap && opts.caption && opts.caption.times && opts.caption.times.length) {
+          const t0 = performance.now();
+          const tick = () => { if (done) return; cap.until((performance.now() - t0) / 1000); raf = requestAnimationFrame(tick); };
+          raf = requestAnimationFrame(tick);
+        } else if (cap) { cap.all(); }
+      };
+      Voice.speak(spoken, Object.assign({}, opts, { onStart: goLive }), finish);
+      // If the engine never actually starts (some mobiles fail silently), release
+      // the screen quickly rather than holding the buttons for the full backstop.
+      setTimeout(() => { if (!live) { if (cap) cap.all(); finish(); } }, 3000);
       // Safety release — only a backstop for a stalled/silent engine. The real
       // release is onend; this must sit ABOVE any real narration's length so it
       // never unlocks the options mid-sentence (the pledge is ~28 words ≈ 15s).
@@ -677,6 +694,7 @@ if (typeof document !== 'undefined') (function () {
         if (started || fell || done) return;
         started = true;
         Voice.stop(); // cancel any queued live speech — the clip wins, never both
+        goLive();     // badge appears exactly when the recording is audible
         if (cap) { const tick = () => { if (done) return; cap.until(a.currentTime); raf = requestAnimationFrame(tick); }; raf = requestAnimationFrame(tick); }
       };
       const fallback = () => { if (started || fell || done) return; fell = true; speakLive(); };
@@ -1032,6 +1050,9 @@ if (typeof document !== 'undefined') (function () {
         const u = new SpeechSynthesisUtterance(text);
         if (!picked) picked = pick(); if (picked) u.voice = picked;
         u.rate = (opts && opts.rate) || 0.92; u.pitch = (opts && opts.pitch) || 1; u.volume = (opts && opts.volume) || 1;
+        // onstart fires when the engine ACTUALLY begins speaking — the only
+        // truthful moment to show "she is speaking" UI.
+        if (opts && opts.onStart) u.onstart = opts.onStart;
         if (onEnd) { u.onend = onEnd; u.onerror = onEnd; }
         window.speechSynthesis.speak(u);
       } catch (e) { if (onEnd) onEnd(); }
@@ -1059,7 +1080,12 @@ if (typeof document !== 'undefined') (function () {
     let primed = false, warmTimer = 0;
     // resume() on every call keeps the engine awake (some mobiles let it sleep
     // between utterances); the silent warm-up utterance is spoken just once.
-    function prime() { if (!ok || !enabled) return; try { window.speechSynthesis.resume(); if (!primed) { primed = true; const u = new SpeechSynthesisUtterance(' '); u.volume = 0; u.rate = 2; window.speechSynthesis.speak(u); } keepWarm(); } catch (e) {} }
+    // Resolving the voice EARLY matters: getVoices() is often empty on the first
+    // call on mobile, and an unset voice falls back to the system default, which
+    // on Android is frequently a NETWORK voice with a multi-second cold start.
+    // Re-trying here (every prime) means a local voice is locked in long before
+    // the first real line.
+    function prime() { if (!ok || !enabled) return; try { window.speechSynthesis.resume(); if (!picked) picked = pick(); if (!primed) { primed = true; const u = new SpeechSynthesisUtterance(' '); u.volume = 0; u.rate = 2; window.speechSynthesis.speak(u); } keepWarm(); } catch (e) {} }
     // Keep the engine from going cold while the user reads a long screen (the
     // next spoken line otherwise pays a multi-second cold start). A tiny SILENT
     // tick, fired ONLY when the engine is completely idle — so it can never
@@ -1368,11 +1394,13 @@ if (typeof document !== 'undefined') (function () {
     hide($('setup')); hideAllOverlays();
     state.pledge = null;
     setText('pledgeYears', state.years);
+    Voice.prime(); // wake the engine before the screen, so the line follows closely
     show($('pledge'));
     narrate('Sometime in your ' + state.years + ' years, a crash will come. Swear it now, while you are calm. When your savings are deep in the red, what will you do?', { rate: 0.92 });
   }
   function makePledge(p) {
     state.pledge = p;
+    Voice.stop(); document.body.classList.remove('narrating', 'voice-live'); // never let the line bleed into the climb
     hide($('pledge'));
     startClimb();
   }
@@ -1878,7 +1906,7 @@ if (typeof document !== 'undefined') (function () {
     setText('emStrikeNeed', inrShort(ctx.need));
     setHTML('emStrikePressure', 'You never planned to touch your investments. Now you have to.');
     show($('emStrike'));
-    setTimeout(() => say('You need ' + amountWords(ctx.need) + ', now.', { rate: 0.92 }), 150);
+    setTimeout(() => say('You need ' + amountWords(ctx.need) + ', now.', { rate: 0.92 }), 0);
   }
   function emToDecision() { hide($('emStrike')); show($('emDecision')); Sound.setHeart(92); } // the clock, running
   function emChoose(r) {
@@ -1960,7 +1988,7 @@ if (typeof document !== 'undefined') (function () {
   /* ===================== Wiring ===================== */
   function hideAllOverlays() { ['pledge', 'silence', 'youDecision', 'friendReveal', 'collision', 'result', 'luck', 'grid', 'emIntro', 'emStrike', 'emDecision', 'emCall', 'emergency'].forEach((id) => hide($(id))); }
   function on(id, type, fn) { const el = $(id); if (el) el.addEventListener(type, fn); }
-  function backToSetup() { Sound.stopAll(); Voice.stop(); stopCallTimer(); cancelAnimationFrame(state.raf); hideAllOverlays(); hide($('stage')); hide($('emergency')); state.wizIndex = 0; showWizStep(0); show($('setup')); }
+  function backToSetup() { Sound.stopAll(); Voice.stop(); document.body.classList.remove('narrating', 'voice-live'); stopCallTimer(); cancelAnimationFrame(state.raf); hideAllOverlays(); hide($('stage')); hide($('emergency')); state.wizIndex = 0; showWizStep(0); show($('setup')); }
 
   function boot() {
     // Kick the voice list loading at startup so a fast LOCAL voice is already
@@ -1981,6 +2009,11 @@ if (typeof document !== 'undefined') (function () {
     const OPENING_SRC = 'voice/opening.mp3?v=20260618', OPEN_T1 = 2.22, OPEN_T2 = 3.47;
     on('introBtn', 'click', () => {
       Sound.unlock(); Voice.prime(); Sound.openSwell(); hide($('intro'));
+      // Mobile browsers ignore media preloading until a user gesture, so the
+      // startup preload above may have been a no-op. Re-issue it now, on the
+      // first tap, so the advisor clips are fully cached long before their
+      // call screens open — that is what makes them start instantly.
+      (state._clipPreload || []).forEach((a) => { if (a) try { a.load(); } catch (e) {} });
       const crash = document.querySelector('#w_scenario .crash-scn');
       const em = document.querySelector('#w_scenario .em-scn');
       // Both doors appear INSTANTLY, locked (closed, dim, padlock); each UNLOCKS
@@ -2044,7 +2077,7 @@ if (typeof document !== 'undefined') (function () {
     window.addEventListener('resize', cueRefresh);
     document.addEventListener('click', () => setTimeout(cueRefresh, 60), true);
     cueRefresh();
-    on('muteBtn', 'click', () => { const onNow = Sound.toggle(); Voice.setEnabled(onNow); if (!onNow) document.body.classList.remove('narrating'); const b = $('muteBtn'); if (b) b.textContent = onNow ? '🔊' : '🔇'; });
+    on('muteBtn', 'click', () => { const onNow = Sound.toggle(); Voice.setEnabled(onNow); if (!onNow) document.body.classList.remove('narrating', 'voice-live'); const b = $('muteBtn'); if (b) b.textContent = onNow ? '🔊' : '🔇'; });
 
     // Wizard: each step is a group of .opt buttons.
     document.querySelectorAll('.wstep').forEach((step) => {
