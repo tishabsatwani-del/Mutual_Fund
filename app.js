@@ -549,7 +549,12 @@ function simEmergency(sip, feeFactor, response, need, S, downturn, N) {
   }
   const idleGrown = idleCash * Math.pow(1 + SAVINGS_ANNUAL, (N - S) / 12);
   const final = value[N];
-  flows.push({ t: S / 12, amount: took });
+  // Only the money actually CONSUMED by the emergency leaves the investor. When
+  // they redeem everything, the un-spent remainder (idleCash) stays theirs in a
+  // bank and is already carried inside `final` — counting the whole redemption
+  // here as well would double-count it and inflate XIRR far above every sleeve's
+  // growth rate (it made panic-selling look like the best return in the app).
+  flows.push({ t: S / 12, amount: took - idleCash });
   flows.push({ t: N / 12, amount: final });
   return { response, value, corpusAtEmergency, sleeveValues, took, need, shortfall, fromMid, fromLiquid, final,
     sipSurvived: !cfg.killSIP, idleCash, idleGrown, xirr: xirr(flows) };
@@ -1906,9 +1911,14 @@ if (typeof document !== 'undefined') (function () {
     setText('emStrikeNeed', inrShort(ctx.need));
     setHTML('emStrikePressure', 'You never planned to touch your investments. Now you have to.');
     show($('emStrike'));
-    setTimeout(() => say('You need ' + amountWords(ctx.need) + ', now.', { rate: 0.92 }), 0);
+    // narrate() (not say()) so the "What do you do?" button is LOCKED until the
+    // amount has actually been spoken. With a bare say() the line was
+    // fire-and-forget: a quick tap moved to the next screen and the voice then
+    // spoke the amount over it. This is now consistent with every other
+    // narrated screen in the app.
+    narrate('You need ' + amountWords(ctx.need) + ', now.', { rate: 0.92 });
   }
-  function emToDecision() { hide($('emStrike')); show($('emDecision')); Sound.setHeart(92); } // the clock, running
+  function emToDecision() { Voice.stop(); document.body.classList.remove('narrating', 'voice-live'); hide($('emStrike')); show($('emDecision')); Sound.setHeart(92); } // the clock, running
   function emChoose(r) {
     state.emResponse = r; Sound.stopHeart(); Sound.tick();
     hide($('emDecision')); show($('emCall'));
