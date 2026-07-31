@@ -102,10 +102,13 @@ async function cueTests() {
   ok('tall wizard step (600px hidden) → cue SHOWS', showing());
 
   reset(); setGeom(setup, 812, 800); refresh();
-  ok('short step with 12px rounding slack → NO cue', !showing());
+  ok('sub-threshold slack (12px, not scrollable) → NO cue', !showing());
 
+  // With no layout engine, nothing is measurable, so the cue falls back to raw
+  // scroll remaining. Whether a *choice* is below the fold is decided by real
+  // geometry and is covered by tests/test_ui_browser.js instead.
   reset(); setGeom(setup, 900, 800); refresh();
-  ok('100px slack (below the 120 threshold) → NO cue', !showing());
+  ok('fallback: 100px of raw scroll remaining → cue shows', showing());
 
   reset(); setGeom(setup, 1400, 800, 1300); refresh();
   ok('scrolled to the bottom → cue HIDES', !showing());
