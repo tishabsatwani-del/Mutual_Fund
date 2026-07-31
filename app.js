@@ -664,6 +664,7 @@ if (typeof document !== 'undefined') (function () {
     const goLive = () => {
       if (done) return;
       live = true; document.body.classList.add('voice-live');
+      if (opts && opts.onSpeechStart) { try { opts.onSpeechStart(); } catch (e) {} }
       if (startCap) { const f = startCap; startCap = null; f(); }
     };
     const finish = () => { if (done) return; done = true; if (raf) cancelAnimationFrame(raf); document.body.classList.remove('narrating', 'voice-live'); if (onDone) onDone(); };
@@ -680,9 +681,10 @@ if (typeof document !== 'undefined') (function () {
         } else if (cap) { cap.all(); }
       };
       Voice.speak(spoken, Object.assign({}, opts, { onStart: goLive }), finish);
-      // If the engine never actually starts (some mobiles fail silently), release
-      // the screen quickly rather than holding the buttons for the full backstop.
-      setTimeout(() => { if (!live) { if (cap) cap.all(); finish(); } }, 3000);
+      // NOTE: there is deliberately no short "never started" timer here. Nothing
+      // is locked while we wait (the lock follows real speech), and a 3s timer
+      // marked the narration done just before a slow engine finally began —
+      // after which goLive() bailed out and the button never locked at all.
       // Safety release — only a backstop for a stalled/silent engine. The real
       // release is onend; this must sit ABOVE any real narration's length so it
       // never unlocks the options mid-sentence (the pledge is ~28 words ≈ 15s).
@@ -1898,7 +1900,6 @@ if (typeof document !== 'undefined') (function () {
     Sound.unlock(); Sound.strike(); Voice.prime(); // wake the speech engine now (it may have slept on the corpus screen)
     // Guarantee the strike screen never inherits a dimmed/locked look.
     document.body.classList.remove('narrating', 'voice-live');
-    hide($('emIntro'));
     const ctx = state.emCtx, em = ctx.em;
     const copy = {
       icu: { tag: 'ICU', title: 'Someone you love is in the ICU.', pressure: 'The deposit clears, or treatment stops. No time to think.' },
@@ -1912,11 +1913,17 @@ if (typeof document !== 'undefined') (function () {
     setText('emStrikeWhat', cp.pressure);
     setText('emStrikeNeed', inrShort(ctx.need));
     setHTML('emStrikePressure', 'You never planned to touch your investments. Now you have to.');
-    show($('emStrike'));
-    // The screen opens fully live and the amount is spoken at once. The button
-    // locks only while she is actually saying it (the lock is keyed on real
-    // speech, not on the screen appearing) and unlocks the instant she stops.
-    narrate('You need ' + amountWords(ctx.need) + ', now.', { rate: 0.92 });
+    // The amount and the voice must land TOGETHER. Speech engines on mobile can
+    // take a second or more to begin, so instead of showing the screen and
+    // hoping the voice catches up, we start the line FIRST and flip the screen
+    // at the exact moment she actually begins speaking. The strike sound plays
+    // on the tap, so the beat is covered. A cap guarantees the screen appears
+    // even if the engine stalls, and a muted user never waits at all.
+    let shown = false;
+    const reveal = () => { if (shown) return; shown = true; hide($('emIntro')); show($('emStrike')); };
+    narrate('You need ' + amountWords(ctx.need) + ', now.', { rate: 0.92, onSpeechStart: reveal });
+    if (!Voice.available || !Voice.isEnabled()) reveal(); // muted: no voice to wait for
+    setTimeout(reveal, 2000);                             // hard cap — never hang on the old screen
   }
   function emToDecision() { Voice.stop(); document.body.classList.remove('narrating', 'voice-live'); hide($('emStrike')); show($('emDecision')); Sound.setHeart(92); } // the clock, running
   function emChoose(r) {
