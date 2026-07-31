@@ -709,13 +709,13 @@ if (typeof document !== 'undefined') (function () {
   }
   // A realistic relationship-manager response: behavioural coaching that also
   // takes a genuine cash need seriously (not just "never sell").
-  const RM_CRASH_LINE = "Don't sell in fear; the market recovers. If you genuinely need money, we plan it — the right amount, the right fund, calmly.";
-  const RM_EM_LINE = "We withdraw strategically — exactly what you need, from the right place — so one hard week never costs your future.";
+  const RM_CRASH_LINE = "The fall is real. The loss is not — unless you sell. Today, we do nothing. And that is the plan.";
+  const RM_EM_LINE = "Exactly what you need — not one rupee more, and that too systematically. The rest keeps growing. Your future is not the emergency.";
   // Word-onset times (seconds) measured in voice/crash.mp3 & voice/emergency.mp3.
   // One entry per word of the QUOTED line (the leading/trailing quote attaches to
   // the first/last word). Drives the subtitle reveal in lockstep with the clip.
-  const RM_CRASH_TIMES = [0.34, 0.59, 0.84, 1.08, 1.70, 1.94, 2.41, 3.21, 3.46, 3.71, 3.96, 4.21, 4.93, 5.09, 5.25, 5.64, 5.83, 6.01, 6.19, 6.61, 6.81, 7.01, 7.42];
-  const RM_EM_TIMES = [0.55, 1.16, 1.76, 2.36, 2.69, 3.08, 3.57, 3.81, 4.44, 4.65, 4.86, 5.21, 5.70, 5.86, 6.20, 6.55, 7.00, 7.30, 7.59, 7.89, 8.18];
+  const RM_CRASH_TIMES = [0.57, 0.86, 1.16, 1.30, 1.88, 2.10, 2.41, 2.56, 2.78, 3.46, 3.87, 4.08, 4.94, 5.35, 5.48, 5.62, 6.35, 6.53, 6.78, 6.90, 7.09];
+  const RM_EM_TIMES = [0.64, 1.14, 1.40, 1.59, 1.90, 2.06, 2.29, 2.51, 2.89, 3.56, 3.74, 3.99, 4.18, 5.83, 6.00, 6.24, 6.54, 7.26, 7.52, 7.90, 8.03, 8.23, 8.42];
   // Make a rupee figure personal & exact: express it in the user's own SIP.
   function sipSpan(rupees) {
     const months = Math.abs(rupees) / state.sip, yrs = months / 12;
@@ -1483,7 +1483,7 @@ if (typeof document !== 'undefined') (function () {
     const av = document.querySelector('#friendReveal .call-avatar'); if (av) av.classList.remove('ringing');
     const wave = $('revealWave'); if (wave) wave.hidden = false;
     setText('revealStatus', 'Connected · MD');
-    narrate(RM_CRASH_LINE, { rate: 0.98, clip: 'voice/crash.mp3?v=20260618', caption: { id: 'revealQuote', text: '"' + RM_CRASH_LINE + '"', times: RM_CRASH_TIMES } }, () => { const go = $('friendRevealBtn'); if (go) go.hidden = false; });
+    narrate(RM_CRASH_LINE, { rate: 0.98, clip: 'voice/crash.mp3?v=20260731', caption: { id: 'revealQuote', text: '"' + RM_CRASH_LINE + '"', times: RM_CRASH_TIMES } }, () => { const go = $('friendRevealBtn'); if (go) go.hidden = false; });
   }
   function choose(choice) {
     state.choice = choice; Sound.stopHeart();
@@ -1896,7 +1896,7 @@ if (typeof document !== 'undefined') (function () {
     const av = document.querySelector('#emCall .call-avatar'); if (av) av.classList.remove('ringing');
     const wave = $('emCallWave'); if (wave) wave.hidden = false;
     setText('emCallStatus', 'Connected · MD');
-    narrate(RM_EM_LINE, { rate: 0.98, clip: 'voice/emergency.mp3?v=20260618', caption: { id: 'emQuote', text: '"' + RM_EM_LINE + '"', times: RM_EM_TIMES } }, () => { const go = $('emCallBtn'); if (go) go.hidden = false; });
+    narrate(RM_EM_LINE, { rate: 0.98, clip: 'voice/emergency.mp3?v=20260731', caption: { id: 'emQuote', text: '"' + RM_EM_LINE + '"', times: RM_EM_TIMES } }, () => { const go = $('emCallBtn'); if (go) go.hidden = false; });
   }
   function emToResult() {
     stopCallTimer(); hide($('emCall')); Sound.whoosh(); Sound.resolve();
@@ -1970,7 +1970,7 @@ if (typeof document !== 'undefined') (function () {
     // start INSTANTLY on tap — otherwise the file is only fetched when the call
     // screen opens, which on mobile delays the voice by a few seconds. Kept
     // referenced (state._clipPreload) so the browser doesn't discard them.
-    state._clipPreload = ['voice/opening.mp3?v=20260618', 'voice/crash.mp3?v=20260618', 'voice/emergency.mp3?v=20260618'].map((src) => {
+    state._clipPreload = ['voice/opening.mp3?v=20260618', 'voice/crash.mp3?v=20260731', 'voice/emergency.mp3?v=20260731'].map((src) => {
       try { const a = new Audio(); a.preload = 'auto'; a.src = src; a.load(); return a; } catch (e) { return null; }
     });
     // Recorded opening clip (instant + identically-timed on every device). When
