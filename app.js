@@ -1913,13 +1913,10 @@ if (typeof document !== 'undefined') (function () {
     setText('emStrikeNeed', inrShort(ctx.need));
     setHTML('emStrikePressure', 'You never planned to touch your investments. Now you have to.');
     show($('emStrike'));
-    // Deliberately NOT narrate() here: this is the urgent beat, and narrate()
-    // dims every button to 40% until the voice ends — on mobile that reads as a
-    // locked screen for the whole speech-startup delay and kills the rhythm.
-    // The screen stays fully live and the amount is spoken immediately; if the
-    // user taps on before she finishes, emToDecision() stops the line so it can
-    // never bleed into the next screen.
-    say('You need ' + amountWords(ctx.need) + ', now.', { rate: 0.92 });
+    // The screen opens fully live and the amount is spoken at once. The button
+    // locks only while she is actually saying it (the lock is keyed on real
+    // speech, not on the screen appearing) and unlocks the instant she stops.
+    narrate('You need ' + amountWords(ctx.need) + ', now.', { rate: 0.92 });
   }
   function emToDecision() { Voice.stop(); document.body.classList.remove('narrating', 'voice-live'); hide($('emStrike')); show($('emDecision')); Sound.setHeart(92); } // the clock, running
   function emChoose(r) {
