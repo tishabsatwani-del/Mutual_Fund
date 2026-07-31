@@ -846,10 +846,21 @@ if (typeof document !== 'undefined') (function () {
    * scrolls down. Works for both scroll models here — overlays scroll internally,
    * the wizard/emergency screens scroll the page — by detecting whichever applies. */
   function cueScroller() {
+    // Three different things can be the scroller here, so check them all in
+    // priority order: an open overlay, the active full screen (the wizard sets
+    // overflow-y on #setup, so IT scrolls rather than the page), then the page
+    // itself. Missing the middle case is why the cue never appeared on the
+    // wizard steps until a scroll happened to make the page scrollable too.
+    const cands = [];
     const ov = document.querySelector('.overlay.show:not([hidden])');
-    if (ov && ov.scrollHeight - ov.clientHeight > 24) return ov;
+    if (ov) cands.push(ov);
+    document.querySelectorAll('.screen:not([hidden])').forEach((s) => cands.push(s));
     const doc = document.scrollingElement || document.documentElement;
-    if (doc && doc.scrollHeight - doc.clientHeight > 24) return doc;
+    if (doc) cands.push(doc);
+    for (let i = 0; i < cands.length; i++) {
+      const el = cands[i];
+      if (el && el.scrollHeight - el.clientHeight > 24) return el;
+    }
     return null;
   }
   let cuePending = false;
@@ -1387,6 +1398,10 @@ if (typeof document !== 'undefined') (function () {
     document.querySelectorAll('#w_' + name + ' .opt').forEach((b) => b.classList.toggle('on', b.dataset.val === cur));
     const back = $('wizBack'); if (back) back.hidden = state.wizIndex === 0;
     setHTML('wizDots', steps.map((s, idx) => '<span class="wdot' + (idx === state.wizIndex ? ' on' : '') + '"></span>').join(''));
+    // Each step has a different height (the five "storm" cards are the tallest),
+    // so re-evaluate the scroll cue whenever the step changes. Steps toggle
+    // [hidden] rather than going through show(), so nothing else would.
+    if (state.wizIndex >= 0) { cueRefresh(); setTimeout(cueRefresh, 80); setTimeout(cueRefresh, 400); }
   }
   function wizPick(name, val, btn) {
     state[WIZ_KEY[name]] = WIZ_NUM[name] ? Number(val) : val;
