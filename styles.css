@@ -593,7 +593,9 @@ body.narrating .cta, body.narrating .ghost-btn, body.narrating .maths-toggle {
 }
 body.narrating #muteBtn { opacity: 1; filter: none; pointer-events: auto; }
 .listen-hint { position: fixed; bottom: calc(20px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%) translateY(10px); z-index: 55; display: none; align-items: center; gap: 9px; padding: 10px 18px; border-radius: 999px; background: rgba(20,26,36,0.92); border: 1px solid rgba(62,224,164,0.4); color: var(--ink); font-size: 14px; font-weight: 600; opacity: 0; transition: opacity .3s ease, transform .3s ease; }
-body.narrating .listen-hint { display: flex; opacity: 1; transform: translateX(-50%) translateY(0); }
+/* Driven by voice-live (real audio), NOT narrating (screen shown) — so the
+ * badge never claims she is speaking while the screen is still silent. */
+body.voice-live .listen-hint { display: flex; opacity: 1; transform: translateX(-50%) translateY(0); }
 .listen-hint::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--direct); animation: blink 1s ease-in-out infinite; }
 @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.25; } }
 
