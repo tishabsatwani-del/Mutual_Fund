@@ -662,7 +662,7 @@ if (typeof document !== 'undefined') (function () {
     // screen sits silent, which reads as a sync fault.
     let startCap = null;
     const goLive = () => {
-      if (done) return;
+      if (done || live) return;          // once only — onboundary fires repeatedly
       live = true; document.body.classList.add('voice-live');
       if (opts && opts.onSpeechStart) { try { opts.onSpeechStart(); } catch (e) {} }
       if (startCap) { const f = startCap; startCap = null; f(); }
@@ -681,10 +681,26 @@ if (typeof document !== 'undefined') (function () {
         } else if (cap) { cap.all(); }
       };
       Voice.speak(spoken, Object.assign({}, opts, { onStart: goLive }), finish);
-      // NOTE: there is deliberately no short "never started" timer here. Nothing
-      // is locked while we wait (the lock follows real speech), and a 3s timer
-      // marked the narration done just before a slow engine finally began —
-      // after which goLive() bailed out and the button never locked at all.
+      // Several mobile browsers (Vivo/Android among them) never fire onstart or
+      // onend for an utterance. Relying on onstart alone meant the lock simply
+      // never engaged on those phones. Two independent safety nets:
+      //   (a) assumeLiveAfterMs — if no start event has arrived by then, treat
+      //       the line as live anyway, so the lock (and any paired reveal)
+      //       still happens and the voice follows within about a second;
+      //   (b) a poll of the engine's own state, so the lock always RELEASES
+      //       even when onend never fires.
+      const assumeAfter = (opts && opts.assumeLiveAfterMs) || 0;
+      if (assumeAfter) setTimeout(() => { if (!done && !live) goLive(); }, assumeAfter);
+      let sawBusy = false;
+      const poll = () => {
+        if (done) return;
+        let busy = false;
+        try { busy = window.speechSynthesis.speaking || window.speechSynthesis.pending; } catch (e) {}
+        if (busy) sawBusy = true;
+        else if (sawBusy) { finish(); return; }   // engine went idle → she has finished
+        setTimeout(poll, 90);
+      };
+      setTimeout(poll, 150);
       // Safety release — only a backstop for a stalled/silent engine. The real
       // release is onend; this must sit ABOVE any real narration's length so it
       // never unlocks the options mid-sentence (the pledge is ~28 words ≈ 15s).
@@ -1057,9 +1073,10 @@ if (typeof document !== 'undefined') (function () {
         const u = new SpeechSynthesisUtterance(text);
         if (!picked) picked = pick(); if (picked) u.voice = picked;
         u.rate = (opts && opts.rate) || 0.92; u.pitch = (opts && opts.pitch) || 1; u.volume = (opts && opts.volume) || 1;
-        // onstart fires when the engine ACTUALLY begins speaking — the only
-        // truthful moment to show "she is speaking" UI.
-        if (opts && opts.onStart) u.onstart = opts.onStart;
+        // onstart fires when the engine ACTUALLY begins speaking. Some mobile
+        // engines never fire it, so onboundary (emitted per word DURING speech)
+        // is wired to the same handler as a second, independent signal.
+        if (opts && opts.onStart) { u.onstart = opts.onStart; u.onboundary = opts.onStart; }
         if (onEnd) { u.onend = onEnd; u.onerror = onEnd; }
         window.speechSynthesis.speak(u);
       } catch (e) { if (onEnd) onEnd(); }
@@ -1921,9 +1938,13 @@ if (typeof document !== 'undefined') (function () {
     // even if the engine stalls, and a muted user never waits at all.
     let shown = false;
     const reveal = () => { if (shown) return; shown = true; hide($('emIntro')); show($('emStrike')); };
-    narrate('You need ' + amountWords(ctx.need) + ', now.', { rate: 0.92, onSpeechStart: reveal });
+    // reveal is fired by narrate the moment the line goes live — either from a
+    // real speech-start event, or (on phones that never send one) from
+    // assumeLiveAfterMs. Either way the screen, the lock and the voice land
+    // together, and the button frees the instant she stops.
+    narrate('You need ' + amountWords(ctx.need) + ', now.', { rate: 0.92, onSpeechStart: reveal, assumeLiveAfterMs: 1700 });
     if (!Voice.available || !Voice.isEnabled()) reveal(); // muted: no voice to wait for
-    setTimeout(reveal, 2000);                             // hard cap — never hang on the old screen
+    setTimeout(reveal, 2600);                             // hard cap — never hang on the old screen
   }
   function emToDecision() { Voice.stop(); document.body.classList.remove('narrating', 'voice-live'); hide($('emStrike')); show($('emDecision')); Sound.setHeart(92); } // the clock, running
   function emChoose(r) {
