@@ -1896,6 +1896,8 @@ if (typeof document !== 'undefined') (function () {
   function sleeveRow(name, val, note) { return '<div class="sleeve"><span class="sl-name">' + name + '</span><span class="sl-val">' + inrShort(val) + '</span><span class="sl-note">' + note + '</span></div>'; }
   function emToStrike() {
     Sound.unlock(); Sound.strike(); Voice.prime(); // wake the speech engine now (it may have slept on the corpus screen)
+    // Guarantee the strike screen never inherits a dimmed/locked look.
+    document.body.classList.remove('narrating', 'voice-live');
     hide($('emIntro'));
     const ctx = state.emCtx, em = ctx.em;
     const copy = {
@@ -1911,12 +1913,13 @@ if (typeof document !== 'undefined') (function () {
     setText('emStrikeNeed', inrShort(ctx.need));
     setHTML('emStrikePressure', 'You never planned to touch your investments. Now you have to.');
     show($('emStrike'));
-    // narrate() (not say()) so the "What do you do?" button is LOCKED until the
-    // amount has actually been spoken. With a bare say() the line was
-    // fire-and-forget: a quick tap moved to the next screen and the voice then
-    // spoke the amount over it. This is now consistent with every other
-    // narrated screen in the app.
-    narrate('You need ' + amountWords(ctx.need) + ', now.', { rate: 0.92 });
+    // Deliberately NOT narrate() here: this is the urgent beat, and narrate()
+    // dims every button to 40% until the voice ends — on mobile that reads as a
+    // locked screen for the whole speech-startup delay and kills the rhythm.
+    // The screen stays fully live and the amount is spoken immediately; if the
+    // user taps on before she finishes, emToDecision() stops the line so it can
+    // never bleed into the next screen.
+    say('You need ' + amountWords(ctx.need) + ', now.', { rate: 0.92 });
   }
   function emToDecision() { Voice.stop(); document.body.classList.remove('narrating', 'voice-live'); hide($('emStrike')); show($('emDecision')); Sound.setHeart(92); } // the clock, running
   function emChoose(r) {
