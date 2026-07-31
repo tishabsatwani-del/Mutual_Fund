@@ -845,23 +845,29 @@ if (typeof document !== 'undefined') (function () {
    * content below the fold. It hides as the user nears the bottom, and tapping it
    * scrolls down. Works for both scroll models here — overlays scroll internally,
    * the wizard/emergency screens scroll the page — by detecting whichever applies. */
+  // A screen must have THIS much genuinely hidden below before the cue appears.
+  // Deliberately well above the few stray pixels that 100vh/safe-area rounding
+  // can leave behind on mobile — otherwise almost every screen looks scrollable
+  // and the cue shows where there is nothing to see.
+  const CUE_MIN = 120;
+  function canScroll(el) { return !!el && el.scrollHeight - el.clientHeight > CUE_MIN; }
   function cueScroller() {
-    // Three different things can be the scroller here, so check them all in
-    // priority order: an open overlay, the active full screen (the wizard sets
-    // overflow-y on #setup, so IT scrolls rather than the page), then the page
-    // itself. Missing the middle case is why the cue never appeared on the
-    // wizard steps until a scroll happened to make the page scrollable too.
-    const cands = [];
+    // An open overlay covers everything behind it, so it is the ONLY surface the
+    // user can scroll — never fall through to the screens underneath it.
     const ov = document.querySelector('.overlay.show:not([hidden])');
-    if (ov) cands.push(ov);
-    document.querySelectorAll('.screen:not([hidden])').forEach((s) => cands.push(s));
-    const doc = document.scrollingElement || document.documentElement;
-    if (doc) cands.push(doc);
-    for (let i = 0; i < cands.length; i++) {
-      const el = cands[i];
-      if (el && el.scrollHeight - el.clientHeight > 24) return el;
+    if (ov) return canScroll(ov) ? ov : null;
+    // Otherwise: a visible screen that is genuinely its own scroll container
+    // (the wizard sets overflow-y on #setup, so IT scrolls, not the page).
+    // Screens without their own overflow are skipped — the page scrolls for them.
+    const screens = document.querySelectorAll('.screen:not([hidden])');
+    for (let i = 0; i < screens.length; i++) {
+      const s = screens[i];
+      let oy = '';
+      try { oy = getComputedStyle(s).overflowY; } catch (e) {}
+      if ((oy === 'auto' || oy === 'scroll') && canScroll(s)) return s;
     }
-    return null;
+    const doc = document.scrollingElement || document.documentElement;
+    return canScroll(doc) ? doc : null;
   }
   let cuePending = false;
   function cueRefresh() {
@@ -872,7 +878,7 @@ if (typeof document !== 'undefined') (function () {
       const s = cueScroller();
       if (!s) { cue.classList.remove('on'); return; }
       const remaining = (s.scrollHeight - s.clientHeight) - (s.scrollTop || 0);
-      cue.classList.toggle('on', remaining > 60);
+      cue.classList.toggle('on', remaining > CUE_MIN);
     });
   }
   function cueScrollDown() {
