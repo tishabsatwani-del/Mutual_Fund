@@ -67,9 +67,15 @@
   }
   .download:active { opacity: .85; }
   .filenote {
-    margin: -1.1rem 0 1.6rem;
+    margin: -1.1rem 0 .5rem;
     text-align: center;
     font-size: .9rem;
+    color: var(--muted);
+  }
+  .appnote {
+    margin: 0 0 1.8rem;
+    text-align: center;
+    font-size: 1rem;
     color: var(--muted);
   }
   .footnote {
@@ -96,6 +102,11 @@
        spaced name without its extension, and the file then opens in nothing. -->
   <a class="download" href="XIRR-Calculator.xlsx" download="XIRR-Calculator.xlsx">Download the sheet</a>
   <p class="filenote">Excel file (.xlsx), 46 KB</p>
+  <!-- The one line added to the Part B copy. Without it, a reader on Android
+       with no spreadsheet app taps the downloaded file, nothing happens, and
+       the printed promise dies at the last step. -->
+  <p class="appnote">On a phone you will need a free spreadsheet app, such as
+  Google Sheets, to open it.</p>
 
   <h2>How to use it</h2>
   <ol>
