@@ -5,16 +5,26 @@ directory `xirr/` holds only the page, the file and the print artwork.
 
 | Script | What it does |
 |---|---|
-| `build_xlsx.py` | Builds `xirr/XIRR-Calculator.xlsx` from scratch |
+| `build_xlsx.py` | Builds the workbook from scratch |
+| `harden.py` | Adds cached formula results, then patches back the two number formats LibreOffice mangles |
 | `acceptance_tests.py` | Types each test case into the real file, recalculates it in LibreOffice, reads back the result and the status line |
 | `verify_structure.py` | Asserts the file against the brief: tab order, named ranges, locked cells, allowed functions only, no macros |
 
 ```
 pip install openpyxl segno            # and: apt-get install libreoffice-calc
-python3 tools/xirr/build_xlsx.py      xirr/XIRR-Calculator.xlsx
+python3 tools/xirr/build_xlsx.py       /tmp/raw.xlsx
+python3 tools/xirr/harden.py           /tmp/raw.xlsx xirr/XIRR-Calculator.xlsx
 python3 tools/xirr/verify_structure.py xirr/XIRR-Calculator.xlsx
 python3 tools/xirr/acceptance_tests.py xirr/XIRR-Calculator.xlsx
 ```
+
+**Do not skip `harden.py`.** A workbook straight out of openpyxl carries
+formulas with no stored results. Excel recalculates on open and is fine, but
+the previewers a phone reaches for first — iOS Quick Look, the Files app,
+Drive's preview, WhatsApp — do not calculate. They render every result cell
+empty, which reads to a reader as a broken file. `harden.py` recalculates the
+sheet once and stores the answers, so the file shows real numbers even when
+nothing is calculating.
 
 ## The printed address
 
