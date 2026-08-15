@@ -75,6 +75,20 @@ itself changes:
 python3 -c "import segno; segno.make('<url>', error='m').save('qr-xirr-sheet.svg', scale=30/41, border=4, dark='#000000', light='#ffffff', unit='mm')"
 ```
 
+## The one deviation from the Part B copy
+
+The page carries Part B's copy word for word, with a single added line under
+the download button:
+
+> On a phone you will need a free spreadsheet app, such as Google Sheets, to
+> open it.
+
+It is there because Android has no built-in spreadsheet viewer. Without an
+app registered for `.xlsx`, tapping the downloaded file does nothing at all —
+no error, no prompt — and the reader is stranded at the last step of a
+promise the book already made. Do not remove this line while "restoring" the
+original copy.
+
 ## What the page deliberately does not have
 
 No email capture, no form, no analytics, no comments, no embeds, no
