@@ -268,6 +268,70 @@
     html += '<p class="hint" style="margin-top:.6rem">Every row uses the same assumed return of ' +
       pct(input.annualRate) + ' a year.</p></div>';
 
+    /* ---- §8: one assumed return printed alone reads as a promise */
+    html += '<div class="card"><h2>It depends what the market does</h2>' +
+      '<div class="scroll"><table class="data"><thead><tr><th>If returns average</th>' +
+      '<th>You reach</th><th>Extra needed each month</th></tr></thead><tbody>';
+    E.requiredAcrossRates(input, [0.06, 0.08, 0.10, 0.12]).forEach(function (row) {
+      if (row.error) return;
+      html += '<tr' + (Math.abs(row.rate - input.annualRate) < 1e-9 ?
+        ' style="background:var(--accent-soft)"' : '') + '><td>' + pct(row.rate, 0) +
+        ' a year</td><td>' + money(row.projected) + '</td><td>' +
+        (row.onTrack ? 'nothing more needed' : money(row.extraMonthly) + ' a month') + '</td></tr>';
+    });
+    html += '</tbody></table></div>' +
+      '<p class="hint" style="margin-top:.6rem">Your own assumption of ' + pct(input.annualRate, 0) +
+      ' is highlighted. Nobody can tell you which of these rows the future will resemble.</p></div>';
+
+    /* ---- §9: what waiting costs */
+    var waits = E.costOfWaiting(input, [0, 5, 10]).filter(function (w) { return !w.error; });
+    if (waits.length > 1) {
+      html += '<div class="card"><h2>What waiting costs</h2>' +
+        '<div class="scroll"><table class="data"><thead><tr><th>If you start</th>' +
+        '<th>Years left</th><th>Needed each month</th><th>Total you pay in</th>' +
+        '</tr></thead><tbody>';
+      waits.forEach(function (w) {
+        html += '<tr><td>' + (w.impossible ? 'in ' + w.delay + ' years' :
+          w.delay === 0 ? 'now' : 'in ' + w.delay + ' years') + '</td>' +
+          (w.impossible
+            ? '<td colspan="3">the goal date has already passed</td>'
+            : '<td>' + w.yearsLeft + '</td><td>' + money(w.monthlyNeeded) + '</td><td>' +
+              money(w.totalPaid) + '</td>') + '</tr>';
+      });
+      html += '</tbody></table></div>';
+      if (waits.length > 1 && waits[0].monthlyNeeded > 0) {
+        html += '<div class="meaning"><h3>What this means</h3>' +
+          '<p>Same goal, same date, same assumed return. Waiting ' + waits[1].delay +
+          ' years raises what you must put in each month from ' + money(waits[0].monthlyNeeded) +
+          ' to <strong>' + money(waits[1].monthlyNeeded) + '</strong>, and raises the total you pay ' +
+          'in from ' + money(waits[0].totalPaid) + ' to ' + money(waits[1].totalPaid) + '.</p>' +
+          '<p>Nothing about the market changed between those rows. Only the number of years did.</p>' +
+          '</div>';
+      }
+      html += '</div>';
+    }
+
+    /* ---- §10: how much of the end is your money, and how much is growth */
+    var ownMoney = input.currentValue + plan.totalContributed;
+    var growth = plan.projected - ownMoney;
+    html += '<div class="card"><h2>Your money, and growth on it</h2><div class="stats">' +
+      stat('You put in', money(ownMoney)) +
+      stat('Growth on it', money(growth)) +
+      stat('You end with', money(plan.projected)) +
+      stat('Growth\u2019s share', growth > 0 ? pct(growth / plan.projected, 0) : '—') +
+      '</div>' +
+      '<div class="meaning"><h3>What this means</h3>' +
+      '<p>Of the ' + money(plan.projected) + ' at the end, ' + money(ownMoney) + ' is money you ' +
+      'handed over yourself and ' + money(growth) + ' is what it earned while you left it alone. ' +
+      'The longer the period, the more the second number does the work.</p></div></div>';
+
+    /* ---- §11: the target is in today's rupees unless the reader adjusts it */
+    html += '<div class="card">' + notice('',
+      '<strong>These are future rupees, not today\u2019s.</strong> ' + money(input.target) +
+      ' in ' + plan.years.toFixed(0) + ' years will not buy what ' + money(input.target) +
+      ' buys today. This tool does not model inflation, so if you want the goal to hold its ' +
+      'purchasing power, raise the target yourself before planning against it.') + '</div>';
+
     html += '<div class="meaning"><h3>What this means</h3>' +
       '<p>Of the ' + money(plan.projected) + ' above, ' + money(plan.fromCorpus) + ' comes from what you ' +
       'already hold and ' + money(plan.fromSip) + ' from what you keep adding. Over ' + plan.years.toFixed(1) +
@@ -280,7 +344,7 @@
       '<p>The ' + pct(input.annualRate) + ' is an assumption you typed in, not a rate anyone can promise. ' +
       'Real markets do not deliver the same return every year, and a run of poor years early on hurts more ' +
       'than the same years late. Treat this as an illustration of arithmetic, not a forecast.</p>' +
-      '<p>Inflation is not deducted. A goal set in today\'s rupees will cost more by the time it arrives.</p></div>';
+      '</div>';
 
     out.innerHTML = html;
   }
@@ -303,41 +367,36 @@
       '<div class="sub">Median annual return across ' + s.count.toLocaleString() + ' overlapping periods, ' +
       fmtDate(series[0].t) + ' to ' + fmtDate(series[series.length - 1].t) + '</div></div>';
 
-    html += '<div class="card"><h2>The range, not the average</h2><div class="stats">' +
-      stat('Worst', pct(s.min)) + stat('Median', pct(s.median)) +
-      stat('Average', pct(s.mean)) + stat('Best', pct(s.max)) +
-      '</div><div class="stats">' +
-      stat('Made money', pct(s.positiveShare, 0) + ' of periods') +
-      stat('Lost money', pct(s.negativeShare, 0) + ' of periods') +
-      stat('Lower quarter', 'below ' + pct(s.p25)) +
-      stat('Upper quarter', 'above ' + pct(s.p75)) +
+    /* Worst to best across the quartiles, in that order. An average put at the
+     * top of a screen becomes the number people remember, and it hides the
+     * spread that actually decided what any one investor got. */
+    html += '<div class="card"><h2>The range, not the average</h2>' +
+      '<div class="scroll"><table class="data spread"><thead><tr>' +
+      '<th>Worst</th><th>25th</th><th>Median</th><th>75th</th><th>Best</th>' +
+      '</tr></thead><tbody><tr>' +
+      '<td>' + pct(s.min) + '</td><td>' + pct(s.p25) + '</td><td><strong>' + pct(s.median) +
+      '</strong></td><td>' + pct(s.p75) + '</td><td>' + pct(s.max) + '</td>' +
+      '</tr></tbody></table></div>' +
+      '<p class="hint" style="margin:.5rem 0 1rem">A quarter of periods fell below ' +
+      pct(s.p25) + ', and a quarter came in above ' + pct(s.p75) + '. The average of ' +
+      pct(s.mean) + ' is shown for completeness; the spread above is what decided ' +
+      'what any one investor actually got.</p>' +
+      '<div class="stats">' +
+      stat('Periods measured', s.count.toLocaleString()) +
+      stat('Made money', pct(s.positiveShare, 0)) +
+      stat('Lost money', pct(s.negativeShare, 0)) +
+      stat('Average', pct(s.mean)) +
       '</div>' + A.histogramChart(r.values, {
         years: years,
         caption: 'Each bar counts the ' + years + '-year periods that ended in that range'
       }) + '</div>';
 
+    html += startDateCard(r, years);
+    html += drawdownCard(series);
     html += rateCheckCard(key, years, r.values);
 
     if (compareSeries) {
-      var c = E.rollingReturns(compareSeries, years);
-      if (c.ok) {
-        html += '<div class="card"><h2>Against ' + esc(compareName) + '</h2><div class="scroll">' +
-          '<table class="data"><thead><tr><th>Over ' + years + ' years</th><th>' + esc(meta.name) +
-          '</th><th>' + esc(compareName) + '</th></tr></thead><tbody>' +
-          cmp('Worst period', s.min, c.stats.min) +
-          cmp('Median period', s.median, c.stats.median) +
-          cmp('Best period', s.max, c.stats.max) +
-          '<tr><td>Periods measured</td><td>' + s.count.toLocaleString() + '</td><td>' +
-          c.stats.count.toLocaleString() + '</td></tr>' +
-          '</tbody></table></div>' +
-          '<div class="meaning"><h3>Read this carefully</h3>' +
-          '<p>The two series may not cover identical dates, and a benchmark carries no costs while a fund ' +
-          'carries expenses, cash holdings and portfolio decisions. A benchmark comparison is a reference ' +
-          'point, not a complete evaluation of a fund.</p></div></div>';
-      } else {
-        html += '<div class="card">' + notice('', 'The comparison series does not cover a ' + years +
-          '-year period, so no side-by-side is shown.') + '</div>';
-      }
+      html += comparisonCards(series, compareSeries, years, meta.name, compareName);
     }
 
     html += '<div class="meaning"><h3>What this means</h3>' +
@@ -364,6 +423,50 @@
       'tolerance when a market was shut. Periods falling inside a longer gap in the data are left out ' +
       'rather than stretched.</p></div></details>';
 
+    return html;
+  }
+
+  /* Same holding period, same market, different starting day. This is the
+   * question a single headline return cannot answer. */
+  function startDateCard(r, years) {
+    var spread = r.best.r - r.worst.r;
+    return '<div class="card"><h2>Would it still look this way if you had started elsewhere?</h2>' +
+      '<div class="scroll"><table class="data"><thead><tr><th>Starting on</th><th>Held until</th>' +
+      '<th>You would have got</th></tr></thead><tbody>' +
+      '<tr><td>' + fmtDate(r.best.t) + '</td><td>' + fmtDate(r.best.endT) + '</td><td>' +
+      pct(r.best.r) + ' a year</td></tr>' +
+      '<tr><td>' + fmtDate(r.worst.t) + '</td><td>' + fmtDate(r.worst.endT) + '</td><td>' +
+      pct(r.worst.r) + ' a year</td></tr>' +
+      '</tbody></table></div>' +
+      '<div class="meaning"><h3>What this means</h3>' +
+      '<p>Both investors held for the same ' + years + ' years, in the same market. The only ' +
+      'difference between them was the day they started, and that difference is worth <strong>' +
+      pct(spread) + ' a year</strong>.</p>' +
+      '<p>Nobody chooses their starting day on purpose. It is worth knowing how much of any ' +
+      'headline return was decided by it.</p></div></div>';
+  }
+
+  /* A return says what was earned. This says what had to be sat through. */
+  function drawdownCard(series) {
+    var dd = E.maxDrawdown(series);
+    if (!dd.ok || dd.depth === 0) return '';
+    var html = '<div class="card"><h2>The worst fall along the way</h2><div class="stats">' +
+      stat('Deepest fall', pct(dd.depth)) +
+      stat('It began', fmtDate(dd.from.t)) +
+      stat('It bottomed', fmtDate(dd.to.t)) +
+      stat('Back to the old high', dd.recoveredOn ? fmtDate(dd.recoveredOn) : 'not yet in this data') +
+      '</div>';
+    html += '<div class="meaning"><h3>What this means</h3>';
+    if (dd.recoveredOn) {
+      html += '<p>Anyone holding through this watched <strong>' + pct(-dd.depth) + '</strong> of their ' +
+        'money disappear over ' + Math.round(dd.fallDays / 30) + ' months, and waited a further <strong>' +
+        Math.round(dd.recoveryDays / 30) + ' months</strong> just to get back to where they had already been.</p>';
+    } else {
+      html += '<p>The fall of <strong>' + pct(-dd.depth) + '</strong> had not been recovered by the end ' +
+        'of this data.</p>';
+    }
+    html += '<p>Returns are earned by the people who were still there afterwards. This is the part ' +
+      'of the record that decides who those people are.</p></div></div>';
     return html;
   }
 
@@ -395,6 +498,89 @@
     return res.above.toLocaleString() + ' of ' + res.count.toLocaleString() + ' ' + years +
       '-year periods returned more than ' + pct(rate, 1) + ' a year.';
   }
+
+  /* Every window both series can cover, paired by start date. One end-to-end
+   * number can be an accident of where it started; how often one led the other
+   * cannot. */
+  function comparisonCards(series, compareSeries, years, name, compareName) {
+    var c = E.compareRolling(series, compareSeries, years);
+    if (!c.ok) {
+      return '<div class="card">' + notice('bad', esc(c.message)) + '</div>';
+    }
+    var f = c.fund, b = c.bench;
+    var html = '<div class="card"><h2>Against ' + esc(compareName) + '</h2>' +
+      '<div class="result" style="margin:0 0 1rem"><div class="label">Periods where ' +
+      esc(name) + ' came out ahead</div><div class="value">' + pct(c.fundAheadShare, 0) + '</div>' +
+      '<div class="sub">' + c.fundAhead.toLocaleString() + ' of ' + c.pairs.toLocaleString() +
+      ' matched ' + years + '-year periods, ' + fmtDate(c.from) + ' to ' + fmtDate(c.to) + '</div></div>' +
+      '<div class="scroll"><table class="data"><thead><tr><th>Over ' + years + ' years</th><th>' +
+      esc(name) + '</th><th>' + esc(compareName) + '</th></tr></thead><tbody>' +
+      cmp('Worst period', f.min, b.min) +
+      cmp('25th percentile', f.p25, b.p25) +
+      cmp('Median period', f.median, b.median) +
+      cmp('75th percentile', f.p75, b.p75) +
+      cmp('Best period', f.max, b.max) +
+      cmp('Periods that made money', f.positiveShare, b.positiveShare) +
+      '<tr><td>Periods compared</td><td>' + c.pairs.toLocaleString() + '</td><td>' +
+      c.pairs.toLocaleString() + '</td></tr>' +
+      '</tbody></table></div>' +
+      '<div class="meaning"><h3>What this means</h3>' +
+      '<p>Only periods that both sets of data cover are compared, so neither is judged on dates the ' +
+      'other never saw. The gap in the median is ' +
+      '<strong>' + (f.median >= b.median ? '+' : '') + ((f.median - b.median) * 100).toFixed(1) +
+      ' percentage points</strong> a year.</p>' +
+      '<p>Leading in ' + pct(c.fundAheadShare, 0) + ' of periods is a different statement from leading ' +
+      'over one stretch. A fund can win on the dates you happen to look at and lose on most others.</p>' +
+      '</div>' +
+      '<div class="meaning"><h3>What it does not mean</h3>' +
+      '<p>A benchmark carries no costs, holds no cash and makes no decisions; a fund does all three. ' +
+      'A benchmark comparison is a reference point, not proof that a fund is good or bad, and it says ' +
+      'nothing about whether the fund suits you.</p></div></div>';
+
+    return html + realityCheck(series, compareSeries, c, name, compareName);
+  }
+
+  /* Four plain judgements, each with the rule that produced it written out, so
+   * a reader can disagree with the rule rather than the label. */
+  function realityCheck(series, compareSeries, c, name, compareName) {
+    var medianGap = c.fund.median - c.bench.median;
+    var fundDD = E.maxDrawdown(series), benchDD = E.maxDrawdown(compareSeries);
+    var ddGap = (fundDD.ok && benchDD.ok) ? fundDD.depth - benchDD.depth : null;
+    var overlapYears = (c.to - c.from) / (365.2425 * 86400000);
+
+    var rows = [
+      ['Return', grade(medianGap >= 0.01 ? 'Ahead' : medianGap <= -0.01 ? 'Behind' : 'Similar'),
+       'Median ' + c.years + '-year return against ' + esc(compareName) + ', ' +
+       (medianGap >= 0 ? '+' : '') + (medianGap * 100).toFixed(1) + ' points a year.'],
+      ['Consistency', grade(c.fundAheadShare >= 0.66 ? 'Strong' : c.fundAheadShare >= 0.34 ? 'Mixed' : 'Weak'),
+       'Came out ahead in ' + pct(c.fundAheadShare, 0) + ' of matched periods.'],
+      ['Falls along the way', grade(ddGap === null ? 'Not measured' : ddGap >= 0.02 ? 'Shallower' :
+        ddGap <= -0.02 ? 'Deeper' : 'Similar'),
+       ddGap === null ? 'Not enough data to measure.' :
+        'Worst fall ' + pct(fundDD.depth) + ' against ' + pct(benchDD.depth) + '.'],
+      ['Weight of evidence', grade(overlapYears >= 10 ? 'Strong' : overlapYears >= 5 ? 'Moderate' : 'Limited'),
+       overlapYears.toFixed(1) + ' years of overlapping history, ' +
+       c.pairs.toLocaleString() + ' periods compared.']
+    ];
+
+    return '<div class="card"><h2>Reality check</h2><div class="scroll">' +
+      '<table class="data"><tbody>' +
+      rows.map(function (r) {
+        return '<tr><td>' + esc(r[0]) + '</td><td><strong>' + esc(r[1]) + '</strong></td><td>' +
+          r[2] + '</td></tr>';
+      }).join('') +
+      '</tbody></table></div>' +
+      '<div class="meaning"><h3>Before you read anything into this</h3>' +
+      '<p>Every line above is a description of what already happened over these dates, against this ' +
+      'benchmark. None of it establishes that the fund is suitable for you, and none of it is a ' +
+      'forecast.</p>' +
+      '<p>Nothing here is a recommendation to buy, hold, sell or switch. Suitability depends on your ' +
+      'goal, your horizon, what else you own and what you can sit through — none of which this tool ' +
+      'knows.</p></div></div>';
+  }
+
+  /* the word carries the meaning, never a colour on its own */
+  function grade(word) { return word; }
 
   function cmp(label, a, b) {
     return '<tr><td>' + esc(label) + '</td><td>' + pct(a) + '</td><td>' + pct(b) + '</td></tr>';

@@ -16,7 +16,7 @@ from openpyxl.workbook.defined_name import DefinedName
 
 OUT = sys.argv[1]
 
-VERSION = "1.1"
+VERSION = "1.2"
 BUILT = "22-Aug-2026"
 
 FIRST_ROW, LAST_ROW = 8, 507
@@ -34,6 +34,7 @@ HEAD_FILL = PatternFill("solid", fgColor="FF1F4E5F")
 RESULT_FONT = Font(name="Calibri", size=28, bold=True, color="FF1F4E5F")
 RESULT_FILL = PatternFill("solid", fgColor="FFEAF3F6")
 GREY_FILL = PatternFill("solid", fgColor="FFF2F2F2")
+INPUT_FILL = PatternFill("solid", fgColor="FFFFFDF0")   # every cell a reader types into
 STATUS_FONT = Font(name="Calibri", size=12, color="FFB00020")
 LABEL_FONT = Font(name="Calibri", size=12, bold=True)
 
@@ -42,7 +43,8 @@ THIN = Side(style="thin", color="FFBFBFBF")
 CELL_BORDER = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
 
 INSTRUCTION = (
-    "One row for every payment, with no blank rows in between. The last row "
+    "Type in the cream cells only \u2014 everything else is worked out for you. "
+    "One row for every payment, with no blank rows in between, and the last row "
     "must be today's date, Value today, and what the holding is worth now."
 )
 
@@ -59,7 +61,7 @@ STATUS_FORMULA = (
     'IF(Calc!$D$2=0,"Add at least one investment.","")))'
 )
 
-HEADINGS = ["Date", "What happened", "Amount", "Used by the sheet"]
+HEADINGS = ["Date", "What happened", "Amount", "Used by the sheet", "Which holding"]
 
 
 def excel_serial(d):
@@ -76,6 +78,7 @@ def widths(ws):
     ws.column_dimensions["C"].width = 17
     ws.column_dimensions["D"].width = 14
     ws.column_dimensions["E"].width = 15
+    ws.column_dimensions["F"].width = 18
 
 
 def header_block(ws, fund_name=None):
@@ -103,7 +106,7 @@ def header_block(ws, fund_name=None):
     ws["B6"].font = BODY
     ws.row_dimensions[6].height = 16
 
-    for col, heading in zip("BCDE", HEADINGS):
+    for col, heading in zip("BCDEF", HEADINGS):
         c = ws[f"{col}{HEAD_ROW}"]
         c.value = heading
         c.font = HEAD_FONT
@@ -116,19 +119,24 @@ def header_block(ws, fund_name=None):
 def entry_rows(ws, unlock):
     """Pre-format rows 8-507 and drop the flow formula into column E."""
     for row in range(FIRST_ROW, LAST_ROW + 1):
-        b, c, d, e = (ws[f"{x}{row}"] for x in "BCDE")
-        for cell in (b, c, d):
+        b, c, d, e, f = (ws[f"{x}{row}"] for x in "BCDEF")
+        for cell in (b, c, d, f):
             cell.font = BODY
             cell.border = CELL_BORDER
             if unlock:
                 cell.protection = UNLOCKED
         b.number_format = DATE_FMT
         d.number_format = MONEY_FMT
+        if unlock:
+            # cream means "yours to type in"; grey means "the sheet works this out"
+            for cell in (b, c, d, f):
+                cell.fill = INPUT_FILL
         e.value = flow_formula(row)
         e.font = GREY
         e.fill = GREY_FILL
         e.border = CELL_BORDER
         e.number_format = MONEY_FMT
+        f.font = BODY
 
 
 def validations(ws):
@@ -201,6 +209,74 @@ inv["B4"] = RESULT_FORMULA
 inv["B5"] = STATUS_FORMULA
 entry_rows(inv, unlock=True)
 validations(inv)
+
+# ---- what the whole portfolio did
+inv["H2"] = "Your portfolio"
+inv["H2"].font = HEAD_FONT
+inv["H2"].fill = HEAD_FILL
+inv["I2"].fill = HEAD_FILL
+SUMMARY = [
+    (3, "You put in", "=Calc!$D$3"),
+    (4, "You took out", "=Calc!$D$4"),
+    (5, "Worth now", "=Calc!$D$5"),
+    (6, "Gain or loss", "=Calc!$D$5+Calc!$D$4-Calc!$D$3"),
+    (7, "How long you have held it",
+     '=IF(COUNT($B$8:$B$507)=0,"",'
+     'TEXT((OFFSET($B$8,COUNT($B$8:$B$507)-1,0)-$B$8)/365.25,"0.0")&" years")'),
+]
+for row, label, formula in SUMMARY:
+    inv.cell(row=row, column=8, value=label).font = BODY
+    c = inv.cell(row=row, column=9, value=formula)
+    c.font = BODY
+    if row != 7:
+        c.number_format = MONEY_FMT
+inv.column_dimensions["H"].width = 26
+inv.column_dimensions["I"].width = 18
+inv.column_dimensions["J"].width = 16
+
+# ---- each holding on its own, beside the whole
+#
+# A reader who owns three funds wants to know how each did AND how their money
+# did. Those are different questions and usually have different answers, which
+# is the single most useful thing this tab can show them.
+inv["H9"] = "Each holding on its own"
+inv["H9"].font = HEAD_FONT
+inv["H9"].fill = HEAD_FILL
+for col in "IJ":
+    inv[f"{col}9"].fill = HEAD_FILL
+inv["H10"] = "Type a holding name"
+inv["I10"] = "You put in"
+inv["J10"] = "Its own XIRR"
+for col in "HIJ":
+    inv[f"{col}10"].font = LABEL_FONT
+
+FLOW_COL = ["AE", "AF", "AG", "AH", "AI"]
+for slot in range(1, 6):
+    row = 10 + slot
+    name = inv.cell(row=row, column=8)
+    name.font = BODY
+    name.protection = UNLOCKED
+    name.border = CELL_BORDER
+    name.fill = INPUT_FILL
+    put = inv.cell(row=row, column=9, value=f"=IF($H{row}=\"\",\"\",Calc!$L${slot})")
+    put.font = BODY
+    put.number_format = MONEY_FMT
+    rate = inv.cell(row=row, column=10, value=(
+        f'=IF($H{row}="","",'
+        f'IFERROR(XIRR(OFFSET(Calc!${FLOW_COL[slot - 1]}$8,0,0,COUNT($B$8:$B$507),1),Flow_Dates),'
+        f'IFERROR(XIRR(OFFSET(Calc!${FLOW_COL[slot - 1]}$8,0,0,COUNT($B$8:$B$507),1),Flow_Dates,-0.5),'
+        f'"not enough entries")))'
+    ))
+    rate.font = BODY
+    rate.number_format = PCT_FMT
+
+inv["H17"] = "Leave the names blank if you hold only one thing."
+inv["H17"].font = GREY
+inv["H18"] = "Your portfolio XIRR is not the average of these."
+inv["H18"].font = BODY_BOLD
+inv["H19"] = "It weighs each holding by how much money you actually had in it, and for how long."
+inv["H19"].font = GREY
+
 protect(inv)
 
 # ------------------------------------------------------------- Plan my goal
@@ -239,7 +315,7 @@ for row, label, default, kind in GOAL_INPUTS:
     b.font = BODY
     b.protection = UNLOCKED
     b.border = CELL_BORDER
-    b.fill = PatternFill("solid", fgColor="FFFFFDF0")
+    b.fill = INPUT_FILL
     if kind == "money":
         b.number_format = MONEY_FMT
     elif kind in ("rate", "years"):
@@ -426,9 +502,44 @@ calc["C1"] = "Rows marked Value today"
 calc["D1"] = f"=SUM($A${FIRST_ROW}:$A${LAST_ROW})"
 calc["C2"] = "Rows marked Investment"
 calc["D2"] = f"=SUM($B${FIRST_ROW}:$B${LAST_ROW})"
+# Helper columns live out at AA and beyond so they can never collide with the
+# goal tab's terms in F to I.
+FLOW_COLS = ["AE", "AF", "AG", "AH", "AI"]      # each holding's cash flow
+PAID_COLS = ["AK", "AL", "AM", "AN", "AO"]      # each holding's money in
+
 for row in range(FIRST_ROW, LAST_ROW + 1):
     calc[f"A{row}"] = f"=IF('My investments'!$C{row}=\"Value today\",1,0)"
     calc[f"B{row}"] = f"=IF('My investments'!$C{row}=\"Investment\",1,0)"
+    calc[f"AA{row}"] = f"=IF('My investments'!$C{row}=\"Investment\",'My investments'!$D{row},0)"
+    calc[f"AB{row}"] = f"=IF('My investments'!$C{row}=\"Withdrawal\",'My investments'!$D{row},0)"
+    calc[f"AC{row}"] = f"=IF('My investments'!$C{row}=\"Value today\",'My investments'!$D{row},0)"
+    # One column per holding: this row's flow if it belongs to that holding,
+    # otherwise zero. A zero contributes nothing to XIRR, so each column is that
+    # holding's own cash flow with every date left in place -- which is how a
+    # subset gets measured without a function that filters.
+    for slot in range(5):
+        name_cell = f"'My investments'!$H${11 + slot}"
+        calc[f"{FLOW_COLS[slot]}{row}"] = (
+            f"=IF({name_cell}=\"\",0,"
+            f"IF('My investments'!$F{row}={name_cell},'My investments'!$E{row},0))"
+        )
+        calc[f"{PAID_COLS[slot]}{row}"] = (
+            f"=IF({name_cell}=\"\",0,"
+            f"IF('My investments'!$F{row}={name_cell},$AA{row},0))"
+        )
+
+# what each holding received, for the table beside it
+for slot in range(5):
+    calc[f"K{slot + 1}"] = f"holding {slot + 1} invested"
+    calc[f"L{slot + 1}"] = f"=SUM({PAID_COLS[slot]}${FIRST_ROW}:{PAID_COLS[slot]}${LAST_ROW})"
+
+# ---- what the whole portfolio did, for the summary beside the entry table
+calc["C3"] = "Total invested"
+calc["D3"] = f"=SUM($AA${FIRST_ROW}:$AA${LAST_ROW})"
+calc["C4"] = "Total withdrawn"
+calc["D4"] = f"=SUM($AB${FIRST_ROW}:$AB${LAST_ROW})"
+calc["C5"] = "Value today"
+calc["D5"] = f"=SUM($AC${FIRST_ROW}:$AC${LAST_ROW})"
 
 # ---- goal-tab helpers.
 #

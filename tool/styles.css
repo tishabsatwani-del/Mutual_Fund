@@ -245,6 +245,8 @@ button.link {
 table.data { width: 100%; border-collapse: collapse; font-size: .9rem; font-variant-numeric: tabular-nums; }
 table.data th, table.data td { text-align: right; padding: .45rem .4rem; border-bottom: 1px solid var(--line); }
 table.data th:first-child, table.data td:first-child { text-align: left; }
+table.data.spread th, table.data.spread td { text-align: center; white-space: nowrap; }
+table.data.spread th:first-child, table.data.spread td:first-child { text-align: center; }
 table.data th { font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; }
 .scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 

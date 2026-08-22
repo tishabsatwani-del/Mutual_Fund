@@ -43,8 +43,8 @@ for phrase in ("Add your first investment above.",
 
 # entry table
 check("headings on row 7",
-      [inv[f"{c}7"].value for c in "BCDE"]
-      == ["Date", "What happened", "Amount", "Used by the sheet"])
+      [inv[f"{c}7"].value for c in "BCDEF"]
+      == ["Date", "What happened", "Amount", "Used by the sheet", "Which holding"])
 check("500 pre-formatted rows, 8 to 507",
       inv["E8"].value == '=IF($B8="","",IF($C8="Investment",-$D8,$D8))'
       and inv["E507"].value == '=IF($B507="","",IF($C507="Investment",-$D507,$D507))')
@@ -74,16 +74,25 @@ check("amount must be positive",
 check("every sheet protected", all(ws.protection.sheet for ws in wb.worksheets))
 check("no sheet password",
       all(not ws.protection.password for ws in wb.worksheets))
-unlocked = [c.coordinate for row in inv.iter_rows(min_row=1, max_row=507, max_col=6)
+unlocked = [c.coordinate for row in inv.iter_rows(min_row=1, max_row=507, max_col=10)
             for c in row if c.protection and c.protection.locked is False]
-check("only B2 and B8:D507 unlocked",
-      set(unlocked) == {"B2"} | {f"{c}{r}" for c in "BCD" for r in range(8, 508)},
+check("inputs unlocked: fund name, the entry table and the holding names",
+      set(unlocked) == ({"B2"} | {f"{c}{r}" for c in "BCDF" for r in range(8, 508)}
+                        | {f"H{r}" for r in range(11, 16)}),
       f"{len(unlocked)} cells")
 check("result cell and column E locked",
       inv["B4"].protection.locked is not False and inv["E8"].protection.locked is not False)
 check("Example tab fully locked",
       not [c for row in wb["Example"].iter_rows() for c in row
            if c.protection and c.protection.locked is False])
+
+check("each holding can be measured on its own",
+      "XIRR" in str(inv["J11"].value) and "not enough entries" in str(inv["J11"].value))
+check("the portfolio summary is on the working tab",
+      [inv[f"H{r}"].value for r in range(3, 8)]
+      == ["You put in", "You took out", "Worth now", "Gain or loss", "How long you have held it"])
+check("the sheet says the portfolio is not an average of the holdings",
+      "not the average" in str(inv["H18"].value))
 
 # the goal tab
 goal = wb["Plan my goal"]

@@ -18,6 +18,7 @@ carry only one printed address.
 | `harden.py` | Adds cached formula results, then patches back the two number formats LibreOffice mangles |
 | `acceptance_tests.py` | Types each test case into the real file, recalculates it in LibreOffice, reads back the result and the status line |
 | `verify_structure.py` | Asserts the file against the brief: tab order, named ranges, locked cells, allowed functions only, no macros |
+| `holdings_acceptance.py` | Enters two named holdings, recalculates outside Excel, and checks each one's XIRR against a bisection solver written in the test |
 | `goal_acceptance.py` | Types goals into the **Plan my goal** tab, recalculates outside Excel, and checks every figure against the same sum done month by month in Python |
 
 ```
@@ -27,6 +28,7 @@ python3 tools/xirr/harden.py           /tmp/raw.xlsx tool/XIRR-Calculator.xlsx
 python3 tools/xirr/verify_structure.py tool/XIRR-Calculator.xlsx
 python3 tools/xirr/acceptance_tests.py tool/XIRR-Calculator.xlsx
 python3 tools/xirr/goal_acceptance.py  tool/XIRR-Calculator.xlsx
+python3 tools/xirr/holdings_acceptance.py tool/XIRR-Calculator.xlsx
 ```
 
 **Do not skip `harden.py`.** A workbook straight out of openpyxl carries
@@ -37,6 +39,20 @@ reader as a broken file. `harden.py` recalculates the sheet once and stores the
 answers, so the file shows real numbers even when nothing is calculating.
 
 The three acceptance cases must return 9.0509%, 12.6600% and 8.1381%.
+
+## Per-holding returns
+
+Each named holding is measured by handing XIRR a column that carries that
+holding's own cash flow and a zero on every other row. A zero contributes
+nothing to the present value, so the answer is that holding's own return, with
+every date left in place — which is how a subset gets measured without a
+function that filters. `holdings_acceptance.py` exists because that is a trick,
+and tricks deserve a test rather than trust.
+
+Helper columns live from `AA` rightwards specifically so they can never collide
+with the goal tab's terms in `F` to `I`. An earlier edit did exactly that and
+silently deleted the goal block; the goal suite caught it. **Run every suite
+after any change to the Calc tab**, not just the one you think you touched.
 
 ## The goal tab
 
@@ -59,7 +75,7 @@ Run it after any change to the tab.
 
 1. Rebuild as above, overwriting `tool/XIRR-Calculator.xlsx` — keep the filename.
 2. Bump the version and build date on the workbook's **About** tab.
-3. Update the `50 KB` note in the sheet view of `tool/index.html` if the size moved.
+3. Update the `102 KB` note in the sheet view of `tool/index.html` if the size moved.
 4. Commit to `main`. The printed address does not change, which is the whole
    point of the reader landing on a page rather than on a file.
 

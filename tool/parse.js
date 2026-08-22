@@ -119,14 +119,19 @@
 
   /* Decide dd/mm versus mm/dd by looking at the whole column, not one row. */
   function detectDayFirst(rows, dateCol) {
-    var firstOver12 = false, secondOver12 = false;
+    var firstOver12 = false, secondOver12 = false, ambiguousFormat = false;
     for (var i = 0; i < rows.length; i++) {
       var s = String(rows[i][dateCol] || '').trim();
       var m = s.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{2,4})/);
       if (!m) continue;
+      ambiguousFormat = true;
       if (+m[1] > 12) firstOver12 = true;
       if (+m[2] > 12) secondOver12 = true;
     }
+    /* 2026-08-05 and 05-Aug-2026 can only be read one way. Warning a reader
+       about an ambiguity their file does not have teaches them to ignore
+       warnings, which is worse than saying nothing. */
+    if (!ambiguousFormat) return { dayFirst: true, certain: true };
     if (firstOver12 && !secondOver12) return { dayFirst: true, certain: true };
     if (secondOver12 && !firstOver12) return { dayFirst: false, certain: true };
     if (firstOver12 && secondOver12) return { dayFirst: true, certain: false, conflict: true };
