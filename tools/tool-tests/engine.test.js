@@ -406,6 +406,120 @@ ok('a refusal explains what the file needs',
 ok('31 February is rejected rather than rolled forward',
    isNaN(P.toTimestamp(P.parseDateParts('31-02-2024', true))));
 
+section('One file, many schemes — the way official downloads actually arrive');
+
+/* AMFI's bulk download carries every scheme in one file. A reader should be
+   able to hand it over exactly as it arrived. */
+function amfiBulk(schemes, days) {
+  var out = ['Scheme Code;Scheme Name;ISIN Div Payout;ISIN Div Reinvestment;Net Asset Value;Date'];
+  var M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  schemes.forEach(function (sc, idx) {
+    var v = sc.start, t = d(2015, 1, 1);
+    for (var i = 0; i < days; i++) {
+      var dd = new Date(t);
+      out.push([100000 + idx, sc.name, 'INF00' + idx, '-', v.toFixed(4),
+                String(dd.getUTCDate()).padStart(2, '0') + '-' + M[dd.getUTCMonth()] + '-' + dd.getUTCFullYear()
+               ].join(';'));
+      v *= Math.pow(1 + sc.rate, 1 / 365.2425);
+      t += 86400000;
+    }
+  });
+  return out.join('\n');
+}
+
+var bulk = amfiBulk([
+  { name: 'Alpha Flexi Cap Fund - Direct Growth', start: 10, rate: 0.14 },
+  { name: 'Alpha Flexi Cap Fund - Regular Growth', start: 10, rate: 0.12 },
+  { name: 'Beta Large Cap Fund - Direct Growth', start: 50, rate: 0.09 }
+], 2600);
+
+var listed = P.listSchemesText(bulk);
+ok('every scheme in the file is found', listed && listed.schemes.length === 3,
+   listed ? String(listed.schemes.length) : 'none');
+ok('schemes are listed alphabetically',
+   listed.schemes[0].name.indexOf('Alpha Flexi Cap Fund - Direct') === 0);
+ok('each scheme reports how many rows it has',
+   listed.schemes.every(function (x) { return x.rows === 2600; }));
+ok('each scheme reports its own date range',
+   listed.schemes.every(function (x) { return x.first === d(2015, 1, 1) && x.last > x.first; }));
+
+var ambiguous = P.parseSeriesText(bulk);
+ok('a multi-scheme file is refused until one is chosen', ambiguous.code === 'MANY_SCHEMES');
+ok('and it says how many schemes it holds', /3 different schemes/.test(ambiguous.message),
+   ambiguous.message);
+
+var chosen = P.parseSeriesText(bulk, { scheme: 'Alpha Flexi Cap Fund - Direct Growth' });
+ok('choosing one scheme reads only that scheme', chosen.ok && chosen.series.length === 2600,
+   chosen.ok ? String(chosen.series.length) : chosen.message);
+ok('the chosen scheme is named in the report',
+   chosen.report.scheme === 'Alpha Flexi Cap Fund - Direct Growth');
+close('the direct plan measures its own 14%',
+  E.rollingReturns(chosen.series, 5).stats.median, 0.14, 2e-3);
+var regular = P.parseSeriesText(bulk, { scheme: 'Alpha Flexi Cap Fund - Regular Growth' });
+close('the regular plan measures its own 12%, not the direct plan\'s',
+  E.rollingReturns(regular.series, 5).stats.median, 0.12, 2e-3);
+ok('asking for a scheme that is not there is refused',
+   P.parseSeriesText(bulk, { scheme: 'Nonexistent Fund' }).code === 'NO_SUCH_SCHEME');
+
+/* a single-scheme file needs no choosing, and names itself */
+var single = 'Scheme Code;Scheme Name;Net Asset Value;Date\n' +
+  '1;Only Fund - Growth;10.0000;01-Apr-2024\n1;Only Fund - Growth;10.5000;02-Apr-2024\n' +
+  '1;Only Fund - Growth;10.2000;03-Apr-2024';
+var one = P.parseSeriesText(single);
+ok('a file holding one scheme is read without asking', one.ok && one.series.length === 3);
+ok('and the analysis is named after the scheme, not the file',
+   one.report.scheme === 'Only Fund - Growth');
+
+/* a plain two-column file has no scheme column and must still work */
+ok('a file with no scheme column is unaffected',
+   P.parseSeriesText('Date,NAV\n01-Apr-2024,10\n02-Apr-2024,11\n').ok);
+ok('and reports no scheme name',
+   P.parseSeriesText('Date,NAV\n01-Apr-2024,10\n02-Apr-2024,11\n').report.scheme === null);
+ok('listing schemes on a file without them returns nothing',
+   P.listSchemesText('Date,NAV\n01-Apr-2024,10\n02-Apr-2024,11\n') === null);
+
+section('The daily all-fund snapshot, which is what most people download first');
+
+/* AMFI's daily file carries one row per fund, for one date. It cannot produce a
+   history, but it must say so usefully rather than dead-end. */
+var daily = 'Scheme Code;Scheme Name;ISIN;ISIN2;Net Asset Value;Date\n' +
+  '1;Alpha Fund - Direct Growth;A;-;45.6789;22-Aug-2026\n' +
+  '2;Alpha Fund - Regular Growth;B;-;42.1234;22-Aug-2026\n' +
+  '3;Beta Fund - Direct Growth;C;-;98.7654;22-Aug-2026';
+var dailyList = P.listSchemesText(daily);
+ok('every fund in a one-day snapshot is still listed',
+   dailyList && dailyList.schemes.length === 3,
+   dailyList ? String(dailyList.schemes.length) : 'none');
+ok('each is marked as holding a single day',
+   dailyList.schemes.every(function (x) { return x.rows === 1; }));
+var oneDay = P.parseSeriesText(daily, { scheme: 'Alpha Fund - Direct Growth' });
+ok('choosing one is refused, because one price is not a history',
+   oneDay.code === 'ONE_DAY_ONLY', oneDay.code);
+ok('and the refusal says what to download instead',
+   /NAV history for a date range/.test(oneDay.message), oneDay.message);
+
+section('Several funds stacked with nothing naming them');
+var stacked = 'Date,NAV\n' +
+  '01-Apr-2024,10\n01-Apr-2024,20\n01-Apr-2024,30\n' +
+  '02-Apr-2024,11\n02-Apr-2024,21\n02-Apr-2024,31\n' +
+  '03-Apr-2024,12\n03-Apr-2024,22\n03-Apr-2024,32';
+var mixed = P.parseSeriesText(stacked);
+ok('a stacked file is refused rather than silently collapsed', mixed.code === 'MIXED_SERIES', mixed.code);
+ok('and the refusal explains what it saw', /repeat a date already seen/.test(mixed.message));
+ok('a genuine file with one stray duplicate is still accepted',
+   P.parseSeriesText('Date,NAV\n01-Apr-2024,10\n02-Apr-2024,11\n02-Apr-2024,12\n03-Apr-2024,13\n04-Apr-2024,14\n').ok);
+
+section('Trimming a series to a chosen window');
+var win = [
+  { t: d(2020, 1, 1), v: 1 }, { t: d(2021, 1, 1), v: 2 },
+  { t: d(2022, 1, 1), v: 3 }, { t: d(2023, 1, 1), v: 4 }
+];
+ok('both bounds are inclusive', P.sliceSeries(win, d(2021, 1, 1), d(2022, 1, 1)).length === 2);
+ok('a missing start means from the beginning', P.sliceSeries(win, null, d(2021, 1, 1)).length === 2);
+ok('a missing end means to the end', P.sliceSeries(win, d(2022, 1, 1), null).length === 2);
+ok('no bounds changes nothing', P.sliceSeries(win, null, null).length === 4);
+ok('a window outside the data is empty, not an error', P.sliceSeries(win, d(2030, 1, 1), null).length === 0);
+
 section('End to end — a file becomes rolling returns');
 var lines = ['Date,NAV'];
 var t = d(2010, 1, 1), v = 100;

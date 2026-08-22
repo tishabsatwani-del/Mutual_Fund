@@ -134,6 +134,29 @@ body[data-view="home"] .backlink { display: none !important; }
 .card > h2 { font-family: var(--serif); font-size: 1.1rem; margin: 0 0 .8rem; }
 .card > h3 { font-size: .95rem; margin: 1.2rem 0 .5rem; }
 
+/* numbered steps: a reader should see how many decisions there are, and that
+   none of them are hidden from them */
+.card.step > h2 { display: flex; align-items: center; gap: .55rem; }
+.stepno {
+  flex: none; width: 1.6rem; height: 1.6rem; border-radius: 50%;
+  background: var(--accent); color: var(--accent-ink);
+  font-family: var(--sans); font-size: .85rem; font-weight: 700;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.card.step[data-done="yes"] .stepno { background: var(--good); }
+.optional {
+  font-family: var(--sans); font-size: .7rem; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .07em; color: var(--muted); border: 1px solid var(--line-strong);
+  border-radius: 999px; padding: .1rem .45rem;
+}
+.fieldlabel { display: block; font-size: .87rem; font-weight: 600; margin-bottom: .3rem; color: var(--ink); }
+input:disabled, select:disabled, button:disabled {
+  opacity: .55; cursor: not-allowed;
+}
+.chip[aria-checked="true"] {
+  background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600;
+}
+
 /* ------------------------------------------------------------------ inputs */
 .field { margin-bottom: .9rem; }
 .field label { display: block; font-size: .87rem; font-weight: 600; margin-bottom: .3rem; color: var(--ink); }
@@ -181,29 +204,39 @@ button.link {
 /* ------------------------------------------------------------- entry table */
 .rows { display: grid; gap: .5rem; }
 .row-head, .entry {
-  display: grid; grid-template-columns: 1.15fr 1.25fr 1fr 44px; gap: .4rem; align-items: center;
+  display: grid; grid-template-columns: 1fr 1.05fr .85fr .95fr 44px; gap: .4rem; align-items: center;
 }
 .row-head { font-size: .75rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
 .entry input, .entry select { min-height: 44px; font-size: .95rem; padding: .45rem .5rem; }
-.c-tag { display: none; }
-#pf-rows.tagged .c-tag { display: block; }
-#pf-rows.tagged .entry { grid-template-columns: 1fr 1.05fr .85fr .95fr 44px; }
+#pf-rows .entry { grid-template-columns: 1fr 1.05fr .85fr .95fr 44px; }
 .entry .del {
   min-height: 44px; width: 44px; background: none; border: 1px solid var(--line);
   border-radius: 8px; color: var(--muted); font-size: 1.1rem; cursor: pointer;
 }
 .entry .del:hover { border-color: var(--critical); color: var(--critical); }
+.entry label { display: none; }
+.c-num { display: none; }
+
 @media (max-width: 33rem) {
   .row-head { display: none; }
+  /* the headings are gone at this width, so each field names itself */
+  .entry label {
+    display: block; font-size: .78rem; font-weight: 600; color: var(--ink-2);
+    margin: 0 0 .2rem;
+  }
+  .c-num {
+    display: block; grid-area: num;
+    font-size: .72rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--muted); margin-bottom: .3rem;
+  }
   .entry {
     grid-template-columns: 1fr 44px;
-    grid-template-areas: "date del" "kind del" "amt del" "tag del";
+    grid-template-areas: "num num" "date del" "kind del" "amt del" "tag del";
     padding: .55rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2);
   }
   .entry .c-date { grid-area: date; } .entry .c-kind { grid-area: kind; }
   .entry .c-amt { grid-area: amt; } .entry .c-tag { grid-area: tag; }
   .entry .del { grid-area: del; align-self: center; }
-  #pf-rows.tagged .entry { grid-template-columns: 1fr 44px; }
 }
 
 /* ------------------------------------------------------------------ result */
@@ -277,6 +310,20 @@ svg .zero { stroke: var(--line-strong); stroke-width: 2; }
 .filebox.over { border-color: var(--accent); background: var(--accent-soft); }
 .filebox p { margin: .5rem 0 0; font-size: .88rem; color: var(--muted); }
 input[type="file"] { display: none; }
+
+/* A file can hold thousands of funds. A native dropdown of that length is a
+   scroll wheel with no search, so the list is filtered as the reader types. */
+.picker { display: grid; gap: .35rem; max-height: 21rem; overflow-y: auto; margin-bottom: .6rem; }
+.picker .hit {
+  display: block; width: 100%; text-align: left; cursor: pointer;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 9px;
+  padding: .6rem .7rem; font: inherit; color: inherit; min-height: 44px;
+}
+.picker .hit:hover, .picker .hit:focus-visible { border-color: var(--accent); }
+.picker .hit[aria-selected="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.picker .hit .nm { display: block; font-weight: 600; font-size: .95rem; line-height: 1.3; }
+.picker .hit .sub { display: block; font-size: .8rem; color: var(--muted); margin-top: .15rem; }
+.picker .more { padding: .5rem .2rem; font-size: .85rem; color: var(--muted); }
 
 .chips { display: flex; flex-wrap: wrap; gap: .4rem; }
 .chip {

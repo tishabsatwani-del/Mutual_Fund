@@ -9,6 +9,9 @@
 
   var MONTHS = { jan:1, feb:2, mar:3, apr:4, may:5, jun:6, jul:7, aug:8, sep:9, sept:9, oct:10, nov:11, dec:12 };
 
+  var SCHEME_HEADERS = ['scheme name', 'schemename', 'scheme', 'fund name', 'fundname',
+                        'fund', 'plan name', 'security name', 'index name'];
+
   var DATE_HEADERS = ['date', 'nav date', 'navdate', 'as on', 'as on date', 'day', 'period'];
   var VALUE_HEADERS = ['nav', 'net asset value', 'net asset value (rs.)', 'nav (rs.)', 'nav rs',
                        'close', 'closing', 'closing value', 'close price', 'index value',
@@ -182,14 +185,94 @@
     return { dateCol: dateCol, valueCol: valueCol };
   }
 
+  /* --------------------------------------------------------------- schemes
+   *
+   * The official bulk NAV downloads carry hundreds of schemes in one file. A
+   * reader should be able to hand the tool that file exactly as it arrived and
+   * pick their own scheme out of it -- which is what makes fund selection
+   * practical at the scale of thousands of schemes without anyone maintaining
+   * a database of them.
+   */
+  function pickSchemeColumn(header, rows) {
+    if (!header) return -1;
+    var lower = header.map(function (h) { return String(h).toLowerCase().trim(); });
+    for (var i = 0; i < lower.length; i++) {
+      if (SCHEME_HEADERS.indexOf(lower[i]) !== -1) return i;
+    }
+    for (var j = 0; j < lower.length; j++) {
+      if (/scheme|fund name/.test(lower[j])) return j;
+    }
+    return -1;
+  }
+
+  /* Every distinct scheme in the file, with enough detail to tell near-identical
+   * names apart before choosing one. */
+  function listSchemes(rows) {
+    var header = looksLikeHeader(rows[0]) ? rows[0] : null;
+    var body = header ? rows.slice(1) : rows;
+    var schemeCol = pickSchemeColumn(header, body);
+    if (schemeCol === -1) return null;
+
+    var cols = pickColumns(body, header);
+    if (cols.dateCol === -1 || cols.valueCol === -1) return null;
+    var dayFirst = detectDayFirst(body, cols.dateCol).dayFirst;
+
+    var found = {}, order = [];
+    for (var i = 0; i < body.length; i++) {
+      var name = String(body[i][schemeCol] == null ? '' : body[i][schemeCol]).trim();
+      if (!name) continue;
+      var t = toTimestamp(parseDateParts(body[i][cols.dateCol], dayFirst));
+      var v = parseNumber(body[i][cols.valueCol]);
+      if (isNaN(t) || !isFinite(v) || v <= 0) continue;
+      if (!found[name]) { found[name] = { name: name, rows: 0, first: t, last: t }; order.push(name); }
+      var f = found[name];
+      f.rows++;
+      if (t < f.first) f.first = t;
+      if (t > f.last) f.last = t;
+    }
+    var list = order.map(function (n) { return found[n]; })
+      .sort(function (a, b) { return a.name.localeCompare(b.name); });
+    return list.length ? { column: schemeCol, schemes: list } : null;
+  }
+
   /* ------------------------------------------------------------------ main */
 
-  function rowsToSeries(rows) {
+  function rowsToSeries(rows, options) {
+    var opts = options || {};
     if (!rows || rows.length < 2) {
       return { ok: false, code: 'EMPTY', message: 'That file has no rows in it that could be read.' };
     }
     var header = looksLikeHeader(rows[0]) ? rows[0] : null;
     var body = header ? rows.slice(1) : rows;
+
+    /* one file, many schemes: keep only the one asked for */
+    var schemeCol = pickSchemeColumn(header, body);
+    var schemeName = null;
+    if (schemeCol !== -1) {
+      var wanted = opts.scheme;
+      var distinct = {};
+      for (var q = 0; q < body.length; q++) {
+        var nm = String(body[q][schemeCol] == null ? '' : body[q][schemeCol]).trim();
+        if (nm) distinct[nm] = true;
+      }
+      var names = Object.keys(distinct);
+      if (wanted) {
+        body = body.filter(function (r) {
+          return String(r[schemeCol] == null ? '' : r[schemeCol]).trim() === wanted;
+        });
+        schemeName = wanted;
+        if (!body.length) {
+          return { ok: false, code: 'NO_SUCH_SCHEME',
+                   message: 'No rows in that file belong to \u201c' + wanted + '\u201d.' };
+        }
+      } else if (names.length > 1) {
+        return { ok: false, code: 'MANY_SCHEMES', schemes: names.length,
+                 message: 'That file holds ' + names.length + ' different schemes. Choose which one to analyse.' };
+      } else if (names.length === 1) {
+        schemeName = names[0];      /* one scheme: name the analysis after it */
+      }
+    }
+
     var cols = pickColumns(body, header);
     if (cols.dateCol === -1 || cols.valueCol === -1 || cols.dateCol === cols.valueCol) {
       return {
@@ -216,10 +299,27 @@
     }
 
     if (series.length < 2) {
+      if (schemeName) {
+        return {
+          ok: false, code: 'ONE_DAY_ONLY',
+          message: 'That file holds only ' + series.length + ' day of prices for \u201c' + schemeName +
+                   '\u201d. It is a daily snapshot of every fund, not a history. Download the NAV ' +
+                   'history for a date range instead, and this will work.'
+        };
+      }
       return {
         ok: false, code: 'TOO_FEW_ROWS',
         message: 'Only ' + series.length + ' usable row' + (series.length === 1 ? '' : 's') +
                  ' could be read from that file. Check that it holds a date column and a NAV column.'
+      };
+    }
+
+    if (schemeCol === -1 && skipped.duplicate >= series.length && series.length) {
+      return {
+        ok: false, code: 'MIXED_SERIES',
+        message: 'That file looks like more than one fund stacked together: ' + skipped.duplicate +
+                 ' rows repeat a date already seen, and no column names the fund they belong to. ' +
+                 'Load a file for one fund, or one that names the fund in a column.'
       };
     }
 
@@ -246,6 +346,7 @@
         examples: examples.slice(0, 3),
         dayFirst: dayFirstInfo.dayFirst,
         dateCertain: dayFirstInfo.certain,
+        scheme: schemeName,
         headerFound: !!header,
         firstDate: series[0].t,
         lastDate: series[series.length - 1].t,
@@ -270,7 +371,18 @@
     return max;
   }
 
-  function parseSeriesText(text) { return rowsToSeries(parseDelimited(text)); }
+  function parseSeriesText(text, options) { return rowsToSeries(parseDelimited(text), options); }
+  function listSchemesText(text) { return listSchemes(parseDelimited(text)); }
+
+  /* Keep only the part of a series inside a chosen window. Both bounds are
+   * inclusive, and either may be left out. */
+  function sliceSeries(series, fromT, toT) {
+    return (series || []).filter(function (p) {
+      if (fromT != null && !isNaN(fromT) && p.t < fromT) return false;
+      if (toT != null && !isNaN(toT) && p.t > toT) return false;
+      return true;
+    });
+  }
 
   var api = {
     detectDelimiter: detectDelimiter,
@@ -279,6 +391,9 @@
     parseDateParts: parseDateParts,
     toTimestamp: toTimestamp,
     rowsToSeries: rowsToSeries,
+    listSchemes: listSchemes,
+    listSchemesText: listSchemesText,
+    sliceSeries: sliceSeries,
     parseSeriesText: parseSeriesText
   };
   if (typeof module === 'object' && module.exports) { module.exports = api; }
