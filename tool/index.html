@@ -201,6 +201,16 @@
   <h1 id="f-h">Analyse my fund</h1>
   <p class="lede">Any fund, including one that did not exist when this tool was built. You bring its history; the tool does the rest.</p>
 
+  <div class="card" id="f-search-card" hidden>
+    <h2>Find your fund</h2>
+    <div class="field">
+      <label for="f-query">Fund name</label>
+      <input type="text" id="f-query" autocomplete="off" placeholder="Start typing the scheme name">
+    </div>
+    <button class="primary" type="button" id="f-search">Search</button>
+    <div id="f-results" aria-live="polite"></div>
+  </div>
+
   <div class="card">
     <h2>Load your fund's NAV history</h2>
     <ol style="margin:0 0 .9rem;padding-left:1.2rem;color:var(--ink-2);font-size:.93rem">
@@ -389,6 +399,7 @@
 
 <script src="engine.js"></script>
 <script src="parse.js"></script>
+<script src="provider.js"></script>
 <script src="app.js"></script>
 <script src="modules.js"></script>
 </body>
