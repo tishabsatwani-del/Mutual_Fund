@@ -1,0 +1,60 @@
+# The Portfolio Reality Check
+
+A static, offline-capable analysis tool for readers of the book. Four modules on
+one page: portfolio XIRR, a goal planner, market rolling returns, and rolling
+returns for any fund the reader can supply NAV history for.
+
+Published at `/Mutual_Fund/tool/`.
+
+## Architecture, and why
+
+| File | Role |
+|---|---|
+| `index.html` | The whole interface. No build step. |
+| `styles.css` | One stylesheet. No framework, no font requests. |
+| `engine.js` | XIRR, CAGR, rolling returns, goal maths. Pure functions, no DOM. |
+| `parse.js` | Turns a messy CSV into a clean dated series, and reports what it dropped. |
+| `app.js` | Formatting, routing, charts, file intake. |
+| `modules.js` | The four screens. |
+| `data/benchmarks.json` | Bundled index history. Empty in 1.0 — see `data/README.md`. |
+
+`engine.js` and `parse.js` are deliberately free of browser APIs so the same code
+that runs on a reader's phone is the code the test suite exercises under Node.
+
+**No dependencies, no CDN, no API, no backend, no analytics, no storage.** The
+page makes exactly two network requests — its own CSS and its own scripts — plus
+one for `data/benchmarks.json`. A browser test asserts that nothing else is ever
+requested, because the privacy claim on the About screen is only worth making if
+something checks it.
+
+Excel files are read by unzipping them with the browser's own
+`DecompressionStream`, so even `.xlsx` support pulls in no library. Where a
+browser lacks it, the reader is told to save as CSV rather than shown a failure.
+
+## Zero maintenance
+
+Nothing here expires on a schedule. There is no fund list to keep current — the
+reader brings the fund's history, so a scheme launched years after this was
+written still works. The only dated thing in the product is
+`data/benchmarks.json`, and the About screen states its date rather than implying
+freshness.
+
+## Conventions worth not breaking
+
+- XIRR uses a 365-day year, matching a spreadsheet, so the tool and Excel agree.
+- Rolling windows match on calendar dates with seven days of tolerance; anything
+  wider is dropped, never stretched.
+- Monthly rates are the twelfth root of the annual rate, never annual ÷ 12.
+- Every result carries four things: the number, what it means, what it does not
+  mean, and what to look at next. That structure is the product.
+- No verdicts. The tool never calls a return good or bad, and never names a fund
+  to buy, sell or switch.
+
+## Testing
+
+See `tools/tool-tests/README.md`. Run all three suites before publishing.
+
+## Version
+
+Version 1.0. The number appears on the About screen and is set in `app.js`
+(`VERSION`) and in `index.html`. Change both together.

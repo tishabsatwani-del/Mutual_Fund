@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Portfolio Reality Check</title>
+<meta name="description" content="Measure what your own money actually earned, see what the number means, and work out what it would take to reach your goal. Runs entirely in your browser.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231f4e5f'/%3E%3Cpath d='M7 22.5 13 15l4.5 4.5L25 9.5' fill='none' stroke='%23ffffff' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body data-view="home">
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="#home">The Portfolio Reality Check<span>You learned the concepts. Now use them on your own portfolio.</span></a>
+    <button class="backlink" id="back" type="button">&#8592; All tools</button>
+  </div>
+</header>
+
+<main id="main" class="wrap">
+
+<!-- ================================================================= HOME -->
+<section class="view on" id="view-home" aria-labelledby="home-h">
+  <div class="hero">
+    <h1 id="home-h">What would you like to understand?</h1>
+    <p>Four tools, one at a time. Everything is worked out on this device — your figures are never sent anywhere.</p>
+  </div>
+
+  <div class="tiles">
+    <button class="tile" data-go="portfolio">
+      <span class="tile-step">Measure</span>
+      <h2>Check my portfolio</h2>
+      <p>Enter what you actually paid in and took out. Get the return your own money earned, not the fund's.</p>
+    </button>
+    <button class="tile" data-go="goal">
+      <span class="tile-step">Plan</span>
+      <h2>Plan my goal</h2>
+      <p>See where you land if nothing changes, what the shortfall is, and what it would take to close it.</p>
+    </button>
+    <button class="tile" data-go="history">
+      <span class="tile-step">Compare</span>
+      <h2>Understand market history</h2>
+      <p>What a market actually delivered across every historical starting point, not one flattering period.</p>
+    </button>
+    <button class="tile" data-go="fund">
+      <span class="tile-step">Examine</span>
+      <h2>Analyse my fund</h2>
+      <p>Load any fund's own NAV history and put it through the same test. No built-in list to go stale.</p>
+    </button>
+  </div>
+
+  <div class="card">
+    <h2>How to use this</h2>
+    <ol style="margin:0;padding-left:1.2rem;color:var(--ink-2)">
+      <li>Choose what you want to understand.</li>
+      <li>Enter your numbers, or load a file.</li>
+      <li>Read the result, then read what it means underneath it.</li>
+    </ol>
+    <details class="explain">
+      <summary>Four words this tool keeps apart</summary>
+      <div class="body">
+        <dl>
+          <dt>XIRR</dt>
+          <dd>What <em>your</em> money earned, counting the date every rupee went in and came out.</dd>
+          <dt>CAGR</dt>
+          <dd>The annual growth between two values. It ignores everything that happened in between, and every payment you made along the way.</dd>
+          <dt>Rolling return</dt>
+          <dd>The annualised return of every historical holding period of a given length — not one lucky stretch.</dd>
+          <dt>Absolute return</dt>
+          <dd>Total gain or loss, not spread over years. 50% over ten years and 50% over one year are very different things.</dd>
+        </dl>
+      </div>
+    </details>
+  </div>
+</section>
+
+<!-- ============================================================ PORTFOLIO -->
+<section class="view" id="view-portfolio" aria-labelledby="pf-h">
+  <h1 id="pf-h">Check my portfolio</h1>
+  <p class="lede">One row for every payment you made, every rupee you took out, and what the holding is worth today.</p>
+
+  <div class="card">
+    <h2>Your money in and out</h2>
+    <div class="rows">
+      <div class="row-head" aria-hidden="true">
+        <div>Date</div><div>What happened</div><div>Amount</div><div></div>
+      </div>
+      <div class="rows" id="pf-rows"></div>
+    </div>
+    <div class="btnrow" style="margin-top:.8rem">
+      <button class="secondary" type="button" id="pf-add">+ Add a row</button>
+      <button class="secondary" type="button" id="pf-sip">+ Add a monthly SIP</button>
+      <button class="secondary" type="button" id="pf-demo">Fill an example</button>
+      <button class="secondary" type="button" id="pf-clear">Clear</button>
+    </div>
+
+    <div class="field" style="margin-top:1rem">
+      <label for="pf-group">Group by (optional)</label>
+      <select id="pf-group">
+        <option value="off">Show one portfolio total</option>
+        <option value="on">Also show each fund or goal separately</option>
+      </select>
+      <p class="hint">Turn this on to see the difference between how each holding did and how your money as a whole did.</p>
+    </div>
+
+    <div class="btnrow" style="margin-top:.4rem">
+      <button class="primary" type="button" id="pf-calc">Calculate my return</button>
+      <button class="secondary" type="button" id="pf-export">Save my entries as a file</button>
+    </div>
+  </div>
+
+  <div id="pf-out" aria-live="polite"></div>
+</section>
+
+<!-- ================================================================= GOAL -->
+<section class="view" id="view-goal" aria-labelledby="goal-h">
+  <h1 id="goal-h">Plan my goal</h1>
+  <p class="lede">Where you land if nothing changes, what is missing, and what it would take to close the gap.</p>
+
+  <div class="card">
+    <h2>Your goal</h2>
+    <div class="grid2">
+      <div class="field">
+        <label for="g-name">What is this for?</label>
+        <input type="text" id="g-name" value="Retirement" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="g-target">Amount you are aiming for (&#8377;)</label>
+        <input type="number" id="g-target" value="10000000" min="0" step="1000" inputmode="numeric">
+      </div>
+      <div class="field">
+        <label for="g-current">What you have already (&#8377;)</label>
+        <input type="number" id="g-current" value="400000" min="0" step="1000" inputmode="numeric">
+      </div>
+      <div class="field">
+        <label for="g-years">Years left</label>
+        <input type="number" id="g-years" value="15" min="0.5" max="60" step="0.5" inputmode="decimal">
+      </div>
+      <div class="field">
+        <label for="g-sip">Investing each month now (&#8377;)</label>
+        <input type="number" id="g-sip" value="10000" min="0" step="500" inputmode="numeric">
+      </div>
+      <div class="field">
+        <label for="g-rate">Assumed return each year (%)</label>
+        <input type="number" id="g-rate" value="10" min="-50" max="50" step="0.5" inputmode="decimal">
+        <p class="hint">An assumption you are choosing, not a rate anyone can promise you.</p>
+      </div>
+      <div class="field">
+        <label for="g-step">Raise the monthly amount each year by (%)</label>
+        <input type="number" id="g-step" value="0" min="0" max="50" step="1" inputmode="decimal">
+        <p class="hint">Most people's income rises. Nothing says the instalment has to stay still.</p>
+      </div>
+    </div>
+    <button class="primary" type="button" id="g-calc">Show me where I land</button>
+  </div>
+
+  <div id="g-out" aria-live="polite"></div>
+</section>
+
+<!-- ============================================================== HISTORY -->
+<section class="view" id="view-history" aria-labelledby="h-h">
+  <h1 id="h-h">Understand market history</h1>
+  <p class="lede">Not one flattering stretch. Every historical starting point of the length you choose.</p>
+
+  <div class="card" id="bm-picker">
+    <h2>Choose a market to look at</h2>
+    <div id="bm-list"></div>
+  </div>
+
+  <div class="card">
+    <h2>Or load an index file</h2>
+    <p style="margin:0 0 .8rem;color:var(--ink-2);font-size:.93rem">
+      A file with two columns: the date, and the index value on that date. Total Return Index
+      figures include dividends; price-only figures do not, and will read lower.</p>
+    <div class="filebox" id="bm-drop" tabindex="0" role="button" aria-label="Choose an index file">
+      <button class="secondary" type="button" id="bm-pick">Choose a file</button>
+      <p>CSV or Excel, on this device only</p>
+    </div>
+    <input type="file" id="bm-file" accept=".csv,.txt,.xlsx,.xls">
+  </div>
+
+  <div id="h-controls" hidden>
+    <div class="card">
+      <h2>How long would you have held it?</h2>
+      <div class="chips" id="h-horizons" role="group" aria-label="Holding period"></div>
+    </div>
+  </div>
+  <div id="h-out" aria-live="polite"></div>
+</section>
+
+<!-- ================================================================= FUND -->
+<section class="view" id="view-fund" aria-labelledby="f-h">
+  <h1 id="f-h">Analyse my fund</h1>
+  <p class="lede">Any fund, including one that did not exist when this tool was built. You bring its history; the tool does the rest.</p>
+
+  <div class="card">
+    <h2>Load your fund's NAV history</h2>
+    <ol style="margin:0 0 .9rem;padding-left:1.2rem;color:var(--ink-2);font-size:.93rem">
+      <li>Download the NAV history from an official source, such as the fund house or AMFI.</li>
+      <li>Load the file below. It is read on this device and never uploaded.</li>
+      <li>Choose a holding period and read the result.</li>
+    </ol>
+    <div class="filebox" id="f-drop" tabindex="0" role="button" aria-label="Choose a NAV file">
+      <button class="secondary" type="button" id="f-pick">Choose a file</button>
+      <p>CSV or Excel &middot; a date column and a NAV column is all it needs</p>
+    </div>
+    <input type="file" id="f-file" accept=".csv,.txt,.xlsx,.xls">
+    <details class="explain">
+      <summary>What if my file looks different?</summary>
+      <div class="body">
+        <p>It reads AMFI's own semicolon files, ordinary comma files, and Excel workbooks.
+        Dates can be 05-08-2026, 05-Aug-2026 or 2026-08-05. Extra columns are ignored.
+        Rows it cannot read are counted and shown to you rather than quietly dropped.</p>
+      </div>
+    </details>
+  </div>
+
+  <div id="f-controls" hidden>
+    <div class="card">
+      <h2>How long would you have held it?</h2>
+      <div class="chips" id="f-horizons" role="group" aria-label="Holding period"></div>
+      <div class="field" style="margin-top:1rem" id="f-compare-wrap" hidden>
+        <label for="f-compare">Compare against</label>
+        <select id="f-compare"></select>
+        <p class="hint">A benchmark is a reference point, not a verdict on the fund.</p>
+      </div>
+    </div>
+  </div>
+  <div id="f-out" aria-live="polite"></div>
+</section>
+
+<!-- =============================================================== METHOD -->
+<section class="view" id="view-method" aria-labelledby="m-h">
+  <h1 id="m-h">How the numbers are worked out</h1>
+  <p class="lede">So you can check them, argue with them, or reproduce them yourself.</p>
+
+  <div class="card">
+    <h2>XIRR</h2>
+    <p>Every payment you make counts as money out, and every rupee you take back — including
+    what the holding is worth today — counts as money in. The tool finds the single annual rate
+    at which all of those, discounted from their own dates, add up to zero. A 365-day year is
+    used, matching the convention a spreadsheet uses, so the answer here and the answer in Excel
+    agree.</p>
+    <p>The search is a bisection, not a Newton step. Newton is faster but wanders off on deeply
+    negative cases, which is exactly when someone anxious is looking at the screen.</p>
+  </div>
+
+  <div class="card">
+    <h2>Rolling returns</h2>
+    <p>A window starts at every single observation in the file. It ends on the same calendar date
+    a chosen number of years later. If the market was shut that day, the most recent earlier price
+    is used, but only within seven days — beyond that the window is dropped rather than stretched,
+    because stretching quietly measures a different holding period than the one you asked for.</p>
+    <p>Each window is annualised as the compound rate that links its two ends. An average of yearly
+    returns is a different statistic and is never reported here in its place.</p>
+  </div>
+
+  <div class="card">
+    <h2>Goal projections</h2>
+    <p>The monthly rate is the twelfth root of the annual rate, not the annual rate divided by
+    twelve. Dividing by twelve overstates the outcome, and across twenty years the overstatement
+    is not small. Instalments are treated as paid at the start of each month, which is how a
+    mandate actually runs, and a step-up is applied once every twelve months.</p>
+    <p>Every projection uses a return you typed in. It is an assumption, not a forecast, and
+    nothing here should be read as a promise about the future.</p>
+  </div>
+
+  <div class="card">
+    <h2>Checking the engine</h2>
+    <p>The calculations are covered by a test suite that compares them against values worked out
+    independently — closed-form formulas, cases done by hand, and results verified in a spreadsheet
+    outside this tool. A test that only agrees with the code it is testing proves nothing.</p>
+  </div>
+</section>
+
+<!-- ================================================================ ABOUT -->
+<section class="view" id="view-about" aria-labelledby="a-h">
+  <h1 id="a-h">About this tool</h1>
+  <div class="card">
+    <h2>Version</h2>
+    <p style="margin:0">Tool version <strong id="ver">1.0</strong><br>
+    Benchmark data: <strong id="asof">none included in this version</strong></p>
+  </div>
+  <div class="card">
+    <h2>Your data</h2>
+    <p style="margin:0 0 .6rem">Everything you type or load is worked out inside your browser. Nothing you
+    enter is uploaded, stored on a server, or written to this device. Close the tab and it is gone,
+    which is also why there is a button to save your own entries as a file.</p>
+    <p style="margin:0">There is no account, no sign-up, no email, and nothing that asks who you are.</p>
+  </div>
+  <div class="card">
+    <h2>What this is not</h2>
+    <p style="margin:0">This is an educational tool for readers of the book. It reports on money that has
+    already moved and illustrates assumptions you choose yourself. It does not recommend funds, rate them,
+    or tell you what to buy, sell or switch. Figures are before exit load and before tax. It is not
+    investment advice.</p>
+  </div>
+</section>
+
+<footer class="foot">
+  <div class="foot-links">
+    <button class="link" data-go="method" type="button">How the numbers work</button>
+    <button class="link" data-go="about" type="button">About &amp; privacy</button>
+    <a href="../xirr/">The XIRR sheet</a>
+  </div>
+  <p>Worked out on your device. Nothing you enter leaves this page.</p>
+  <p>Educational tool, not investment advice. Figures are before exit load and tax.</p>
+</footer>
+
+</main>
+
+<script src="engine.js"></script>
+<script src="parse.js"></script>
+<script src="app.js"></script>
+<script src="modules.js"></script>
+</body>
+</html>
