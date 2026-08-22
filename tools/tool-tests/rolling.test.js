@@ -249,6 +249,11 @@ function plainFile(file, rate, fromY, toY, start = 100) {
   ok('the dates are disabled again', await page.locator('#r-start').isDisabled());
   ok('the analyse button is disabled again', await page.locator('#r-run').isDisabled());
   ok('the results are gone', (await page.locator('#r-out').innerText()).trim() === '');
+  ok('the holding-period note is cleared too',
+     (await page.locator('#r-window-note').innerText()).trim() === '',
+     await page.locator('#r-window-note').innerText());
+  ok('and step 3 is no longer ticked',
+     (await page.locator('#step-hold').getAttribute('data-done')) !== 'yes');
 
   section('Old links still land somewhere sensible');
   for (const hash of ['#fund', '#history']) {

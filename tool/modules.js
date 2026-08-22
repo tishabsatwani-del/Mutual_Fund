@@ -778,7 +778,10 @@
     $('#r-run').disabled = true;
     limitYears(null);
     $('#step-period').dataset.done = 'no';
+    $('#step-hold').dataset.done = 'no';
     $('#r-range').textContent = 'Choose something to analyse first.';
+    var note = $('#r-window-note');
+    if (note) note.textContent = '';
     $('#r-out').innerHTML = '';
     if (message) $('#r-loaded').innerHTML = message;
   }
@@ -912,11 +915,12 @@
         return;
       }
       list.innerHTML = hits.slice(0, MAX_HITS).map(function (sc, i) {
-        var days = sc.rows === 1 ? '1 day only' : sc.rows.toLocaleString() + ' days';
+        /* rows are prices, not calendar days: a fund has no price at a weekend */
+        var count = sc.rows === 1 ? 'one price only' : sc.rows.toLocaleString() + ' prices';
         return '<button class="hit" type="button" role="option" aria-selected="false" ' +
           'data-i="' + i + '"><span class="nm">' + esc(sc.name) + '</span>' +
           '<span class="sub">' + fmtDate(sc.first) + ' to ' + fmtDate(sc.last) +
-          ' \u00b7 ' + days + '</span></button>';
+          ' \u00b7 ' + count + '</span></button>';
       }).join('') +
         (hits.length > MAX_HITS
           ? '<p class="more">' + (hits.length - MAX_HITS).toLocaleString() +
@@ -1342,6 +1346,7 @@
       clearLoaded('');
       $('#r-loaded').innerHTML = '';
       $('#r-index').value = '';
+      refreshCompare();
     });
   }
 
