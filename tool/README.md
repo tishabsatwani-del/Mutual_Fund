@@ -19,6 +19,7 @@ spreadsheet, which is why there is no separate download page any more —
 | `parse.js` | Turns a messy CSV into a clean dated series, and reports what it dropped. |
 | `app.js` | Formatting, routing, charts, file intake. |
 | `modules.js` | The four screens. |
+| `provider.js` | The seam for automatic fund lookup. No provider wired in; the contract is documented in the file. |
 | `data/benchmarks.json` | Bundled index history. Empty in 1.0 — see `data/README.md`. |
 | `XIRR-Calculator.xlsx` | The downloadable spreadsheet, offered from the **sheet** view. Built by `tools/xirr/` — see that README. |
 | `qr-portfolio-reality-check.svg` | Print artwork for the address in the book. |
@@ -55,9 +56,26 @@ freshness.
 - No verdicts. The tool never calls a return good or bad, and never names a fund
   to buy, sell or switch.
 
+## Automatic fund lookup
+
+`provider.js` defines a two-method contract — `search(query)` and `history(id)` —
+and ships with nothing behind it. The search journey appears only when a provider
+is registered, because a dead search box reads as broken rather than simple.
+
+Fetched rows go through **the same validation as an uploaded file**, so an
+automatically retrieved fund is held to exactly the same standard as one a reader
+typed in. `tools/tool-tests/provider.test.js` drives the whole journey against a
+stub — search, disambiguation, selection, analysis, no matches, a failed lookup
+and unusable data — so wiring a real provider later is configuration, not
+discovery.
+
+Before wiring one: confirm its terms permit the use, that it sends CORS headers
+to a static page, that it covers the funds readers hold, and that it fails loudly
+rather than returning something plausible when it has nothing.
+
 ## Testing
 
-See `tools/tool-tests/README.md`. Run all three suites before publishing.
+See `tools/tool-tests/README.md`. Run every suite before publishing.
 
 ## Version
 

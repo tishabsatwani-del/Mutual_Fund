@@ -593,7 +593,7 @@
 
   /* ================================================================ HISTORY */
 
-  var state = { bmSeries: null, bmName: '', bmYears: 5, fundSeries: null, fundName: '', fundYears: 5, bundled: {} };
+  var state = { bmSeries: null, bmName: '', bmMeta: null, bmYears: 5, fundSeries: null, fundName: '', fundYears: 5, bundled: {} };
 
   function horizonChips(containerId, current, onPick) {
     var box = $('#' + containerId);
@@ -612,8 +612,33 @@
     if (!state.bmSeries) return;
     $('#h-controls').hidden = false;
     horizonChips('h-horizons', state.bmYears, function (h) { state.bmYears = h; drawHistory(); });
-    $('#h-out').innerHTML = renderRolling(state.bmSeries, state.bmYears, { name: state.bmName },
+    $('#h-out').innerHTML = datasetCard(state.bmMeta, state.bmSeries) +
+      renderRolling(state.bmSeries, state.bmYears, { name: state.bmName },
       null, '', 'market');
+  }
+
+  /* Where the numbers came from, and what they can and cannot be read as. A
+   * result with no stated dataset behind it is an opinion wearing a decimal. */
+  function datasetCard(meta, series) {
+    if (!meta) return '';
+    var first = fmtDate(series[0].t), last = fmtDate(series[series.length - 1].t);
+    return '<div class="card"><h2>About this data</h2><div class="scroll">' +
+      '<table class="data"><tbody>' +
+      '<tr><td>Series</td><td>' + esc(meta.name) + '</td></tr>' +
+      '<tr><td>Type</td><td>' + (meta.kind === 'PRICE'
+        ? 'Price index, dividends excluded' : 'Total Return Index, dividends included') + '</td></tr>' +
+      '<tr><td>Covers</td><td>' + first + ' to ' + last + '</td></tr>' +
+      '<tr><td>Days of data</td><td>' + (meta.points || series.length).toLocaleString() + '</td></tr>' +
+      (meta.source ? '<tr><td>Source</td><td>' + esc(meta.source) + '</td></tr>' : '') +
+      (meta.licence ? '<tr><td>Used under</td><td>' + esc(meta.licence) + '</td></tr>' : '') +
+      (meta.note ? '<tr><td>Note</td><td>' + esc(meta.note) + '</td></tr>' : '') +
+      '</tbody></table></div>' +
+      '<div class="meaning"><h3>What these results describe</h3>' +
+      '<p>Everything below is calculated from this dataset and no other. It describes what happened ' +
+      'between <strong>' + first + '</strong> and <strong>' + last + '</strong>, and nothing outside ' +
+      'those dates.</p>' +
+      '<p>This data is fixed, not live. It does not update itself, it will not include what the market ' +
+      'did after ' + last + ', and nothing in it forecasts what comes next.</p></div></div>';
   }
 
   function loadBenchmarks() {
@@ -634,12 +659,21 @@
         box.innerHTML = '';
         list.forEach(function (b) {
           var btn = A.el('button', { class: 'tile', type: 'button' });
-          btn.innerHTML = '<h2>' + esc(b.name) + '</h2><p>' + esc(b.note || '') + '</p>';
+          btn.innerHTML = '<h2>' + esc(b.name) + '</h2>' +
+            '<p>' + esc(b.kind === 'PRICE'
+              ? 'Price index — dividends are not included, so it reads lower than what an investor earned.'
+              : 'Total Return Index — dividends included.') + '</p>' +
+            '<p style="margin-top:.3rem;font-size:.85rem;color:var(--muted)">' +
+            (b.firstDate && b.lastDate
+              ? esc(b.firstDate) + ' to ' + esc(b.lastDate) +
+                (b.points ? ' · ' + b.points.toLocaleString() + ' days' : '')
+              : '') + '</p>';
           btn.addEventListener('click', function () {
             state.bmSeries = b.series.map(function (p) { return { t: A.isoToTs(p[0]), v: p[1] }; })
               .filter(function (p) { return !isNaN(p.t) && p.v > 0; })
               .sort(function (x, y) { return x.t - y.t; });
             state.bmName = b.name;
+            state.bmMeta = b;
             state.bundled[b.name] = state.bmSeries;
             refreshCompareOptions();
             drawHistory();
@@ -678,6 +712,90 @@
     }
     sel.innerHTML = opts.join('');
     $('#f-compare-wrap').hidden = opts.length < 2;
+  }
+
+  /* The search journey exists only when a provider does. A dead search box that
+   * never returns anything is worse than no search box: it makes the tool look
+   * broken rather than deliberately simple. */
+  function wireFundSearch() {
+    var provider = window.PRCProvider && window.PRCProvider.get();
+    if (!provider) return;
+    $('#f-search-card').hidden = false;
+
+    function search() {
+      var q = $('#f-query').value.trim();
+      var out = $('#f-results');
+      if (q.length < 3) {
+        out.innerHTML = notice('', 'Type at least three letters of the scheme name.');
+        return;
+      }
+      out.innerHTML = notice('', 'Looking\u2026');
+      Promise.resolve()
+        .then(function () { return provider.search(q); })
+        .then(function (matches) {
+          if (!matches || !matches.length) {
+            out.innerHTML = notice('bad', 'Nothing matched \u201c' + esc(q) + '\u201d. Check the ' +
+              'spelling, or load the fund\u2019s NAV file below \u2014 that works for every fund.');
+            return;
+          }
+          /* §18: show enough to tell near-identical schemes apart */
+          out.innerHTML = '<p class="hint" style="margin:.8rem 0 .4rem">' + matches.length +
+            ' match' + (matches.length === 1 ? '' : 'es') + '. Check the plan and option before ' +
+            'choosing \u2014 schemes with almost the same name behave differently.</p>' +
+            '<div class="rows">' + matches.slice(0, 25).map(function (m, i) {
+              return '<button class="tile" type="button" data-pick="' + i + '">' +
+                '<h2 style="font-size:1rem">' + esc(m.name) + '</h2><p>' +
+                [m.plan, m.option, m.identifier].filter(Boolean).map(esc).join(' \u00b7 ') +
+                '</p></button>';
+            }).join('') + '</div>';
+          $$('#f-results [data-pick]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+              choose(matches[+btn.dataset.pick]);
+            });
+          });
+        })
+        .catch(function (err) {
+          out.innerHTML = notice('bad', 'The fund lookup could not be reached (' +
+            esc(err && err.message ? err.message : 'no reply') + '). Load the fund\u2019s NAV ' +
+            'file below instead \u2014 it needs no connection to anything.');
+        });
+    }
+
+    function choose(match) {
+      var out = $('#f-results');
+      out.innerHTML = notice('', 'Fetching the history for ' + esc(match.name) + '\u2026');
+      Promise.resolve()
+        .then(function () { return provider.history(match.id); })
+        .then(function (rows) {
+          /* the same validation an uploaded file gets, so an automatically
+             fetched fund is held to exactly the same standard */
+          var res = P.rowsToSeries(rows);
+          if (!res.ok) {
+            /* the validator's wording assumes a file; this did not come from one */
+            out.innerHTML = notice('bad',
+              'The history that came back for ' + esc(match.name) + ' could not be used. ' +
+              esc(res.message).replace('That file has', 'It has').replace('That file', 'It') +
+              ' This came from the lookup service, not from you \u2014 loading the fund\u2019s own ' +
+              'NAV file below will usually work.');
+            return;
+          }
+          out.innerHTML = notice('ok', 'Loaded ' + esc(match.name) + '.');
+          state.fundSeries = res.series;
+          state.fundReport = res.report;
+          state.fundName = match.name;
+          refreshCompareOptions();
+          drawFund();
+        })
+        .catch(function (err) {
+          out.innerHTML = notice('bad', 'That fund\u2019s history could not be fetched (' +
+            esc(err && err.message ? err.message : 'no reply') + '). Load its NAV file below instead.');
+        });
+    }
+
+    $('#f-search').addEventListener('click', search);
+    $('#f-query').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); search(); }
+    });
   }
 
   function importReport(rep, name) {
@@ -759,12 +877,14 @@
         state.bmSeries = res.series;
         state.bmName = file.name.replace(/\.[^.]+$/, '');
         state.bmReport = res.report;
+        state.bmMeta = null;
         refreshCompareOptions();
         drawHistory();
       }, function (msg) { $('#h-out').innerHTML = notice('bad', esc(msg)); });
     });
 
-    /* fund */
+    /* fund: automatic lookup, only if a provider has been wired in */
+    wireFundSearch();
     A.wireDrop('f-drop', 'f-file', 'f-pick', function (file) {
       A.readFile(file, function (res) {
         state.fundSeries = res.series;

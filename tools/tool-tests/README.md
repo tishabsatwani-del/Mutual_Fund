@@ -8,8 +8,13 @@ node  tools/tool-tests/engine.test.js      # 82 checks, no dependencies
 
 npm install playwright                     # once
 python3 -m http.server 8781                # from the repository root
-node  tools/tool-tests/browser.test.js     # 35 checks in a real browser
-node  tools/tool-tests/grouped.test.js     # 7 checks on fund vs portfolio
+node  tools/tool-tests/browser.test.js       # the whole page, driven for real
+node  tools/tool-tests/grouped.test.js       # fund versus portfolio XIRR
+node  tools/tool-tests/intelligence.test.js  # spread, start dates, drawdown, consistency
+node  tools/tool-tests/bundled.test.js       # the bundled-benchmark path
+node  tools/tool-tests/provider.test.js      # the fund-lookup seam, against a stub
+
+python3 tools/benchmarks/test_prepare.py     # the benchmark checker's refusals
 ```
 
 Environment variables, all optional: `PRC_URL` (default
@@ -47,6 +52,19 @@ A large early holding returning 7% and a small late one returning 50% must give 
 portfolio figure near 7.6%, not the 28.5% an average of the two would suggest.
 If that ever collapses into an average, the tool is lying about the thing it was
 built to show.
+
+**`intelligence.test.js`** covers the parts that make this more than a
+calculator: the percentile spread, start-date sensitivity, drawdown and recovery,
+benchmark consistency, and the reality check — including that it issues no buy or
+sell instruction and never claims a fund is suitable.
+
+**`bundled.test.js`** writes a clearly-labelled synthetic benchmark, drives the
+whole bundled path in a browser, and restores the real (empty) file afterwards
+whatever happens. It asserts at the end that the shipped bundle still contains no
+invented data.
+
+**`provider.test.js`** injects a stub provider and drives the search journey
+end to end, including the failure paths. Nothing touches the network.
 
 ## Before publishing a change
 
