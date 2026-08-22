@@ -4,11 +4,12 @@
  * this page's memory and dies with the tab, which is the only honest way to
  * promise privacy.
  */
-(function () {
+(function (root) {
   'use strict';
 
   var E = window.PRCEngine, P = window.PRCParse;
-  var VERSION = '1.0';
+  var VERSION = '2.0';
+  var SHEET_VERSION = '1.2';
   var HORIZONS = [1, 3, 5, 7, 10];
 
   /* ------------------------------------------------------------ formatting */
@@ -77,9 +78,17 @@
 
   /* ---------------------------------------------------------------- routing */
 
-  var VIEWS = ['home', 'portfolio', 'goal', 'history', 'fund', 'sheet', 'method', 'about'];
+  var VIEWS = ['home', 'portfolio', 'goal', 'rolling', 'sheet', 'method', 'about'];
+  /* the two analysis screens became one; old links still land somewhere sensible */
+  var ALIASES = { history: ['rolling', 'index'], market: ['rolling', 'index'],
+                  fund: ['rolling', 'fund'] };
 
   function show(name, initial) {
+    if (ALIASES[name]) {
+      var alias = ALIASES[name];
+      name = alias[0];
+      if (alias[1] && root.PRCRolling) root.PRCRolling.preset(alias[1]);
+    }
     if (VIEWS.indexOf(name) === -1) name = 'home';
     $$('.view').forEach(function (v) { v.classList.toggle('on', v.id === 'view-' + name); });
     document.body.dataset.view = name;
@@ -98,7 +107,11 @@
     window.addEventListener('hashchange', function () { show(location.hash.replace('#', '') || 'home'); });
     document.addEventListener('click', function (ev) {
       var t = ev.target.closest('[data-go]');
-      if (t) { ev.preventDefault(); show(t.dataset.go); }
+      if (t) {
+        ev.preventDefault();
+        if (t.dataset.source && root.PRCRolling) root.PRCRolling.preset(t.dataset.source);
+        show(t.dataset.go);
+      }
     });
     $('#back').addEventListener('click', function () { show('home'); });
     show(location.hash.replace('#', '') || 'home', true);
@@ -211,11 +224,16 @@
 
   /* ------------------------------------------------------------ file intake */
 
-  function readFile(file, onSeries, onError) {
+  function readFile(file, onSeries, onError, onProgress) {
     var name = (file.name || '').toLowerCase();
+    if (onProgress) {
+      var mb = file.size / (1024 * 1024);
+      onProgress('Reading ' + file.name + (mb >= 1 ? ' (' + mb.toFixed(1) + ' MB)' : '') + '\u2026' +
+        (mb > 25 ? ' This is a large file and may take a few seconds on a phone.' : ''));
+    }
     if (/\.xlsx?$/.test(name)) {
       readWorkbook(file).then(function (rows) {
-        finish(P.rowsToSeries(rows));
+        finish(P.rowsToSeries(rows), rows);
       }).catch(function (err) {
         onError('That Excel file could not be read here (' + err.message + '). Open it and save it as CSV, then load that.');
       });
@@ -223,11 +241,27 @@
     }
     var fr = new FileReader();
     fr.onerror = function () { onError('That file could not be opened.'); };
-    fr.onload = function () { finish(P.parseSeriesText(fr.result)); };
+    fr.onload = function () {
+      try {
+        var rows = P.parseDelimited(fr.result);
+        finish(P.rowsToSeries(rows), rows);
+      } catch (err) {
+        onError('That file could not be read (' + (err && err.message ? err.message : 'unknown') + ').');
+      }
+    };
     fr.readAsText(file);
 
-    function finish(res) {
-      if (!res.ok) { onError(res.message); return; }
+    function finish(res, rows) {
+      if (!res.ok) {
+        /* one file holding many schemes is a question, not an error */
+        if (res.code === 'MANY_SCHEMES' && rows) {
+          var listed = P.listSchemes(rows);
+          if (listed) { onError(res.message, { rows: rows, schemes: listed.schemes }); return; }
+        }
+        onError(res.message);
+        return;
+      }
+      res.rows = rows;
       onSeries(res);
     }
   }
@@ -379,11 +413,11 @@
   }
 
   window.PRCApp = {
-    E: E, P: P, VERSION: VERSION, HORIZONS: HORIZONS,
+    E: E, P: P, VERSION: VERSION, SHEET_VERSION: SHEET_VERSION, HORIZONS: HORIZONS,
     money: money, moneyLong: moneyLong, scale: scale, pct: pct, signedPct: signedPct,
     fmtDate: fmtDate, isoToday: isoToday, isoToTs: isoToTs,
     $: $, $$: $$, el: el, esc: esc, notice: notice, show: show,
     histogramChart: histogramChart, goalChart: goalChart,
     readFile: readFile, wireDrop: wireDrop, initRouter: initRouter
   };
-})();
+})(typeof globalThis !== 'undefined' ? globalThis : this);

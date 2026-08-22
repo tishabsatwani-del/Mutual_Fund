@@ -66,17 +66,25 @@ function pretty(iso) {
     const errors = [];
     page.on('pageerror', e => errors.push(e.message));
 
-    await page.goto(BASE_URL + '#history', { waitUntil: 'networkidle' });
-    ok('a bundled benchmark is offered without any upload',
-       await page.locator('#bm-list .tile').count() === 1);
-    const tile = await page.locator('#bm-list').innerText();
-    ok('the tile says whether dividends are included', /Total Return Index/.test(tile));
-    ok('the tile shows the real date range',
-       tile.includes(FIRST + ' to ' + LAST), tile);
+    await page.goto(BASE_URL + '#rolling', { waitUntil: 'networkidle' });
+    await page.click('#r-source .chip[data-source="index"]');
+    ok('a bundled index is offered without any upload',
+       (await page.locator('#r-index option').count()) === 2);
+    ok('no upload box is pushed at the reader when data is bundled',
+       (await page.locator('#bm-drop').count()) === 0);
 
-    await page.click('#bm-list .tile');
-    await page.waitForSelector('#h-out .result', { timeout: 20000 });
-    const out = await page.locator('#h-out').innerText();
+    await page.selectOption('#r-index', { index: 1 });
+    await page.waitForTimeout(400);
+    const hint = await page.locator('#r-index-hint').innerText();
+    ok('it says whether dividends are included', /Total Return Index/.test(hint), hint);
+    ok('it shows the real date range', hint.includes(FIRST) && hint.includes(LAST), hint);
+    ok('the dates fill themselves in from the bundled data',
+       (await page.locator('#r-start').inputValue()) === FIRST &&
+       (await page.locator('#r-end').inputValue()) === LAST);
+
+    await page.click('#r-run');
+    await page.waitForSelector('#r-out .result', { timeout: 20000 });
+    const out = await page.locator('#r-out').innerText();
 
     ok('the dataset is described before the results', /About this data/.test(out));
     ok('the source is stated', /synthetic test fixture/.test(out));
@@ -88,28 +96,28 @@ function pretty(iso) {
     ok('it says the data is fixed, not live', /fixed, not live/.test(out));
     ok('it makes no forecast claim', /nothing in it forecasts/.test(out));
 
-    ok('rolling statistics are calculated automatically', /Median annual return/.test(out));
-    const spread = await page.locator('#h-out table.spread td').allInnerTexts();
+    ok('rolling statistics are calculated automatically', /Median 5-year return/i.test(out), out.slice(0, 160));
+    const spread = await page.locator('#r-out table.spread td').allInnerTexts();
     ok('a 10% series measures 10% across every percentile',
        spread.every(v => v.trim() === '10.0%'), spread.join('|'));
     ok('positive and negative shares are shown', /Made money/i.test(out) && /Lost money/i.test(out));
-    ok('the distribution chart is drawn', await page.locator('#h-out svg').count() >= 1);
-    ok('the hurdle-rate box is offered', await page.locator('#rate-market').isVisible());
+    ok('the distribution chart is drawn', (await page.locator('#r-out svg').count()) >= 1);
+    ok('the hurdle-rate box is offered', await page.locator('#rate-rolling').isVisible());
 
-    await page.fill('#rate-market', '12');
+    await page.fill('#rate-rolling', '12');
     await page.waitForTimeout(250);
     ok('a hurdle above the series is beaten by nothing',
-       (await page.locator('#rateout-market').textContent()).trim() === '0%');
-    await page.fill('#rate-market', '8');
+       (await page.locator('#rateout-rolling').textContent()).trim() === '0%');
+    await page.fill('#rate-rolling', '8');
     await page.waitForTimeout(250);
     ok('a hurdle below the series is beaten by everything',
-       (await page.locator('#rateout-market').textContent()).trim() === '100%');
+       (await page.locator('#rateout-rolling').textContent()).trim() === '100%');
 
     for (const years of ['3 years', '10 years']) {
-      await page.locator('#h-horizons .chip', { hasText: years }).click();
-      await page.waitForTimeout(300);
+      await page.locator('#r-years .chip', { hasText: years }).click();
+      await page.waitForTimeout(500);
       ok('switching to ' + years + ' recalculates from the bundled data',
-         new RegExp(years.split(' ')[0] + '-year period').test(await page.locator('#h-out').innerText()));
+         new RegExp(years.split(' ')[0] + ' years').test(await page.locator('#r-out').innerText()));
     }
 
     ok('the About screen shows the data date',

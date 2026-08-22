@@ -19,24 +19,36 @@
     var v = values || {};
     var id = 'r' + (rowSeq++);
     var wrap = A.el('div', { class: 'entry', 'data-row': id });
+    /* The labels are visible on a phone, where the column headings are not: an
+     * error saying "row 4" is useless if row 4 is four unlabelled boxes. */
     wrap.innerHTML =
-      '<div class="c-date"><label class="sr-only" for="' + id + 'd">Date</label>' +
+      '<div class="c-num" aria-hidden="true"></div>' +
+      '<div class="c-date"><label for="' + id + 'd">Date</label>' +
         '<input type="date" id="' + id + 'd" class="in-date" value="' + esc(v.date || '') + '"></div>' +
-      '<div class="c-kind"><label class="sr-only" for="' + id + 'k">What happened</label>' +
+      '<div class="c-kind"><label for="' + id + 'k">What happened</label>' +
         '<select id="' + id + 'k" class="in-kind">' +
         KINDS.map(function (k) {
           return '<option' + (v.kind === k ? ' selected' : '') + '>' + k + '</option>';
         }).join('') + '</select></div>' +
-      '<div class="c-amt"><label class="sr-only" for="' + id + 'a">Amount in rupees</label>' +
+      '<div class="c-amt"><label for="' + id + 'a">Amount in rupees</label>' +
         '<input type="number" id="' + id + 'a" class="in-amt" inputmode="decimal" min="0" step="1" ' +
         'placeholder="Amount" value="' + (v.amount != null ? esc(v.amount) : '') + '"></div>' +
-      '<div class="c-tag"><label class="sr-only" for="' + id + 't">Which fund or goal</label>' +
+      '<div class="c-tag"><label for="' + id + 't">Which fund or goal</label>' +
         '<input type="text" id="' + id + 't" class="in-tag" autocomplete="off" ' +
         'placeholder="Which fund?" value="' + esc(v.label || '') + '"></div>' +
       '<button type="button" class="del" aria-label="Remove this row">&times;</button>';
-    wrap.querySelector('.del').addEventListener('click', function () { wrap.remove(); });
+    wrap.querySelector('.del').addEventListener('click', function () { wrap.remove(); numberRows(); });
     $('#pf-rows').appendChild(wrap);
+    numberRows();
     return wrap;
+  }
+
+  /* Rows are referred to by number in every error message, so they carry one. */
+  function numberRows() {
+    $$('#pf-rows .entry').forEach(function (r, i) {
+      var n = r.querySelector('.c-num');
+      if (n) n.textContent = 'Row ' + (i + 1);
+    });
   }
 
   function readRows() {
@@ -50,6 +62,11 @@
     });
   }
 
+  function todayTs() {
+    var n = new Date();
+    return Date.UTC(n.getFullYear(), n.getMonth(), n.getDate());
+  }
+
   function calcPortfolio() {
     var rows = readRows();
     var out = $('#pf-out');
@@ -60,6 +77,11 @@
       if (blank) return;
       var t = A.isoToTs(r.date);
       if (isNaN(t)) { problems.push('Row ' + (i + 1) + ' has no date.'); return; }
+      if (t > todayTs()) {
+        problems.push('Row ' + (i + 1) + ' is dated ' + fmtDate(t) + ', which is in the future. ' +
+          'This measures money that has already moved.');
+        return;
+      }
       if (!isFinite(r.amount) || r.amount <= 0) {
         problems.push('Row ' + (i + 1) + ' needs an amount greater than zero, typed as a plain positive number.');
         return;
@@ -168,19 +190,59 @@
   function stat(k, v) { return '<div class="stat"><div class="k">' + esc(k) + '</div><div class="v">' + esc(v) + '</div></div>'; }
   function trow(k, v) { return '<tr><td>' + esc(k) + '</td><td>' + esc(v) + '</td></tr>'; }
 
-  function addSip() {
-    var start = window.prompt('First instalment date (YYYY-MM-DD)', A.isoToday().slice(0, 8) + '01');
-    if (!start) return;
-    var t0 = A.isoToTs(start);
-    if (isNaN(t0)) { window.alert('That date could not be read. Use the form 2024-01-01.'); return; }
-    var amount = parseFloat(window.prompt('Monthly amount in rupees', '10000'));
-    if (!isFinite(amount) || amount <= 0) { window.alert('Enter the amount as a plain positive number.'); return; }
-    var count = parseInt(window.prompt('How many instalments?', '12'), 10);
-    if (!isFinite(count) || count < 1 || count > 480) { window.alert('Enter between 1 and 480 instalments.'); return; }
+  /* Three chained window.prompt dialogs on a phone is not an interface. The
+   * same four questions, asked in the page, with a date picker like everywhere
+   * else. */
+  function toggleSip(show) {
+    var panel = $('#sip-builder');
+    panel.hidden = !show;
+    $('#pf-sip').setAttribute('aria-expanded', String(show));
+    if (show) {
+      if (!$('#sip-start').value) {
+        /* a year ago, not today: a SIP that starts today has no history to measure */
+        var d = new Date();
+        d.setUTCFullYear(d.getUTCFullYear() - 1);
+        $('#sip-start').value = d.toISOString().slice(0, 10);
+      }
+      $('#sip-start').max = A.isoToday();
+      $('#sip-msg').innerHTML = '';
+      $('#sip-start').focus();
+    }
+  }
+
+  function addSipRows() {
+    var msg = $('#sip-msg');
+    var t0 = A.isoToTs($('#sip-start').value);
+    var amount = parseFloat($('#sip-amount').value);
+    var count = parseInt($('#sip-count').value, 10);
+    var name = $('#sip-name').value.trim();
+
+    if (isNaN(t0)) { msg.innerHTML = notice('bad', 'Choose the date of the first instalment.'); return; }
+    if (t0 > todayTs()) {
+      msg.innerHTML = notice('bad', 'The first instalment cannot be in the future.');
+      return;
+    }
+    if (!isFinite(amount) || amount <= 0) {
+      msg.innerHTML = notice('bad', 'Enter the monthly amount as a plain positive number.');
+      return;
+    }
+    if (!isFinite(count) || count < 1 || count > 480) {
+      msg.innerHTML = notice('bad', 'Enter between 1 and 480 instalments.');
+      return;
+    }
+
+    var added = 0, skipped = 0;
     for (var i = 0; i < count; i++) {
       var t = E.addMonths(t0, i);
-      addRow({ date: new Date(t).toISOString().slice(0, 10), kind: 'Investment', amount: amount });
+      if (t > todayTs()) { skipped++; continue; }
+      addRow({ date: new Date(t).toISOString().slice(0, 10), kind: 'Investment',
+               amount: amount, label: name });
+      added++;
     }
+    if (name) $('#pf-group').value = 'on';
+    msg.innerHTML = notice('ok', 'Added ' + added + ' instalment' + (added === 1 ? '' : 's') + '.' +
+      (skipped ? ' ' + skipped + ' would have fallen in the future and were left out.' : ''));
+    toggleSip(false);
   }
 
   function fillExample() {
@@ -315,15 +377,17 @@
     var ownMoney = input.currentValue + plan.totalContributed;
     var growth = plan.projected - ownMoney;
     html += '<div class="card"><h2>Your money, and growth on it</h2><div class="stats">' +
-      stat('You put in', money(ownMoney)) +
-      stat('Growth on it', money(growth)) +
-      stat('You end with', money(plan.projected)) +
-      stat('Growth\u2019s share', growth > 0 ? pct(growth / plan.projected, 0) : '—') +
+      stat('Already saved', money(input.currentValue)) +
+      stat('Still to pay in', money(plan.totalContributed)) +
+      stat('Growth on both', money(growth)) +
+      stat('Growth\u2019s share of the end', growth > 0 ? pct(growth / plan.projected, 0) : '—') +
       '</div>' +
       '<div class="meaning"><h3>What this means</h3>' +
       '<p>Of the ' + money(plan.projected) + ' at the end, ' + money(ownMoney) + ' is money you ' +
-      'handed over yourself and ' + money(growth) + ' is what it earned while you left it alone. ' +
-      'The longer the period, the more the second number does the work.</p></div></div>';
+      'hand over yourself \u2014 ' + money(input.currentValue) + ' already saved and ' +
+      money(plan.totalContributed) + ' still to pay in \u2014 and ' + money(growth) + ' is what it ' +
+      'earns while you leave it alone. The longer the period, the more the second number does the ' +
+      'work.</p></div></div>';
 
     /* ---- §11: the target is in today's rupees unless the reader adjusts it */
     html += '<div class="card">' + notice('',
@@ -353,7 +417,7 @@
 
   var RATE_DATA = {};
 
-  function renderRolling(series, years, meta, compareSeries, compareName, prefix) {
+  function renderRolling(series, years, meta, compareSeries, compareName, prefix, compareMeta) {
     var r = E.rollingReturns(series, years);
     if (!r.ok) return notice('bad', esc(r.message));
     var s = r.stats;
@@ -361,18 +425,20 @@
     RATE_DATA[key] = r.values;
     var html = '';
 
-    html += '<div class="result"><div class="label">' + esc(meta.name) + ' &middot; every ' + years +
-      '-year period in this data</div>' +
+    html += '<div class="result"><div class="label">Median ' + years + '-year return, % a year</div>' +
       '<div class="value">' + pct(s.median) + '</div>' +
-      '<div class="sub">Median annual return across ' + s.count.toLocaleString() + ' overlapping periods, ' +
-      fmtDate(series[0].t) + ' to ' + fmtDate(series[series.length - 1].t) + '</div></div>';
+      '<div class="sub">' + esc(meta.name) + ' \u00b7 the middle of ' + s.count.toLocaleString() +
+      ' overlapping holding periods, ' + fmtDate(series[0].t) + ' to ' +
+      fmtDate(series[series.length - 1].t) + '. Half did better, half did worse.</div></div>';
 
     /* Worst to best across the quartiles, in that order. An average put at the
      * top of a screen becomes the number people remember, and it hides the
      * spread that actually decided what any one investor got. */
     html += '<div class="card"><h2>The range, not the average</h2>' +
-      '<div class="scroll"><table class="data spread"><thead><tr>' +
-      '<th>Worst</th><th>25th</th><th>Median</th><th>75th</th><th>Best</th>' +
+      '<div class="scroll"><table class="data spread">' +
+      '<caption>Annualised return, % a year, over every ' + years + '-year holding period</caption>' +
+      '<thead><tr>' +
+      '<th>Worst</th><th>Bottom quarter</th><th>Median</th><th>Top quarter</th><th>Best</th>' +
       '</tr></thead><tbody><tr>' +
       '<td>' + pct(s.min) + '</td><td>' + pct(s.p25) + '</td><td><strong>' + pct(s.median) +
       '</strong></td><td>' + pct(s.p75) + '</td><td>' + pct(s.max) + '</td>' +
@@ -382,10 +448,10 @@
       pct(s.mean) + ' is shown for completeness; the spread above is what decided ' +
       'what any one investor actually got.</p>' +
       '<div class="stats">' +
-      stat('Periods measured', s.count.toLocaleString()) +
-      stat('Made money', pct(s.positiveShare, 0)) +
-      stat('Lost money', pct(s.negativeShare, 0)) +
-      stat('Average', pct(s.mean)) +
+      stat('Holding periods measured', s.count.toLocaleString()) +
+      stat('Periods that made money', pct(s.positiveShare, 0)) +
+      stat('Periods that lost money', pct(s.negativeShare, 0)) +
+      stat('Average (mean)', pct(s.mean)) +
       '</div>' + A.histogramChart(r.values, {
         years: years,
         caption: 'Each bar counts the ' + years + '-year periods that ended in that range'
@@ -396,7 +462,7 @@
     html += rateCheckCard(key, years, r.values);
 
     if (compareSeries) {
-      html += comparisonCards(series, compareSeries, years, meta.name, compareName);
+      html += comparisonCards(series, compareSeries, years, meta.name, compareName, compareMeta);
     }
 
     html += '<div class="meaning"><h3>What this means</h3>' +
@@ -431,12 +497,12 @@
   function startDateCard(r, years) {
     var spread = r.best.r - r.worst.r;
     return '<div class="card"><h2>Would it still look this way if you had started elsewhere?</h2>' +
-      '<div class="scroll"><table class="data"><thead><tr><th>Starting on</th><th>Held until</th>' +
-      '<th>You would have got</th></tr></thead><tbody>' +
-      '<tr><td>' + fmtDate(r.best.t) + '</td><td>' + fmtDate(r.best.endT) + '</td><td>' +
-      pct(r.best.r) + ' a year</td></tr>' +
-      '<tr><td>' + fmtDate(r.worst.t) + '</td><td>' + fmtDate(r.worst.endT) + '</td><td>' +
-      pct(r.worst.r) + ' a year</td></tr>' +
+      '<div class="scroll"><table class="data"><thead><tr><th></th><th>Starting on</th>' +
+      '<th>Held until</th><th>You would have got</th></tr></thead><tbody>' +
+      '<tr><td><strong>Best start</strong></td><td>' + fmtDate(r.best.t) + '</td><td>' +
+      fmtDate(r.best.endT) + '</td><td>' + pct(r.best.r) + ' a year</td></tr>' +
+      '<tr><td><strong>Worst start</strong></td><td>' + fmtDate(r.worst.t) + '</td><td>' +
+      fmtDate(r.worst.endT) + '</td><td>' + pct(r.worst.r) + ' a year</td></tr>' +
       '</tbody></table></div>' +
       '<div class="meaning"><h3>What this means</h3>' +
       '<p>Both investors held for the same ' + years + ' years, in the same market. The only ' +
@@ -502,7 +568,7 @@
   /* Every window both series can cover, paired by start date. One end-to-end
    * number can be an accident of where it started; how often one led the other
    * cannot. */
-  function comparisonCards(series, compareSeries, years, name, compareName) {
+  function comparisonCards(series, compareSeries, years, name, compareName, compareMeta) {
     var c = E.compareRolling(series, compareSeries, years);
     if (!c.ok) {
       return '<div class="card">' + notice('bad', esc(c.message)) + '</div>';
@@ -532,7 +598,18 @@
       '<p>Leading in ' + pct(c.fundAheadShare, 0) + ' of periods is a different statement from leading ' +
       'over one stretch. A fund can win on the dates you happen to look at and lose on most others.</p>' +
       '</div>' +
+      (compareMeta ? '<div class="scroll" style="margin-top:.8rem"><table class="data"><tbody>' +
+        '<tr><td>' + esc(compareName) + ' is</td><td>' + (compareMeta.kind === 'PRICE'
+          ? 'a price index — dividends excluded' : 'a total return index — dividends included') +
+        '</td></tr>' +
+        (compareMeta.firstDate ? '<tr><td>Its own data covers</td><td>' + esc(compareMeta.firstDate) +
+          ' to ' + esc(compareMeta.lastDate) + '</td></tr>' : '') +
+        (compareMeta.source ? '<tr><td>Source</td><td>' + esc(compareMeta.source) + '</td></tr>' : '') +
+        '</tbody></table></div>' : '') +
       '<div class="meaning"><h3>What it does not mean</h3>' +
+      (compareMeta && compareMeta.kind === 'PRICE'
+        ? '<p>This index excludes dividends while a fund\u2019s NAV includes them, so the fund is ' +
+          'flattered here by roughly the market\u2019s dividend yield each year.</p>' : '') +
       '<p>A benchmark carries no costs, holds no cash and makes no decisions; a fund does all three. ' +
       'A benchmark comparison is a reference point, not proof that a fund is good or bad, and it says ' +
       'nothing about whether the fund suits you.</p></div></div>';
@@ -591,34 +668,452 @@
     return pct(b.from, 0) + ' to ' + pct(b.to, 0) + ' a year';
   }
 
-  /* ================================================================ HISTORY */
+  /* =============================================================== ROLLING
+   *
+   * One module, one set of controls, two sources. Splitting "the market" and
+   * "my fund" into separate screens made the same analysis look like two
+   * different things and left the inputs scattered; this asks the four
+   * questions the analysis actually needs, in order, with nothing hidden.
+   */
 
-  var state = { bmSeries: null, bmName: '', bmMeta: null, bmYears: 5, fundSeries: null, fundName: '', fundYears: 5, bundled: {} };
+  var R = {
+    source: null,          /* 'index' | 'fund' */
+    series: null,          /* everything available for the chosen source */
+    name: '',
+    meta: null,            /* bundled-index metadata, when there is any */
+    report: null,          /* import report, when it came from a file */
+    rows: null,            /* raw rows, kept so the scheme can be changed */
+    schemes: null,
+    years: 5,
+    datesTouched: false,
+    bundled: {},           /* name -> series, for the comparison list */
+    ran: false
+  };
 
-  function horizonChips(containerId, current, onPick) {
-    var box = $('#' + containerId);
+  function setSource(source) {
+    R.source = source;
+    $$('#r-source .chip').forEach(function (c) {
+      c.setAttribute('aria-checked', String(c.dataset.source === source));
+    });
+    $('#src-index').hidden = source !== 'index';
+    $('#src-fund').hidden = source !== 'fund';
+    $('#step-source').dataset.done = source ? 'yes' : 'no';
+    var prompt = $('#r-source-prompt');
+    if (prompt) {
+      prompt.textContent = source ? ''
+        : 'Pick one of the two above to begin. The rest of this screen unlocks once you do.';
+    }
+  }
+
+  /* Everything downstream of "what am I analysing" stays visible but inert
+     until there is something to analyse, so nobody has to discover a control
+     that only appears once they guess the right first move. */
+  function setLoaded(series, name, opts) {
+    var o = opts || {};
+    R.series = series;
+    R.name = name;
+    R.meta = o.meta || null;
+    R.report = o.report || null;
+
+    var first = series[0].t, last = series[series.length - 1].t;
+    var lo = isoOf(first), hi = isoOf(last);
+    ['r-start', 'r-end'].forEach(function (id) {
+      var el = $('#' + id);
+      el.disabled = false;
+      el.min = lo;
+      el.max = hi;
+    });
+    /* keep dates the reader chose; replace dates this screen filled in itself */
+    var reset = false;
+    ['r-start', 'r-end'].forEach(function (id) {
+      var el = $('#' + id);
+      var v = el.value;
+      var mine = R.datesTouched && v && v >= lo && v <= hi;
+      if (!mine) { el.value = (id === 'r-start' ? lo : hi); if (v && R.datesTouched) reset = true; }
+    });
+    $('#r-all').disabled = false;
+    $('#r-run').disabled = false;
+    var spanYears = (last - first) / (365.2425 * 86400000);
+    $('#r-range').textContent = 'Data available: ' + fmtDate(first) + ' to ' + fmtDate(last) +
+      ' \u2014 ' + spanYears.toFixed(1) + ' years, ' + series.length.toLocaleString() +
+      ' observations.';
+    limitYears(selectedSpanYears());
+    updateWindowNote();
+    $('#step-period').dataset.done = 'yes';
+
+    $('#r-loaded').innerHTML = notice('ok', 'Ready to analyse <strong>' + esc(name) + '</strong>.' +
+      (reset ? ' Your dates fell outside this data, so they have been set to its full range.' : '') +
+      (o.note ? ' ' + o.note : ''));
+    refreshCompare();
+    if (R.ran) runRolling();
+  }
+
+  function isoOf(t) { return new Date(t).toISOString().slice(0, 10); }
+
+  /* How much history the reader's own dates leave, which is what the holding
+   * period has to fit inside -- not the span of the whole file. */
+  function selectedSpanYears() {
+    if (!R.series) return null;
+    var from = A.isoToTs($('#r-start').value), to = A.isoToTs($('#r-end').value);
+    if (isNaN(from) || isNaN(to) || to <= from) return null;
+    return (to - from) / (365.2425 * 86400000);
+  }
+
+  function updateWindowNote() {
+    var note = $('#r-window-note');
+    if (!note) return;
+    var to = A.isoToTs($('#r-end').value), from = A.isoToTs($('#r-start').value);
+    if (!R.series || isNaN(to) || isNaN(from) || to <= from) { note.textContent = ''; return; }
+    var lastStart = E.addYears(to, -R.years);
+    note.textContent = lastStart <= from
+      ? 'These dates leave less than one ' + R.years + '-year holding period.'
+      : 'With a ' + R.years + '-year holding period, start dates from ' + fmtDate(from) +
+        ' to ' + fmtDate(lastStart) + ' are measured.';
+  }
+
+  function clearLoaded(message) {
+    R.series = null; R.name = ''; R.meta = null; R.report = null;
+    ['r-start', 'r-end'].forEach(function (id) { $('#' + id).disabled = true; $('#' + id).value = ''; });
+    $('#r-all').disabled = true;
+    $('#r-run').disabled = true;
+    limitYears(null);
+    $('#step-period').dataset.done = 'no';
+    $('#r-range').textContent = 'Choose something to analyse first.';
+    $('#r-out').innerHTML = '';
+    if (message) $('#r-loaded').innerHTML = message;
+  }
+
+  /* ---------------------------------------------------------------- index */
+
+  function loadIndexList() {
+    var sel = $('#r-index');
+    fetch('data/benchmarks.json', { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .catch(function () { return null; })
+      .then(function (data) {
+        var list = (data && data.benchmarks) || [];
+        R.indexList = list;
+        if (data && data.asOf) $('#asof').textContent = 'through ' + data.asOf;
+        if (!list.length) {
+          sel.innerHTML = '<option value="">No index is bundled with this version</option>';
+          sel.disabled = true;
+          $('#r-index-hint').textContent = '';
+          $('#r-index-upload').innerHTML =
+            notice('', '<strong>No market data is bundled with this version.</strong> Nothing has ' +
+              'been invented to fill the gap: a guessed-at index would produce confident numbers ' +
+              'about a market that never existed. Load an official index file and every measurement ' +
+              'on this screen works exactly the same way.') +
+            '<label class="fieldlabel" for="bm-pick">Index data file</label>' +
+            '<div class="filebox" id="bm-drop" tabindex="0" role="button" aria-label="Choose an index file">' +
+            '<button class="secondary" type="button" id="bm-pick">Choose a file</button>' +
+            '<p>A date column and the index value on that date</p></div>' +
+            '<input type="file" id="bm-file" accept=".csv,.txt,.xlsx">';
+          A.wireDrop('bm-drop', 'bm-file', 'bm-pick', function (file) { loadIndexFile(file); });
+          return;
+        }
+        sel.disabled = false;
+        sel.innerHTML = '<option value="">Choose an index…</option>' +
+          list.map(function (b, i) {
+            return '<option value="' + i + '">' + esc(b.name) + '</option>';
+          }).join('');
+        sel.addEventListener('change', function () {
+          if (sel.value === '') { clearLoaded(''); return; }
+          var b = list[+sel.value];
+          var series = seriesOf(b);
+          R.bundled[b.name] = series;
+          $('#r-index-hint').textContent =
+            (b.kind === 'PRICE' ? 'Price index — dividends are not included.'
+                                : 'Total Return Index — dividends included.') +
+            ' ' + b.firstDate + ' to ' + b.lastDate + '.';
+          setLoaded(series, b.name, { meta: b, note: agingNote(b.lastDate) });
+        });
+      });
+  }
+
+  /* Bundled data does not update itself. Once it is materially behind, say so
+   * in years rather than leaving a date for the reader to do the arithmetic on. */
+  function agingNote(lastDate) {
+    var last = A.isoToTs(lastDate);
+    if (isNaN(last)) return '';
+    var months = (Date.now() - last) / (30.44 * 86400000);
+    if (months < 9) return '';
+    var years = months / 12;
+    return 'This data ends ' + fmtDate(last) + ', about ' +
+      (years >= 1.5 ? years.toFixed(0) + ' years' : Math.round(months) + ' months') +
+      ' ago, and describes the market only up to then. Load a current index file to bring it forward.';
+  }
+
+  function seriesOf(b) {
+    return b.series.map(function (p) { return { t: A.isoToTs(p[0]), v: p[1] }; })
+      .filter(function (p) { return !isNaN(p.t) && p.v > 0; })
+      .sort(function (x, y) { return x.t - y.t; });
+  }
+
+  function loadIndexFile(file) {
+    A.readFile(file, function (res) {
+      var name = res.report.scheme || file.name.replace(/\.[^.]+$/, '');
+      R.bundled[name] = res.series;
+      setLoaded(res.series, name, { report: res.report });
+    }, function (msg) { clearLoaded(notice('bad', esc(msg))); },
+    function (progress) { $('#r-loaded').innerHTML = notice('', esc(progress)); });
+  }
+
+  /* ----------------------------------------------------------------- fund */
+
+  function loadFundFile(file) {
+    A.readFile(file, function (res) {
+      R.rows = res.rows || null;
+      R.schemes = null;
+      $('#r-scheme-wrap').hidden = true;
+      setLoaded(res.series, res.report.scheme || file.name.replace(/\.[^.]+$/, ''),
+                { report: res.report });
+    }, function (msg, extra) {
+      /* one file, many schemes: let the reader pick theirs out of it */
+      if (extra && extra.schemes && extra.rows) {
+        R.rows = extra.rows;
+        R.schemes = extra.schemes;
+        showSchemePicker(extra.schemes);
+        clearLoaded(notice('', 'That file holds <strong>' + extra.schemes.length +
+          '</strong> funds. Choose yours below.'));
+        return;
+      }
+      $('#r-scheme-wrap').hidden = true;
+      clearLoaded(notice('bad', esc(msg)));
+    }, function (progress) {
+      $('#r-loaded').innerHTML = notice('', esc(progress));
+    });
+  }
+
+  /* Thousands of funds cannot be chosen from a dropdown on a phone. Filter as
+   * they type, cap what is drawn, and say how many more are waiting. */
+  var MAX_HITS = 40;
+
+  function showSchemePicker(schemes) {
+    var wrap = $('#r-scheme-wrap'), q = $('#r-scheme-q');
+    wrap.hidden = false;
+    q.value = '';
+    render('');
+    q.oninput = function () { render(q.value); };
+    q.focus();
+
+    function render(term) {
+      var needle = term.trim().toLowerCase();
+      var hits = needle
+        ? schemes.filter(function (sc) { return sc.name.toLowerCase().indexOf(needle) !== -1; })
+        : schemes;
+      $('#r-scheme-count').textContent = schemes.length.toLocaleString() +
+        (schemes.length === 1 ? ' fund in this file' : ' funds in this file') +
+        (needle ? ' \u00b7 ' + hits.length.toLocaleString() + ' match' + (hits.length === 1 ? '' : 'es')
+                : ' \u2014 type to narrow the list');
+
+      var list = $('#r-scheme-list');
+      if (!hits.length) {
+        list.innerHTML = '<p class="more">Nothing matches \u201c' + esc(term) + '\u201d.</p>';
+        return;
+      }
+      list.innerHTML = hits.slice(0, MAX_HITS).map(function (sc, i) {
+        var days = sc.rows === 1 ? '1 day only' : sc.rows.toLocaleString() + ' days';
+        return '<button class="hit" type="button" role="option" aria-selected="false" ' +
+          'data-i="' + i + '"><span class="nm">' + esc(sc.name) + '</span>' +
+          '<span class="sub">' + fmtDate(sc.first) + ' to ' + fmtDate(sc.last) +
+          ' \u00b7 ' + days + '</span></button>';
+      }).join('') +
+        (hits.length > MAX_HITS
+          ? '<p class="more">' + (hits.length - MAX_HITS).toLocaleString() +
+            ' more \u2014 keep typing to narrow them down.</p>'
+          : '');
+
+      $$('#r-scheme-list .hit').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var sc = hits[+btn.dataset.i];
+          $$('#r-scheme-list .hit').forEach(function (o) { o.setAttribute('aria-selected', 'false'); });
+          btn.setAttribute('aria-selected', 'true');
+          choose(sc);
+        });
+      });
+    }
+
+    function choose(sc) {
+      var res = P.rowsToSeries(R.rows, { scheme: sc.name });
+      if (!res.ok) { clearLoaded(notice('bad', esc(res.message))); return; }
+      setLoaded(res.series, sc.name, { report: res.report });
+    }
+  }
+
+  /* ------------------------------------------------------------- controls */
+
+  function refreshCompare() {
+    var sel = $('#r-compare');
+    var keep = sel.value;
+    var names = Object.keys(R.bundled).filter(function (n) { return n !== R.name; });
+    (R.indexList || []).forEach(function (b) {
+      if (b.name !== R.name && names.indexOf(b.name) === -1) names.push(b.name);
+    });
+    sel.innerHTML = '<option value="none">Nothing — just what I chose above</option>' +
+      names.map(function (n) { return '<option value="' + esc(n) + '">' + esc(n) + '</option>'; }).join('');
+    if (names.indexOf(keep) !== -1) sel.value = keep;
+    sel.disabled = !names.length;
+    $('#step-compare').dataset.done = sel.value !== 'none' ? 'yes' : 'no';
+
+    var hint = $('#r-compare-hint'), box = $('#r-compare-upload');
+    if (!names.length) {
+      hint.textContent = 'Nothing to compare against yet. This version bundles no index data, ' +
+        'so load an index file here and it becomes available as a benchmark.';
+      if (!$('#cmp-file')) {
+        box.innerHTML =
+          '<label class="fieldlabel" for="cmp-pick">Index data file</label>' +
+          '<div class="filebox" id="cmp-drop" tabindex="0" role="button" aria-label="Choose an index file">' +
+          '<button class="secondary" type="button" id="cmp-pick">Choose a file</button>' +
+          '<p>A date column and the index value on that date</p></div>' +
+          '<input type="file" id="cmp-file" accept=".csv,.txt,.xlsx">';
+        A.wireDrop('cmp-drop', 'cmp-file', 'cmp-pick', function (file) {
+          A.readFile(file, function (res) {
+            var nm = res.report.scheme || file.name.replace(/\.[^.]+$/, '');
+            R.bundled[nm] = res.series;
+            refreshCompare();
+            $('#r-compare').value = nm;
+            $('#step-compare').dataset.done = 'yes';
+            if (R.ran) runRolling();
+          }, function (msg) { box.innerHTML += notice('bad', esc(msg)); });
+        });
+      }
+    } else {
+      hint.textContent = 'A benchmark is a reference point, not a verdict. Only dates both sets ' +
+        'of data cover are compared.';
+      box.innerHTML = '';
+    }
+  }
+
+  function compareSeries() {
+    var sel = $('#r-compare');
+    var name = sel.value;
+    if (!name || name === 'none') return null;
+    var bMeta = (R.indexList || []).filter(function (x) { return x.name === name; })[0] || null;
+    if (R.bundled[name]) return { name: name, series: R.bundled[name], meta: bMeta };
+    var b = (R.indexList || []).filter(function (x) { return x.name === name; })[0];
+    if (!b) return null;
+    R.bundled[name] = seriesOf(b);
+    return { name: name, series: R.bundled[name], meta: b };
+  }
+
+  function yearChips() {
+    var box = $('#r-years');
     box.innerHTML = '';
     A.HORIZONS.forEach(function (h) {
-      var b = A.el('button', {
-        class: 'chip', type: 'button', 'aria-pressed': String(h === current)
-      });
+      var b = A.el('button', { class: 'chip', type: 'button', role: 'radio',
+                               'aria-checked': String(h === R.years) });
+      b.dataset.years = h;
       b.textContent = h + (h === 1 ? ' year' : ' years');
-      b.addEventListener('click', function () { onPick(h); });
+      b.addEventListener('click', function () {
+        if (b.disabled) return;
+        R.years = h;
+        $$('#r-years .chip').forEach(function (c) {
+          c.setAttribute('aria-checked', String(c === b));
+        });
+        $('#step-hold').dataset.done = 'yes';
+        updateWindowNote();
+        if (R.ran) runRolling();
+      });
       box.appendChild(b);
     });
   }
 
-  function drawHistory() {
-    if (!state.bmSeries) return;
-    $('#h-controls').hidden = false;
-    horizonChips('h-horizons', state.bmYears, function (h) { state.bmYears = h; drawHistory(); });
-    $('#h-out').innerHTML = datasetCard(state.bmMeta, state.bmSeries) +
-      renderRolling(state.bmSeries, state.bmYears, { name: state.bmName },
-      null, '', 'market');
+  /* Offering "10 years" on a three-year file invites a reader to choose it and
+   * only then be told no. Say it on the chip instead. */
+  function limitYears(spanYears) {
+    var best = null;
+    $$('#r-years .chip').forEach(function (c) {
+      var h = +c.dataset.years;
+      var possible = spanYears == null || h <= spanYears;
+      c.disabled = !possible;
+      c.textContent = h + (h === 1 ? ' year' : ' years') +
+        (possible ? '' : ' \u2014 needs ' + h + ' years of data');
+      if (possible) best = h;
+    });
+    if (best !== null && R.years > best) {
+      R.years = best;
+      $$('#r-years .chip').forEach(function (c) {
+        c.setAttribute('aria-checked', String(+c.dataset.years === best));
+      });
+    }
   }
 
-  /* Where the numbers came from, and what they can and cannot be read as. A
-   * result with no stated dataset behind it is an opinion wearing a decimal. */
+  /* -------------------------------------------------------------- the run */
+
+  function runRolling() {
+    var out = $('#r-out');
+    if (!R.series) { out.innerHTML = notice('bad', 'Choose something to analyse first.'); return; }
+
+    var from = A.isoToTs($('#r-start').value);
+    var to = A.isoToTs($('#r-end').value);
+    if (isNaN(from) || isNaN(to)) {
+      out.innerHTML = notice('bad', 'Enter both a start date and an end date.');
+      return;
+    }
+    if (from >= to) {
+      out.innerHTML = notice('bad', 'The end date must be after the start date.');
+      return;
+    }
+    var series = P.sliceSeries(R.series, from, to);
+    if (series.length < 2) {
+      out.innerHTML = notice('bad', 'There is no data between those two dates.');
+      return;
+    }
+    /* Report the dates the data actually reaches, never the ones typed: a
+       weekend or a holiday would otherwise put two different periods on one
+       screen. */
+    var usedFrom = series[0].t, usedTo = series[series.length - 1].t;
+    var span = (usedTo - usedFrom) / (365.2425 * 86400000);
+    if (span < R.years) {
+      out.innerHTML = notice('bad', 'That leaves ' + span.toFixed(1) + ' years of history, and each ' +
+        'holding period is ' + R.years + ' years long. Widen the dates, or choose a shorter holding ' +
+        'period.');
+      return;
+    }
+    var against = compareSeries();
+    var cmpSeries = against ? P.sliceSeries(against.series, from, to) : null;
+    var warning = '';
+    if (against && cmpSeries.length < 2) {
+      cmpSeries = null;
+      warning = notice('bad', esc(against.name) + ' has no data between those dates, so no ' +
+        'comparison is shown. Widen the dates, or choose a different benchmark.');
+    }
+
+    R.ran = true;
+    out.innerHTML = warning +
+      periodCard(from, to, usedFrom, usedTo, R.years, R.name) +
+      (R.meta ? datasetCard(R.meta, series) : '') +
+      (R.report ? importReport(R.report, R.name) : '') +
+      renderRolling(series, R.years, { name: R.name },
+                    cmpSeries, against ? against.name : '', 'rolling',
+                    against ? against.meta : null);
+    out.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }
+
+  /* What was actually measured, stated before any result. */
+  function periodCard(from, to, usedFrom, usedTo, years, name) {
+    var drifted = Math.abs(dayGap(from, usedFrom)) > 3 || Math.abs(dayGap(to, usedTo)) > 3;
+    var lastStart = E.addYears(usedTo, -years);
+    return '<div class="card"><h2>What was measured</h2><div class="scroll">' +
+      '<table class="data"><tbody>' +
+      '<tr><td>Fund or index</td><td>' + esc(name) + '</td></tr>' +
+      '<tr><td>History searched</td><td>' + fmtDate(usedFrom) + ' to ' + fmtDate(usedTo) + '</td></tr>' +
+      (drifted
+        ? '<tr><td>You asked for</td><td>' + fmtDate(from) + ' to ' + fmtDate(to) +
+          '; the nearest data is above</td></tr>'
+        : '') +
+      '<tr><td>Each holding period</td><td>' + years + (years === 1 ? ' year' : ' years') + '</td></tr>' +
+      '<tr><td>Start dates measured</td><td>' + fmtDate(usedFrom) + ' to ' + fmtDate(lastStart) +
+      '</td></tr>' +
+      '</tbody></table></div>' +
+      '<p class="hint" style="margin:.6rem 0 0">A holding period cannot start later than ' +
+      fmtDate(lastStart) + ', because there would not be ' + years +
+      (years === 1 ? ' year' : ' years') + ' of history left to measure it over.</p></div>';
+  }
+
+  function dayGap(a, b) { return Math.round((b - a) / 86400000); }
+
+  /* Where the numbers came from, and what they can and cannot be read as. */
   function datasetCard(meta, series) {
     if (!meta) return '';
     var first = fmtDate(series[0].t), last = fmtDate(series[series.length - 1].t);
@@ -627,8 +1122,7 @@
       '<tr><td>Series</td><td>' + esc(meta.name) + '</td></tr>' +
       '<tr><td>Type</td><td>' + (meta.kind === 'PRICE'
         ? 'Price index, dividends excluded' : 'Total Return Index, dividends included') + '</td></tr>' +
-      '<tr><td>Covers</td><td>' + first + ' to ' + last + '</td></tr>' +
-      '<tr><td>Days of data</td><td>' + (meta.points || series.length).toLocaleString() + '</td></tr>' +
+      '<tr><td>Bundled range</td><td>' + esc(meta.firstDate || '') + ' to ' + esc(meta.lastDate || '') + '</td></tr>' +
       (meta.source ? '<tr><td>Source</td><td>' + esc(meta.source) + '</td></tr>' : '') +
       (meta.licence ? '<tr><td>Used under</td><td>' + esc(meta.licence) + '</td></tr>' : '') +
       (meta.note ? '<tr><td>Note</td><td>' + esc(meta.note) + '</td></tr>' : '') +
@@ -637,81 +1131,8 @@
       '<p>Everything below is calculated from this dataset and no other. It describes what happened ' +
       'between <strong>' + first + '</strong> and <strong>' + last + '</strong>, and nothing outside ' +
       'those dates.</p>' +
-      '<p>This data is fixed, not live. It does not update itself, it will not include what the market ' +
-      'did after ' + last + ', and nothing in it forecasts what comes next.</p></div></div>';
-  }
-
-  function loadBenchmarks() {
-    var box = $('#bm-list');
-    fetch('data/benchmarks.json', { cache: 'no-store' })
-      .then(function (r) { return r.ok ? r.json() : null; })
-      .catch(function () { return null; })
-      .then(function (data) {
-        var list = (data && data.benchmarks) || [];
-        if (!list.length) {
-          box.innerHTML = notice('', '<strong>No market data is bundled with this version.</strong> ' +
-            'Nothing has been invented to fill the gap: an index series that was guessed at would produce ' +
-            'confident numbers about a market that never existed. Load an official index file below and ' +
-            'every measurement on this screen works exactly the same way.');
-          return;
-        }
-        $('#asof').textContent = data.asOf ? 'through ' + esc(data.asOf) : 'included';
-        box.innerHTML = '';
-        list.forEach(function (b) {
-          var btn = A.el('button', { class: 'tile', type: 'button' });
-          btn.innerHTML = '<h2>' + esc(b.name) + '</h2>' +
-            '<p>' + esc(b.kind === 'PRICE'
-              ? 'Price index — dividends are not included, so it reads lower than what an investor earned.'
-              : 'Total Return Index — dividends included.') + '</p>' +
-            '<p style="margin-top:.3rem;font-size:.85rem;color:var(--muted)">' +
-            (b.firstDate && b.lastDate
-              ? esc(b.firstDate) + ' to ' + esc(b.lastDate) +
-                (b.points ? ' · ' + b.points.toLocaleString() + ' days' : '')
-              : '') + '</p>';
-          btn.addEventListener('click', function () {
-            state.bmSeries = b.series.map(function (p) { return { t: A.isoToTs(p[0]), v: p[1] }; })
-              .filter(function (p) { return !isNaN(p.t) && p.v > 0; })
-              .sort(function (x, y) { return x.t - y.t; });
-            state.bmName = b.name;
-            state.bmMeta = b;
-            state.bundled[b.name] = state.bmSeries;
-            refreshCompareOptions();
-            drawHistory();
-          });
-          box.appendChild(btn);
-        });
-      });
-  }
-
-  /* =================================================================== FUND */
-
-  function drawFund() {
-    if (!state.fundSeries) return;
-    $('#f-controls').hidden = false;
-    horizonChips('f-horizons', state.fundYears, function (h) { state.fundYears = h; drawFund(); });
-    var sel = $('#f-compare');
-    var chosen = sel.value;
-    var compare = null, compareName = '';
-    if (chosen && chosen !== 'none') {
-      compare = chosen === '__loaded__' ? state.bmSeries : state.bundled[chosen];
-      compareName = chosen === '__loaded__' ? state.bmName : chosen;
-    }
-    $('#f-out').innerHTML =
-      importReport(state.fundReport, state.fundName) +
-      renderRolling(state.fundSeries, state.fundYears, { name: state.fundName }, compare, compareName, 'fund');
-  }
-
-  function refreshCompareOptions() {
-    var sel = $('#f-compare');
-    if (!sel) return;
-    var names = Object.keys(state.bundled);
-    var opts = ['<option value="none">Nothing — just my fund</option>'];
-    names.forEach(function (n) { opts.push('<option value="' + esc(n) + '">' + esc(n) + '</option>'); });
-    if (state.bmSeries && names.indexOf(state.bmName) === -1) {
-      opts.push('<option value="__loaded__">' + esc(state.bmName) + ' (the file you loaded)</option>');
-    }
-    sel.innerHTML = opts.join('');
-    $('#f-compare-wrap').hidden = opts.length < 2;
+      '<p>This data is fixed, not live. It does not update itself, and nothing in it forecasts what ' +
+      'comes next.</p></div></div>';
   }
 
   /* The search journey exists only when a provider does. A dead search box that
@@ -719,8 +1140,10 @@
    * broken rather than deliberately simple. */
   function wireFundSearch() {
     var provider = window.PRCProvider && window.PRCProvider.get();
-    if (!provider) return;
-    $('#f-search-card').hidden = false;
+    var card = $('#f-search-card');
+    /* a missing element must never take the rest of init down with it */
+    if (!provider || !card) return;
+    card.hidden = false;
 
     function search() {
       var q = $('#f-query').value.trim();
@@ -779,12 +1202,8 @@
               'NAV file below will usually work.');
             return;
           }
-          out.innerHTML = notice('ok', 'Loaded ' + esc(match.name) + '.');
-          state.fundSeries = res.series;
-          state.fundReport = res.report;
-          state.fundName = match.name;
-          refreshCompareOptions();
-          drawFund();
+          out.innerHTML = '';
+          setLoaded(res.series, match.name, { report: res.report });
         })
         .catch(function (err) {
           out.innerHTML = notice('bad', 'That fund\u2019s history could not be fetched (' +
@@ -849,53 +1268,119 @@
     A.initRouter();
     wireRateChecks();
     $('#ver').textContent = A.VERSION;
+    if ($('#sheetver')) $('#sheetver').textContent = A.SHEET_VERSION;
 
     /* portfolio */
     for (var i = 0; i < 3; i++) addRow({});
     addRow({ date: A.isoToday(), kind: 'Value today' });
     $('#pf-add').addEventListener('click', function () { addRow({}); });
-    $('#pf-sip').addEventListener('click', addSip);
+    $('#pf-sip').addEventListener('click', function () { toggleSip($('#sip-builder').hidden); });
+    $('#sip-add').addEventListener('click', addSipRows);
+    $('#sip-cancel').addEventListener('click', function () { toggleSip(false); });
     $('#pf-demo').addEventListener('click', fillExample);
     $('#pf-clear').addEventListener('click', function () {
       $('#pf-rows').innerHTML = ''; $('#pf-out').innerHTML = '';
       for (var k = 0; k < 3; k++) addRow({});
       addRow({ date: A.isoToday(), kind: 'Value today' });
     });
-    $('#pf-group').addEventListener('change', function () {
-      $('#pf-rows').classList.toggle('tagged', this.value === 'on');
-    });
+    $('#pf-group').addEventListener('change', function () { if ($('#pf-out').innerHTML) calcPortfolio(); });
     $('#pf-calc').addEventListener('click', calcPortfolio);
     $('#pf-export').addEventListener('click', exportRows);
 
     /* goal */
+    ['g-target', 'g-current', 'g-sip'].forEach(function (id) {
+      var input = $('#' + id), echo = $('#' + id + '-echo');
+      if (!input || !echo) return;
+      function say() {
+        var v = parseFloat(input.value);
+        var scaled = isFinite(v) && v > 0 ? A.scale(v) : null;
+        echo.textContent = scaled ? '= about \u20b9' + scaled : '';
+      }
+      input.addEventListener('input', say);
+      say();
+    });
     $('#g-calc').addEventListener('click', calcGoal);
 
-    /* history */
-    loadBenchmarks();
-    A.wireDrop('bm-drop', 'bm-file', 'bm-pick', function (file) {
-      A.readFile(file, function (res) {
-        state.bmSeries = res.series;
-        state.bmName = file.name.replace(/\.[^.]+$/, '');
-        state.bmReport = res.report;
-        state.bmMeta = null;
-        refreshCompareOptions();
-        drawHistory();
-      }, function (msg) { $('#h-out').innerHTML = notice('bad', esc(msg)); });
+    /* rolling returns: one module, four steps, nothing hidden */
+    yearChips();
+    loadIndexList();
+    $$('#r-source .chip').forEach(function (c) {
+      c.addEventListener('click', function () { resetSource(c.dataset.source); });
     });
+    A.wireDrop('f-drop', 'f-file', 'f-pick', loadFundFile);
+    try { wireFundSearch(); } catch (e) { /* optional; never fatal */ }
+    $('#r-compare').addEventListener('change', function () {
+      $('#step-compare').dataset.done = this.value !== 'none' ? 'yes' : 'no';
+      if (R.ran) runRolling();
+    });
+    ['r-start', 'r-end'].forEach(function (id) {
+      $('#' + id).addEventListener('change', function () {
+        R.datesTouched = true;
+        limitYears(selectedSpanYears());
+        updateWindowNote();
+        if (R.ran) runRolling();
+      });
+    });
+    $('#r-all').addEventListener('click', function () {
+      if (!R.series) return;
+      $('#r-start').value = isoOf(R.series[0].t);
+      $('#r-end').value = isoOf(R.series[R.series.length - 1].t);
+      R.datesTouched = false;
+      limitYears(selectedSpanYears());
+      updateWindowNote();
+      if (R.ran) runRolling();
+    });
+    $('#r-run').addEventListener('click', runRolling);
+    refreshCompare();   /* disabled, and visibly so, until there is anything to compare with */
+    applyPreset();
+    $('#r-reset').addEventListener('click', function () {
+      R.ran = false; R.rows = null; R.schemes = null;
+      $('#r-scheme-wrap').hidden = true;
+      $('#r-compare').value = 'none';
+      $('#step-compare').dataset.done = 'no';
+      setSource(null);
+      clearLoaded('');
+      $('#r-loaded').innerHTML = '';
+      $('#r-index').value = '';
+    });
+  }
 
-    /* fund: automatic lookup, only if a provider has been wired in */
-    wireFundSearch();
-    A.wireDrop('f-drop', 'f-file', 'f-pick', function (file) {
-      A.readFile(file, function (res) {
-        state.fundSeries = res.series;
-        state.fundReport = res.report;
-        state.fundName = file.name.replace(/\.[^.]+$/, '');
-        refreshCompareOptions();
-        drawFund();
-      }, function (msg) { $('#f-out').innerHTML = notice('bad', esc(msg)); });
+  window.PRCRolling = {
+    preset: function (source) {
+      if (!source) return;
+      pendingSource = source;
+      if ($('#r-source')) applyPreset();
+    }
+  };
+
+  var pendingSource = null;
+  function applyPreset() {
+    if (!pendingSource) return;
+    var next = pendingSource;
+    pendingSource = null;
+    if (next === R.source && R.series) return;   /* already there; keep their work */
+    resetSource(next);
+  }
+
+  /* Switching source must never leave the other source's series loaded under a
+   * label that no longer describes it. */
+  function resetSource(next) {
+    setSource(next);
+    R.rows = null; R.schemes = null; R.ran = false; R.datesTouched = false;
+    var scheme = $('#r-scheme-wrap');
+    if (scheme) scheme.hidden = true;
+    var idx = $('#r-index');
+    if (idx) idx.value = '';
+    /* forget the chosen file too, or re-choosing the same one looks like nothing
+       happened: the browser fires no change event for an unchanged selection */
+    ['f-file', 'bm-file'].forEach(function (id) {
+      var input = $('#' + id);
+      if (input) input.value = '';
     });
-    $('#f-compare').addEventListener('change', drawFund);
-    refreshCompareOptions();
+    var results = $('#f-results');
+    if (results) results.innerHTML = '';
+    clearLoaded('');
+    $('#r-loaded').innerHTML = '';
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

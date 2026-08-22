@@ -18,7 +18,7 @@ spreadsheet, which is why there is no separate download page any more —
 | `engine.js` | XIRR, CAGR, rolling returns, goal maths. Pure functions, no DOM. |
 | `parse.js` | Turns a messy CSV into a clean dated series, and reports what it dropped. |
 | `app.js` | Formatting, routing, charts, file intake. |
-| `modules.js` | The four screens. |
+| `modules.js` | The screens: portfolio, goal, rolling returns, spreadsheet. |
 | `provider.js` | The seam for automatic fund lookup. No provider wired in; the contract is documented in the file. |
 | `data/benchmarks.json` | Bundled index history. Empty in 1.0 — see `data/README.md`. |
 | `XIRR-Calculator.xlsx` | The downloadable spreadsheet, offered from the **sheet** view. Built by `tools/xirr/` — see that README. |
@@ -45,6 +45,23 @@ written still works. The only dated thing in the product is
 `data/benchmarks.json`, and the About screen states its date rather than implying
 freshness.
 
+## The rolling-returns module
+
+One module, four numbered steps, two sources. An earlier version split "the
+market" and "my fund" into separate screens; that made one analysis look like
+two different things and scattered its inputs. Every control is now visible from
+the first paint and disabled until it can be used, because a control that
+appears only after the right first move cannot be discovered by someone who
+makes the wrong one.
+
+Fund selection at the scale of thousands of schemes needs no database on our
+side: official bulk downloads already carry every scheme in one file, so the
+tool reads the file as it arrives, lists what is inside it, and filters as the
+reader types. A daily all-scheme snapshot is recognised and refused with the
+name of the file to download instead. A file that stacks several funds with no
+column naming them is refused outright rather than silently collapsed by date,
+which would produce a confident series belonging to no fund at all.
+
 ## Conventions worth not breaking
 
 - XIRR uses a 365-day year, matching a spreadsheet, so the tool and Excel agree.
@@ -55,6 +72,10 @@ freshness.
   mean, and what to look at next. That structure is the product.
 - No verdicts. The tool never calls a return good or bad, and never names a fund
   to buy, sell or switch.
+- Every result states what was measured before it states the answer, using the
+  dates the data actually reached rather than the ones typed.
+- One word for one thing: a **fund** in the interface, whatever the file calls
+  it; **holding period** for the window length, never bare "period".
 
 ## Automatic fund lookup
 

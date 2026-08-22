@@ -47,7 +47,8 @@ window.PRC_PROVIDER = {
   /* ---------------------------------------- with no provider, nothing appears */
   const plain = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const p0 = await plain.newPage();
-  await p0.goto(BASE_URL + '#fund', { waitUntil: 'networkidle' });
+  await p0.goto(BASE_URL + '#rolling', { waitUntil: 'networkidle' });
+  await p0.click('#r-source .chip[data-source="fund"]');
   ok('with no provider wired in, no search box is shown',
      await p0.locator('#f-search-card').isHidden());
   ok('and the upload path is still offered', await p0.locator('#f-drop').isVisible());
@@ -61,7 +62,8 @@ window.PRC_PROVIDER = {
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
-  await page.goto(BASE_URL + '#fund', { waitUntil: 'networkidle' });
+  await page.goto(BASE_URL + '#rolling', { waitUntil: 'networkidle' });
+  await page.click('#r-source .chip[data-source="fund"]');
 
   ok('a wired provider reveals the search journey', await page.locator('#f-search-card').isVisible());
 
@@ -82,11 +84,17 @@ window.PRC_PROVIDER = {
   ok('the reader is warned to check before choosing', /behave differently/.test(results));
 
   await page.locator('#f-results [data-pick="0"]').click();
-  await page.waitForSelector('#f-out .result', { timeout: 20000 });
-  const out = await page.locator('#f-out').innerText();
-  ok('choosing a fund fetches and analyses it', /Median annual return/.test(out));
+  await page.waitForTimeout(1200);
+  ok('a fetched fund is ready to analyse like any other source',
+     /Ready to analyse/.test(await page.locator('#r-loaded').innerText()),
+     await page.locator('#r-loaded').innerText());
+  await page.click('#r-run');
+  await page.waitForSelector('#r-out .result', { timeout: 20000 });
+  const out = await page.locator('#r-out').innerText();
+  ok('choosing a fund fetches and analyses it', /Median 5-year return/i.test(out), out.slice(0, 160));
   ok('an 11% history measures 11%', /11\.0%/.test(out), out.slice(0, 200));
   ok('the fetched data goes through the same import report', /rows in file/i.test(out));
+  ok('and through the same period controls', /What was measured/.test(out));
   ok('the fund is named from the search result', /Example Flexi Cap Fund/.test(out));
 
   /* -------------------------------------------------- failures stay honest */

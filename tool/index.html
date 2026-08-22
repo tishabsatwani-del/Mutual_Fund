@@ -38,15 +38,15 @@
       <h2>Plan my goal</h2>
       <p>See where you land if nothing changes, what the shortfall is, and what it would take to close it.</p>
     </button>
-    <button class="tile" data-go="history">
+    <button class="tile" data-go="rolling" data-source="index">
       <span class="tile-step">Compare</span>
-      <h2>Understand market history</h2>
-      <p>What a market actually delivered across every historical starting point, not one flattering period.</p>
+      <h2>Rolling returns: a market index</h2>
+      <p>What a market actually delivered across every historical starting point, not one flattering stretch.</p>
     </button>
-    <button class="tile" data-go="fund">
+    <button class="tile" data-go="rolling" data-source="fund">
       <span class="tile-step">Examine</span>
-      <h2>Analyse my fund</h2>
-      <p>Load any fund's own NAV history and put it through the same test. No built-in list to go stale.</p>
+      <h2>Rolling returns: my own fund</h2>
+      <p>Put any fund through the same test, and against its benchmark. No built-in list to go stale.</p>
     </button>
   </div>
 
@@ -65,7 +65,7 @@
       <li>Read the result, then read what it means underneath it.</li>
     </ol>
     <details class="explain">
-      <summary>Four words this tool keeps apart</summary>
+      <summary>Words this tool keeps apart</summary>
       <div class="body">
         <dl>
           <dt>XIRR</dt>
@@ -76,6 +76,12 @@
           <dd>The annualised return of every historical holding period of a given length — not one lucky stretch.</dd>
           <dt>Absolute return</dt>
           <dd>Total gain or loss, not spread over years. 50% over ten years and 50% over one year are very different things.</dd>
+          <dt>NAV</dt>
+          <dd>Net asset value — a fund's price per unit on a given day. A file of those, day by day, is its history.</dd>
+          <dt>Index</dt>
+          <dd>A measure of a whole market. A <strong>total return index</strong> (TRI) counts dividends; a <strong>price index</strong> does not, and reads lower.</dd>
+          <dt>Benchmark</dt>
+          <dd>The index a fund is measured against. A reference point, not a verdict.</dd>
         </dl>
       </div>
     </details>
@@ -91,24 +97,52 @@
     <h2>Your money in and out</h2>
     <div class="rows">
       <div class="row-head" aria-hidden="true">
-        <div>Date</div><div>What happened</div><div>Amount</div><div></div>
+        <div>Date</div><div>What happened</div><div>Amount</div><div>Which fund</div><div></div>
       </div>
       <div class="rows" id="pf-rows"></div>
     </div>
     <div class="btnrow" style="margin-top:.8rem">
       <button class="secondary" type="button" id="pf-add">+ Add a row</button>
-      <button class="secondary" type="button" id="pf-sip">+ Add a monthly SIP</button>
+      <button class="secondary" type="button" id="pf-sip" aria-expanded="false">+ Add a monthly SIP</button>
       <button class="secondary" type="button" id="pf-demo">Fill an example</button>
       <button class="secondary" type="button" id="pf-clear">Clear</button>
     </div>
 
+    <div class="card" id="sip-builder" hidden style="margin:.9rem 0 0;background:var(--surface-2)">
+      <h2>Add a monthly SIP</h2>
+      <div class="grid2">
+        <div class="field">
+          <label for="sip-start">First instalment</label>
+          <input type="date" id="sip-start">
+        </div>
+        <div class="field">
+          <label for="sip-amount">Amount each month (&#8377;)</label>
+          <input type="number" id="sip-amount" value="10000" min="1" step="500" inputmode="numeric">
+        </div>
+        <div class="field">
+          <label for="sip-count">How many instalments?</label>
+          <input type="number" id="sip-count" value="12" min="1" max="480" step="1" inputmode="numeric">
+        </div>
+        <div class="field">
+          <label for="sip-name">Which fund? (optional)</label>
+          <input type="text" id="sip-name" autocomplete="off" placeholder="Leave blank if you hold one thing">
+        </div>
+      </div>
+      <div class="btnrow">
+        <button class="primary" type="button" id="sip-add">Add these rows</button>
+        <button class="secondary" type="button" id="sip-cancel">Cancel</button>
+      </div>
+      <div id="sip-msg" aria-live="polite"></div>
+    </div>
+
     <div class="field" style="margin-top:1rem">
-      <label for="pf-group">Group by (optional)</label>
+      <label for="pf-group">Break the result down by fund as well</label>
       <select id="pf-group">
-        <option value="off">Show one portfolio total</option>
-        <option value="on">Also show each fund or goal separately</option>
+        <option value="off">No — one portfolio total is enough</option>
+        <option value="on">Yes — measure each fund on its own too</option>
       </select>
-      <p class="hint">Turn this on to see the difference between how each holding did and how your money as a whole did.</p>
+      <p class="hint">Name the funds in the rows above, then turn this on to see the difference
+      between how each holding did and how your money as a whole did.</p>
     </div>
 
     <div class="btnrow" style="margin-top:.4rem">
@@ -135,10 +169,12 @@
       <div class="field">
         <label for="g-target">Amount you are aiming for (&#8377;)</label>
         <input type="number" id="g-target" value="10000000" min="0" step="1000" inputmode="numeric">
+        <p class="hint" id="g-target-echo"></p>
       </div>
       <div class="field">
         <label for="g-current">What you have already (&#8377;)</label>
         <input type="number" id="g-current" value="400000" min="0" step="1000" inputmode="numeric">
+        <p class="hint" id="g-current-echo"></p>
       </div>
       <div class="field">
         <label for="g-years">Years left</label>
@@ -151,7 +187,10 @@
       <div class="field">
         <label for="g-rate">Assumed return each year (%)</label>
         <input type="number" id="g-rate" value="10" min="-50" max="50" step="0.5" inputmode="decimal">
-        <p class="hint">An assumption you are choosing, not a rate anyone can promise you.</p>
+        <p class="hint">An assumption you are choosing, not a rate anyone can promise you. This tool
+        will not suggest a number. Not sure?
+        <button class="link" type="button" data-go="rolling" data-source="index">See what this kind of
+        market has actually returned over periods this long</button>.</p>
       </div>
       <div class="field">
         <label for="g-step">Raise the monthly amount each year by (%)</label>
@@ -165,86 +204,134 @@
   <div id="g-out" aria-live="polite"></div>
 </section>
 
-<!-- ============================================================== HISTORY -->
-<section class="view" id="view-history" aria-labelledby="h-h">
-  <h1 id="h-h">Understand market history</h1>
-  <p class="lede">Not one flattering stretch. Every historical starting point of the length you choose.</p>
+<!-- ============================================================== ROLLING -->
+<section class="view" id="view-rolling" aria-labelledby="r-h">
+  <h1 id="r-h">Rolling returns</h1>
+  <p class="lede">Every holding period of the length you choose, not one flattering stretch.
+  Set the four things below, then read the answer.</p>
 
-  <div class="card" id="bm-picker">
-    <h2>Choose a market to look at</h2>
-    <div id="bm-list"></div>
-  </div>
-
-  <div class="card">
-    <h2>Or load an index file</h2>
-    <p style="margin:0 0 .8rem;color:var(--ink-2);font-size:.93rem">
-      A file with two columns: the date, and the index value on that date. Total Return Index
-      figures include dividends; price-only figures do not, and will read lower.</p>
-    <div class="filebox" id="bm-drop" tabindex="0" role="button" aria-label="Choose an index file">
-      <button class="secondary" type="button" id="bm-pick">Choose a file</button>
-      <p>CSV or Excel, on this device only</p>
+  <!-- 1 ------------------------------------------------------------------ -->
+  <div class="card step" id="step-source">
+    <h2><span class="stepno">1</span> What do you want to analyse?</h2>
+    <div class="chips" id="r-source" role="radiogroup" aria-label="What to analyse">
+      <button class="chip" type="button" role="radio" data-source="index" aria-checked="false">A market index</button>
+      <button class="chip" type="button" role="radio" data-source="fund" aria-checked="false">My own fund</button>
     </div>
-    <input type="file" id="bm-file" accept=".csv,.txt,.xlsx,.xls">
-  </div>
+    <p class="hint" id="r-source-prompt">Pick one of the two above to begin. The rest of this screen
+    unlocks once you do.</p>
 
-  <div id="h-controls" hidden>
-    <div class="card">
-      <h2>How long would you have held it?</h2>
-      <div class="chips" id="h-horizons" role="group" aria-label="Holding period"></div>
+    <div id="src-index" hidden>
+      <div class="field" style="margin-top:1rem">
+        <label for="r-index">Index</label>
+        <select id="r-index"><option value="">Loading…</option></select>
+        <p class="hint" id="r-index-hint"></p>
+      </div>
+      <div id="r-index-upload"></div>
+      <details class="explain">
+        <summary>Where do I get an index file?</summary>
+        <div class="body">
+          <p>Download the historical values of the index from the index provider’s own site — for
+          Indian equity indices that is NSE Indices. Ask for the longest period they offer.</p>
+          <p>The file needs two columns and nothing else matters: <strong>a date</strong>, and
+          <strong>the index value on that date</strong>. Any of 05-08-2026, 05-Aug-2026 or
+          2026-08-05 will be read. Extra columns are ignored.</p>
+          <p>Prefer a <strong>Total Return Index</strong> (TRI) file where one is offered. A TRI
+          counts dividends; a price index does not, and will read several percent a year lower
+          than what an investor actually received.</p>
+        </div>
+      </details>
     </div>
+
+    <div id="src-fund" hidden>
+      <div id="f-search-card" hidden>
+        <div class="field" style="margin-top:1rem">
+          <label for="f-query">Search for your fund by name</label>
+          <input type="text" id="f-query" autocomplete="off" placeholder="Start typing the scheme name">
+        </div>
+        <button class="secondary" type="button" id="f-search">Search</button>
+        <div id="f-results" aria-live="polite"></div>
+        <p class="hint" style="margin-top:.8rem">Or load the fund’s NAV file below.</p>
+      </div>
+
+      <div style="margin-top:1rem">
+        <label class="fieldlabel" for="f-pick">The fund’s NAV history file</label>
+        <p class="hint" style="margin:-.1rem 0 .4rem">NAV is the fund’s price per unit on a given day. A file of those, day by day, is all this needs.</p>
+        <div class="filebox" id="f-drop" tabindex="0" role="button" aria-label="Choose a NAV file">
+          <button class="secondary" type="button" id="f-pick">Choose a file</button>
+          <p>CSV or Excel &middot; a date column and a NAV column is all it needs</p>
+        </div>
+        <input type="file" id="f-file" accept=".csv,.txt,.xlsx">
+      </div>
+
+      <div id="r-scheme-wrap" hidden style="margin-top:1rem">
+        <div class="field">
+          <label for="r-scheme-q">Which fund in that file?</label>
+          <input type="text" id="r-scheme-q" autocomplete="off" placeholder="Type part of the name">
+          <p class="hint" id="r-scheme-count"></p>
+        </div>
+        <div id="r-scheme-list" class="picker" role="listbox" aria-label="Funds in this file"></div>
+        <p class="hint">Official downloads call these “schemes”, and hold every one of them in a
+        single file. Check the plan and option — Direct and Regular of the same fund are different
+        things, and so are Growth and IDCW.</p>
+      </div>
+
+      <details class="explain">
+        <summary>Where do I get my fund’s NAV file?</summary>
+        <div class="body">
+          <p>Download the NAV history from AMFI or your fund house for the period you want. Load the
+          file exactly as it arrives — if it holds hundreds of funds, you pick yours above.</p>
+          <p>It reads AMFI’s semicolon files, ordinary comma files and Excel workbooks. Dates can be
+          05-08-2026, 05-Aug-2026 or 2026-08-05. Rows it cannot read are counted and shown to you
+          rather than quietly dropped.</p>
+        </div>
+      </details>
+    </div>
+    <div id="r-loaded" aria-live="polite"></div>
   </div>
-  <div id="h-out" aria-live="polite"></div>
-</section>
 
-<!-- ================================================================= FUND -->
-<section class="view" id="view-fund" aria-labelledby="f-h">
-  <h1 id="f-h">Analyse my fund</h1>
-  <p class="lede">Any fund, including one that did not exist when this tool was built. You bring its history; the tool does the rest.</p>
+  <!-- 2 ------------------------------------------------------------------ -->
+  <div class="card step" id="step-period">
+    <h2><span class="stepno">2</span> Which stretch of history?</h2>
+    <div class="grid2">
+      <div class="field">
+        <label for="r-start">History from</label>
+        <input type="date" id="r-start" disabled>
+      </div>
+      <div class="field">
+        <label for="r-end">History to</label>
+        <input type="date" id="r-end" disabled>
+      </div>
+    </div>
+    <p class="hint" id="r-range">Choose something to analyse first.</p>
+    <button class="secondary" type="button" id="r-all" disabled>Use the full range of this data</button>
+    <p class="hint" id="r-window-note" style="margin-top:.6rem"></p>
+  </div>
 
-  <div class="card" id="f-search-card" hidden>
-    <h2>Find your fund</h2>
+  <!-- 3 ------------------------------------------------------------------ -->
+  <div class="card step" id="step-hold">
+    <h2><span class="stepno">3</span> How long is each holding period?</h2>
+    <div class="chips" id="r-years" role="radiogroup" aria-label="Holding period"></div>
+    <p class="hint">Every possible start date within the stretch above is measured over this length.</p>
+  </div>
+
+  <!-- 4 ------------------------------------------------------------------ -->
+  <div class="card step" id="step-compare">
+    <h2><span class="stepno">4</span> Compare against <span class="optional">optional</span></h2>
     <div class="field">
-      <label for="f-query">Fund name</label>
-      <input type="text" id="f-query" autocomplete="off" placeholder="Start typing the scheme name">
+      <label for="r-compare">Benchmark</label>
+      <select id="r-compare"><option value="none">Nothing — just what I chose above</option></select>
+      <p class="hint" id="r-compare-hint">A benchmark is a reference point, not a verdict. Only dates
+      both sets of data cover are compared.</p>
     </div>
-    <button class="primary" type="button" id="f-search">Search</button>
-    <div id="f-results" aria-live="polite"></div>
+    <div id="r-compare-upload"></div>
   </div>
 
-  <div class="card">
-    <h2>Load your fund's NAV history</h2>
-    <ol style="margin:0 0 .9rem;padding-left:1.2rem;color:var(--ink-2);font-size:.93rem">
-      <li>Download the NAV history from an official source, such as the fund house or AMFI.</li>
-      <li>Load the file below. It is read on this device and never uploaded.</li>
-      <li>Choose a holding period and read the result.</li>
-    </ol>
-    <div class="filebox" id="f-drop" tabindex="0" role="button" aria-label="Choose a NAV file">
-      <button class="secondary" type="button" id="f-pick">Choose a file</button>
-      <p>CSV or Excel &middot; a date column and a NAV column is all it needs</p>
-    </div>
-    <input type="file" id="f-file" accept=".csv,.txt,.xlsx,.xls">
-    <details class="explain">
-      <summary>What if my file looks different?</summary>
-      <div class="body">
-        <p>It reads AMFI's own semicolon files, ordinary comma files, and Excel workbooks.
-        Dates can be 05-08-2026, 05-Aug-2026 or 2026-08-05. Extra columns are ignored.
-        Rows it cannot read are counted and shown to you rather than quietly dropped.</p>
-      </div>
-    </details>
+  <div class="btnrow" style="margin-bottom:1.2rem">
+    <button class="primary" type="button" id="r-run" disabled>Show rolling returns</button>
+    <button class="secondary" type="button" id="r-reset">Start again</button>
   </div>
 
-  <div id="f-controls" hidden>
-    <div class="card">
-      <h2>How long would you have held it?</h2>
-      <div class="chips" id="f-horizons" role="group" aria-label="Holding period"></div>
-      <div class="field" style="margin-top:1rem" id="f-compare-wrap" hidden>
-        <label for="f-compare">Compare against</label>
-        <select id="f-compare"></select>
-        <p class="hint">A benchmark is a reference point, not a verdict on the fund.</p>
-      </div>
-    </div>
-  </div>
-  <div id="f-out" aria-live="polite"></div>
+  <div id="r-out" aria-live="polite"></div>
 </section>
 
 <!-- ================================================================ SHEET -->
@@ -258,7 +345,7 @@
     over the years, or when you would rather not type into a web page at all. It works with no internet
     connection once downloaded.</p>
     <a class="btn download" href="XIRR-Calculator.xlsx" download="XIRR-Calculator.xlsx">Download the sheet</a>
-    <p class="filenote">Excel file (.xlsx), 102 KB</p>
+    <p class="filenote">Excel file (.xlsx)</p>
     <p class="appnote">On a phone you will need a free spreadsheet app, such as
     Google Sheets, to open it.</p>
   </div>
@@ -313,7 +400,7 @@
     portfolio</button> is quicker for a one-off look, handles withdrawals across several funds at once,
     and explains what the number means as it goes.</p>
     <p style="margin:0;color:var(--ink-2)">The sheet's version number and build date are on its
-    <strong>About</strong> tab. This is version 1.2, which added per-holding returns.</p>
+    <strong>About</strong> tab — spreadsheet version <span id="sheetver">1.2</span>, separate from the tool’s own version.</p>
   </div>
 </section>
 

@@ -45,7 +45,11 @@ fs.mkdirSync(TMP + '/shots', { recursive: true });
   await page.goto(BASE, { waitUntil: 'networkidle' });
   ok('page loads with no script errors', errors.length === 0, errors.join(' | '));
   ok('title is the product name', (await page.title()) === 'The Portfolio Reality Check');
-  ok('all four modules are offered', (await page.locator('.tile[data-go]').count()) === 4);
+  ok('four analysis modules are offered', (await page.locator('.tile[data-go="portfolio"], .tile[data-go="goal"], .tile[data-go="rolling"]').count()) === 4);
+  ok('rolling returns is named on the home screen',
+     /Rolling returns/.test(await page.locator('.tiles').innerText()));
+  ok('and it is offered for both an index and a fund',
+     (await page.locator('.tile[data-go="rolling"]').count()) === 2);
   await page.screenshot({ path: path.join(SHOTS, '01-home.png'), fullPage: true });
 
   /* ---------------------------------------------------------- portfolio */
@@ -120,103 +124,8 @@ fs.mkdirSync(TMP + '/shots', { recursive: true });
   ok('a fantasy return is refused', /50%/.test(await page.locator('#g-out').innerText()));
   await page.fill('#g-rate', '10');
 
-  /* ---------------------------------------------------------------- fund */
-  console.log('\nAnalyse my fund');
-  await page.click('#back'); await page.click('.tile[data-go="fund"]');
-  await page.waitForSelector('#view-fund.on');
-  const navPath = TMP + '/fund-nav.csv';
-  fs.writeFileSync(navPath, navCsv());
-  await page.setInputFiles('#f-file', navPath);
-  await page.waitForSelector('#f-out .result', { timeout: 15000 });
-  const fundText = await page.locator('#f-out').innerText();
-  ok('the import report says what was read', /rows in file/i.test(fundText));
-  const median = (await page.locator('#f-out .result .value').first().textContent()).trim();
-  ok('a 13% file measures 13% over five years', median === '13.0%', 'got ' + median);
-  ok('the range is shown, not just an average', /worst/i.test(fundText) && /best/i.test(fundText));
-  ok('distribution chart rendered', (await page.locator('#f-out svg').count()) >= 1);
-  ok('a table view of the chart exists', /See the numbers as a table/.test(fundText));
-  ok('it says what the number does not mean', /not a forecast/.test(fundText));
-  await page.screenshot({ path: path.join(SHOTS, '04-fund.png'), fullPage: true });
-
-  /* horizon switching */
-  await page.locator('#f-horizons .chip', { hasText: '10 years' }).click();
-  await page.waitForTimeout(300);
-  const tenText = await page.locator('#f-out').innerText();
-  ok('switching the holding period recalculates', /10-year period/.test(tenText));
-
-  /* not enough history */
-  await page.locator('#f-horizons .chip', { hasText: '1 year' }).click();
-  const shortPath = TMP + '/short.csv';
-  fs.writeFileSync(shortPath, 'Date,NAV\n01-01-2024,10\n01-06-2024,11\n01-12-2024,12\n');
-  await page.setInputFiles('#f-file', shortPath);
-  await page.waitForTimeout(400);
-  const shortText = await page.locator('#f-out').innerText();
-  ok('too little history is explained, not crashed', /not enough|0\.9 years|shorter/i.test(shortText), shortText.slice(0, 200));
-
-  /* a junk file */
-  const junkPath = TMP + '/junk.csv';
-  fs.writeFileSync(junkPath, 'hello,world\nthis,is not a nav file\n');
-  await page.setInputFiles('#f-file', junkPath);
-  await page.waitForTimeout(400);
-  const junkText = await page.locator('#f-out').innerText();
-  ok('a junk file is refused in plain words', /date/i.test(junkText) && !/NaN|undefined/.test(junkText), junkText.slice(0, 160));
-
-  /* AMFI format */
-  const amfiPath = TMP + '/amfi.csv';
-  const amfi = ['Scheme Code;Scheme Name;ISIN Div Payout;ISIN Div Reinvestment;Net Asset Value;Date'];
-  let tt = Date.UTC(2010, 0, 1), vv = 20;
-  while (tt <= Date.UTC(2024, 0, 1)) {
-    const d = new Date(tt);
-    const M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    amfi.push(`119551;A Fund - Growth;INF209K01Z15;-;${vv.toFixed(4)};${String(d.getUTCDate()).padStart(2,'0')}-${M[d.getUTCMonth()]}-${d.getUTCFullYear()}`);
-    vv *= Math.pow(1.09, 1/365.2425); tt += 86400000;
-  }
-  fs.writeFileSync(amfiPath, amfi.join('\n'));
-  await page.setInputFiles('#f-file', amfiPath);
-  await page.waitForSelector('#f-out .result', { timeout: 15000 });
-  const amfiMedian = (await page.locator('#f-out .result .value').first().textContent()).trim();
-  ok('AMFI semicolon files work end to end (9%)', amfiMedian === '9.0%', 'got ' + amfiMedian);
-
-  /* ------------------------------------------------------------- history */
-  console.log('\nMarket history');
-  await page.click('#back'); await page.click('.tile[data-go="history"]');
-  await page.waitForSelector('#view-history.on');
-  const histText = await page.locator('#bm-list').innerText();
-  ok('the empty benchmark slot is stated honestly', /No market data is bundled/.test(histText), histText.slice(0, 120));
-  ok('it does not claim data it does not have', !/Nifty/.test(histText));
-  await page.setInputFiles('#bm-file', navPath);
-  await page.waitForSelector('#h-out .result', { timeout: 15000 });
-  ok('an uploaded index file measures the same way', /Median annual return/.test(await page.locator('#h-out').innerText()));
-  await page.screenshot({ path: path.join(SHOTS, '05-history.png'), fullPage: true });
-
-  /* ---------------------------------------------------------- rate check */
-  console.log('\nBeating a rate the reader chooses');
-  await page.goto(BASE_URL + '#fund', { waitUntil: 'networkidle' });
-  await page.setInputFiles('#f-file', TMP + '/fund-nav.csv');
-  await page.waitForSelector('#f-out .result', { timeout: 15000 });
-  const rateBox = page.locator('#rate-fund');
-  ok('the reader is given a rate box', await rateBox.isVisible());
-  /* the 13%-a-year file: every period beats 7%, none beats 20% */
-  ok('at 7% every period beats it', (await page.locator('#rateout-fund').textContent()).trim() === '100%');
-  await rateBox.fill('20');
-  await page.waitForTimeout(200);
-  ok('at 20% no period beats it', (await page.locator('#rateout-fund').textContent()).trim() === '0%',
-     await page.locator('#rateout-fund').textContent());
-  await rateBox.fill('12.5');
-  await page.waitForTimeout(200);
-  ok('the sentence names the rate the reader typed',
-     /more than 12\.5% a year/.test(await page.locator('#ratesub-fund').textContent()),
-     await page.locator('#ratesub-fund').textContent());
-  const rateCard = await page.locator('#f-out').innerText();
-  ok('it says the reader chose the rate', /You chose that rate/.test(rateCard));
-  ok('it makes no claim about deposits or any product',
-     !/\bFD\b|fixed deposit/i.test(rateCard));
-  ok('it states both sides are before tax and costs', /before tax and before costs/.test(rateCard));
-  await rateBox.fill('');
-  await page.waitForTimeout(200);
-  ok('an empty rate shows a prompt, not NaN',
-     !/NaN/.test(await page.locator('#ratesub-fund').textContent()),
-     await page.locator('#ratesub-fund').textContent());
+  /* The fund, index, hurdle-rate and benchmark journeys are covered in full by
+     rolling.test.js, which drives the rebuilt module click by click. */
 
   /* --------------------------------------------------------------- sheet */
   console.log('\nThe spreadsheet, inside the tool');
