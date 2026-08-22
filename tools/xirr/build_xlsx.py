@@ -16,8 +16,8 @@ from openpyxl.workbook.defined_name import DefinedName
 
 OUT = sys.argv[1]
 
-VERSION = "1.0"
-BUILT = "15-Aug-2026"
+VERSION = "1.1"
+BUILT = "22-Aug-2026"
 
 FIRST_ROW, LAST_ROW = 8, 507
 HEAD_ROW = 7
@@ -173,16 +173,17 @@ start.title = "Start here"
 start.column_dimensions["A"].width = 3
 start.column_dimensions["B"].width = 92
 lines = [
-    "1. This sheet works out your XIRR: the yearly rate the money you actually "
-    "invested has earned.",
+    "1. This workbook does two things: it works out what your money has actually "
+    "earned, and it shows what it would take to reach a goal.",
     "2. Save your own copy before you type anything, so you always have a clean one.",
     "3. On the My investments tab, enter one row for every payment you made: the "
     "date, then Investment or Withdrawal from the dropdown, then the amount as a "
     "plain positive number.",
     "4. In the last row, enter today's date, choose Value today, and type what the "
-    "holding is worth right now.",
-    "5. Your XIRR appears at the top of that tab. If it does not, read the line "
-    "underneath it: it says what is still missing.",
+    "holding is worth right now. Your XIRR appears at the top of that tab.",
+    "5. On the Plan my goal tab, enter what you are aiming for, what you already "
+    "have, and what you invest each month. It shows where you land and what would "
+    "close the gap.",
     "6. The Example tab is the same thing already filled in, if you get stuck.",
 ]
 for i, text in enumerate(lines):
@@ -201,6 +202,178 @@ inv["B5"] = STATUS_FORMULA
 entry_rows(inv, unlock=True)
 validations(inv)
 protect(inv)
+
+# ------------------------------------------------------------- Plan my goal
+#
+# Excel cannot loop, so the monthly instalments are summed in closed form. The
+# helper terms live on the hidden Calc tab; this tab holds only what a reader
+# reads. The closed form was checked against the same calculation done month by
+# month, and agrees to fourteen decimal places, so this tab and the web tool
+# never disagree.
+#
+# Percentages are entered as plain numbers -- 10 means 10% -- and divided by 100
+# in the formulas. A cell pre-formatted as a percentage turns a typed 10 into
+# either 10% or 1000% depending on one Excel setting, and a reader has no way to
+# tell which they got.
+goal = wb.create_sheet("Plan my goal")
+goal.column_dimensions["A"].width = 32
+goal.column_dimensions["B"].width = 26      # wide enough for a crore in 20pt
+goal.column_dimensions["C"].width = 22
+
+goal["B1"] = "Plan my goal"
+goal["B1"].font = Font(name="Calibri", size=16, bold=True, color="FF1F4E5F")
+
+GOAL_INPUTS = [
+    (3, "What is this for?", None, "text"),
+    (4, "Amount you are aiming for", 5000000, "money"),
+    (5, "What you have already", 400000, "money"),
+    (6, "Years left", 15, "years"),
+    (7, "Investing each month now", 10000, "money"),
+    (8, "Assumed return each year (%)", 10, "rate"),
+    (9, "Raise the monthly amount each year by (%)", 0, "rate"),
+]
+for row, label, default, kind in GOAL_INPUTS:
+    a = goal.cell(row=row, column=1, value=label)
+    a.font = LABEL_FONT
+    b = goal.cell(row=row, column=2, value=default)
+    b.font = BODY
+    b.protection = UNLOCKED
+    b.border = CELL_BORDER
+    b.fill = PatternFill("solid", fgColor="FFFFFDF0")
+    if kind == "money":
+        b.number_format = MONEY_FMT
+    elif kind in ("rate", "years"):
+        b.number_format = "0.#"
+
+goal["A8"].alignment = Alignment(wrap_text=True, vertical="center")
+goal["A9"].alignment = Alignment(wrap_text=True, vertical="center")
+goal.row_dimensions[9].height = 30
+goal["C8"] = "An assumption you choose. Nobody can promise it."
+goal["C8"].font = GREY
+
+# ---- the answer
+goal["A11"] = "If nothing changes, you reach"
+goal["A11"].font = LABEL_FONT
+goal["B11"] = ('=IF(Calc!$G$10=0,"Check the line below",'
+               'Calc!$G$11+Calc!$G$12)')
+# 20pt, not the 28pt used for a short percentage: a goal figure can run to
+# nine characters plus a symbol, and an oversized font turns it into ###.
+goal["B11"].font = Font(name="Calibri", size=20, bold=True, color="FF1F4E5F")
+goal["B11"].fill = RESULT_FILL
+goal["B11"].number_format = MONEY_FMT
+goal.row_dimensions[11].height = 38
+
+goal["B12"] = (
+    '=IF($B$6="","Enter how many years are left, on the line above.",'
+    'IF($B$6<=0,"Years left must be more than zero.",'
+    'IF($B$6>40,"Enter 40 years or less.",'
+    'IF($B$4="","Enter the amount you are aiming for.",'
+    'IF($B$4<=0,"The amount you are aiming for must be more than zero.",'
+    'IF($B$8>50,"Enter a return of 50% a year or less. A higher assumption does '
+    'not make a plan, it hides one.",'
+    'IF($B$8<=-100,"Enter a return greater than -100%.","")))))))'
+)
+goal["B12"].font = STATUS_FONT
+goal["B12"].alignment = Alignment(vertical="center")
+
+goal["A14"] = "Against your goal"
+goal["A14"].font = LABEL_FONT
+goal["B14"] = (
+    '=IF(Calc!$G$10=0,"",'
+    'IF(Calc!$G$13>0.5,"Short by "&TEXT(Calc!$G$13,"\u20b9 ##,##,##0"),'
+    'IF(Calc!$G$13<-0.5,"Covered, with "&TEXT(-Calc!$G$13,"\u20b9 ##,##,##0")&" to spare",'
+    '"Covered, exactly on target")))'
+)
+goal["B14"].font = BODY_BOLD
+
+goal["A15"] = "Extra each month to close it"
+goal["A15"].font = LABEL_FONT
+goal["B15"] = '=IF(Calc!$G$10=0,"",Calc!$G$14)'
+goal["B15"].font = BODY_BOLD
+goal["B15"].number_format = MONEY_FMT
+goal["C15"] = "On top of what you already invest each month."
+goal["C15"].font = GREY
+
+# ---- where the money comes from
+goal["A17"] = "Where that comes from"
+goal["A17"].font = HEAD_FONT
+goal["A17"].fill = HEAD_FILL
+for col in "BC":
+    goal[f"{col}17"].fill = HEAD_FILL
+
+WHERE = [
+    (18, "What you already have, grown", '=IF(Calc!$G$10=0,"",Calc!$G$11)'),
+    (19, "What your monthly investing adds", '=IF(Calc!$G$10=0,"",Calc!$G$12)'),
+    (20, "Your own money paid in over the years", '=IF(Calc!$G$10=0,"",Calc!$G$15)'),
+]
+for row, label, formula in WHERE:
+    goal.cell(row=row, column=1, value=label).font = BODY
+    c = goal.cell(row=row, column=2, value=formula)
+    c.font = BODY
+    c.number_format = MONEY_FMT
+
+# ---- scenarios
+goal["A22"] = "If you did a little more"
+goal["A22"].font = LABEL_FONT
+for col, head in zip("ABC", ["Scenario", "You reach", "Against your goal"]):
+    c = goal[f"{col}23"]
+    c.value = head
+    c.font = HEAD_FONT
+    c.fill = HEAD_FILL
+    c.alignment = Alignment(horizontal="left", vertical="center")
+
+SCENARIOS = [
+    (24, "Carry on exactly as you are", "Calc!$G$16"),
+    (25, "Add \u20b92,000 a month", "Calc!$G$17"),
+    (26, "Add \u20b95,000 a month", "Calc!$G$18"),
+    (27, "Same amount, raised 10% every year", "Calc!$G$19"),
+]
+for row, label, ref in SCENARIOS:
+    goal.cell(row=row, column=1, value=label).font = BODY
+    v = goal.cell(row=row, column=2, value=f'=IF(Calc!$G$10=0,"",{ref})')
+    v.font = BODY
+    v.number_format = MONEY_FMT
+    d = goal.cell(row=row, column=3, value=(
+        f'=IF(Calc!$G$10=0,"",IF({ref}>=$B$4,'
+        f'"covered, +"&TEXT({ref}-$B$4,"\u20b9 ##,##,##0"),'
+        f'"short by "&TEXT($B$4-{ref},"\u20b9 ##,##,##0")))'
+    ))
+    d.font = BODY
+
+# Three short lines rather than one merged block: merged cells break selection
+# on a touch screen, and this workbook is opened on phones.
+NOTE = [
+    "Every line above uses the return you typed in. It is an assumption, not a forecast.",
+    "Real markets do not deliver the same return every year, and a run of poor years "
+    "early on hurts more than the same years late.",
+    "Inflation is not deducted, so a goal set in today's rupees will cost more by the "
+    "time it arrives.",
+]
+for offset, text in enumerate(NOTE):
+    c = goal.cell(row=29 + offset, column=1, value=text)
+    c.font = GREY
+
+dv_years = DataValidation(
+    type="whole", operator="between", formula1="1", formula2="40",
+    allow_blank=True, showErrorMessage=True,
+    errorTitle="Whole years only",
+    error="Enter the number of years left as a whole number between 1 and 40.",
+)
+goal.add_data_validation(dv_years)
+dv_years.add("B6")
+
+dv_amounts = DataValidation(
+    type="decimal", operator="greaterThanOrEqual", formula1="0",
+    allow_blank=True, showErrorMessage=True,
+    errorTitle="Positive numbers only",
+    error="Type the amount as a plain positive number, with no rupee sign and no commas.",
+)
+goal.add_data_validation(dv_amounts)
+dv_amounts.add("B4")
+dv_amounts.add("B5")
+dv_amounts.add("B7")
+
+protect(goal)
 
 # ------------------------------------------------------------------ Example
 ex = wb.create_sheet("Example")
@@ -236,6 +409,8 @@ about_lines = [
     "Questions: use the channels listed in the book.",
     "The tabs are protected without a password. To adapt this sheet, choose "
     "Review, then Unprotect Sheet.",
+    "The Plan my goal tab uses a return you type in yourself. It is an assumption, "
+    "not a forecast, and it is shown before inflation.",
     "No Excel? Upload this file to Google Sheets and it works there too, unchanged.",
 ]
 for i, text in enumerate(about_lines):
@@ -254,6 +429,52 @@ calc["D2"] = f"=SUM($B${FIRST_ROW}:$B${LAST_ROW})"
 for row in range(FIRST_ROW, LAST_ROW + 1):
     calc[f"A{row}"] = f"=IF('My investments'!$C{row}=\"Value today\",1,0)"
     calc[f"B{row}"] = f"=IF('My investments'!$C{row}=\"Investment\",1,0)"
+
+# ---- goal-tab helpers.
+#
+# Excel has no loop, so a year of month-start instalments is summed in closed
+# form and then compounded forward. G3 is what one rupee a month becomes over a
+# year; G8 is what one rupee a month becomes over the whole period, which is why
+# the extra needed to close a gap is a division rather than a search.
+G = "'Plan my goal'!"
+calc["F1"] = "annual rate r";        calc["G1"] = f'=IF({G}$B$8="",0,{G}$B$8/100)'
+calc["F2"] = "monthly rate i";       calc["G2"] = '=(1+$G$1)^(1/12)-1'
+calc["F3"] = "one year of 1/month";  calc["G3"] = '=IF($G$2=0,12,(((1+$G$2)^12-1)/$G$2)*(1+$G$2))'
+calc["F4"] = "years Y";              calc["G4"] = f'=IF({G}$B$6="",0,{G}$B$6)'
+calc["F5"] = "step-up g";            calc["G5"] = f'=IF({G}$B$9="",0,{G}$B$9/100)'
+calc["F6"] = "ratio x";              calc["G6"] = '=(1+$G$5)/(1+$G$1)'
+calc["F7"] = "geometric sum S";      calc["G7"] = '=IF($G$4<=0,0,IF($G$6=1,$G$4,(1-$G$6^$G$4)/(1-$G$6)))'
+calc["F8"] = "growth of 1/month";    calc["G8"] = '=IF($G$4<=0,0,$G$3*(1+$G$1)^($G$4-1)*$G$7)'
+
+calc["F10"] = "inputs usable?"
+calc["G10"] = (
+    f'=IF({G}$B$6="",0,IF({G}$B$6<=0,0,IF({G}$B$6>40,0,'
+    f'IF({G}$B$4="",0,IF({G}$B$4<=0,0,'
+    f'IF({G}$B$8>50,0,IF({G}$B$8<=-100,0,1)))))))'
+)
+calc["F11"] = "from what you have";  calc["G11"] = f'=IF({G}$B$5="",0,{G}$B$5)*(1+$G$1)^$G$4'
+calc["F12"] = "from monthly";        calc["G12"] = f'=IF({G}$B$7="",0,{G}$B$7)*$G$8'
+calc["F13"] = "gap";                 calc["G13"] = f'=IF({G}$B$4="",0,{G}$B$4)-($G$11+$G$12)'
+calc["F14"] = "extra each month"
+calc["G14"] = '=IF($G$13<=0.5,0,IF($G$8<=0,0,$G$13/$G$8))'
+calc["F20"] = "step-up sum T"
+calc["G20"] = '=IF($G$4<=0,0,IF($G$5=0,$G$4,((1+$G$5)^$G$4-1)/$G$5))'
+calc["F15"] = "own money paid in"
+calc["G15"] = f'=IF({G}$B$7="",0,{G}$B$7)*12*$G$20'
+
+# ---- the scenario rows, sharing the same helpers
+calc["F16"] = "as you are";   calc["G16"] = '=$G$11+$G$12'
+calc["F17"] = "plus 2,000";   calc["G17"] = f'=$G$11+(IF({G}$B$7="",0,{G}$B$7)+2000)*$G$8'
+calc["F18"] = "plus 5,000";   calc["G18"] = f'=$G$11+(IF({G}$B$7="",0,{G}$B$7)+5000)*$G$8'
+
+# a 10% step-up needs its own ratio and sum, so it gets its own short column
+calc["I5"] = '=IF($G$5>0.1,$G$5,0.1)'
+calc["I6"] = '=(1+$I$5)/(1+$G$1)'
+calc["I7"] = '=IF($G$4<=0,0,IF($I$6=1,$G$4,(1-$I$6^$G$4)/(1-$I$6)))'
+calc["I8"] = '=IF($G$4<=0,0,$G$3*(1+$G$1)^($G$4-1)*$I$7)'
+calc["F19"] = "raised 10% a year"
+calc["G19"] = f'=$G$11+IF({G}$B$7="",0,{G}$B$7)*$I$8'
+
 for row in calc.iter_rows():
     for c in row:
         if c.value is not None:

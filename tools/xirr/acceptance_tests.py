@@ -142,6 +142,6 @@ for name, rows, expected in CASES:
     results.append((name, b4, b5, solver, expected))
 
 # the Example tab, untouched, must also carry a live answer
-grid = recalc(SRC, 3)               # 3 = Example
+grid = recalc(SRC, 4)               # 4 = Example (the goal tab is now 3)
 print("-" * 110)
 print(f"{'Example tab (as shipped)':42} {cell(grid, 4, 2):>12}")

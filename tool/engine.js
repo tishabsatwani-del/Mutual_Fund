@@ -210,6 +210,21 @@
     return lo === hi ? sorted[lo] : sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo);
   }
 
+  /* How many periods cleared a rate the reader picked.
+   *
+   * Deliberately takes the rate as an argument rather than naming any product.
+   * "Beat an FD 90% of the time" is a claim about a dataset nobody defined --
+   * the rate source, the period, the compounding and the tax treatment all
+   * change the answer. A rate the reader types is a claim they can check. */
+  function shareAbove(values, rate) {
+    if (!values || !values.length || !isFinite(rate)) {
+      return fail('NO_DATA', 'There are no periods to compare.');
+    }
+    var above = 0;
+    for (var i = 0; i < values.length; i++) if (values[i] > rate) above++;
+    return { ok: true, above: above, count: values.length, share: above / values.length };
+  }
+
   /* Buckets for the distribution chart. Fixed edges so two funds, or a fund
    * and a benchmark, can be read side by side. */
   function histogram(values, edges) {
@@ -331,6 +346,7 @@
     describe: describe,
     quantile: quantile,
     histogram: histogram,
+    shareAbove: shareAbove,
     monthlyRate: monthlyRate,
     futureValueOfLumpSum: futureValueOfLumpSum,
     futureValueOfSip: futureValueOfSip,

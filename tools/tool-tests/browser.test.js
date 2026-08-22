@@ -189,6 +189,35 @@ fs.mkdirSync(TMP + '/shots', { recursive: true });
   ok('an uploaded index file measures the same way', /Median annual return/.test(await page.locator('#h-out').innerText()));
   await page.screenshot({ path: path.join(SHOTS, '05-history.png'), fullPage: true });
 
+  /* ---------------------------------------------------------- rate check */
+  console.log('\nBeating a rate the reader chooses');
+  await page.goto(BASE_URL + '#fund', { waitUntil: 'networkidle' });
+  await page.setInputFiles('#f-file', TMP + '/fund-nav.csv');
+  await page.waitForSelector('#f-out .result', { timeout: 15000 });
+  const rateBox = page.locator('#rate-fund');
+  ok('the reader is given a rate box', await rateBox.isVisible());
+  /* the 13%-a-year file: every period beats 7%, none beats 20% */
+  ok('at 7% every period beats it', (await page.locator('#rateout-fund').textContent()).trim() === '100%');
+  await rateBox.fill('20');
+  await page.waitForTimeout(200);
+  ok('at 20% no period beats it', (await page.locator('#rateout-fund').textContent()).trim() === '0%',
+     await page.locator('#rateout-fund').textContent());
+  await rateBox.fill('12.5');
+  await page.waitForTimeout(200);
+  ok('the sentence names the rate the reader typed',
+     /more than 12\.5% a year/.test(await page.locator('#ratesub-fund').textContent()),
+     await page.locator('#ratesub-fund').textContent());
+  const rateCard = await page.locator('#f-out').innerText();
+  ok('it says the reader chose the rate', /You chose that rate/.test(rateCard));
+  ok('it makes no claim about deposits or any product',
+     !/\bFD\b|fixed deposit/i.test(rateCard));
+  ok('it states both sides are before tax and costs', /before tax and before costs/.test(rateCard));
+  await rateBox.fill('');
+  await page.waitForTimeout(200);
+  ok('an empty rate shows a prompt, not NaN',
+     !/NaN/.test(await page.locator('#ratesub-fund').textContent()),
+     await page.locator('#ratesub-fund').textContent());
+
   /* --------------------------------------------------------------- sheet */
   console.log('\nThe spreadsheet, inside the tool');
   await page.click('#back');
