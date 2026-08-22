@@ -148,6 +148,9 @@ input[type="text"], input[type="number"], input[type="date"], select {
 input:focus-visible, select:focus-visible, button:focus-visible, .tile:focus-visible, a:focus-visible {
   outline: 3px solid var(--accent); outline-offset: 2px;
 }
+/* Headings are focused only to move a screen reader along; the ring would
+   otherwise appear around a heading nobody clicked. */
+[tabindex="-1"]:focus { outline: none; }
 .grid2 { display: grid; gap: .9rem; }
 @media (min-width: 34rem) { .grid2 { grid-template-columns: 1fr 1fr; } }
 
