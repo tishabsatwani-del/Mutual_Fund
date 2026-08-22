@@ -189,6 +189,31 @@ fs.mkdirSync(TMP + '/shots', { recursive: true });
   ok('an uploaded index file measures the same way', /Median annual return/.test(await page.locator('#h-out').innerText()));
   await page.screenshot({ path: path.join(SHOTS, '05-history.png'), fullPage: true });
 
+  /* --------------------------------------------------------------- sheet */
+  console.log('\nThe spreadsheet, inside the tool');
+  await page.click('#back');
+  await page.click('[data-go="sheet"]');
+  await page.waitForSelector('#view-sheet.on');
+  const sheetText = await page.locator('#view-sheet').innerText();
+  ok('the sheet is reachable without leaving the tool', /Download the sheet/.test(sheetText));
+  ok('the phone app line is present', /free spreadsheet app/.test(sheetText));
+  ok('the date warning survived the move', /05-Aug-2026/.test(sheetText));
+  ok('the Google Sheets line survived the move', /Google Sheets and it works there too/.test(sheetText));
+  const href = await page.locator('#view-sheet a.download').getAttribute('href');
+  ok('the download points at a file beside the tool', href === 'XIRR-Calculator.xlsx', href);
+  const dl = await page.request.get(new URL(href, BASE_URL).href);
+  ok('the file is actually served', dl.status() === 200, 'status ' + dl.status());
+  ok('it is served as a spreadsheet, not a web page',
+     /spreadsheetml/.test(dl.headers()['content-type'] || ''), dl.headers()['content-type']);
+  const bytes = await dl.body();
+  ok('the file is a real workbook, not an error page',
+     bytes.length > 20000 && bytes[0] === 0x50 && bytes[1] === 0x4b, 'length ' + bytes.length);
+
+  /* the old separate address must still land somewhere useful */
+  const oldPage = await page.request.get(new URL('../xirr/', BASE_URL).href);
+  ok('the old sheet address still resolves', oldPage.status() === 200, 'status ' + oldPage.status());
+  ok('the old address sends the reader to the tool', /url=\.\.\/tool\//.test(await oldPage.text()));
+
   /* -------------------------------------------------------------- privacy */
   console.log('\nPrivacy and robustness');
   const external = requests.filter(u => !u.startsWith(new URL(BASE_URL).origin + '/'));

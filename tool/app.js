@@ -77,7 +77,7 @@
 
   /* ---------------------------------------------------------------- routing */
 
-  var VIEWS = ['home', 'portfolio', 'goal', 'history', 'fund', 'method', 'about'];
+  var VIEWS = ['home', 'portfolio', 'goal', 'history', 'fund', 'sheet', 'method', 'about'];
 
   function show(name, initial) {
     if (VIEWS.indexOf(name) === -1) name = 'home';
