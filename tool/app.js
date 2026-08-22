@@ -79,15 +79,19 @@
 
   var VIEWS = ['home', 'portfolio', 'goal', 'history', 'fund', 'method', 'about'];
 
-  function show(name) {
+  function show(name, initial) {
     if (VIEWS.indexOf(name) === -1) name = 'home';
     $$('.view').forEach(function (v) { v.classList.toggle('on', v.id === 'view-' + name); });
     document.body.dataset.view = name;
     $('#back').classList.toggle('on', name !== 'home');
     if (location.hash !== '#' + name) location.hash = name;
     window.scrollTo(0, 0);
-    var h = $('#view-' + name + ' h1');
-    if (h) { h.setAttribute('tabindex', '-1'); h.focus({ preventScroll: true }); }
+    /* Move focus to the new heading so a screen reader announces the change --
+     * but not on first paint, where nothing has changed yet. */
+    if (!initial) {
+      var h = $('#view-' + name + ' h1');
+      if (h) { h.setAttribute('tabindex', '-1'); h.focus({ preventScroll: true }); }
+    }
   }
 
   function initRouter() {
@@ -97,7 +101,7 @@
       if (t) { ev.preventDefault(); show(t.dataset.go); }
     });
     $('#back').addEventListener('click', function () { show('home'); });
-    show(location.hash.replace('#', '') || 'home');
+    show(location.hash.replace('#', '') || 'home', true);
   }
 
   /* ----------------------------------------------------------------- charts
