@@ -156,7 +156,7 @@
         years + '-year holding period. Choose a shorter period, or use a file with more history.');
     }
 
-    var values = [];
+    var pairs = [];
     var j = 0;
     for (var i = 0; i < series.length; i++) {
       var target = addYears(series[i].t, years);
@@ -168,13 +168,23 @@
       if (end.t <= series[i].t) continue;
       if (dayCount(end.t, target) > tol) continue;
       if (!(series[i].v > 0) || !(end.v > 0)) continue;
-      values.push(Math.pow(end.v / series[i].v, 1 / years) - 1);
+      pairs.push({ t: series[i].t, endT: end.t, r: Math.pow(end.v / series[i].v, 1 / years) - 1 });
     }
 
-    if (!values.length) {
+    if (!pairs.length) {
       return fail('NO_WINDOWS', 'No complete ' + years + '-year periods could be measured from this data.');
     }
-    return { ok: true, years: years, values: values, stats: describe(values), toleranceDays: tol };
+    var values = pairs.map(function (p) { return p.r; });
+    var best = pairs[0], worst = pairs[0];
+    for (var k = 1; k < pairs.length; k++) {
+      if (pairs[k].r > best.r) best = pairs[k];
+      if (pairs[k].r < worst.r) worst = pairs[k];
+    }
+    return {
+      ok: true, years: years, values: values, pairs: pairs,
+      stats: describe(values), toleranceDays: tol,
+      best: best, worst: worst
+    };
   }
 
   function describe(values) {
@@ -240,6 +250,107 @@
       }
     }
     return bins;
+  }
+
+  /* ------------------------------------------------------------- drawdown
+   *
+   * The deepest fall from a previous high, and whether it ever came back. A
+   * return says what was earned; this says what had to be sat through to earn
+   * it, which is the part people actually abandon.
+   */
+  function maxDrawdown(series) {
+    if (!series || series.length < 2) {
+      return fail('TOO_SHORT', 'There is not enough history to measure a fall.');
+    }
+    var peak = series[0], worst = 0, from = null, to = null, recovered = null;
+    for (var i = 1; i < series.length; i++) {
+      if (series[i].v >= peak.v) { peak = series[i]; continue; }
+      var fall = series[i].v / peak.v - 1;
+      if (fall < worst) { worst = fall; from = peak; to = series[i]; recovered = null; }
+    }
+    if (!to) return { ok: true, depth: 0, from: null, to: null, recoveredOn: null, recoveryDays: null };
+    /* the first day at or above the old high, after the trough */
+    for (var j = 0; j < series.length; j++) {
+      if (series[j].t > to.t && series[j].v >= from.v) { recovered = series[j]; break; }
+    }
+    return {
+      ok: true,
+      depth: worst,
+      from: from,
+      to: to,
+      fallDays: dayCount(from.t, to.t),
+      recoveredOn: recovered ? recovered.t : null,
+      recoveryDays: recovered ? dayCount(to.t, recovered.t) : null
+    };
+  }
+
+  /* ------------------------------------------------- fund against benchmark
+   *
+   * One end-to-end number can be an accident of its start date. This measures
+   * every window both series can cover, and reports how often one led the
+   * other -- consistency rather than a single verdict.
+   */
+  function compareRolling(fundSeries, benchSeries, years, options) {
+    var a = rollingReturns(fundSeries, years, options);
+    if (!a.ok) return a;
+    var b = rollingReturns(benchSeries, years, options);
+    if (!b.ok) return b;
+
+    /* only windows whose start dates both series actually cover */
+    var lo = Math.max(fundSeries[0].t, benchSeries[0].t);
+    var hi = Math.min(fundSeries[fundSeries.length - 1].t, benchSeries[benchSeries.length - 1].t);
+    if (addYears(lo, years) > hi) {
+      return fail('NO_OVERLAP',
+        'The two sets of data do not overlap by ' + years + ' years, so no fair comparison can be made.');
+    }
+    var window = { from: lo, to: hi };
+    var fund = windowed(fundSeries, window, years, options);
+    var bench = windowed(benchSeries, window, years, options);
+    if (!fund.ok || !bench.ok) return fund.ok ? bench : fund;
+
+    /* pair windows by start date so like is compared with like */
+    var byDate = {};
+    fund.pairs.forEach(function (p) { byDate[p.t] = { fund: p.r }; });
+    var pairs = [];
+    bench.pairs.forEach(function (p) {
+      if (byDate[p.t]) pairs.push({ t: p.t, fund: byDate[p.t].fund, bench: p.r });
+    });
+    if (!pairs.length) {
+      return fail('NO_PAIRS', 'No period could be measured on both sets of data.');
+    }
+    var ahead = 0;
+    for (var i = 0; i < pairs.length; i++) if (pairs[i].fund > pairs[i].bench) ahead++;
+    return {
+      ok: true,
+      years: years,
+      pairs: pairs.length,
+      fundAhead: ahead,
+      fundAheadShare: ahead / pairs.length,
+      fund: describe(pairs.map(function (p) { return p.fund; })),
+      bench: describe(pairs.map(function (p) { return p.bench; })),
+      from: window.from,
+      to: window.to
+    };
+  }
+
+  /* rolling returns restricted to a shared date window, keeping start dates */
+  function windowed(series, window, years, options) {
+    var slice = series.filter(function (p) { return p.t >= window.from && p.t <= window.to; });
+    if (slice.length < 2) return fail('TOO_SHORT', 'Not enough overlapping history.');
+    var tol = (options && options.toleranceDays != null) ? options.toleranceDays : 7;
+    var pairs = [], j = 0;
+    for (var i = 0; i < slice.length; i++) {
+      var target = addYears(slice[i].t, years);
+      if (target > slice[slice.length - 1].t) break;
+      if (j < i) j = i;
+      while (j + 1 < slice.length && slice[j + 1].t <= target) j++;
+      var end = slice[j];
+      if (end.t <= slice[i].t || dayCount(end.t, target) > tol) continue;
+      if (!(slice[i].v > 0) || !(end.v > 0)) continue;
+      pairs.push({ t: slice[i].t, r: Math.pow(end.v / slice[i].v, 1 / years) - 1 });
+    }
+    if (!pairs.length) return fail('NO_WINDOWS', 'No complete period inside the shared dates.');
+    return { ok: true, pairs: pairs };
   }
 
   /* ------------------------------------------------------------ goal maths
@@ -317,6 +428,49 @@
     };
   }
 
+  /* The same goal under several return assumptions. One assumed return printed
+   * alone reads as a promise; three side by side read as an assumption. */
+  function requiredAcrossRates(input, rates) {
+    return (rates || [0.08, 0.10, 0.12]).map(function (rate) {
+      var plan = projectGoal({
+        currentValue: input.currentValue, monthlySip: input.monthlySip,
+        years: input.years, annualRate: rate,
+        annualStepUpRate: input.annualStepUpRate, target: input.target
+      });
+      return plan.ok
+        ? { rate: rate, projected: plan.projected, gap: plan.gap,
+            extraMonthly: plan.extraMonthly, onTrack: plan.onTrack }
+        : { rate: rate, error: plan.message };
+    });
+  }
+
+  /* What waiting costs. Same goal, same finish date, fewer years to pay into it.
+   *
+   * Money already invested keeps compounding through the wait -- it does not
+   * sit still just because no new instalment starts. Only the instalments lose
+   * years, which is the whole point being illustrated. */
+  function costOfWaiting(input, delays) {
+    var fullYears = num(input.years);
+    var rate = num(input.annualRate);
+    var step = num(input.annualStepUpRate);
+    var corpusAtGoal = futureValueOfLumpSum(num(input.currentValue), rate, fullYears);
+    var shortfall = num(input.target) - corpusAtGoal;
+
+    return (delays || [0, 5, 10]).map(function (delay) {
+      var yearsLeft = fullYears - delay;
+      if (yearsLeft <= 0) return { delay: delay, impossible: true };
+      var factor = sipGrowthFactor(rate, yearsLeft, step);
+      var needed = shortfall > 0 && factor > 0 ? shortfall / factor : 0;
+      return {
+        delay: delay,
+        yearsLeft: yearsLeft,
+        corpusAtGoal: corpusAtGoal,
+        monthlyNeeded: needed,
+        totalPaid: contributions(needed, yearsLeft, step)
+      };
+    });
+  }
+
   function contributions(monthlyAmount, years, annualStepUpRate) {
     var months = Math.round(years * 12);
     if (months <= 0 || !(monthlyAmount > 0)) return 0;
@@ -352,6 +506,10 @@
     futureValueOfSip: futureValueOfSip,
     sipGrowthFactor: sipGrowthFactor,
     projectGoal: projectGoal,
+    maxDrawdown: maxDrawdown,
+    compareRolling: compareRolling,
+    requiredAcrossRates: requiredAcrossRates,
+    costOfWaiting: costOfWaiting,
     contributions: contributions
   };
 

@@ -143,6 +143,15 @@ close('a flat year measures 0%', oneYear.stats.min, 0.0, 1e-9);
 close('two-year window over a double then flat = 41.42%',
   E.rollingReturns(stepped, 2).stats.mean, Math.sqrt(2) - 1, 1e-9);
 
+section('Rolling returns — which start date produced which result');
+var dated = E.rollingReturns(stepped, 1);
+ok('the best window names the day it started', dated.best.t === d(2020, 1, 1),
+   String(dated.best && dated.best.t));
+ok('the worst window names its own start day', dated.worst.t === d(2021, 1, 1),
+   String(dated.worst && dated.worst.t));
+close('the best window carries its own return', dated.best.r, 1.0, 1e-9);
+ok('every window is kept, not just the summary', dated.pairs.length === dated.values.length);
+
 section('Rolling returns — refuses rather than guesses');
 ok('asking for more years than the data holds is refused',
    E.rollingReturns(stepped, 10).code === 'NOT_ENOUGH_HISTORY');
@@ -234,6 +243,109 @@ ok('a century is refused', E.projectGoal({ years: 100, annualRate: 0.1, target: 
 ok('a fantasy return is refused', E.projectGoal({ years: 5, annualRate: 0.9, target: 100 }).code === 'BAD_RATE');
 ok('no target is refused', E.projectGoal({ years: 5, annualRate: 0.1, target: 0 }).code === 'BAD_TARGET');
 
+/* =============================================================== DRAWDOWN */
+section('Drawdown — what had to be sat through');
+
+/* built by hand: 100 up to 120, down to 60, back to 120 and beyond.
+   The worst fall is 120 -> 60, which is exactly -50%. */
+var shaped = [
+  { t: d(2020, 1, 1), v: 100 },
+  { t: d(2020, 6, 1), v: 120 },
+  { t: d(2021, 1, 1), v: 60 },
+  { t: d(2021, 6, 1), v: 90 },
+  { t: d(2022, 6, 1), v: 120 },
+  { t: d(2023, 1, 1), v: 150 }
+];
+var dd = E.maxDrawdown(shaped);
+close('the deepest fall is measured from the previous high', dd.depth, -0.5, 1e-12);
+ok('it names the day the fall started', dd.from.t === d(2020, 6, 1));
+ok('it names the bottom', dd.to.t === d(2021, 1, 1));
+ok('it finds the day the old high was regained', dd.recoveredOn === d(2022, 6, 1),
+   String(dd.recoveredOn));
+close('recovery is measured from the bottom', dd.recoveryDays, 516, 1);
+
+var neverBack = [
+  { t: d(2020, 1, 1), v: 100 }, { t: d(2021, 1, 1), v: 40 }, { t: d(2022, 1, 1), v: 70 }
+];
+ok('a fall that never recovered says so', E.maxDrawdown(neverBack).recoveredOn === null);
+ok('a series that only rises has no fall', E.maxDrawdown(steady.slice(0, 500)).depth === 0);
+ok('one point cannot show a fall', E.maxDrawdown([{ t: d(2020, 1, 1), v: 1 }]).ok !== true);
+
+/* ================================================== FUND VERSUS BENCHMARK */
+section('Fund against benchmark — consistency, not one verdict');
+
+var slow = constantGrowthSeries(2005, 20, 0.08);
+var fast = constantGrowthSeries(2005, 20, 0.12);
+var cmpAll = E.compareRolling(fast, slow, 5);
+ok('every window is paired by its start date', cmpAll.ok && cmpAll.pairs > 3000, cmpAll.message);
+close('a steadily better series leads in every period', cmpAll.fundAheadShare, 1, 1e-12);
+close('the two medians are reported separately', cmpAll.fund.median, 0.12, 5e-4);
+close('and the benchmark median is its own', cmpAll.bench.median, 0.08, 5e-4);
+close('the weaker series never leads', E.compareRolling(slow, fast, 5).fundAheadShare, 0, 1e-12);
+
+/* a series too short for the horizon at all is refused on its own terms */
+var late = constantGrowthSeries(2022, 3, 0.12);
+var tooShort = E.compareRolling(late, slow, 5);
+ok('a series too short for the horizon is refused', tooShort.ok !== true);
+ok('and the refusal says how much history it actually has',
+   /not enough for a 5-year/.test(tooShort.message || ''), tooShort.message);
+
+/* both long enough on their own, but they never overlap: no fair comparison */
+var early = constantGrowthSeries(2000, 8, 0.12);
+var later = constantGrowthSeries(2015, 8, 0.09);
+var noOverlap = E.compareRolling(early, later, 5);
+ok('two series that never overlap are refused', noOverlap.ok !== true);
+ok('the refusal names the overlap as the problem',
+   /overlap/.test(noOverlap.message || ''), noOverlap.message);
+
+/* comparison must use the shared window only, never each series' own best run */
+var overlap = E.compareRolling(constantGrowthSeries(2010, 10, 0.15), slow, 3);
+ok('comparison is confined to the dates both cover',
+   overlap.ok && overlap.from >= d(2010, 1, 1) && overlap.to <= d(2020, 1, 1),
+   overlap.ok ? fmt(overlap.from) + ' to ' + fmt(overlap.to) : overlap.message);
+
+function fmt(t) { return new Date(t).toISOString().slice(0, 10); }
+
+/* ==================================================== GOAL SENSITIVITY */
+section('Goal — the same plan under different assumptions');
+
+var goalInput = { currentValue: 400000, monthlySip: 10000, years: 15,
+                  annualRate: 0.10, annualStepUpRate: 0, target: 10000000 };
+var rates = E.requiredAcrossRates(goalInput, [0.08, 0.10, 0.12]);
+ok('one row per assumption', rates.length === 3);
+ok('a higher assumed return needs less money each month',
+   rates[0].extraMonthly > rates[1].extraMonthly && rates[1].extraMonthly > rates[2].extraMonthly,
+   rates.map(function (r) { return Math.round(r.extraMonthly); }).join(' > '));
+rates.forEach(function (r) {
+  var check = E.projectGoal({
+    currentValue: 400000, monthlySip: 10000 + r.extraMonthly, years: 15,
+    annualRate: r.rate, annualStepUpRate: 0, target: 10000000
+  });
+  close('at ' + (r.rate * 100) + '% the stated top-up reaches the goal', check.projected, 10000000, 2);
+});
+
+section('Goal — what waiting costs');
+var waits = E.costOfWaiting(goalInput, [0, 5, 10]);
+ok('one row per delay', waits.length === 3);
+ok('waiting always raises the monthly amount needed',
+   waits[0].monthlyNeeded < waits[1].monthlyNeeded && waits[1].monthlyNeeded < waits[2].monthlyNeeded,
+   waits.map(function (w) { return Math.round(w.monthlyNeeded); }).join(' < '));
+ok('waiting past the deadline is reported, not calculated',
+   E.costOfWaiting(goalInput, [20])[0].impossible === true);
+ok('the total paid in is reported for each delay', waits.every(function (w) { return w.totalPaid > 0; }));
+
+/* money already invested keeps compounding through the wait: the corpus at the
+   goal date is the same in every row, because only the instalments start later */
+close('waiting does not stop the existing corpus compounding',
+  waits[1].corpusAtGoal, E.futureValueOfLumpSum(400000, 0.10, 15), 1e-6);
+ok('every delay shares the same corpus figure',
+  waits.every(function (w) { return Math.abs(w.corpusAtGoal - waits[0].corpusAtGoal) < 1e-6; }));
+/* and each row's stated instalment really does reach the goal */
+waits.forEach(function (w) {
+  var reached = E.futureValueOfLumpSum(400000, 0.10, 15) + E.futureValueOfSip(w.monthlyNeeded, 0.10, w.yearsLeft, 0);
+  close('starting in ' + w.delay + ' years, that instalment still reaches the goal', reached, 10000000, 2);
+});
+
 /* =================================================================== FILES */
 section('Reading files — the formats a reader will actually download');
 
@@ -259,6 +371,14 @@ var ambiguous = 'Date,NAV\n01-02-2024,100\n02-03-2024,101\n03-04-2024,102\n';
 var amb = P.parseSeriesText(ambiguous);
 ok('an ambiguous date column is flagged to the reader',
    amb.ok && amb.report.warnings.length > 0 && !amb.report.dateCertain);
+
+var isoOnly = P.parseSeriesText('Date,NAV\n2024-01-01,100\n2024-02-01,101\n2024-03-01,102\n');
+ok('an unambiguous ISO file raises no date warning',
+   isoOnly.ok && isoOnly.report.dateCertain && isoOnly.report.warnings.length === 0,
+   (isoOnly.report && isoOnly.report.warnings || []).join(' | '));
+var namedMonths = P.parseSeriesText('Date,NAV\n01-Apr-2024,10\n02-Apr-2024,11\n03-Apr-2024,12\n');
+ok('a named-month file raises no date warning',
+   namedMonths.ok && namedMonths.report.warnings.length === 0);
 
 var messyFile = 'Date,NAV\n01-Apr-2024,"1,234.56"\n02-Apr-2024,₹1235.00\n03-Apr-2024,n/a\n' +
                 '04-Apr-2024,-5\n05-Apr-2024,1240.10\n05-Apr-2024,1241.00\nrubbish,12\n';
