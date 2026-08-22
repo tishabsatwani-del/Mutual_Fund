@@ -51,6 +51,13 @@
   </div>
 
   <div class="card">
+    <h2>Prefer to work in a spreadsheet?</h2>
+    <p style="margin:0 0 .9rem;color:var(--ink-2)">The same XIRR calculation as a file you can keep,
+    fill in over the years, and open without an internet connection.</p>
+    <button class="secondary" type="button" data-go="sheet">Open the spreadsheet</button>
+  </div>
+
+  <div class="card">
     <h2>How to use this</h2>
     <ol style="margin:0;padding-left:1.2rem;color:var(--ink-2)">
       <li>Choose what you want to understand.</li>
@@ -230,6 +237,60 @@
   <div id="f-out" aria-live="polite"></div>
 </section>
 
+<!-- ================================================================ SHEET -->
+<section class="view" id="view-sheet" aria-labelledby="s-h">
+  <h1 id="s-h">The spreadsheet</h1>
+  <p class="lede">Your own return, worked out properly, in about two minutes — in a file that is yours to keep.</p>
+
+  <div class="card">
+    <h2>Download it</h2>
+    <p style="margin:0 0 .4rem;color:var(--ink-2)">Use this when you want a permanent record you can add to
+    over the years, or when you would rather not type into a web page at all. It works with no internet
+    connection once downloaded.</p>
+    <a class="btn download" href="XIRR-Calculator.xlsx" download="XIRR-Calculator.xlsx">Download the sheet</a>
+    <p class="filenote">Excel file (.xlsx), 46 KB</p>
+    <p class="appnote">On a phone you will need a free spreadsheet app, such as
+    Google Sheets, to open it.</p>
+  </div>
+
+  <div class="card">
+    <h2>How to use it</h2>
+    <ol style="margin:0;padding-left:1.2rem;color:var(--ink-2)">
+      <li>Download the file and open it in Excel. Save your own copy first, so you always have a clean one.</li>
+      <li>On the <strong>My investments</strong> tab, enter one row for every payment you have made. Date,
+      then choose <strong>Investment</strong> from the dropdown, then the amount. Always type the amount as
+      a plain positive number.</li>
+      <li>If you have taken money out, enter that as a row too, choosing <strong>Withdrawal</strong>.</li>
+      <li>In the last row, enter today's date, choose <strong>Value today</strong>, and type what the holding
+      is worth right now.</li>
+    </ol>
+    <p style="margin:.9rem 0 0;color:var(--ink-2)">Your XIRR appears at the top of the sheet. That is the
+    yearly rate your own money has earned.</p>
+  </div>
+
+  <div class="card">
+    <h2>If something looks wrong</h2>
+    <ul style="margin:0;padding-left:1.2rem;color:var(--ink-2)">
+      <li><strong>No answer yet.</strong> Read the line under the result. It will tell you what is still
+      missing, usually the Value today row.</li>
+      <li><strong>The date looks odd.</strong> The sheet shows dates as 05-Aug-2026. If yours reads
+      08-May-2026, your computer is set to American dates. Retype the date the other way round.</li>
+      <li><strong>A number will not go in.</strong> Type digits only, with no rupee sign and no commas.</li>
+      <li><strong>No Excel?</strong> Upload the file to Google Sheets and it works there too, unchanged.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>Sheet or screen?</h2>
+    <p style="margin:0 0 .6rem;color:var(--ink-2)">Both run the same calculation and give the same answer.
+    The sheet is a record you keep and add to. <button class="link" data-go="portfolio">Check my
+    portfolio</button> is quicker for a one-off look, handles withdrawals across several funds at once,
+    and explains what the number means as it goes.</p>
+    <p style="margin:0;color:var(--ink-2)">The sheet's version number and build date are on its
+    <strong>About</strong> tab.</p>
+  </div>
+</section>
+
 <!-- =============================================================== METHOD -->
 <section class="view" id="view-method" aria-labelledby="m-h">
   <h1 id="m-h">How the numbers are worked out</h1>
@@ -302,7 +363,7 @@
   <div class="foot-links">
     <button class="link" data-go="method" type="button">How the numbers work</button>
     <button class="link" data-go="about" type="button">About &amp; privacy</button>
-    <a href="../xirr/">The XIRR sheet</a>
+    <button class="link" data-go="sheet" type="button">The spreadsheet</button>
   </div>
   <p>Worked out on your device. Nothing you enter leaves this page.</p>
   <p>Educational tool, not investment advice. Figures are before exit load and tax.</p>

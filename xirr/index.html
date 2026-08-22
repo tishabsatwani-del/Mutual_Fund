@@ -3,144 +3,25 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>The XIRR Sheet</title>
-<meta name="description" content="A free spreadsheet that works out your own XIRR: the yearly rate your own money has earned.">
-<!-- Deliberately self-contained: no fonts, scripts, embeds, forms or analytics
-     of any kind. Nothing here can break when something outside it changes. -->
+<title>The Portfolio Reality Check</title>
+<link rel="canonical" href="../tool/">
+<meta http-equiv="refresh" content="0; url=../tool/">
+<!-- The spreadsheet is no longer a separate destination: it lives inside the
+     tool, behind the one address printed in the book. This page exists only so
+     that anything already pointing here still lands somewhere useful. -->
 <style>
-  :root {
-    --ink: #16232b;
-    --muted: #4a5b66;
-    --rule: #d9e1e6;
-    --accent: #1f4e5f;
-    --paper: #ffffff;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --ink: #e8eef1;
-      --muted: #a9bac4;
-      --rule: #2c3a43;
-      --accent: #7fc6dd;
-      --paper: #12191e;
-    }
-  }
-  * { box-sizing: border-box; }
-  html { -webkit-text-size-adjust: 100%; }
-  body {
-    margin: 0;
-    padding: 2.2rem 1.25rem 4rem;
-    background: var(--paper);
-    color: var(--ink);
-    font-family: Georgia, "Times New Roman", serif;
-    font-size: 1.0625rem;
-    line-height: 1.6;
-  }
-  main { max-width: 34rem; margin: 0 auto; }
-  h1 {
-    font-size: 1.9rem;
-    line-height: 1.2;
-    margin: 0 0 .4rem;
-    letter-spacing: -0.01em;
-  }
-  .standfirst { margin: 0 0 1.6rem; color: var(--muted); font-size: 1.15rem; }
-  h2 {
-    font-size: 1.15rem;
-    margin: 2.4rem 0 .6rem;
-    padding-top: 1.4rem;
-    border-top: 1px solid var(--rule);
-  }
-  p { margin: 0 0 1rem; }
-  ol, ul { margin: 0 0 1rem; padding-left: 1.3rem; }
-  li { margin-bottom: .6rem; }
-  .download {
-    display: block;
-    margin: 1.8rem 0;
-    padding: 1.05rem 1.25rem;
-    background: var(--accent);
-    color: var(--paper);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    font-size: 1.15rem;
-    font-weight: 600;
-    text-align: center;
-    text-decoration: none;
-    border-radius: 8px;
-  }
-  .download:active { opacity: .85; }
-  .filenote {
-    margin: -1.1rem 0 .5rem;
-    text-align: center;
-    font-size: .9rem;
-    color: var(--muted);
-  }
-  .appnote {
-    margin: 0 0 1.8rem;
-    text-align: center;
-    font-size: 1rem;
-    color: var(--muted);
-  }
-  .footnote {
-    margin-top: 2.6rem;
-    padding-top: 1.4rem;
-    border-top: 1px solid var(--rule);
-    font-size: .95rem;
-    color: var(--muted);
-  }
-  strong { font-weight: 700; }
+  body { margin:0; padding:3rem 1.25rem; background:#fbfaf8; color:#16181c;
+         font-family: Georgia, "Times New Roman", serif; line-height:1.6; }
+  @media (prefers-color-scheme: dark) { body { background:#16181c; color:#eef1f4; } }
+  main { max-width:32rem; margin:0 auto; }
+  a { color:#1f4e5f; }
+  @media (prefers-color-scheme: dark) { a { color:#7fc6dd; } }
 </style>
 </head>
 <body>
 <main>
-
-  <h1>The XIRR Sheet</h1>
-  <p class="standfirst">Your own return, worked out properly, in about two minutes.</p>
-
-  <p>Your app already shows an XIRR for the funds you hold with it. This sheet is
-  for everything it cannot see: money spread across two platforms, money you have
-  already taken out, or a record you want to keep yourself.</p>
-
-  <!-- download name deliberately has no spaces: some Android browsers save a
-       spaced name without its extension, and the file then opens in nothing. -->
-  <a class="download" href="XIRR-Calculator.xlsx" download="XIRR-Calculator.xlsx">Download the sheet</a>
-  <p class="filenote">Excel file (.xlsx), 46 KB</p>
-  <!-- The one line added to the Part B copy. Without it, a reader on Android
-       with no spreadsheet app taps the downloaded file, nothing happens, and
-       the printed promise dies at the last step. -->
-  <p class="appnote">On a phone you will need a free spreadsheet app, such as
-  Google Sheets, to open it.</p>
-
-  <h2>How to use it</h2>
-  <ol>
-    <li>Download the file and open it in Excel. Save your own copy first, so you
-    always have a clean one.</li>
-    <li>On the <strong>My investments</strong> tab, enter one row for every payment
-    you have made. Date, then choose <strong>Investment</strong> from the dropdown,
-    then the amount. Always type the amount as a plain positive number.</li>
-    <li>If you have taken money out, enter that as a row too, choosing
-    <strong>Withdrawal</strong>.</li>
-    <li>In the last row, enter today's date, choose <strong>Value today</strong>,
-    and type what the holding is worth right now.</li>
-  </ol>
-
-  <p>Your XIRR appears at the top of the sheet. That is the yearly rate your own
-  money has earned.</p>
-
-  <h2>If something looks wrong</h2>
-  <ul>
-    <li><strong>No answer yet.</strong> Read the line under the result. It will
-    tell you what is still missing, usually the Value today row.</li>
-    <li><strong>The date looks odd.</strong> The sheet shows dates as 05-Aug-2026.
-    If yours reads 08-May-2026, your computer is set to American dates. Retype the
-    date the other way round.</li>
-    <li><strong>A number will not go in.</strong> Type digits only, with no rupee
-    sign and no commas.</li>
-    <li><strong>No Excel?</strong> Upload the file to Google Sheets and it works
-    there too, unchanged.</li>
-  </ul>
-
-  <p class="footnote">This is a free tool for readers, not investment advice. The
-  figure it produces is before exit load and before tax, so what you finally keep
-  will be a little less.</p>
-
+  <p>The XIRR sheet now lives inside The Portfolio Reality Check, along with everything else.</p>
+  <p><a href="../tool/">Continue to the tool</a></p>
 </main>
 </body>
 </html>

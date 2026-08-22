@@ -173,6 +173,11 @@ button.link {
 }
 .btnrow { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
 
+/* the spreadsheet download: the one action on its screen, so it takes the width */
+.download { width: 100%; margin: 1.3rem 0 .5rem; font-size: 1.1rem; }
+.filenote { margin: 0 0 .4rem; text-align: center; font-size: .85rem; color: var(--muted); }
+.appnote { margin: 0; text-align: center; font-size: .95rem; color: var(--ink-2); }
+
 /* ------------------------------------------------------------- entry table */
 .rows { display: grid; gap: .5rem; }
 .row-head, .entry {

@@ -4,7 +4,10 @@ A static, offline-capable analysis tool for readers of the book. Four modules on
 one page: portfolio XIRR, a goal planner, market rolling returns, and rolling
 returns for any fund the reader can supply NAV history for.
 
-Published at `/Mutual_Fund/tool/`.
+Published at `/Mutual_Fund/tool/`. **This is the single address printed in the
+book.** Everything a reader is promised lives behind it, including the XIRR
+spreadsheet, which is why there is no separate download page any more —
+`/Mutual_Fund/xirr/` is now only a redirect for anything already pointing there.
 
 ## Architecture, and why
 
@@ -17,6 +20,8 @@ Published at `/Mutual_Fund/tool/`.
 | `app.js` | Formatting, routing, charts, file intake. |
 | `modules.js` | The four screens. |
 | `data/benchmarks.json` | Bundled index history. Empty in 1.0 — see `data/README.md`. |
+| `XIRR-Calculator.xlsx` | The downloadable spreadsheet, offered from the **sheet** view. Built by `tools/xirr/` — see that README. |
+| `qr-portfolio-reality-check.svg` | Print artwork for the address in the book. |
 
 `engine.js` and `parse.js` are deliberately free of browser APIs so the same code
 that runs on a reader's phone is the code the test suite exercises under Node.
