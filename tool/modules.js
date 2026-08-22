@@ -287,10 +287,14 @@
 
   /* ================================================ ROLLING RETURN RENDERER */
 
-  function renderRolling(series, years, meta, compareSeries, compareName) {
+  var RATE_DATA = {};
+
+  function renderRolling(series, years, meta, compareSeries, compareName, prefix) {
     var r = E.rollingReturns(series, years);
     if (!r.ok) return notice('bad', esc(r.message));
     var s = r.stats;
+    var key = prefix || 'x';
+    RATE_DATA[key] = r.values;
     var html = '';
 
     html += '<div class="result"><div class="label">' + esc(meta.name) + ' &middot; every ' + years +
@@ -311,6 +315,8 @@
         years: years,
         caption: 'Each bar counts the ' + years + '-year periods that ended in that range'
       }) + '</div>';
+
+    html += rateCheckCard(key, years, r.values);
 
     if (compareSeries) {
       var c = E.rollingReturns(compareSeries, years);
@@ -361,6 +367,35 @@
     return html;
   }
 
+  /* The reader names the rate. The screen reports arithmetic on the data above
+   * and nothing else -- no product, no promise, no comparison anybody has to
+   * take on trust. */
+  function rateCheckCard(key, years, values) {
+    var start = 0.07;
+    var res = E.shareAbove(values, start);
+    return '<div class="card"><h2>How often did it beat a rate you choose?</h2>' +
+      '<div class="field" style="max-width:16rem">' +
+      '<label for="rate-' + key + '">Rate to compare against, % a year</label>' +
+      '<input type="number" id="rate-' + key + '" class="ratecheck" data-key="' + key +
+      '" data-years="' + years + '" value="7" step="0.5" min="-50" max="100" inputmode="decimal">' +
+      '</div>' +
+      '<div class="result" style="margin:.6rem 0 0"><div class="label">Periods that beat it</div>' +
+      '<div class="value" id="rateout-' + key + '">' + pct(res.share, 0) + '</div>' +
+      '<div class="sub" id="ratesub-' + key + '">' + rateSentence(res, start, years) + '</div></div>' +
+      '<div class="meaning"><h3>Read this carefully</h3>' +
+      '<p>You chose that rate, so this is arithmetic on the data above and nothing more. It is not a ' +
+      'comparison with any particular product, and it says nothing about what a deposit, a bond or any ' +
+      'other investment actually paid over these dates.</p>' +
+      '<p>The figures are before tax and before costs, on both sides of the comparison. Periods overlap, ' +
+      'and none of this is a statement about what comes next.</p></div></div>';
+  }
+
+  function rateSentence(res, rate, years) {
+    if (!res.ok) return '';
+    return res.above.toLocaleString() + ' of ' + res.count.toLocaleString() + ' ' + years +
+      '-year periods returned more than ' + pct(rate, 1) + ' a year.';
+  }
+
   function cmp(label, a, b) {
     return '<tr><td>' + esc(label) + '</td><td>' + pct(a) + '</td><td>' + pct(b) + '</td></tr>';
   }
@@ -391,7 +426,8 @@
     if (!state.bmSeries) return;
     $('#h-controls').hidden = false;
     horizonChips('h-horizons', state.bmYears, function (h) { state.bmYears = h; drawHistory(); });
-    $('#h-out').innerHTML = renderRolling(state.bmSeries, state.bmYears, { name: state.bmName });
+    $('#h-out').innerHTML = renderRolling(state.bmSeries, state.bmYears, { name: state.bmName },
+      null, '', 'market');
   }
 
   function loadBenchmarks() {
@@ -442,7 +478,7 @@
     }
     $('#f-out').innerHTML =
       importReport(state.fundReport, state.fundName) +
-      renderRolling(state.fundSeries, state.fundYears, { name: state.fundName }, compare, compareName);
+      renderRolling(state.fundSeries, state.fundYears, { name: state.fundName }, compare, compareName, 'fund');
   }
 
   function refreshCompareOptions() {
@@ -488,8 +524,26 @@
 
   /* =================================================================== INIT */
 
+  function wireRateChecks() {
+    document.addEventListener('input', function (ev) {
+      var input = ev.target;
+      if (!input.classList || !input.classList.contains('ratecheck')) return;
+      var key = input.dataset.key, years = input.dataset.years;
+      var values = RATE_DATA[key];
+      var rate = parseFloat(input.value) / 100;
+      var out = document.getElementById('rateout-' + key);
+      var sub = document.getElementById('ratesub-' + key);
+      if (!out || !values) return;
+      var res = E.shareAbove(values, rate);
+      if (!res.ok) { out.textContent = '—'; sub.textContent = 'Enter a rate.'; return; }
+      out.textContent = pct(res.share, 0);
+      sub.textContent = rateSentence(res, rate, years);
+    });
+  }
+
   function init() {
     A.initRouter();
+    wireRateChecks();
     $('#ver').textContent = A.VERSION;
 
     /* portfolio */

@@ -175,6 +175,15 @@ var bins = E.histogram(sample);
 ok('every value lands in exactly one bucket',
    bins.reduce(function (s, b) { return s + b.count; }, 0) === sample.length);
 
+section('Beating a rate the reader chooses');
+var periods = [-0.05, 0.02, 0.07, 0.07, 0.11, 0.18];
+close('counts strictly above the rate', E.shareAbove(periods, 0.07).above, 2, 0);
+close('share is out of every period', E.shareAbove(periods, 0.07).share, 2 / 6, 1e-12);
+close('a rate below everything is beaten by all', E.shareAbove(periods, -1).share, 1, 1e-12);
+close('a rate above everything is beaten by none', E.shareAbove(periods, 5).share, 0, 1e-12);
+ok('an empty set is refused rather than dividing by zero', E.shareAbove([], 0.07).ok !== true);
+ok('a missing rate is refused', E.shareAbove(periods, NaN).ok !== true);
+
 /* ================================================================ GOAL MATH */
 section('Goal maths — against the closed-form annuity');
 

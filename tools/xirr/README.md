@@ -18,6 +18,7 @@ carry only one printed address.
 | `harden.py` | Adds cached formula results, then patches back the two number formats LibreOffice mangles |
 | `acceptance_tests.py` | Types each test case into the real file, recalculates it in LibreOffice, reads back the result and the status line |
 | `verify_structure.py` | Asserts the file against the brief: tab order, named ranges, locked cells, allowed functions only, no macros |
+| `goal_acceptance.py` | Types goals into the **Plan my goal** tab, recalculates outside Excel, and checks every figure against the same sum done month by month in Python |
 
 ```
 pip install openpyxl segno            # and: apt-get install libreoffice-calc
@@ -25,6 +26,7 @@ python3 tools/xirr/build_xlsx.py       /tmp/raw.xlsx
 python3 tools/xirr/harden.py           /tmp/raw.xlsx tool/XIRR-Calculator.xlsx
 python3 tools/xirr/verify_structure.py tool/XIRR-Calculator.xlsx
 python3 tools/xirr/acceptance_tests.py tool/XIRR-Calculator.xlsx
+python3 tools/xirr/goal_acceptance.py  tool/XIRR-Calculator.xlsx
 ```
 
 **Do not skip `harden.py`.** A workbook straight out of openpyxl carries
@@ -36,11 +38,28 @@ answers, so the file shows real numbers even when nothing is calculating.
 
 The three acceptance cases must return 9.0509%, 12.6600% and 8.1381%.
 
+## The goal tab
+
+Excel cannot loop, so a year of month-start instalments is summed in closed form
+on the hidden `Calc` tab and then compounded forward. That closed form was
+checked against the same calculation done month by month and agrees to fourteen
+decimal places, which is what keeps the workbook and the website from giving a
+reader two different answers.
+
+Percentages are entered as **plain numbers** — 10 means 10% — and divided by 100
+in the formulas. A cell pre-formatted as a percentage turns a typed `10` into
+either 10% or 1000% depending on one Excel setting, and a reader has no way to
+tell which they got.
+
+`goal_acceptance.py` caught three real bugs on its first run, including a total
+contributed figure that was correct with no step-up and badly wrong with one.
+Run it after any change to the tab.
+
 ## Replacing it with a new version
 
 1. Rebuild as above, overwriting `tool/XIRR-Calculator.xlsx` — keep the filename.
 2. Bump the version and build date on the workbook's **About** tab.
-3. Update the `46 KB` note in the sheet view of `tool/index.html` if the size moved.
+3. Update the `50 KB` note in the sheet view of `tool/index.html` if the size moved.
 4. Commit to `main`. The printed address does not change, which is the whole
    point of the reader landing on a page rather than on a file.
 

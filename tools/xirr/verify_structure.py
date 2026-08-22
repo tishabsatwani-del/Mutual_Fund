@@ -17,9 +17,9 @@ def check(label, ok, detail=""):
 
 
 # tab order and visibility
-check("four visible tabs, in order",
+check("five visible tabs, in order",
       [ws.title for ws in wb.worksheets if ws.sheet_state == "visible"]
-      == ["Start here", "My investments", "Example", "About"])
+      == ["Start here", "My investments", "Plan my goal", "Example", "About"])
 check("only Calc is hidden",
       [ws.title for ws in wb.worksheets if ws.sheet_state != "visible"] == ["Calc"])
 
@@ -84,6 +84,21 @@ check("result cell and column E locked",
 check("Example tab fully locked",
       not [c for row in wb["Example"].iter_rows() for c in row
            if c.protection and c.protection.locked is False])
+
+# the goal tab
+goal = wb["Plan my goal"]
+check("goal inputs are the only unlocked cells on the goal tab",
+      set(c.coordinate for row in goal.iter_rows() for c in row
+          if c.protection and c.protection.locked is False)
+      == {"B3", "B4", "B5", "B6", "B7", "B8", "B9"})
+check("the projected value is locked", goal["B11"].protection.locked is not False)
+check("years are limited to whole numbers",
+      any(dv.type == "whole" for dv in goal.data_validations.dataValidation))
+check("the goal tab never shows a bare error",
+      'Check the line below' in str(goal["B11"].value))
+check("the goal tab says the return is an assumption",
+      any("assumption, not a forecast" in str(c.value)
+          for row in goal.iter_rows() for c in row if c.value))
 
 # forbidden functions, anywhere in the workbook
 ALLOWED = {"XIRR", "IF", "IFERROR", "DATE", "EDATE", "TODAY", "COUNT", "COUNTA",
