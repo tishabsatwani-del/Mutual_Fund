@@ -1,0 +1,323 @@
+{
+  "$comment": [
+    "The copy deck of Build Specification v2, section 13. Every visitor-facing",
+    "string in the Simulator is read from this file.",
+    "",
+    "The author writes every 'text' value. The developer wires slots and never",
+    "writes or edits prose, which is why every text below ships empty: an empty",
+    "slot is a slot still waiting for the author, and the build says so rather",
+    "than inventing a sentence to fill it.",
+    "",
+    "'budget' is the proposed character budget for that slot, to be agreed with",
+    "the designer. 'where' says where the slot appears, so the author can write",
+    "with the screen in mind.",
+    "",
+    "Three rules apply to every slot and are enforced by sim/tests/copy.test.js:",
+    "no sentence may tell the reader to buy, sell, switch, hold, redeem, stop,",
+    "start or continue an investment; nothing may reference a moment (no dates,",
+    "no index levels, no fund names, no rate presented as current), so the copy",
+    "never ages; and the words 'insider' and 'veteran' must not appear."
+  ],
+  "version": 1,
+  "locale": "en-IN",
+  "chapterRefs": {
+    "$comment": "Book pointers resolve through this table so chapter numbering stays under the author's control. Fill each value with the chapter reference as it should read.",
+    "SHORT-PERIOD": "",
+    "INSTALMENT-TIMING": "",
+    "ROLLING-RETURNS": "",
+    "XIRR": "",
+    "BENCHMARKS": ""
+  },
+  "slots": {
+    "POS-INTRO": {
+      "text": "",
+      "budget": 240,
+      "where": "Module A, above the transaction table: what this reading will tell them."
+    },
+    "POS-TOO-EARLY": {
+      "text": "",
+      "budget": 320,
+      "where": "State S-EARLY. Totals are shown; every annualised reading is suppressed."
+    },
+    "POS-STALE": {
+      "text": "",
+      "budget": 200,
+      "where": "State S-STALE. A banner above the report. The date is substituted by the app."
+    },
+    "POS-VALUE-APPROX": {
+      "text": "",
+      "budget": 220,
+      "where": "Beside an estimated value: what the estimate excludes."
+    },
+    "POS-UNITS-NEGATIVE": {
+      "text": "",
+      "budget": 260,
+      "where": "Stop condition: the entries and the fund do not reconcile."
+    },
+    "POS-ROW-BEFORE-FUND": {
+      "text": "",
+      "budget": 240,
+      "where": "Stop condition: a row is dated before the fund's first NAV."
+    },
+    "POS-ROW-NO-NAV": {
+      "text": "",
+      "budget": 220,
+      "where": "Beside a row with no NAV within seven days of its date."
+    },
+    "POS-GAP-BEHIND": {
+      "text": "",
+      "budget": 400,
+      "where": "State S-GAP-BEHIND. The instalment-timing reading."
+    },
+    "POS-GAP-AHEAD": {
+      "text": "",
+      "budget": 400,
+      "where": "State S-GAP-AHEAD."
+    },
+    "POS-GAP-NEUTRAL": {
+      "text": "",
+      "budget": 400,
+      "where": "State S-GAP-NEUTRAL."
+    },
+    "POS-STRETCH-LOW": {
+      "text": "",
+      "budget": 400,
+      "where": "State S-STRETCH-LOW. Percentile at or below the low threshold."
+    },
+    "POS-STRETCH-MID": {
+      "text": "",
+      "budget": 400,
+      "where": "State S-STRETCH-MID."
+    },
+    "POS-STRETCH-HIGH": {
+      "text": "",
+      "budget": 400,
+      "where": "State S-STRETCH-HIGH. Percentile at or above the high threshold."
+    },
+    "POS-STRETCH-NA": {
+      "text": "",
+      "budget": 300,
+      "where": "State S-STRETCH-NA. Not enough record to place the stretch in."
+    },
+    "POS-ALT-BEHIND": {
+      "text": "",
+      "budget": 400,
+      "where": "State S-ALT-BEHIND. Against the replay in the proxy fund."
+    },
+    "POS-ALT-AHEAD": {
+      "text": "",
+      "budget": 400,
+      "where": "State S-ALT-AHEAD."
+    },
+    "POS-ALT-CLOSE": {
+      "text": "",
+      "budget": 400,
+      "where": "State S-ALT-CLOSE."
+    },
+    "POS-ALT-NONE": {
+      "text": "",
+      "budget": 300,
+      "where": "State S-ALT-NONE. No proxy, or the proxy does not cover the span."
+    },
+    "POS-REPLAY-LINE": {
+      "text": "",
+      "budget": 200,
+      "where": "The one-sentence replay pattern; the proxy fund name is substituted."
+    },
+    "POS-NEXT-SHORT-PERIOD": {
+      "text": "",
+      "budget": 90,
+      "where": "Next-step label for S-EARLY. Carries [CH-REF:SHORT-PERIOD]."
+    },
+    "POS-NEXT-STALE-RECORD": {
+      "text": "",
+      "budget": 90,
+      "where": "Next-step label for S-STALE. Opens Module B at the full range."
+    },
+    "POS-NEXT-GAP-TIMING": {
+      "text": "",
+      "budget": 90,
+      "where": "Next-step label for the gap states. Carries [CH-REF:INSTALMENT-TIMING]."
+    },
+    "POS-NEXT-EVERY-STRETCH": {
+      "text": "",
+      "budget": 90,
+      "where": "Next-step label for the stretch states. Opens Module B at the visitor's span."
+    },
+    "POS-NEXT-FULL-RECORD": {
+      "text": "",
+      "budget": 90,
+      "where": "Next-step label for S-STRETCH-NA. Opens Module B at the full range."
+    },
+    "POS-NEXT-OVERLAY": {
+      "text": "",
+      "budget": 90,
+      "where": "Next-step label for the alternative states. Opens Module B with the overlay on."
+    },
+    "RR-MEANING-1Y": {
+      "text": "",
+      "budget": 500,
+      "where": "The interpretation panel for the 1-year window."
+    },
+    "RR-MEANING-3Y": {
+      "text": "",
+      "budget": 500,
+      "where": "The interpretation panel for the 3-year window."
+    },
+    "RR-MEANING-5Y": {
+      "text": "",
+      "budget": 500,
+      "where": "The interpretation panel for the 5-year window."
+    },
+    "RR-MEANING-7Y": {
+      "text": "",
+      "budget": 500,
+      "where": "The interpretation panel for the 7-year window."
+    },
+    "RR-MEANING-10Y": {
+      "text": "",
+      "budget": 500,
+      "where": "The interpretation panel for the 10-year window."
+    },
+    "RR-MEANING-OVERLAY": {
+      "text": "",
+      "budget": 500,
+      "where": "The interpretation panel addition when a benchmark overlay is drawn."
+    },
+    "RR-NO-PROXY": {
+      "text": "",
+      "budget": 220,
+      "where": "No index-fund proxy exists for this category."
+    },
+    "RR-PROXY-LABEL": {
+      "text": "",
+      "budget": 220,
+      "where": "The transparency label under the overlay: what the proxy is and is not."
+    },
+    "RR-PROXY-SHORT": {
+      "text": "",
+      "budget": 220,
+      "where": "The proxy is younger than the range being shown."
+    },
+    "RR-IDCW-ROUTE": {
+      "text": "",
+      "budget": 300,
+      "where": "Why an IDCW selection was routed to its Growth twin."
+    },
+    "RR-STALE": {
+      "text": "",
+      "budget": 200,
+      "where": "The scheme has stopped publishing NAV. The date is substituted."
+    },
+    "RR-TOO-YOUNG": {
+      "text": "",
+      "budget": 260,
+      "where": "The fund is younger than the window. The two figures are substituted."
+    },
+    "RR-FEW-WINDOWS": {
+      "text": "",
+      "budget": 260,
+      "where": "Fewer than the minimum windows; the count is printed prominently."
+    },
+    "XIRR-MEANING": {
+      "text": "",
+      "budget": 500,
+      "where": "The interpretation panel under the XIRR result."
+    },
+    "XIRR-SUB-YEAR": {
+      "text": "",
+      "budget": 320,
+      "where": "Span under a year: why an annualised rate misleads over a short span."
+    },
+    "XIRR-NEED-IN": {
+      "text": "",
+      "budget": 160,
+      "where": "Validation 1: no Money in row."
+    },
+    "XIRR-NEED-VALUE": {
+      "text": "",
+      "budget": 160,
+      "where": "Validation 2: not exactly one Value today row."
+    },
+    "XIRR-ROW-FIX": {
+      "text": "",
+      "budget": 160,
+      "where": "Validation 3: the first incomplete row."
+    },
+    "XIRR-SAME-SIGN": {
+      "text": "",
+      "budget": 240,
+      "where": "Validation 4: every flow points the same way."
+    },
+    "XIRR-NO-SOLVE": {
+      "text": "",
+      "budget": 300,
+      "where": "Solver 9.3: no single yearly rate settles these entries."
+    },
+    "XIRR-COMPARE-STEADY": {
+      "text": "",
+      "budget": 240,
+      "where": "The 'compare against a steady rate' comparator. Ships with no rate filled."
+    },
+    "XIRR-WORKBOOK-OFFER": {
+      "text": "",
+      "budget": 160,
+      "where": "The workbook download offer."
+    },
+    "LANDING-PROMISE": {
+      "text": "",
+      "budget": 300,
+      "where": "The home screen promise, under the product name."
+    },
+    "EMPTY-SEARCH": {
+      "text": "",
+      "budget": 200,
+      "where": "Search ran and matched nothing."
+    },
+    "ERR-DATA-DOWN": {
+      "text": "",
+      "budget": 260,
+      "where": "Every provider is unreachable; cached data is being shown."
+    },
+    "ABOUT-1": {
+      "text": "",
+      "budget": 600,
+      "where": "About & Data page, paragraph 1."
+    },
+    "ABOUT-2": {
+      "text": "",
+      "budget": 600,
+      "where": "About & Data page, paragraph 2."
+    },
+    "ABOUT-3": {
+      "text": "",
+      "budget": 600,
+      "where": "About & Data page, paragraph 3."
+    },
+    "ABOUT-4": {
+      "text": "",
+      "budget": 600,
+      "where": "About & Data page, paragraph 4."
+    },
+    "ABOUT-5": {
+      "text": "",
+      "budget": 600,
+      "where": "About & Data page, paragraph 5."
+    },
+    "ABOUT-6": {
+      "text": "",
+      "budget": 600,
+      "where": "About & Data page, paragraph 6."
+    },
+    "ABOUT-7": {
+      "text": "",
+      "budget": 600,
+      "where": "About & Data page, paragraph 7."
+    },
+    "ABOUT-8": {
+      "text": "",
+      "budget": 600,
+      "where": "About & Data page, paragraph 8."
+    }
+  }
+}
