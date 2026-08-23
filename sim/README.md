@@ -54,13 +54,42 @@ access.state()                                    // which provider answered, an
 
 ### Judgment calls in the chain
 
-**A 404 is an answer, not a failure.** §5.1 says a provider that "errors, times
-out, or returns malformed data is skipped for the rest of the session". Read
-strictly, that blacklists a provider for correctly answering *no such scheme* —
-one bad code would burn the chain for the whole session. So a reply that is a
-valid answer meaning "not here" (404, 400, 410) moves the chain on without
-marking the provider unhealthy. Network errors, timeouts, 5xx and malformed
-payloads all skip the provider exactly as written.
+**Three verdicts, not two.** §5.1 says a provider that "errors, times out, or
+returns malformed data is skipped for the rest of the session". Read strictly,
+that blacklists a provider for correctly answering *no such scheme* — one bad
+code would burn the chain for the whole session. So every reply lands in one of
+three buckets:
+
+| Verdict | What it means | What the chain does |
+|---|---|---|
+| **absent** | The provider answered correctly and the answer is "nothing here for this code" | Move to the next provider. This one stays healthy |
+| **malformed** | The reply cannot be read at all — a shape change, junk | Skip the provider for the session, exactly as §5.1 says |
+| **failed** | Transport error, timeout, 5xx | Skip the provider for the session |
+
+Absence is not only an HTTP status. api.mfapi.in reports its own failures inside
+a 200 body — its adapter says so in a comment — so the adapters tag what they
+know (`C.absent` / `C.malformed`) and the layer reads the tag before the status.
+Reading the status alone missed exactly the provider the code documents as
+answering in-body.
+
+When every provider says absent, the result carries `RR-NO-HISTORY`, not
+`ERR-DATA-DOWN`: telling a visitor the data providers are down when the truth is
+that their scheme has no history would be a false statement, and §2's second
+principle forbids it. If a stored copy exists it is still served, labelled,
+because §5.6 says a scheme that stops being published keeps its history.
+
+**A short series is a fact, not a fault.** The validator has no minimum length. A
+fund that has published one NAV is a correct answer — §5.6 promises new funds
+"require nothing", and a fund launched yesterday has exactly one row. Whether a
+series is long enough to measure is §8.4's question, answered on screen with
+`RR-TOO-YOUNG` and `RR-FEW-WINDOWS`. What *is* malformed is rows arriving and
+none of them being readable: that is a shape change, and reporting it as "no
+results" would hide a broken provider behind an empty screen.
+
+**Scheme codes are never used as plain object keys.** A code of `constructor` or
+`__proto__` resolved against `Object.prototype` and handed the caller something
+that was not a promise, crashing it synchronously — a white screen, which §14
+forbids. Every map keyed by external strings uses `Object.create(null)`.
 
 **One in-flight fetch per scheme.** Module A asks for the fund and its proxy,
 and Module B may ask for the same fund moments later. Concurrent callers for one
@@ -95,6 +124,22 @@ browsers.
 No adapter claims `verified: true`, and a fixture asserts that none does. Nothing
 should flip that flag except a person who has actually looked at the live
 responses.
+
+### Where these decisions came from
+
+The three-verdict design is not how the layer was first written. It had two
+verdicts — good, and provider-is-broken — and an adversarial review of the
+finished code found what that costs: opening one newly launched fund marked all
+three providers faulty and left the visitor with a dead data layer for the rest
+of the session, for every other fund too. Four defects were confirmed by
+reproduction and are now regression-tested in `tests/access.test.js`:
+
+1. a one-NAV fund read as provider malformation, killing the session (blocking)
+2. a dead scheme code reported in a 200 body doing the same (blocking)
+3. a search reply whose rows could not be mapped reported as a successful empty
+   result — no failover, no skip, and cached for the session (serious)
+4. scheme codes colliding with `Object.prototype` returning non-promises (minor,
+   but it crashes the caller)
 
 ## Runbook (§15)
 

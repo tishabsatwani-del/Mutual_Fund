@@ -238,18 +238,141 @@ function run() {
 
   step(function () {
     var access = A.createAccess({
-      providers: [stubProvider('one'), stubProvider('two')],
+      providers: [mfapi, tigzig],
       transport: fakeTransport({
-        'one/history': { meta: { schemeCode: 1, schemeName: 'x' }, data: [{ date: '05-08-2026', nav: '10' }] },
-        'two/history': MFAPI_HISTORY
+        '/mf/118989': { meta: { scheme_code: 1, scheme_name: 'x' }, status: 'SUCCESS',
+                        data: [{ when: '05-08-2026', price: '10' }, { when: '06-08-2026', price: '11' }] },
+        '/nav': TIGZIG_HISTORY
       }),
       cache: Cache.createCache({ store: Cache.memoryStore() })
     });
     return access.history('118989').then(function (r) {
-      ok('a reply with too little data is malformed, and fails over', r.ok && r.provider === 'two');
+      ok('rows the adapter cannot read at all are malformed, and fail over',
+         r.ok && r.provider === 'tigzig', JSON.stringify(r));
+      var first = access.state().providers[0];
       ok('and that provider is skipped for the session',
-         /malformed|fewer than two/.test(access.state().providers[0].reason || ''),
+         first.status === 'skipped' && /none of the 2 NAV rows could be read/.test(first.reason || ''),
+         JSON.stringify(first));
+    });
+  });
+
+  /* ============================ regressions from the adversarial review ==== */
+
+  step(function () {
+    section('A provider answering correctly is never blamed for the answer');
+    var NEW_FUND = {
+      meta: { scheme_code: 999999, scheme_name: 'Brand New Fund - Direct Plan - Growth' },
+      data: [{ date: '22-08-2026', nav: '10.0000' }], status: 'SUCCESS'
+    };
+    var access = A.createAccess({
+      providers: [mfapi, tigzig],
+      transport: fakeTransport({ '/mf/999999': NEW_FUND, '/mf/118989': MFAPI_HISTORY }),
+      cache: Cache.createCache({ store: Cache.memoryStore() })
+    });
+    return access.history('999999').then(function (r) {
+      ok('a fund with one published NAV is served, not rejected',
+         r.ok && r.series.length === 1, JSON.stringify(r).slice(0, 160));
+      ok('and no provider is blamed for it',
+         access.state().providers.every(function (p) { return p.status === 'available'; }),
+         JSON.stringify(access.state().providers));
+      return access.history('118989');
+    }).then(function (r) {
+      ok('a healthy fund still works afterwards in the same session', r.ok && r.series.length === 3);
+    });
+  });
+
+  step(function () {
+    var access = A.createAccess({
+      providers: [mfapi, tigzig],
+      transport: fakeTransport({
+        '/mf/000000': { status: 'FAIL', message: 'Invalid scheme code' },
+        '/mf/118989': MFAPI_HISTORY
+      }),
+      cache: Cache.createCache({ store: Cache.memoryStore() })
+    });
+    return access.history('000000').then(function (r) {
+      ok('a dead scheme code reported inside a 200 body is absence, not breakage',
+         r.ok === false && r.kind === 'absent', JSON.stringify(r));
+      ok('and it says no history was found, not that the data is down',
+         r.slot === 'RR-NO-HISTORY', r.slot);
+      ok('the provider that answered honestly stays in the chain',
+         access.state().providers[0].status === 'available',
          JSON.stringify(access.state().providers[0]));
+      return access.history('118989');
+    }).then(function (r) {
+      ok('so the next fund is served normally', r.ok && r.provider === 'mfapi');
+    });
+  });
+
+  step(function () {
+    var access = A.createAccess({
+      providers: [mfapi, tigzig],
+      transport: fakeTransport({
+        '/mf/search': [{ sid: 118989, title: 'Renamed Keys Fund - Direct Plan - Growth' }],
+        '/search': TIGZIG_SEARCH
+      }),
+      cache: Cache.createCache({ store: Cache.memoryStore() })
+    });
+    return access.search('flexi').then(function (r) {
+      ok('a search whose rows cannot be mapped fails over instead of looking empty',
+         r.ok && r.provider === 'tigzig' && r.schemes.length === 1, JSON.stringify(r));
+      var moved = access.state().providers[0];
+      ok('and the provider whose shape moved is skipped',
+         moved.status === 'skipped' && /none of the 1 search rows could be read/.test(moved.reason || ''),
+         JSON.stringify(moved));
+    });
+  });
+
+  step(function () {
+    var access = A.createAccess({
+      providers: [mfapi],
+      transport: fakeTransport({ '/mf/search': [] }),
+      cache: Cache.createCache({ store: Cache.memoryStore() })
+    });
+    return access.search('nothing matches this').then(function (r) {
+      ok('an honestly empty search is still a success', r.ok && r.schemes.length === 0);
+      ok('and carries the EMPTY-SEARCH slot rather than an error', r.slot === 'EMPTY-SEARCH', r.slot);
+      ok('the provider is not blamed for finding nothing',
+         access.state().providers[0].status === 'available');
+    });
+  });
+
+  step(function () {
+    section('Scheme codes that collide with Object.prototype');
+    var access = A.createAccess({
+      providers: [stubProvider('one')],
+      transport: fakeTransport({ 'one/history': MFAPI_HISTORY }),
+      cache: Cache.createCache({ store: Cache.memoryStore() })
+    });
+    var awkward = ['constructor', 'toString', '__proto__', 'hasOwnProperty'];
+    ok('every one of them returns a real promise',
+       awkward.every(function (code) {
+         var out = access.history(code);
+         return out && typeof out.then === 'function';
+       }), JSON.stringify(awkward));
+    return Promise.all(awkward.map(function (c) { return access.history(c); })).then(function (all) {
+      ok('and each resolves rather than crashing the caller',
+         all.every(function (r) { return r && typeof r.ok === 'boolean'; }));
+    });
+  });
+
+  step(function () {
+    section('An adapter that throws instead of rejecting');
+    var thrower = {
+      id: 'thrower', label: 'thrower', verified: false,
+      search: function () { throw new Error('synchronous explosion'); },
+      history: function () { throw new Error('synchronous explosion'); }
+    };
+    var access = A.createAccess({
+      providers: [thrower, stubProvider('two')],
+      transport: fakeTransport({ 'two/history': MFAPI_HISTORY }),
+      cache: Cache.createCache({ store: Cache.memoryStore() })
+    });
+    return access.history('118989').then(function (r) {
+      ok('is treated as a provider fault, not an exception escaping the layer',
+         r.ok && r.provider === 'two', JSON.stringify(r));
+      ok('and is skipped for the session',
+         access.state().providers[0].status === 'skipped');
     });
   });
 

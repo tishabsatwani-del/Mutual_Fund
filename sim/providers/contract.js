@@ -47,9 +47,14 @@
     return null;
   }
 
+  /* No minimum length. A fund that has published one NAV so far is a correct
+   * answer, not a broken provider -- section 5.6 promises that new funds "require
+   * nothing", and a fund launched yesterday has exactly one row. Whether a series
+   * is long enough to measure anything is section 8.4's question, answered on
+   * screen with RR-TOO-YOUNG and RR-FEW-WINDOWS, not a reason to blacklist the
+   * provider that served it faithfully. */
   function validateSeries(value) {
     if (!Array.isArray(value)) return 'not a list';
-    if (value.length < 2) return 'fewer than two observations';
     var previous = '';
     for (var i = 0; i < value.length; i++) {
       var p = value[i];
@@ -70,6 +75,23 @@
     if (bad) return 'scheme: ' + bad;
     return validateSeries(value.series);
   }
+
+  /* Three things can go wrong with a provider reply, and the layer has to tell
+   * them apart, because only one of them is the provider's fault:
+   *
+   *   absent     the provider answered correctly, and the answer is "nothing
+   *              here for this code". A retired scheme, a code that never
+   *              existed. Move to the next provider; this one stays healthy.
+   *   malformed  the reply cannot be read at all -- a shape change, junk.
+   *              Section 5.1's skip-for-the-session rule applies.
+   *   anything else (transport error, timeout, 5xx) is a plain failure and
+   *              also skips the provider.
+   *
+   * Collapsing the first two is what let one dead scheme code take the whole
+   * chain down with it.
+   */
+  function absent(message) { var e = new Error(message); e.absent = true; return e; }
+  function malformed(message) { var e = new Error(message); e.malformed = true; return e; }
 
   /* Adapters differ in what they call things; every one of them ends here, so
    * the cleaning rules of 5.2 are applied exactly once, in exactly one place. */
@@ -108,7 +130,7 @@
       if (obj[list[i]] !== undefined && obj[list[i]] !== null && obj[list[i]] !== '') return obj[list[i]];
     }
     /* one case-insensitive sweep, so schemeName and schemename both land */
-    var lower = {};
+    var lower = Object.create(null);   /* never inherit from Object.prototype */
     Object.keys(obj).forEach(function (k) { lower[k.toLowerCase()] = obj[k]; });
     for (var j = 0; j < list.length; j++) {
       var v = lower[String(list[j]).toLowerCase()];
@@ -164,6 +186,7 @@
     validateSchemes: validateSchemes, validateSeries: validateSeries,
     validateHistory: validateHistory,
     toScheme: toScheme, toSeries: toSeries, pick: pick,
+    absent: absent, malformed: malformed,
     conform: conform, cannedTransport: cannedTransport
   };
   if (typeof module === 'object' && module.exports) module.exports = api;

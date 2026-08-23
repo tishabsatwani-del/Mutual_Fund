@@ -150,7 +150,7 @@
     var opts = options || {};
     var store = opts.store || safeIndexedDbStore() || memoryStore();
     var now = opts.now || function () { return Date.now(); };
-    var searches = {};
+    var searches = Object.create(null);
 
     function historyKey(providerless) { return 'history:' + providerless; }
 

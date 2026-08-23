@@ -31,8 +31,16 @@
    * provider for correctly answering "no such scheme", which would burn the
    * whole chain on one bad code. So a reply that is a valid answer meaning
    * "not here" is treated as absence, not as failure: the chain moves on and
-   * the provider stays healthy. Recorded in sim/README.md. */
+   * the provider stays healthy. Recorded in sim/README.md.
+   *
+   * Absence is not only an HTTP status. api.mfapi.in reports its own failures
+   * inside a 200 body, so the adapters tag what they know: an explicit "no such
+   * scheme" is C.absent, an unreadable payload is C.malformed. Reading the
+   * status alone missed exactly the provider the code documents as answering
+   * in-body. */
   function classify(error) {
+    if (error && error.absent) return 'absent';
+    if (error && error.malformed) return 'malformed';
     var status = error && error.status;
     if (status === 404 || status === 400 || status === 410) return 'absent';
     return 'failed';
@@ -112,7 +120,10 @@
     var skipped = {};            /* provider id -> why, for the rest of the session */
     var blocked = {};            /* the drill of 16.4 */
     var attempts = [];           /* what happened, for the About page and the drill */
-    var inFlightByCode = {};     /* one fetch per scheme, however many callers ask */
+    /* Object.create(null), not {}: a scheme code of "constructor" or "__proto__"
+     * would otherwise resolve against Object.prototype and hand the caller
+     * something that is not a promise, crashing it synchronously. */
+    var inFlightByCode = Object.create(null);
 
     (opts.block || []).forEach(function (id) { blocked[id] = 'blocked for the failover drill'; });
 
@@ -132,16 +143,28 @@
     function chain(call, validate, what) {
       var list = usable();
       var reasons = [];
+      var sawAbsence = false;
 
       function step(i) {
         if (i >= list.length) {
-          return Promise.resolve({ ok: false, reasons: reasons, slot: 'ERR-DATA-DOWN' });
+          /* Two different failures need two different sentences. Every provider
+           * saying "nothing here" means the scheme is missing, and telling the
+           * visitor the data providers are down would be untrue. */
+          return Promise.resolve({
+            ok: false,
+            kind: sawAbsence ? 'absent' : 'down',
+            reasons: reasons
+          });
         }
         var provider = list[i];
         return withTimeout(function (signal) {
-          return call(provider, { get: function (url, o) {
-            return transport(url, { signal: (o && o.signal) || signal });
-          }, signal: signal });
+          /* An adapter that throws rather than rejecting is still a provider
+           * fault, not an exception escaping the layer. */
+          try {
+            return Promise.resolve(call(provider, { get: function (url, o) {
+              return transport(url, { signal: (o && o.signal) || signal });
+            }, signal: signal }));
+          } catch (thrown) { return Promise.reject(thrown); }
         }, timeoutMs, hasAbort).then(function (value) {
           var bad = validate(value);
           if (bad) {
@@ -156,7 +179,10 @@
         }, function (error) {
           var kind = error && error.timedOut ? 'failed' : classify(error);
           var detail = (error && error.message) || String(error);
-          if (kind === 'failed') skipped[provider.id] = detail;
+          /* Only a fault removes a provider from the chain. An honest "not
+           * here" leaves it available for the next scheme. */
+          if (kind === 'failed' || kind === 'malformed') skipped[provider.id] = detail;
+          if (kind === 'absent') sawAbsence = true;
           record({ provider: provider.id, what: what, outcome: kind, detail: detail });
           reasons.push(provider.id + ': ' + detail);
           return step(i + 1);
@@ -180,9 +206,15 @@
           C.validateSchemes,
           'search'
         ).then(function (result) {
-          if (!result.ok) return { ok: false, schemes: [], slot: 'ERR-DATA-DOWN', reasons: result.reasons };
+          if (!result.ok) {
+            if (result.kind === 'absent') {
+              return { ok: true, schemes: [], provider: null, cached: false, slot: 'EMPTY-SEARCH' };
+            }
+            return { ok: false, schemes: [], slot: 'ERR-DATA-DOWN', reasons: result.reasons };
+          }
           cache.writeSearch(q, { schemes: result.value, provider: result.provider });
-          return { ok: true, schemes: result.value, provider: result.provider, cached: false };
+          return { ok: true, schemes: result.value, provider: result.provider,
+                   cached: false, slot: result.value.length ? null : 'EMPTY-SEARCH' };
         });
       },
 
@@ -214,12 +246,17 @@
                          provider: result.provider, cached: false, stale: false };
               });
             }
+            /* Section 5.6: a scheme that has stopped being served keeps its
+             * history. A stored copy is still worth showing, labelled. */
             if (cached.hit) {
               return { ok: true, scheme: cached.value.scheme, series: cached.value.series,
-                       provider: null, cached: true, stale: true,
-                       storedOn: cached.storedOn, slot: 'ERR-DATA-DOWN', reasons: result.reasons };
+                       provider: null, cached: true, stale: true, storedOn: cached.storedOn,
+                       slot: result.kind === 'absent' ? 'RR-STALE' : 'ERR-DATA-DOWN',
+                       reasons: result.reasons };
             }
-            return { ok: false, slot: 'ERR-DATA-DOWN', reasons: result.reasons };
+            return { ok: false, kind: result.kind,
+                     slot: result.kind === 'absent' ? 'RR-NO-HISTORY' : 'ERR-DATA-DOWN',
+                     reasons: result.reasons };
           });
         });
 

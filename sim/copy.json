@@ -209,6 +209,11 @@
       "budget": 200,
       "where": "The scheme has stopped publishing NAV. The date is substituted."
     },
+    "RR-NO-HISTORY": {
+      "text": "",
+      "budget": 240,
+      "where": "No provider has any NAV history for the selected scheme. Distinct from every provider being unreachable, which is ERR-DATA-DOWN."
+    },
     "RR-TOO-YOUNG": {
       "text": "",
       "budget": 260,
