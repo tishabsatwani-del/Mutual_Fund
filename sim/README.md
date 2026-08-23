@@ -19,13 +19,98 @@ reach. Nothing here is wired to it.
 | `states.json` | Thresholds and the next-step mapping. Numbers and identifiers only |
 | `copy.js` | The three copy rules of §13, as a lint |
 | `copy.json` | The slot inventory with character budgets. Every string empty, by design |
+| `access.js` | The data access layer of §5.1, §5.3 and §5.5: the chain, the failover, the caches, the queue |
+| `cache.js` | The on-device cache of §5.5 — IndexedDB in a browser, memory everywhere else |
+| `providers/contract.js` | The one interface every provider is reached through, and the validation that decides what "malformed" means |
+| `providers/mfapi.js` | Provider 1, api.mfapi.in |
+| `providers/tigzig.js` | Provider 2, TIGZIG MFPRO API — endpoint shapes provisional, see below |
+| `providers/worker.js` | Provider 3, the Cloudflare Worker — holds its place, deliberately not built |
 | `tests/fixtures.test.js` | §17 acceptance criteria 1–9 |
 | `tests/copy.test.js` | §13 and §16.8 |
+| `tests/access.test.js` | §5.1, §5.3, §5.5 and the criterion 12 drill |
+| `tests/idb.test.js` | The IndexedDB half of §5.5, in real Chromium |
 
 ```
 node sim/tests/fixtures.test.js     # 97 checks
 node sim/tests/copy.test.js         # 27 checks
+node sim/tests/access.test.js       # 47 checks
+python3 -m http.server 8781 &       # tests/idb.test.js needs an origin
+node sim/tests/idb.test.js          # 11 checks
 ```
+
+## The access layer
+
+Everything the app knows about data arrives through `access.js`. Adapters never
+call `fetch`: they are handed a transport, which is what keeps the 8-second
+timeout, the failure classification and the failover policy in one file instead
+of three, and what lets the whole chain be tested against canned bodies — the
+same mechanism the criterion 12 drill uses in the browser, by blocking providers
+at the layer rather than at the firewall.
+
+```
+access.block('mfapi'); access.block('tigzig');   // the drill
+access.state()                                    // which provider answered, and why the others did not
+```
+
+### Judgment calls in the chain
+
+**A 404 is an answer, not a failure.** §5.1 says a provider that "errors, times
+out, or returns malformed data is skipped for the rest of the session". Read
+strictly, that blacklists a provider for correctly answering *no such scheme* —
+one bad code would burn the chain for the whole session. So a reply that is a
+valid answer meaning "not here" (404, 400, 410) moves the chain on without
+marking the provider unhealthy. Network errors, timeouts, 5xx and malformed
+payloads all skip the provider exactly as written.
+
+**One in-flight fetch per scheme.** Module A asks for the fund and its proxy,
+and Module B may ask for the same fund moments later. Concurrent callers for one
+scheme share a single request. §5.5 asks integrators to respect rate limiting,
+and the cheapest request is the one never sent.
+
+**The TTL day is the visitor's day, not UTC's.** AMFI publishes a NAV late in
+the IST evening. Stamping the cache in UTC would call yesterday's copy fresh for
+anyone opening the app before about 5:30 am IST, hiding the NAV that had already
+been published. The stamp uses local date parts, and the suite pins this by
+running the same instant under `TZ=UTC` and `TZ=Asia/Kolkata`.
+
+**The cache fails closed, never open.** An IndexedDB request that neither
+succeeds nor errors — blocked by another tab holding an older version, or a
+browser whose `result` getter raises instead of returning — would leave a promise
+pending forever, and a pending cache read is a page that never finishes loading.
+Every branch settles. Reaching for the global is itself guarded, because a
+browser told to block site data raises `SecurityError` from the `indexedDB`
+getter, so even `typeof indexedDB` is not a safe question. Anything going wrong
+means the memory store and a network call. §14 says the app never white-screens;
+this is where that is won or lost, and `tests/idb.test.js` runs both hostile
+browsers.
+
+### Provider status
+
+| Provider | State |
+|---|---|
+| 1 · api.mfapi.in | Written against its documented shapes. `verified: false` until §16.2's live check of CORS headers, rate-limit behaviour and date format |
+| 2 · TIGZIG MFPRO API | Written, but §5.1 says *"confirm exact endpoint shapes from its live documentation at build time; do not hardcode from this spec"*. The paths and payload locations sit in one `ENDPOINTS` block at the top of the file; confirming the live docs should be an edit to that block and nothing else. Then run `tests/access.test.js` — the conformance harness is what proves the adapter, and it is the same harness provider 1 passes |
+| 3 · own Cloudflare Worker | Not built. AMFI's old NAV download format retires **28 August 2026**, and both §5.1 and the author's instruction say to build the parser against the new format inspected live. The adapter exists, holds its place in the chain, and refuses with a reason the layer understands, so it is skipped like any unavailable provider |
+
+No adapter claims `verified: true`, and a fixture asserts that none does. Nothing
+should flip that flag except a person who has actually looked at the live
+responses.
+
+## Runbook (§15)
+
+| Event | What happens | What anyone has to do |
+|---|---|---|
+| mfapi.in slow, down or retired | The layer times out at 8 s or catches the error, skips it for the session, and provider 2 answers | Nothing |
+| All public mirrors gone | The Worker serves directly from AMFI | Nothing — once the Worker is built |
+| AMFI changes its file format | Provider 3 only; providers 1–2 usually adapt first | One small Worker update. This is the 28 Aug 2026 case |
+| A provider renames a field | The adapters try several spellings before giving up; a rename that defeats them makes the reply malformed, which fails over rather than producing a wrong number | Edit that adapter's mapping; run `tests/access.test.js` |
+| SEBI redraws fund categories | Unmapped categories degrade to fund-only statistics | Review `benchmarks.json` once |
+| GitHub Pages policy change | The site is a static folder | Re-point DNS to any static host |
+| Every live provider disappears | Cached last-good data is shown, labelled, behind the `ERR-DATA-DOWN` slot | Re-point the Worker at a copy of the archival floor: the community SQLite archive at `captn3m0/historical-mf-data`, which is never called at runtime and exists precisely for this |
+| Domain lapses | The printed QR dies. The only unrecoverable failure | Prevented by multi-year registration, auto-renew, and a calendar reminder |
+
+After launch the system has no scheduled tasks. The one standing obligation is
+that the domain stays paid.
 
 ## Decisions taken under "should", recorded as §0 asks
 
@@ -101,7 +186,8 @@ fixtures assert all three by reading its source.
   the spec states, but §19 item 4 makes them the author's to freeze.
 - **`benchmarks.json` is not written yet.** §6.2 requires resolving real scheme
   codes by inception date and verifying them by hand, which needs live provider
-  data.
+  data through the access layer. The resolved table goes to the author for one
+  read before anything is marked verified.
 - **Acceptance criterion 5 is pending, not passing.** The real-fund cross-check
   needs live provider data and a second established tool. This environment's
   proxy blocks all outbound hosts, so it cannot be run here and is reported as
