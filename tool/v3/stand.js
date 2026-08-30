@@ -132,7 +132,7 @@
       '<div class="scroller"><table class="ledger"><tbody>' +
       '<tr><td>Put in</td><td class="n">' + money(f.put) + '</td></tr>' +
       '<tr><td>Taken out</td><td class="n">' + (f.took ? money(f.took) : '—') + '</td></tr>' +
-      '<tr><td>Worth ' + (f.valueSource === 'visitor' ? 'today, as you entered it' :
+      '<tr><td>Worth ' + (f.valueSource === 'visitor' ? 'as you entered it' :
         'at the latest NAV') + '</td><td class="n">' + money(f.value) + '</td></tr>' +
       '</tbody></table></div></div>';
 

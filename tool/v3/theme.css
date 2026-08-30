@@ -164,9 +164,13 @@ h2 { font-family: var(--serif); font-weight: 400; font-size: 1.25rem; margin: 0 
    in a column with the figure orphaned beneath its own label. The layout is
    the line's, not the box's. */
 .line {
-  display: flex; align-items: baseline; gap: 1rem;
+  display: flex; align-items: baseline; gap: 1rem; flex-wrap: wrap;
   padding: .7rem 0; border-top: 1px solid var(--rule);
 }
+/* A long figure -- "Higher than 85 of 100" -- used to squeeze its own label
+   into two cramped lines to stay on the same row. It drops to the next line
+   instead, still against the right margin. */
+.line .val { margin-left: auto; }
 .reading .line:first-of-type { margin-top: 1rem; }
 .line .what { flex: 1; }
 .line .val {
@@ -317,6 +321,21 @@ body[data-view="about"] #foot-about { display: none; }
 .ll-compare { stroke: var(--slate); stroke-width: 1.25; stroke-linejoin: round;
                vector-effect: non-scaling-stroke; }
 .ll-dot { fill: var(--ink); }
+/* The names below the line are HTML, not SVG: inside a viewBox stretched with
+   preserveAspectRatio="none" a glyph is squashed to a third of its width on a
+   phone. Positioned by percentage, they sit exactly under their dots and are
+   set in the page's own type. */
+.ll-wrap { position: relative; }
+.ll-names { position: relative; height: 1.1rem; margin-top: -1.35rem; }
+.ll-name {
+  position: absolute; transform: translateX(-50%); white-space: nowrap;
+  font-family: var(--sans); font-size: .8125rem; color: var(--muted);
+}
+.ll-name.ll-first { transform: none; }
+.ll-name.ll-last { transform: translateX(-100%); }
+.ll-name.ll-yours { color: var(--ink); }
+@media (prefers-color-scheme: dark) { .ll-name.ll-yours { color: var(--marker-line); } }
+
 .ll-mark-text { fill: var(--muted); font-family: var(--sans); font-size: 13px;
                 font-variant-numeric: lining-nums tabular-nums; }
 .ll-yours { fill: var(--ink); }

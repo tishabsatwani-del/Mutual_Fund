@@ -380,9 +380,9 @@
     var said = {
       'XIRR-NEED-IN': 'Not one line here has money going in.',
       'XIRR-NEED-VALUE': bad.found > 1
-        ? 'There is more than one "worth today" figure.'
+        ? 'There is more than one figure for what it is worth.'
         : 'The ledger has ' + W.count(rows.length) +
-          (rows.length === 1 ? ' payment' : ' payments') + ' and no figure for what it is worth today.',
+          (rows.length === 1 ? ' payment' : ' payments') + ' and no figure for what it is worth.',
       'XIRR-ROW-FIX': 'One line is not finished' +
         (bad.row != null ? ': the one dated ' + (rows[bad.row] ? date(rows[bad.row].t) : '') : '') + '.',
       'XIRR-SAME-SIGN': 'Every figure here points the same way, so there is no gain or loss to spread over the dates.',

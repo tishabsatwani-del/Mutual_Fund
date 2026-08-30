@@ -147,22 +147,43 @@
     svg += '<path class="ll-life" d="' + path(full, s) + '" fill="none"/>';
 
     /* Marks sit under the line with their names, so the reader reads along the
-       line rather than up into it. A dot on the line, a name beneath. */
+     * line rather than up into it. The DOT belongs in the drawing; the NAME
+     * does not.
+     *
+     * The viewBox is 1000 units wide and the phone gives it about 340, with
+     * preserveAspectRatio="none" so the line stretches to whatever width there
+     * is. That stretch applies to glyphs too: a <text> inside this SVG comes
+     * out at full height and a third of its width — legible on a desktop, a
+     * squashed smear on a phone, which is where this is read. The names are
+     * HTML underneath instead, positioned by percentage, so they are set in the
+     * page's own type at the page's own size and cannot be distorted at all. */
+    var names = [];
     (o.marks || []).slice(0, 3).forEach(function (m) {
       if (!isFinite(m.t)) return;
       var x = s.x(m.t), at = nearest(full, m.t);
       if (at) svg += '<circle class="ll-dot" cx="' + x.toFixed(1) + '" cy="' + s.y(at.v).toFixed(1) + '" r="3"/>';
-      svg += '<text class="ll-mark-text" x="' + x.toFixed(1) + '" y="' + (H - 6) + '" ' +
-             'text-anchor="middle">' + esc(m.text || '') + '</text>';
+      names.push({ pct: (x / W) * 100, text: m.text || '', cls: '' });
     });
 
     if (bandMid !== null) {
-      svg += '<text class="ll-mark-text ll-yours" x="' + bandMid.toFixed(1) + '" y="' + (H - 6) +
-             '" text-anchor="middle">your stretch</text>';
+      names.push({ pct: (bandMid / W) * 100, text: 'your stretch', cls: ' ll-yours' });
     }
 
     svg += '</svg>';
-    return svg;
+
+    /* aria-hidden: the SVG's own label already describes the whole picture, so
+       a screen reader hearing these three words again learns nothing. */
+    var strip = '<div class="ll-names" aria-hidden="true">' + names.map(function (n) {
+      var at = Math.max(0, Math.min(100, n.pct));
+      /* A name is centred on its dot, except at the ends: the first mark sits
+         on the first NAV in the history and the last near the final one, and a
+         centred word there hangs half off the page. */
+      var edge = at < 8 ? ' ll-first' : at > 92 ? ' ll-last' : '';
+      return '<span class="ll-name' + n.cls + edge + '" style="left:' +
+        at.toFixed(2) + '%">' + esc(n.text) + '</span>';
+    }).join('') + '</div>';
+
+    return '<div class="ll-wrap">' + svg + strip + '</div>';
   }
 
   function nearest(points, t) {

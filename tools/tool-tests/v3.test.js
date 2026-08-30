@@ -163,9 +163,24 @@ const NIGHT = { paper: '#12161E', ink: '#E8E6E1', muted: '#9AA1AE', slate: '#8FA
          const r = document.querySelector('.ll-band');
          return r ? parseFloat(r.getAttribute('height')) : 999;
        })) < 142);
-    ok('the three names sit beneath the line',
-       (await page.evaluate(() => [...document.querySelectorAll('.ll-mark-text')]
-          .every(t => parseFloat(t.getAttribute('y')) > 150))) === true);
+    /* The names are HTML under the SVG, not <text> inside it: this viewBox is
+       stretched with preserveAspectRatio="none", so a glyph drawn inside it
+       comes out at a third of its width on a phone. */
+    ok('the names sit beneath the line, in the page’s own type',
+       (await page.locator('.ll-names .ll-name').count()) >= 3 &&
+       (await page.locator('.lifeline text').count()) === 0,
+       (await page.locator('.ll-names .ll-name').count()) + ' names, ' +
+       (await page.locator('.lifeline text').count()) + ' inside the drawing');
+    ok('and they are not squashed by the stretch the line depends on',
+       (await page.evaluate(() => {
+         const svg = document.querySelector('.lifeline');
+         const n = document.querySelector('.ll-name');
+         if (!svg || !n) return null;
+         const box = svg.getBoundingClientRect();
+         const vb = svg.viewBox.baseVal.width;
+         /* the drawing is squeezed to about a third; the name must not be */
+         return { squeeze: box.width / vb, nameSize: parseFloat(getComputedStyle(n).fontSize) };
+       }).then(r => r && r.squeeze < 0.6 && r.nameSize >= 12)) === true);
 
     const named = await page.locator('#reading .slot-empty code').allInnerTexts();
     ok('every unwritten sentence is named on screen, not left blank',
@@ -252,8 +267,8 @@ const NIGHT = { paper: '#12161E', ink: '#E8E6E1', muted: '#9AA1AE', slate: '#8FA
 
     ok('the life-line is drawn here too', (await page.locator('#r-out .lifeline').count()) === 1);
     ok('with the worst, best and latest windows named beneath it',
-       (await page.locator('#r-out .ll-mark-text').count()) === 3,
-       String(await page.locator('#r-out .ll-mark-text').count()));
+       (await page.locator('#r-out .ll-names .ll-name').count()) === 3,
+       String(await page.locator('#r-out .ll-names .ll-name').count()));
     ok('each with a dot on the line itself',
        (await page.locator('#r-out .ll-dot').count()) === 3);
     ok('and no marker band, because this is not the reader’s own stretch',
@@ -425,8 +440,8 @@ const NIGHT = { paper: '#12161E', ink: '#E8E6E1', muted: '#9AA1AE', slate: '#8FA
     await page.fill('#m-worth', '');
     await page.click('#m-run');
     await page.waitForTimeout(200);
-    ok('with nothing entered for worth today it says so, and names the sentence',
-       /no figure for what it is worth today/.test(await page.locator('#m-out').innerText()) &&
+    ok('with nothing entered for what it is worth it says so, and names the sentence',
+       /no figure for what it is worth/.test(await page.locator('#m-out').innerText()) &&
        /XIRR-NEED-VALUE/.test(await page.locator('#m-out').innerText()),
        await page.locator('#m-out').innerText());
 
@@ -657,6 +672,16 @@ const NIGHT = { paper: '#12161E', ink: '#E8E6E1', muted: '#9AA1AE', slate: '#8FA
     await page.waitForTimeout(700);
     screens.recordResult = await read('#r-out');
 
+    await page.evaluate(() => { location.hash = 'stand'; });
+    await page.waitForTimeout(200);
+    await page.setInputFiles('#file', navFile);
+    await page.waitForTimeout(800);
+    await page.click('#example');
+    await page.waitForTimeout(300);
+    await page.click('#run');
+    await page.waitForTimeout(800);
+    screens.standResult = await read('#reading');
+
     await page.evaluate(() => { location.hash = 'plan'; });
     await page.waitForTimeout(300);
     await page.fill('#p-have', '100000');
@@ -665,6 +690,10 @@ const NIGHT = { paper: '#12161E', ink: '#E8E6E1', muted: '#9AA1AE', slate: '#8FA
     await page.fill('#p-needed', '5000000');
     await page.waitForTimeout(400);
     screens.planResult = await read('#p-out');
+
+    await page.evaluate(() => { location.hash = 'about'; });
+    await page.waitForTimeout(200);
+    screens.about = await read('#main > [data-view="about"]');
 
     /* The two budgets review §4 states for Tool 1, in words. */
     ok('Tool 1’s ledger keeps inside its forty words of labels',
@@ -701,6 +730,15 @@ const NIGHT = { paper: '#12161E', ink: '#E8E6E1', muted: '#9AA1AE', slate: '#8FA
       .filter(f => f.rule === 'timeless');
     ok('nothing written into the page itself references a moment', stale.length === 0,
        JSON.stringify(stale));
+
+    /* Half of rule 2 applies to the readings as well. A rendered date or
+       percentage comes from the reader's own data and is theirs to see; a word
+       meaning "now" is never data, and it survived in four places the markup
+       lint could not reach because the screens generate them. */
+    const nowWords = COPY.check({ slots }).filter(f =>
+      f.rule === 'timeless' && /means "now"/.test(f.detail));
+    ok('and no screen prints a word meaning "now", wherever it is generated',
+       nowWords.length === 0, JSON.stringify(nowWords));
 
     /* Counted and printed for the screens the review has not budgeted yet, so
        the author sets those numbers against something measured. */

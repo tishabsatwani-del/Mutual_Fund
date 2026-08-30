@@ -95,7 +95,7 @@
       }) + '</div>';
 
     /* Where each of those windows started, and where the latest one places.
-     * "What the fund's page prints today" is the latest window, and its place
+     * The window a fund's own page prints is the latest one, and its place
      * is the question a fund's own page can never answer. */
     var latest = pts[pts.length - 1];
     var place = E.placeInHundred(latest.r, s.values);
@@ -105,7 +105,7 @@
       trow('The best began', W.date(s.best.startT), W.pct(s.best.r)) +
       trow('The latest began', W.date(latest.startT), W.pct(latest.r)) +
       '</tbody></table></div>' +
-      '<p class="gloss">The latest window is what this fund’s own page prints today. ' +
+      '<p class="gloss">The latest window is the one this fund’s own page prints. ' +
       'It is higher than ' + place + ' of every 100 windows of this length.</p></div>';
 
     /* Two counts under the distribution. A count, not a share: a share reads as
@@ -152,7 +152,7 @@
     var below = s.values.filter(function (v) { return v < 0; }).length;
     return '<div class="section"><p class="label">Against a deposit</p>' +
       '<label class="field" for="r-dep" style="max-width:14rem">' +
-      '<span class="label">What a fixed deposit pays today, %</span>' +
+      '<span class="label">What a fixed deposit pays, %</span>' +
       '<input type="number" id="r-dep" inputmode="decimal" step="0.1" min="0" max="100"></label>' +
       '<div class="scroller"><table class="ledger"><tbody>' +
       '<tr><td>Windows that ended below zero</td><td class="n">' + W.count(below) + ' of ' +
