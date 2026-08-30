@@ -15,7 +15,6 @@ var Cache = require('../cache.js');
 var C = require('../providers/contract.js');
 var mfapi = require('../providers/mfapi.js');
 var tigzig = require('../providers/tigzig.js');
-var worker = require('../providers/worker.js');
 
 var passed = 0, failed = [], pending = [];
 function ok(name, condition, detail) {
@@ -128,14 +127,24 @@ function run() {
   });
 
   step(function () {
-    ok('the worker adapter holds its place in the chain and refuses honestly',
-       worker.built === false && typeof worker.reason === 'string' && worker.reason.length > 30);
-    todo('provider 3, the Cloudflare Worker parser',
-         'AMFI\'s new file format goes live on 28 August 2026 and is inspected before it is built');
-    todo('live shape confirmation for providers 1 and 2 (section 16.2)',
+    /* The chain is two public, no-key sources called straight from the reader's
+     * browser. The Cloudflare Worker is gone on purpose: it ran on the author's
+     * own infrastructure, which is a key to hold, a bill to pay and a thing to
+     * break into. Two public doors plus the upload door leave nothing of the
+     * author's anywhere in the path. */
+    var fs = require('fs'), path = require('path');
+    var src = fs.readFileSync(path.join(__dirname, '../providers/mfapi.js'), 'utf8') +
+              fs.readFileSync(path.join(__dirname, '../providers/tigzig.js'), 'utf8');
+    ok('every source in the chain is a public host', [mfapi, tigzig].every(function (p) {
+      return /^https:\/\//.test(p.base || (p.endpoints && p.endpoints.base));
+    }));
+    ok('and neither needs a key of the author\'s', !/apiKey|api_key|bearer|Authorization/i.test(src));
+    ok('no leg of the chain runs on infrastructure of the author\'s',
+       !fs.existsSync(path.join(__dirname, '../providers/worker.js')));
+    todo('live shape confirmation for both sources',
          'this environment has no outbound network; verified stays false until checked');
     ok('no adapter claims to be verified before anyone has checked it',
-       [mfapi, tigzig, worker].every(function (p) { return p.verified === false; }));
+       [mfapi, tigzig].every(function (p) { return p.verified === false; }));
   });
 
   step(function () {
@@ -205,19 +214,21 @@ function run() {
   });
 
   step(function () {
+    /* With both public sources blocked there is no third leg to fall to, by
+     * design. The layer has to fail cleanly and name it, because that is the
+     * exact moment the upload door has to appear. */
     var access = A.createAccess({
-      providers: [stubProvider('one'), stubProvider('two'), stubProvider('three')],
-      transport: fakeTransport({ 'three/history': MFAPI_HISTORY }),
+      providers: [stubProvider('one'), stubProvider('two')],
+      transport: fakeTransport({}),
       cache: Cache.createCache({ store: Cache.memoryStore() }),
       block: ['one', 'two']
     });
     return access.history('118989').then(function (r) {
-      ok('with providers 1 and 2 blocked, the flow completes on provider 3',
-         r.ok && r.provider === 'three', JSON.stringify(r));
+      ok('with both sources blocked the layer fails cleanly rather than hanging',
+         r.ok === false && r.slot === 'ERR-DATA-DOWN', JSON.stringify(r));
       var s = access.state();
-      ok('the drill reports exactly which providers were blocked',
-         s.providers[0].status === 'blocked' && s.providers[1].status === 'blocked' &&
-         s.providers[2].status === 'available');
+      ok('the drill reports exactly which sources were blocked',
+         s.providers[0].status === 'blocked' && s.providers[1].status === 'blocked');
     });
   });
 

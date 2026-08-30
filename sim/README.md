@@ -24,7 +24,6 @@ reach. Nothing here is wired to it.
 | `providers/contract.js` | The one interface every provider is reached through, and the validation that decides what "malformed" means |
 | `providers/mfapi.js` | Provider 1, api.mfapi.in |
 | `providers/tigzig.js` | Provider 2, TIGZIG MFPRO API — endpoint shapes provisional, see below |
-| `providers/worker.js` | Provider 3, the Cloudflare Worker — holds its place, deliberately not built |
 | `tests/fixtures.test.js` | §17 acceptance criteria 1–9 |
 | `tests/copy.test.js` | §13 and §16.8 |
 | `tests/access.test.js` | §5.1, §5.3, §5.5 and the criterion 12 drill |
@@ -119,7 +118,7 @@ browsers.
 |---|---|
 | 1 · api.mfapi.in | Written against its documented shapes. `verified: false` until §16.2's live check of CORS headers, rate-limit behaviour and date format |
 | 2 · TIGZIG MFPRO API | Written, but §5.1 says *"confirm exact endpoint shapes from its live documentation at build time; do not hardcode from this spec"*. The paths and payload locations sit in one `ENDPOINTS` block at the top of the file; confirming the live docs should be an edit to that block and nothing else. Then run `tests/access.test.js` — the conformance harness is what proves the adapter, and it is the same harness provider 1 passes |
-| 3 · own Cloudflare Worker | Not built. AMFI's old NAV download format retires **28 August 2026**, and both §5.1 and the author's instruction say to build the parser against the new format inspected live. The adapter exists, holds its place in the chain, and refuses with a reason the layer understands, so it is skipped like any unavailable provider |
+| 3 · own Cloudflare Worker | **Removed.** It ran on the author's own infrastructure — a key to hold, a bill to pay, and something to break into. The chain is now two public no-key sources called straight from the reader's browser, with the upload door as the third leg. Nothing of the author's sits anywhere in the data path, and a fixture asserts the file is gone |
 
 No adapter claims `verified: true`, and a fixture asserts that none does. Nothing
 should flip that flag except a person who has actually looked at the live
@@ -146,8 +145,8 @@ reproduction and are now regression-tested in `tests/access.test.js`:
 | Event | What happens | What anyone has to do |
 |---|---|---|
 | mfapi.in slow, down or retired | The layer times out at 8 s or catches the error, skips it for the session, and provider 2 answers | Nothing |
-| All public mirrors gone | The Worker serves directly from AMFI | Nothing — once the Worker is built |
-| AMFI changes its file format | Provider 3 only; providers 1–2 usually adapt first | One small Worker update. This is the 28 Aug 2026 case |
+| Both public sources gone | The layer fails cleanly with `ERR-DATA-DOWN`, which is the signal for the upload door | Nothing — the upload screen is complete on its own |
+| AMFI changes its file format | The public sources adapt first; the upload parser reads content rather than headers | Refresh the upload guide's list of sites — a text edit |
 | A provider renames a field | The adapters try several spellings before giving up; a rename that defeats them makes the reply malformed, which fails over rather than producing a wrong number | Edit that adapter's mapping; run `tests/access.test.js` |
 | SEBI redraws fund categories | Unmapped categories degrade to fund-only statistics | Review `benchmarks.json` once |
 | GitHub Pages policy change | The site is a static folder | Re-point DNS to any static host |

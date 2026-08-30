@@ -205,26 +205,28 @@
    * crossover is the single most common reason two figures on one screen look
    * like a contradiction, so the tool says which side of it the reader is on. */
   function twoNumbersCard(abs, rate, years) {
+    /* The earlier wording said the total overtakes the rate "near the two-year
+     * mark", which is true for a monthly SIP and false for a lump sum: a lump
+     * crosses at exactly twelve months, because (1+r)^1 - 1 is r. One line
+     * that is true for both is simply how many years the total has inside it. */
     var absAhead = abs > rate;
     var sentence = years < 1
       ? 'Under a year, the yearly rate is the one to ignore. It stretches a short stretch to a ' +
         'twelve-month pace: a 5% gain in two months reads as about 34% a year, which is not something ' +
         'that has happened to anyone. Read the total gain instead.'
       : absAhead
-        ? 'Your total gain is now the bigger of the two. That happens to everyone somewhere near the ' +
-          'two-year mark and it means nothing is wrong: the total keeps piling up year after year, ' +
-          'while the yearly rate stays a per-year figure.'
-        : 'Your yearly rate is currently the bigger of the two. Early on, the total gain is still small ' +
-          'and the yearly rate stretches it to a twelve-month pace. As the years pass the total will ' +
-          'overtake it, usually near the two-year mark.';
+        ? 'The total is bigger than the yearly rate because it has ' + years.toFixed(1) +
+          ' years inside it; the rate has one.'
+        : 'The yearly rate is bigger than the total because most of this money has been invested for ' +
+          'less than a year so far; the rate is still a per-year figure.';
 
     return '<div class="card"><h2>Two numbers, two different questions</h2>' +
       '<p class="hint" style="margin:0 0 .9rem">Both are on this screen, they do not match, and ' +
       'nothing is wrong. They are answering different questions.</p>' +
       '<div class="scroll"><table class="data"><tbody>' +
-      '<tr><td><strong>Absolute return</strong><br><span class="qsub">How much more do I have than ' +
-      'I put in?</span></td><td>' + esc(A.signedPct(abs)) + '<br><span class="qsub">in total &middot; ' +
-      'no clock in it</span></td></tr>' +
+      '<tr><td><strong>Absolute return</strong><br><span class="qsub">Worth today, plus what you took ' +
+      'out, minus what you put in &mdash; as a share of what you put in.</span></td><td>' +
+      esc(A.signedPct(abs)) + '<br><span class="qsub">in total &middot; no clock in it</span></td></tr>' +
       '<tr><td><strong>XIRR</strong><br><span class="qsub">At what yearly speed did my own money ' +
       'travel?</span></td><td>' + pct(rate) + '<br><span class="qsub">a year &middot; counts every ' +
       'date</span></td></tr>' +
@@ -543,6 +545,7 @@
     var r = E.rollingReturns(series, years);
     if (!r.ok) return notice('bad', esc(r.message));
     var s = r.stats;
+    var below = r.values.filter(function (v) { return v < 0; }).length;
     var key = prefix || 'x';
     RATE_DATA[key] = r.values;
     var html = '';
@@ -587,14 +590,14 @@
       '</strong></td><td>' + pct(s.p75) + '</td><td>' + pct(s.max) + '</td>' +
       '</tr></tbody></table></div>' +
       '<p class="hint" style="margin:.5rem 0 1rem">A quarter of periods fell below ' +
-      pct(s.p25) + ', and a quarter came in above ' + pct(s.p75) + '. The average of ' +
-      pct(s.mean) + ' is shown for completeness; the spread above is what decided ' +
+      pct(s.p25) + ', and a quarter came in above ' + pct(s.p75) + '. The spread is what decided ' +
       'what any one investor actually got.</p>' +
       '<div class="stats">' +
       stat('Holding periods measured', s.count.toLocaleString()) +
-      stat('Periods that made money', pct(s.positiveShare, 0)) +
-      stat('Periods that lost money', pct(s.negativeShare, 0)) +
-      stat('Average (mean)', pct(s.mean)) +
+      /* Counts, not shares. A share reads as a property of the fund when it is
+       * really a property of the dates this file happens to start and end on. */
+      stat('Ended below zero', below.toLocaleString() + ' of ' + s.count.toLocaleString()) +
+      stat('Ended above zero', (s.count - below).toLocaleString() + ' of ' + s.count.toLocaleString()) +
       '</div>' + A.histogramChart(r.values, {
         years: years,
         caption: 'Each bar counts the ' + years + '-year periods that ended in that range'
@@ -614,8 +617,9 @@
       ' years earned <strong>' + pct(s.min) + ' a year</strong>. Someone who started at the best moment ' +
       'earned <strong>' + pct(s.max) + '</strong>. Same market, same holding period — the only difference ' +
       'was the day they started.</p>' +
-      '<p>' + pct(s.positiveShare, 0) + ' of these ' + years + '-year periods made money and ' +
-      pct(s.negativeShare, 0) + ' lost money.</p></div>';
+      '<p>Of the ' + s.count.toLocaleString() + ' periods measured, ' + below.toLocaleString() +
+      ' ended below zero. That count depends on the dates this file happens to cover, so read it as ' +
+      'a count of what is in front of you, not as a property of the fund.</p></div>';
 
     html += '<div class="meaning"><h3>What it does not mean</h3>' +
       '<p>This is what already happened, over the dates in this file and no others. It is not a forecast, ' +

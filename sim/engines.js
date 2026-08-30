@@ -64,8 +64,13 @@
   /* ------------------------------------------------------------------- XIRR
    *
    * §9.3. Newton-Raphson from 0.10; on divergence or oscillation, bisection on
-   * [-0.9999, 10]. If no sign change exists on that bracket, XIRR-NO-SOLVE --
-   * never a raw error, never NaN on screen.
+   * [-0.99, 100] -- that is -99% to +10,000% a year. The upper end is not
+   * fantasy: a real holding measured over a few weeks annualises to four
+   * figures, and a solver that refuses it forces the screen to say "no answer"
+   * when the honest answer is "here it is, and it is meaningless at this
+   * length". Whether to show it is the screen's decision, not the solver's.
+   * If no sign change exists on that bracket, XIRR-NO-SOLVE -- never a raw
+   * error, never NaN on screen.
    */
 
   function npv(rate, flows, t0) {
@@ -107,13 +112,13 @@
       var d = dNpv(r, flows, t0);
       if (!isFinite(d) || d === 0) break;
       var next = r - f / d;
-      if (!isFinite(next) || next <= -0.9999 || next > 10) break;   /* diverged */
+      if (!isFinite(next) || next <= -0.99 || next > 100) break;   /* diverged */
       if (Math.abs(next - r) < 1e-12) return { ok: true, rate: next, method: 'newton' };
       r = next;
     }
 
-    /* bisection on [-0.9999, 10] */
-    var lo = -0.9999, hi = 10;
+    /* bisection on [-0.99, 100] */
+    var lo = -0.99, hi = 100;
     var flo = npv(lo, flows, t0), fhi = npv(hi, flows, t0);
     if (!isFinite(flo) || !isFinite(fhi) || flo * fhi > 0) {
       return fail('XIRR-NO-SOLVE',
@@ -275,6 +280,15 @@
     return ((below + equal / 2) / n) * 100;
   }
 
+  /* Placement, said the way a reader says it: "higher than N of every 100".
+   * A decimal percentile invites a precision the data does not have, and it
+   * reads as a score. An integer count out of a hundred reads as a place. */
+  function placeInHundred(value, sortedValues) {
+    var p = percentileOf(value, sortedValues);
+    if (!isFinite(p)) return NaN;
+    return Math.max(0, Math.min(100, Math.round(p)));
+  }
+
   /* Share of windows at or above a rate the visitor typed (§8.1 item 5). */
   function shareAtOrAbove(points, rate) {
     if (!points.length || !isFinite(rate)) return NaN;
@@ -297,7 +311,8 @@
     toISO: toISO, fromISO: fromISO,
     npv: npv, xirr: xirr, validateRows: validateRows, toFlows: toFlows,
     rolling: rolling, describe: describe, quantile: quantile,
-    percentileOf: percentileOf, shareAtOrAbove: shareAtOrAbove, pointToPoint: pointToPoint
+    percentileOf: percentileOf, placeInHundred: placeInHundred,
+    shareAtOrAbove: shareAtOrAbove, pointToPoint: pointToPoint
   };
   if (typeof module === 'object' && module.exports) module.exports = api;
   root.SimEngines = api;
