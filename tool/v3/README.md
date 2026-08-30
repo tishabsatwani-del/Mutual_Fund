@@ -12,7 +12,9 @@ screens are still live at `../`; these replace them.
 | `record.js` | Tool 2, *This fund's record* |
 | `stand.js` | Tool 3, *My money in this fund* |
 | `plan.js` | Tool 4, *My plan, tested* |
-| `boot.js` | Starts the four tools, and draws About |
+| `boot.js` | Starts the four tools, draws About, registers the shell |
+| `reading.js` | Draws a saved reading as an image, always on day paper |
+| `sw.js`, `manifest.webmanifest`, `icon/` | The offline shell |
 | *(shared)* `sim/upload.js` | The §5 door: its questions, its stitching, its messages |
 | *(shared)* `sim/workbook.js` | Reads an .xlsx without a library |
 | `shots/` | The twelve screenshots — run `node tools/v3/shoot.js` |
@@ -20,7 +22,7 @@ screens are still live at `../`; these replace them.
 
 ```
 python3 tools/v3/build_deck.py     # after editing sim/copy.json or sim/states.json
-node tools/tool-tests/v3.test.js   # 234 checks, needs a server on 8781
+node tools/tool-tests/v3.test.js   # 258 checks, needs a server on 8781
 node sim/tests/upload.test.js      # 41 checks on the door, headless
 node tools/v3/shoot.js             # the twelve screenshots, same server
 ```
@@ -125,6 +127,41 @@ the code in front of the reader actually does. That last table asks
 registered it says a fund's prices are *read from a file you choose*, and it
 will change by itself the day one is wired. A privacy note is worth nothing if
 it cannot be checked against the build it ships with.
+
+## The two rare touches
+
+**Add to home screen.** A manifest and an offline shell, so the tool sits on the
+phone as an icon and opens instantly. On an upload-only tool this is not a
+nicety: the tool fetches no data by design, so once the shell is on the phone
+there is nothing left for a network to be needed for — the reader's file comes
+off their own device and every figure is worked out there. It works on a plane,
+which no fetching calculator can claim, and the suite proves it by turning the
+network off and opening the tool.
+
+Two strategies, deliberately. The **page** is network-first, falling back to
+cache: every sentence comes from the copy deck and the author is still writing
+it, so a cache-first document would show a reader last month's sentences for as
+long as the icon sat on their phone. **Everything else** is
+stale-while-revalidate — instant from cache, refreshed behind you — which is
+what makes it open at once and self-heal without anyone bumping a version.
+
+The icon is the book's own materials: a page with lines written on it, and one
+of them marked. A bare highlighter band was abstract at 48 pixels; a marked
+*line* among unmarked ones reads at any size.
+
+**Save this reading.** One tap renders the four figures, the sentence and the
+date as an image, on the phone. It is **drawn, not screenshotted** — a
+screenshot carries whatever else is on the screen; this carries exactly what it
+was handed. It **always renders in the day palette**, whatever sheet the reader
+is on, so it looks like a page from the book wherever it ends up. And it takes a
+figures object rather than scraping the DOM, which is how "no fund advice on it,
+ever" is enforced rather than merely intended: the next step is a thing to do
+*inside* the tool, so it is never handed over at all.
+
+Two overflows the suite caught, both of them section 11's "never wider than its
+container" in text: the footer ran off the right edge, and so did an AMFI-length
+fund name. Both wrap now, and a check paints the right margin and fails if a
+single pixel lands in it.
 
 ## Copy
 

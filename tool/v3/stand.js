@@ -76,6 +76,7 @@
       f.dripEven = evenDripRate(purchases, ST.series, asOf);
     }
     var states = St.evaluate(f);
+    lastFigures = f;
 
     /* The section already carries the screen's h1, so the fund is named beneath
      * it rather than as a second one: two h1s in one document leave a screen
@@ -162,12 +163,65 @@
         'at the latest NAV') + '</td><td class="n">' + money(f.value) + '</td></tr>' +
       '</tbody></table></div></div>';
 
+    /* Review v4 §6, "Save this reading". The figures are handed over
+     * deliberately rather than scraped off the screen, so nothing can wander
+     * onto an image that leaves the phone -- and the next step, which is a
+     * thing to do inside the tool, is not on it. */
+    html += '<div class="section"><button class="linkish" id="save-reading" type="button">' +
+      'Save this reading</button><p class="gloss" id="save-state" aria-live="polite"></p></div>';
+
     $('#reading').innerHTML = html;
+    wireSave({
+      fund: ST.name,
+      span: date(stood.firstExecution.t) + ' to ' + date(stood.latest.t) + ' · ' +
+            ST.rows.length + (ST.rows.length === 1 ? ' entry' : ' entries'),
+      dateT: stood.latest.t,
+      hero: { label: 'Your speed', value: pct(f.personalXirr), unit: states.early ? '' : 'a year' },
+      lines: [
+        { what: 'The fund over your dates', value: pct(f.fundSpeed) },
+        { what: 'Your stretch, placed',
+          value: f.placementOk ? 'Higher than ' + f.placement + ' of 100' : '—' },
+        { what: 'Index fund, same money', value: f.proxyOk ? pct(f.replayXirr) : '—' }
+      ],
+      sentence: sentenceFor(states)
+    });
     $('#step-reading').hidden = false;
     $('#step-fund').hidden = true;
     $('#step-ledger').hidden = true;
     animate();
     window.scrollTo(0, 0);
+  }
+
+  /* The author's own cell sentence, as text, for the saved image. A slot she
+   * has not written yet contributes nothing rather than the slot's name: an
+   * image that leaves the phone should carry a sentence or no sentence. */
+  function sentenceFor(states) {
+    var slotId = states.cellSlot;
+    if (!slotId || !W.written(slotId)) return '';
+    var raw = W.copy.slots[slotId].text;
+    return raw.replace(/\[GAP\]/g, W.pct(Math.abs(lastFigures.personalXirr - lastFigures.fundSpeed)).replace('%', ''))
+              .replace(/\[MONTHS\]/g, String(Math.max(1, Math.round(lastFigures.spanDays / 30.44))))
+              .replace(/\[YOURS\]/g, W.pct(lastFigures.personalXirr))
+              .replace(/\[INDEX\]/g, W.pct(lastFigures.replayXirr))
+              .replace(/\[DRIP\]/g, W.pct(lastFigures.dripEven));
+  }
+
+  var lastFigures = {};
+
+  function wireSave(reading) {
+    var btn = $('#save-reading'), note = $('#save-state');
+    if (!btn) return;
+    btn.addEventListener('click', function () {
+      btn.disabled = true;
+      note.textContent = 'Drawing it…';
+      window.WYSReading.save(reading).then(function (how) {
+        note.textContent = how === 'shared' ? 'Shared.' : 'Saved to your device.';
+        btn.disabled = false;
+      }).catch(function (err) {
+        note.textContent = err.message;
+        btn.disabled = false;
+      });
+    });
   }
 
   /* A ruled line: what it is on the left, the figure aligned right. A figure

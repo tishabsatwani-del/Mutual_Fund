@@ -1030,6 +1030,171 @@ const NIGHT = { paper: '#12161E', ink: '#E8E6E1', muted: '#9AA1AE', slate: '#8FA
     await ctx.close();
   }
 
+  /* ================================= review v4 §6 · the two rare touches */
+  section('Step 6 · Add to home screen');
+  {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const page = await ctx.newPage();
+    await page.goto(BASE, { waitUntil: 'networkidle' });
+
+    const manifestHref = await page.getAttribute('link[rel="manifest"]', 'href');
+    ok('the page declares a manifest', manifestHref === 'manifest.webmanifest', String(manifestHref));
+
+    const m = await page.evaluate(async () =>
+      fetch('manifest.webmanifest').then(r => r.json()));
+    ok('it names the product', m.name === 'Where You Stand', m.name);
+    ok('it opens standalone, as an app rather than a tab', m.display === 'standalone', m.display);
+    ok('and on the book’s own paper', m.background_color === '#F1EFEA' && m.theme_color === '#F1EFEA',
+       m.background_color + ' / ' + m.theme_color);
+    ok('with an icon at both sizes a phone asks for, and a maskable one',
+       m.icons.some(i => i.sizes === '192x192') && m.icons.some(i => i.sizes === '512x512') &&
+       m.icons.some(i => i.purpose === 'maskable'),
+       JSON.stringify(m.icons.map(i => i.sizes + '/' + i.purpose)));
+
+    for (const icon of m.icons) {
+      const res = await page.evaluate(async (src) => {
+        const r = await fetch(src);
+        return { ok: r.ok, type: r.headers.get('content-type') };
+      }, icon.src);
+      ok('the icon ' + icon.src + ' is really there', res.ok === true, JSON.stringify(res));
+    }
+
+    /* The shell itself. A service worker needs a secure context, which
+       127.0.0.1 is, so it registers here exactly as it would on the site. */
+    const registered = await page.evaluate(() =>
+      navigator.serviceWorker.ready.then(r => !!r.active).catch(() => false));
+    ok('the offline shell registers', registered === true, String(registered));
+
+    const cached = await page.evaluate(async () => {
+      const keys = await caches.keys();
+      if (!keys.length) return null;
+      const c = await caches.open(keys[0]);
+      const reqs = await c.keys();
+      return { cache: keys[0], count: reqs.length, urls: reqs.map(r => r.url) };
+    });
+    ok('and it precaches the whole shell', cached && cached.count >= 15,
+       cached ? cached.cache + ': ' + cached.count + ' files' : 'no cache');
+    ok('including the copy deck, the engines and the stylesheet',
+       cached && ['deck.js', 'theme.css', 'engines.js', 'upload.js', 'stand.js']
+         .every(f => cached.urls.some(u => u.endsWith(f))),
+       cached ? cached.urls.filter(u => /\.(js|css)$/.test(u)).length + ' scripts and sheets' : '');
+    ok('and nothing from another origin',
+       cached && cached.urls.every(u => u.startsWith('http://127.0.0.1:8781/')),
+       cached ? cached.urls.filter(u => !u.startsWith('http://127.0.0.1:8781/')).join(', ') : '');
+
+    /* The point of it: it opens with no network at all. */
+    await ctx.setOffline(true);
+    const offline = await ctx.newPage();
+    let opened = true;
+    try { await offline.goto(BASE, { waitUntil: 'domcontentloaded', timeout: 15000 }); }
+    catch (e) { opened = false; }
+    if (opened) {
+      await offline.waitForTimeout(600);
+      ok('the tool opens with the network off',
+         (await offline.locator('.entry b').count()) === 4,
+         String(await offline.locator('.entry b').count()));
+      ok('and its four tools are all there, by name',
+         (await offline.locator('.entry b').allInnerTexts()).join(' | ') ===
+         'My return | This fund’s record | My money in this fund | My plan, tested',
+         (await offline.locator('.entry b').allInnerTexts()).join(' | '));
+      ok('the reading engine came with it',
+         (await offline.evaluate(() => typeof SimEngines.xirr === 'function')) === true);
+    } else {
+      ok('the tool opens with the network off', false, 'navigation failed offline');
+    }
+    await ctx.setOffline(false);
+    await ctx.close();
+  }
+
+  section('Step 6 · Save this reading');
+  {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 900 }, colorScheme: 'dark' });
+    const page = await ctx.newPage();
+    const errors = [];
+    page.on('pageerror', e => errors.push(e.message));
+    await page.goto(BASE + '#stand', { waitUntil: 'networkidle' });
+    await page.setInputFiles('#file', navFile);
+    await page.waitForTimeout(900);
+    await page.click('#example');
+    await page.waitForTimeout(300);
+    await page.click('#run');
+    await page.waitForTimeout(900);
+
+    ok('the reading offers to be saved', (await page.locator('#save-reading').count()) === 1);
+
+    /* Drawn, not screenshotted, so exactly what was handed over is on it. */
+    const shot = await page.evaluate(() => {
+      const c = window.WYSReading.draw({
+        fund: 'A Fund', span: '01-Jan-2020 to 01-Jan-2025 · 60 entries',
+        dateT: Date.UTC(2025, 0, 1),
+        hero: { label: 'Your speed', value: '19.6%', unit: 'a year' },
+        lines: [{ what: 'The fund over your dates', value: '19.0%' },
+                { what: 'Your stretch, placed', value: 'Higher than 85 of 100' },
+                { what: 'Index fund, same money', value: '—' }],
+        sentence: 'A strong stretch for the fund, and your dates beat it as well.'
+      });
+      const g = c.getContext('2d');
+      const px = (x, y) => { const d = g.getImageData(x, y, 1, 1).data; return d[0] + ',' + d[1] + ',' + d[2]; };
+      return { w: c.width, h: c.height, corner: px(4, 4), name: window.WYSReading.fileName({
+        fund: 'A Fund', dateT: Date.UTC(2025, 0, 1) }) };
+    });
+    ok('it is drawn at a size worth keeping', shot.w === 1080 && shot.h > 600,
+       shot.w + '×' + shot.h);
+    /* §6: the saved reading always renders in the DAY palette, so it looks
+       like a page from the book wherever it goes. This page is on the night
+       sheet; the image must not be. */
+    ok('and always on the book’s day paper, even from the night sheet',
+       shot.corner === '241,239,234', shot.corner);
+    ok('the file names the fund and the date it was measured to',
+       /^where-you-stand-a-fund-01-Jan-2025\.png$/.test(shot.name), shot.name);
+
+    /* Section 11's "never a number wider than its container" applies to the
+       words around it too. The footer ran off the right edge as one line. */
+    const fits = await page.evaluate(() => {
+      const c = window.WYSReading.draw({
+        fund: 'A Fund With Quite A Long Name - Direct Plan - Growth',
+        span: '01-Jan-2020 to 01-Jan-2025 · 60 entries', dateT: Date.UTC(2025, 0, 1),
+        hero: { label: 'Your speed', value: '19.6%', unit: 'a year' },
+        lines: [{ what: 'The fund over your dates', value: '19.0%' }],
+        sentence: 'A strong stretch for the fund, and your dates beat it as well.'
+      });
+      const g = c.getContext('2d');
+      /* nothing may be painted in the right margin */
+      const strip = g.getImageData(c.width - 60, 0, 60, c.height).data;
+      let painted = 0;
+      for (let i = 0; i < strip.length; i += 4) {
+        if (strip[i] !== 241 || strip[i + 1] !== 239 || strip[i + 2] !== 234) painted++;
+      }
+      return { painted: painted, height: c.height };
+    });
+    ok('nothing is drawn into the right margin, however long the fund’s name',
+       fits.painted === 0, fits.painted + ' pixels past the margin');
+
+    /* "No fund advice on it, ever." The next step is a thing to do inside the
+       tool, so it is not handed to the image at all. */
+    const handed = await page.evaluate(() => {
+      const calls = [];
+      const real = window.WYSReading.save;
+      window.WYSReading.save = function (r) { calls.push(r); return Promise.resolve('saved'); };
+      document.querySelector('#save-reading').click();
+      window.WYSReading.save = real;
+      return calls[0];
+    });
+    ok('the image is handed the four figures and nothing else',
+       handed && handed.hero && handed.lines.length === 3 &&
+       !('nextStep' in handed) && !('next' in handed),
+       JSON.stringify(Object.keys(handed || {})));
+    ok('it carries the fund, the span and the date it was measured to',
+       !!handed.fund && !!handed.span && !!handed.dateT);
+    ok('and no next step, which is a thing to do inside the tool',
+       JSON.stringify(handed).indexOf('Next') < 0 &&
+       !/read the worst window|My plan, tested/.test(JSON.stringify(handed)),
+       JSON.stringify(handed).slice(0, 200));
+
+    ok('no script errors across the saved reading', errors.length === 0, errors.join(' | '));
+    await ctx.close();
+  }
+
   section('Reduced motion');
   {
     const ctx = await browser.newContext({ viewport: { width: 390, height: 900 }, reducedMotion: 'reduce' });

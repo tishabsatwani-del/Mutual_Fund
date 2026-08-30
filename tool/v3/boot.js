@@ -64,6 +64,20 @@
     root.WYSMine.init();
     root.WYSPlan.init();
     W.start();
+    offlineShell();
+  }
+
+  /* Review v4 §6, "Add to home screen". The shell is registered after the page
+   * has drawn, so it never competes with the first paint, and every failure is
+   * survivable: a browser without service workers, a page opened over file://,
+   * or a user who has blocked them all get exactly the tool they had before. */
+  function offlineShell() {
+    if (!('serviceWorker' in navigator)) return;
+    if (location.protocol !== 'https:' && location.hostname !== 'localhost' &&
+        location.hostname !== '127.0.0.1') return;
+    try {
+      navigator.serviceWorker.register('sw.js').catch(function () { /* no shell, same tool */ });
+    } catch (e) { /* likewise */ }
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
