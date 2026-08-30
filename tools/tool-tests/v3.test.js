@@ -121,24 +121,34 @@ const NIGHT = { paper: '#12161E', ink: '#E8E6E1', muted: '#9AA1AE', slate: '#8FA
     await page.waitForSelector('#reading .reading');
     await page.waitForTimeout(1200);
 
-    const labels = await page.locator('#reading .reading .label').allInnerTexts();
-    ok('the four figures land in the order the review fixes',
-       labels.length === 4 &&
-       /Your speed/i.test(labels[0]) &&
-       /fund.s speed over your dates/i.test(labels[1]) &&
-       /stretch in this fund.s record/i.test(labels[2]) &&
-       /same money in the index fund/i.test(labels[3]), labels.join(' | '));
+    /* Exactly one figure is large: the reader's own. Everything else is a
+       ruled line with its figure aligned right. */
+    ok('the reading is boxed',
+       (await page.evaluate(() => getComputedStyle(document.querySelector('.reading')).borderStyle)) === 'solid');
+    ok('the reader\'s own speed is the one large figure',
+       (await page.locator('#reading .reading .figure').count()) === 1);
+    const hero = (await page.locator('#reading .hero .figure').innerText()).trim();
+    ok('and it is a percentage', /^\d+\.\d%$/.test(hero), hero);
+    ok('with its unit inline beside it, not beneath',
+       (await page.locator('#reading .hero .unit').innerText()).trim() === 'a year');
+    ok('it wears the marker, and nothing else on the page does',
+       (await page.locator('#reading .figure.mine').count()) === 1);
 
-    const figs = await page.locator('#reading .reading .figure').allInnerTexts();
-    ok('the reader\'s own speed is a percentage', /^\d+\.\d%$/.test(figs[0].trim()), figs[0]);
-    ok('placement is a whole number out of a hundred',
-       /^Higher than \d+ of every 100$/.test(figs[2].trim()), figs[2]);
-    ok('no decimal percentile reaches the screen', !/\d\.\d+ of every/.test(figs[2]));
+    const lines = await page.evaluate(() => [...document.querySelectorAll('.reading .line')].map(l => ({
+      what: l.querySelector('.what').childNodes[0].textContent.trim(),
+      val: l.querySelector('.val').textContent.trim()
+    })));
+    ok('the fund over the reader\'s dates comes first',
+       /fund over your dates/i.test(lines[0].what), JSON.stringify(lines[0]));
+    ok('the placement second, out of a hundred',
+       /Higher than \d+ of 100/.test(lines[1].val), JSON.stringify(lines[1]));
+    ok('no decimal percentile reaches the screen', !/\d\.\d+ of 100/.test(lines[1].val));
+    ok('and the index fund last', /index fund/i.test(lines[2].what), JSON.stringify(lines[2]));
 
-    ok('a reading the tool will not give keeps its row, at less weight',
-       (await page.locator('#reading .row.suppressed').count()) >= 1);
+    ok('a reading the tool will not give keeps its line, at less weight',
+       (await page.locator('#reading .line.suppressed').count()) >= 1);
     ok('and says why, rather than showing a bare dash',
-       /No index fund is loaded/.test(await page.locator('#reading .row.suppressed').innerText()));
+       /No index fund is loaded/.test(await page.locator('#reading .line.suppressed').innerText()));
 
     ok('the life-line is drawn', (await page.locator('.lifeline').count()) === 1);
     ok('it carries the reader\'s own stretch', (await page.locator('.ll-mine').count()) === 1);
@@ -146,6 +156,14 @@ const NIGHT = { paper: '#12161E', ink: '#E8E6E1', muted: '#9AA1AE', slate: '#8FA
        /whole recorded life/.test(await page.locator('.lifeline').getAttribute('aria-label')));
     ok('the marker appears on no other chart in the product',
        (await page.locator('.ll-band, .ll-mine').count()) <= 2);
+    ok('the band hugs the line rather than filling the chart',
+       (await page.evaluate(() => {
+         const r = document.querySelector('.ll-band');
+         return r ? parseFloat(r.getAttribute('height')) : 999;
+       })) < 142);
+    ok('the three names sit beneath the line',
+       (await page.evaluate(() => [...document.querySelectorAll('.ll-mark-text')]
+          .every(t => parseFloat(t.getAttribute('y')) > 150))) === true);
 
     const named = await page.locator('#reading .slot-empty code').allInnerTexts();
     ok('every unwritten sentence is named on screen, not left blank',
@@ -231,8 +249,11 @@ const NIGHT = { paper: '#12161E', ink: '#E8E6E1', muted: '#9AA1AE', slate: '#8FA
        /higher than \d+ of every 100/i.test(body), body.slice(0, 200));
 
     ok('the life-line is drawn here too', (await page.locator('#r-out .lifeline').count()) === 1);
-    ok('with the worst, best and latest windows marked',
-       (await page.locator('#r-out .ll-mark').count()) === 3);
+    ok('with the worst, best and latest windows named beneath it',
+       (await page.locator('#r-out .ll-mark-text').count()) === 3,
+       String(await page.locator('#r-out .ll-mark-text').count()));
+    ok('each with a dot on the line itself',
+       (await page.locator('#r-out .ll-dot').count()) === 3);
     ok('and no marker band, because this is not the reader’s own stretch',
        (await page.locator('#r-out .ll-band').count()) === 0);
 

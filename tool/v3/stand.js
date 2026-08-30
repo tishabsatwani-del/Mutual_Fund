@@ -85,24 +85,32 @@
       date(stood.firstExecution.t) + ' to ' + date(stood.latest.t) + ' · ' +
       ST.rows.length + (ST.rows.length === 1 ? ' entry' : ' entries') + '</p>';
 
-    /* ---- the four figures, in reading order --------------------------- */
+    /* ---- the reading -------------------------------------------------
+     * Exactly one figure is large: the reader's own speed, wearing the marker,
+     * with its unit inline beside it. The fund's speed, the placement and the
+     * index-fund replay are ruled lines with their figures aligned right, so
+     * the eye lands on the one number the screen exists for and then reads
+     * down. The index fund's line and figure are the only slate on the page. */
     html += '<div class="reading" style="margin-top:1.5rem">';
-    html += row('Your speed', pct(f.personalXirr), 'mine', 0,
-      states.early ? null : 'a year');
-    html += row('The fund’s speed over your dates', pct(f.fundSpeed), '', 1, 'a year');
+    html += '<div class="hero"' + W.land(0) + '><p class="label">Your speed</p>' +
+      '<p class="figure mine">' + pct(f.personalXirr) + '</p>' +
+      (states.early ? '' : '<span class="unit">a year</span>') + '</div>';
+
+    html += line('The fund over your dates', pct(f.fundSpeed), '', 1);
     html += f.placementOk
-      ? row('Your stretch in this fund’s record',
-            'Higher than <b>' + f.placement + '</b> of every 100', 'placement', 2,
-            'stretches of your length')
-      : suppressed('Your stretch in this fund’s record', 2,
-            'This history is not long enough to place a stretch of your length inside it.');
+      ? line('Your stretch, placed', 'Higher than ' + f.placement + ' of 100', '', 2)
+      : line('Your stretch, placed', '—', 'suppressed', 2,
+             'Not enough history to place a stretch of your length.');
     html += f.proxyOk
-      ? row('The same money in the index fund', pct(f.replayXirr), 'theirs', 3, esc(ST.proxyName))
-      : suppressed('The same money in the index fund', 3,
-            'No index fund is loaded to replay your dates into.');
+      ? line('Index fund, same money', pct(f.replayXirr), 'theirs', 3)
+      : line('Index fund, same money', '—', 'suppressed', 3,
+             'No index fund is loaded to replay your dates into.');
     html += '</div>';
 
-    /* ---- the life-line ------------------------------------------------- */
+    /* ---- the life-line -------------------------------------------------
+     * The fund's whole life in ink, the index fund beside it in slate, and the
+     * reader's own stretch marked. The three names sit beneath the line, so
+     * the reader reads along it rather than up into it. */
     html += lifeLineBlock(stood, f);
 
     /* ---- the sentence, then the next step ------------------------------ */
@@ -134,36 +142,30 @@
     window.scrollTo(0, 0);
   }
 
-  /* A figure the tool will not give. The row is kept, so the reader can see
-   * that the question was asked and answered honestly, rather than wondering
-   * where the fourth reading went. */
-  function suppressed(label, i, why) {
-    return '<div class="row suppressed"' + W.land(i) + '>' +
-      '<p class="label">' + label + '</p>' +
-      '<p class="figure">—</p>' +
-      '<p class="gloss">' + why + '</p></div>';
-  }
-
-  function row(label, value, tone, i, gloss) {
-    return '<div class="row"' + W.land(i) + '>' +
-      '<p class="label">' + label + '</p>' +
-      '<p class="figure ' + tone + '">' + value + '</p>' +
-      (gloss ? '<p class="gloss">' + gloss + '</p>' : '') + '</div>';
+  /* A ruled line: what it is on the left, the figure aligned right. A figure
+   * the tool will not give keeps its line, at less weight, with a true em dash
+   * and one sentence saying why — the tool declining to guess is part of its
+   * character, not an error. */
+  function line(what, value, tone, i, why, under) {
+    return '<div class="line ' + tone + '"' + W.land(i) + '>' +
+      '<div class="what">' + what +
+      (why ? '<br><span class="gloss">' + why + '</span>' : '') +
+      (under ? '<br><span class="gloss">' + under + '</span>' : '') + '</div>' +
+      '<div class="val">' + value + '</div></div>';
   }
 
   function lifeLineBlock(stood, f) {
     var marks = [];
     if (stood.stretch && stood.stretch.ok) {
-      marks.push({ t: stood.stretch.stats.worst.startT, text: 'worst', rowLabel: 'Worst stretch of your length began' });
-      marks.push({ t: stood.stretch.stats.best.startT, text: 'best', rowLabel: 'Best began' });
-      var pts = stood.stretch.points;
-      marks.push({ t: pts[pts.length - 1].startT, text: 'latest', rowLabel: 'Latest full stretch began' });
+      marks.push({ t: stood.stretch.stats.worst.startT, text: 'worst', rowLabel: 'The worst stretch of your length began' });
+      marks.push({ t: stood.stretch.stats.best.startT, text: 'best', rowLabel: 'The best began' });
     }
     var svg = LL.render({
       series: ST.series,
+      compare: ST.proxy,
       stretch: { from: stood.firstExecution.t, to: stood.latest.t },
       marks: marks,
-      describe: 'The fund’s whole recorded life from ' + date(ST.series[0].t) + ' to ' +
+      describe: 'The whole recorded life of ' + ST.name + ', from ' + date(ST.series[0].t) + ' to ' +
         date(ST.series[ST.series.length - 1].t) + ', with your own stretch marked from ' +
         date(stood.firstExecution.t) + ' to ' + date(stood.latest.t) + '.'
     });
@@ -253,6 +255,15 @@
   function init() {
     drawRows();
     $('#use-file').addEventListener('click', function () { $('#file').click(); });
+    $('#index-open').addEventListener('click', function () { $('#index-file').click(); });
+    $('#index-file').addEventListener('change', function (e) {
+      var f = e.target.files && e.target.files[0];
+      if (!f) return;
+      W.readFile(f).then(function (r) {
+        ST.proxy = r.series; ST.proxyName = r.name;
+        $('#index-state').textContent = r.name + ' · loaded';
+      }).catch(function (err) { $('#index-state').textContent = err.message; });
+    });
     $('#file').addEventListener('change', function (e) {
       var f = e.target.files && e.target.files[0];
       if (!f) return;

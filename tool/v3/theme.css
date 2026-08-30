@@ -148,9 +148,26 @@ h2 { font-family: var(--serif); font-weight: 400; font-size: 1.25rem; margin: 0 
 /* The reading and the ledger are the only two boxed things in the product. */
 .boxed { border: 1px solid var(--rule-edge); border-radius: 6px; padding: 1.1rem 1rem; }
 
-/* the four figures, in reading order */
-.reading > .row { padding: 1.1rem 0; border-top: 1px solid var(--rule); }
-.reading > .row:first-child { border-top: 0; padding-top: .25rem; }
+/* The reading is one of the only two boxed things in the product.
+   Inside it exactly one figure is large — the reader's own speed. Everything
+   else is a ruled row with its figure aligned right, so the eye lands on the
+   one number the screen exists for and then reads down. */
+.reading { border: 1px solid var(--rule-edge); border-radius: 6px; padding: 1.1rem 1rem; }
+.hero .label { margin-bottom: .1rem; }
+.hero .figure { display: inline; }
+.hero .unit { font-family: var(--sans); font-size: 1rem; color: var(--muted); margin-left: .45rem; }
+.reading .line {
+  display: flex; align-items: baseline; gap: 1rem;
+  padding: .7rem 0; border-top: 1px solid var(--rule);
+}
+.reading .line:first-of-type { margin-top: 1rem; }
+.reading .line .what { flex: 1; }
+.reading .line .val {
+  font-family: var(--serif); font-size: 1.25rem;
+  font-variant-numeric: lining-nums tabular-nums; white-space: nowrap;
+}
+.reading .line.theirs .what, .reading .line.theirs .val { color: var(--slate); }
+.reading .line.suppressed { opacity: .55; }
 
 /* the sentence, and the slot that is waiting for it */
 .sentence { font-family: var(--serif); font-size: var(--sentence); line-height: 1.45; margin: 0; }
@@ -222,13 +239,18 @@ input[type="text"], input[type="date"], input[type="number"] {
 .ll-band { fill: rgba(255, 229, 102, .55); }
 .ll-mine { stroke: var(--ink); stroke-width: 2; stroke-linejoin: round;
            vector-effect: non-scaling-stroke; }
-.ll-mark { stroke: var(--rule-edge); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.ll-compare { stroke: var(--slate); stroke-width: 1.25; stroke-linejoin: round;
+               vector-effect: non-scaling-stroke; }
+.ll-dot { fill: var(--ink); }
 .ll-mark-text { fill: var(--muted); font-family: var(--sans); font-size: 13px;
                 font-variant-numeric: lining-nums tabular-nums; }
+.ll-yours { fill: var(--ink); }
 
 @media (prefers-color-scheme: dark) {
   .ll-band { fill: none; }
   .ll-mine { stroke: var(--marker-line); stroke-width: 2.25; }
+  .ll-dot { fill: var(--ink); }
+  .ll-yours { fill: var(--marker-line); }
 }
 
 /* The life-line draws once, left to right, in under a second. */

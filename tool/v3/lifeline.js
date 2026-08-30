@@ -73,18 +73,41 @@
     });
   }
 
+  /* Rebase both series to 100 at the first date they share.
+   *
+   * A fund's NAV and an index fund's NAV are different numbers on different
+   * scales; drawing them raw would put one far above the other and say nothing.
+   * Rebased, the two lines answer the only question worth asking of them side
+   * by side: which shape did each make over the same days. */
+  function rebase(series, fromT) {
+    var base = null;
+    for (var i = 0; i < series.length; i++) {
+      if (series[i].t >= fromT) { base = series[i].v; break; }
+    }
+    if (!base) return [];
+    return series.filter(function (p) { return p.t >= fromT; })
+                 .map(function (p) { return { t: p.t, v: p.v / base * 100 }; });
+  }
+
   /* options:
-   *   series   [{t, v}] the fund's whole life, ascending
-   *   stretch  { from, to } the reader's own stretch, or null
-   *   marks    [{ t, kind: 'worst'|'best'|'latest', text }] at most three
-   *   describe a sentence for a screen reader, built by the caller from copy
+   *   series    [{t, v}] the fund's whole life, ascending
+   *   compare   [{t, v}] the index fund, drawn in slate on the same axes
+   *   stretch   { from, to } the reader's own stretch, or null
+   *   marks     [{ t, kind, text }] labelled beneath the line
+   *   describe  a sentence for a screen reader, built by the caller from copy
    */
   function render(options) {
     var o = options || {};
     var series = o.series || [];
     if (series.length < 2) return '';
-    var full = decimate(series, 600);
-    var s = scales(full);
+
+    var from = series[0].t;
+    var mine = o.compare && o.compare.length ? rebase(series, from) : series;
+    var theirs = o.compare && o.compare.length ? rebase(o.compare, from) : null;
+
+    var full = decimate(mine, 600);
+    var other = theirs ? decimate(theirs, 600) : null;
+    var s = scales(other ? full.concat(other) : full);
 
     var svg = '';
     svg += '<svg class="lifeline" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" ' +
@@ -92,30 +115,63 @@
 
     /* the reader's stretch: a band under the segment by day, and the segment
        redrawn in marker for the night sheet. Both ship; CSS shows one. */
+    var bandMid = null;
     if (o.stretch && isFinite(o.stretch.from) && isFinite(o.stretch.to)) {
       var x0 = s.x(o.stretch.from), x1 = s.x(o.stretch.to);
-      svg += '<rect class="ll-band" x="' + x0.toFixed(1) + '" y="' + PAD.t + '" ' +
-             'width="' + Math.max(1, x1 - x0).toFixed(1) + '" height="' + (H - PAD.t - PAD.b) + '"/>';
+      bandMid = (x0 + x1) / 2;
       var inside = full.filter(function (p) { return p.t >= o.stretch.from && p.t <= o.stretch.to; });
+
+      /* The band hugs the line through the reader's stretch rather than filling
+       * the chart's whole height. A full-height block reads as a shaded region
+       * of the axis; a band around the line reads as what it is — a highlighter
+       * drawn over that part of the page. */
+      var top = H - PAD.b, bot = PAD.t;
+      inside.forEach(function (p) {
+        var y = s.y(p.v);
+        if (y < top) top = y;
+        if (y > bot) bot = y;
+      });
+      var PADY = 9;
+      top = Math.max(PAD.t, top - PADY);
+      bot = Math.min(H - PAD.b, bot + PADY);
+      svg += '<rect class="ll-band" x="' + x0.toFixed(1) + '" y="' + top.toFixed(1) + '" ' +
+             'width="' + Math.max(1, x1 - x0).toFixed(1) + '" ' +
+             'height="' + Math.max(6, bot - top).toFixed(1) + '"/>';
+
       if (inside.length > 1) {
         svg += '<path class="ll-mine" d="' + path(inside, s) + '" fill="none"/>';
       }
     }
 
+    if (other) svg += '<path class="ll-compare" d="' + path(other, s) + '" fill="none"/>';
     svg += '<path class="ll-life" d="' + path(full, s) + '" fill="none"/>';
 
-    (o.marks || []).slice(0, 3).forEach(function (m, i) {
+    /* Marks sit under the line with their names, so the reader reads along the
+       line rather than up into it. A dot on the line, a name beneath. */
+    (o.marks || []).slice(0, 3).forEach(function (m) {
       if (!isFinite(m.t)) return;
-      var x = s.x(m.t);
-      svg += '<line class="ll-mark" x1="' + x.toFixed(1) + '" y1="' + PAD.t + '" ' +
-             'x2="' + x.toFixed(1) + '" y2="' + (H - PAD.b) + '"/>';
-      var anchor = x > W * 0.75 ? 'end' : x < W * 0.25 ? 'start' : 'middle';
-      svg += '<text class="ll-mark-text" x="' + x.toFixed(1) + '" y="' + (PAD.t - 9) + '" ' +
-             'text-anchor="' + anchor + '">' + esc(m.text || '') + '</text>';
+      var x = s.x(m.t), at = nearest(full, m.t);
+      if (at) svg += '<circle class="ll-dot" cx="' + x.toFixed(1) + '" cy="' + s.y(at.v).toFixed(1) + '" r="3"/>';
+      svg += '<text class="ll-mark-text" x="' + x.toFixed(1) + '" y="' + (H - 6) + '" ' +
+             'text-anchor="middle">' + esc(m.text || '') + '</text>';
     });
+
+    if (bandMid !== null) {
+      svg += '<text class="ll-mark-text ll-yours" x="' + bandMid.toFixed(1) + '" y="' + (H - 6) +
+             '" text-anchor="middle">your stretch</text>';
+    }
 
     svg += '</svg>';
     return svg;
+  }
+
+  function nearest(points, t) {
+    var best = null, gap = Infinity;
+    for (var i = 0; i < points.length; i++) {
+      var d = Math.abs(points[i].t - t);
+      if (d < gap) { gap = d; best = points[i]; }
+    }
+    return best;
   }
 
   /* The same information as words, because a line nobody can see is not a
@@ -134,7 +190,7 @@
     return rows;
   }
 
-  var api = { render: render, tableRows: tableRows, decimate: decimate, scales: scales };
+  var api = { render: render, tableRows: tableRows, decimate: decimate, scales: scales, rebase: rebase };
   if (typeof module === 'object' && module.exports) module.exports = api;
   root.LifeLine = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
