@@ -115,7 +115,7 @@ const NIGHT = { paper: '#12161E', ink: '#E8E6E1', muted: '#9AA1AE', slate: '#8FA
     /* Review v4 §5: the door confirms before anything is computed, naming the
        file's own name and the dates it actually covers. */
     ok('the upload door confirms what it found, before computing',
-       /^Found [\d,]+ NAVs for .+, \d\d-[A-Z][a-z]{2}-\d{4} to \d\d-[A-Z][a-z]{2}-\d{4}\.$/
+       /^Found [\d,]+ NAVs for .+, \d\d-[A-Z][a-z]{2}-\d{4} to \d\d-[A-Z][a-z]{2}-\d{4}, (no gaps|one gap|[\d,]+ gaps)\.$/
          .test((await page.locator('#fund-state').innerText()).trim()),
        await page.locator('#fund-state').innerText());
 
@@ -885,6 +885,149 @@ const NIGHT = { paper: '#12161E', ink: '#E8E6E1', muted: '#9AA1AE', slate: '#8FA
       }
       await ctx.close();
     }
+  }
+
+  /* =============================================== review v4 §5 · the door
+   *
+   * Upload is the only door, so it holds a conversation. sim/tests/upload.test.js
+   * proves the verdicts; this drives them through a real screen, because a
+   * question nobody can answer with a thumb is not a question.
+   */
+  section('Step 5 · the upload door, in a browser');
+  {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 900 } });
+    const page = await ctx.newPage();
+    const errors = [];
+    page.on('pageerror', e => errors.push(e.message));
+    await page.goto(BASE + '#record', { waitUntil: 'networkidle' });
+
+    const iso = t => new Date(t).toISOString().slice(0, 10);
+
+    /* --- a file holding many schemes ------------------------------------ */
+    const manyFile = path.join(TMP, 'v5-many.csv');
+    {
+      const lines = ['Scheme Name,Date,NAV'];
+      const names = ['Acme Bluechip Fund - Direct Plan - Growth',
+                     'Acme Bluechip Fund - Direct Plan - IDCW',
+                     'Acme Bluechip Fund - Regular Plan - Growth',
+                     'Zenith Midcap Fund - Direct Plan - Growth'];
+      names.forEach((n, k) => {
+        for (let i = 0; i < 400; i++) {
+          lines.push(`"${n}",${iso(Date.UTC(2019, 0, 1) + i * 86400000)},${(10 + k + i * 0.01).toFixed(4)}`);
+        }
+      });
+      fs.writeFileSync(manyFile, lines.join('\n'));
+    }
+    await page.setInputFiles('#r-file', manyFile);
+    await page.waitForTimeout(900);
+
+    ok('a file with many schemes asks which one, and counts them',
+       /This file has 4 schemes\. Pick the one you own\./
+         .test(await page.locator('#r-fund .door-ask').innerText()),
+       (await page.locator('#r-fund .door-ask').innerText()).slice(0, 140));
+    ok('they are grouped by family, not listed flat',
+       (await page.locator('#r-fund .scheme-list .label').count()) === 2,
+       String(await page.locator('#r-fund .scheme-list .label').count()));
+    ok('and each row is named by what differs — its plan and option',
+       (await page.locator('#r-fund .scheme').first().innerText()).startsWith('Direct · Growth'),
+       await page.locator('#r-fund .scheme').first().innerText());
+    ok('every choice is a finger tall',
+       (await page.evaluate(() => [...document.querySelectorAll('#r-fund .scheme')]
+          .every(b => b.getBoundingClientRect().height >= 44))) === true);
+
+    /* the search box §5 asks for */
+    await page.fill('#r-file-find', 'zenith');
+    await page.waitForTimeout(200);
+    ok('the list can be searched down to one',
+       (await page.locator('#r-fund .scheme:visible').count()) === 1,
+       String(await page.locator('#r-fund .scheme:visible').count()));
+
+    await page.locator('#r-fund .scheme:visible').first().click();
+    await page.waitForTimeout(900);
+    ok('picking one loads only that scheme, and confirms before computing',
+       /^Found 400 NAVs for Zenith Midcap Fund - Direct Plan - Growth, 01-Jan-2019 to 04-Feb-2020, no gaps\.$/
+         .test((await page.locator('#r-state').innerText()).trim()),
+       await page.locator('#r-state').innerText());
+    ok('and the question is not asked again',
+       (await page.locator('#r-fund .door-ask').isVisible()) === false);
+
+    /* --- dates that read two ways --------------------------------------- */
+    const ambFile = path.join(TMP, 'v5-ambiguous.csv');
+    {
+      const lines = ['Date,NAV'];
+      /* every row valid read either way: day and month both under 13 */
+      for (let m = 1; m <= 12; m++) {
+        for (let day = 1; day <= 12; day++) {
+          lines.push(`${String(day).padStart(2, '0')}/${String(m).padStart(2, '0')}/2020,` +
+                     (10 + m * 0.1 + day * 0.01).toFixed(4));
+        }
+      }
+      fs.writeFileSync(ambFile, lines.join('\n'));
+    }
+    await page.setInputFiles('#r-file', ambFile);
+    await page.waitForTimeout(900);
+    const askText = await page.locator('#r-fund .door-ask').innerText();
+    ok('dates that read two ways are asked about, not guessed',
+       /^These dates read two ways\./.test(askText), askText.slice(0, 160));
+    ok('and the first row is shown BOTH ways, so the reader can tell them apart',
+       /01-Jan-2020 one way, 01-Jan-2020 the other|one way, .* the other/.test(askText), askText);
+    ok('with two answers to tap',
+       (await page.locator('#r-fund .door-ask [data-answer]').count()) === 2);
+
+    await page.locator('#r-fund [data-answer="month"]').click();
+    await page.waitForTimeout(900);
+    ok('answering settles it and the file loads',
+       /^Found \d+ NAVs for /.test((await page.locator('#r-state').innerText()).trim()),
+       await page.locator('#r-state').innerText());
+    ok('and it is not asked twice',
+       (await page.locator('#r-fund .door-ask [data-answer]').count()) === 0);
+
+    /* --- many pieces, stitched, with a gap ------------------------------ */
+    const p1 = path.join(TMP, 'v5-p1.csv'), p2 = path.join(TMP, 'v5-p2.csv');
+    const piece = (from, days, nav) => {
+      const out = ['Date,NAV'];
+      for (let i = 0; i < days; i++) out.push(`${iso(from + i * 86400000)},${(nav + i * 0.01).toFixed(4)}`);
+      return out.join('\n');
+    };
+    fs.writeFileSync(p1, piece(Date.UTC(2018, 0, 1), 90, 10));
+    fs.writeFileSync(p2, piece(Date.UTC(2018, 8, 1), 90, 14));
+    await page.setInputFiles('#r-file', [p1, p2]);
+    await page.waitForTimeout(1000);
+    const stitched = await page.locator('#r-state').innerText();
+    ok('two pieces are stitched into one history',
+       /^Found 180 NAVs for /.test(stitched.trim()), stitched);
+    ok('and the confirmation says a gap is in it, rather than "no gaps"',
+       /one gap\.$/.test(stitched.trim()), stitched);
+    ok('the gap itself is named, with what to do about it',
+       /There is a gap of \d+ days/.test(await page.locator('#r-fund .door-ask').innerText()) &&
+       /one may be missing/.test(await page.locator('#r-fund .door-ask').innerText()),
+       await page.locator('#r-fund .door-ask').innerText());
+
+    /* --- the IDCW row --------------------------------------------------- */
+    await page.setInputFiles('#r-file', manyFile);
+    await page.waitForTimeout(900);
+    await page.locator('#r-fund .scheme', { hasText: 'IDCW' }).first().click();
+    await page.waitForTimeout(900);
+    const idcw = await page.locator('#r-fund .door-ask').innerText();
+    ok('an IDCW row is refused, with the reason and the row to pick instead',
+       /Its NAV falls at every payout/.test(idcw) &&
+       /Pick the Growth row of the same plan\./.test(idcw), idcw);
+    ok('and it is set as a reading, not as an alert box',
+       (await page.locator('#r-fund .door-ask .refusal').count()) >= 1);
+
+    /* --- a file with no dates in it ------------------------------------- */
+    const junk = path.join(TMP, 'v5-junk.csv');
+    fs.writeFileSync(junk, 'Fund,Rating\nAcme,Five stars\nZenith,Four stars\n');
+    await page.setInputFiles('#r-file', junk);
+    await page.waitForTimeout(700);
+    ok('a file with no dates says what the file should hold instead',
+       /One column should be dates and one NAV/.test(await page.locator('#r-fund .door-ask').innerText()) &&
+       /A screenshot or PDF will not work/.test(await page.locator('#r-fund .door-ask').innerText()),
+       await page.locator('#r-fund .door-ask').innerText());
+
+    ok('no script errors across the whole door', errors.length === 0, errors.join(' | '));
+    await page.screenshot({ path: path.join(TMP, 'v5-door.png'), fullPage: true });
+    await ctx.close();
   }
 
   section('Reduced motion');

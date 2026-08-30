@@ -281,7 +281,14 @@
       };
     }
 
+    /* Review v4 §5: where day-first and month-first are both valid the reader
+     * is asked once, and their answer arrives here. Detection still runs when
+     * nothing has been asked, so a file whose dates can only be read one way
+     * never raises a question at all. */
     var dayFirstInfo = detectDayFirst(body, cols.dateCol);
+    if (opts.dayFirst !== undefined) {
+      dayFirstInfo = { dayFirst: !!opts.dayFirst, certain: true, answered: true };
+    }
     var seen = {}, series = [], skipped = { badDate: 0, badValue: 0, duplicate: 0, blank: 0 };
     var examples = [];
 

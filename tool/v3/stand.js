@@ -294,36 +294,17 @@
   /* ------------------------------------------------------------- the data */
   function loadSeries(series, name) {
     ST.series = series; ST.name = name;
-    $('#fund-state').textContent = 'Found ' + W.count(series.length) + ' NAVs for ' + name +
-      ', ' + W.span(series[0].t, series[series.length - 1].t) + '.';
+    /* the door writes the confirmation (review v4 §5) */
     $('#step-ledger').hidden = false;
     refresh();
   }
 
   function init() {
     drawRows();
-    $('#use-file').addEventListener('click', function () { $('#file').click(); });
-    $('#index-open').addEventListener('click', function () { $('#index-file').click(); });
-    $('#index-file').addEventListener('change', function (e) {
-      var f = e.target.files && e.target.files[0];
-      if (!f) return;
-      W.readFile(f).then(function (r) {
-        ST.proxy = r.series; ST.proxyName = r.name;
-        $('#index-state').textContent = r.name + ' · loaded';
-      }).catch(function (err) { $('#index-state').textContent = err.message; });
-    });
-    $('#file').addEventListener('change', function (e) {
-      var f = e.target.files && e.target.files[0];
-      if (!f) return;
-      var reader = new FileReader();
-      reader.onload = function () {
-        var parsed = window.PRCParse.parseSeriesText(String(reader.result));
-        if (!parsed.ok) { $('#fund-state').textContent = parsed.message; return; }
-        loadSeries(parsed.series, f.name.replace(/\.[^.]+$/, ''));
-      };
-      reader.readAsText(f);
-    });
-
+    W.door({ openId: 'use-file', fileId: 'file', stateId: 'fund-state',
+             onLoad: function (series, name) { loadSeries(series, name); } });
+    W.door({ openId: 'index-open', fileId: 'index-file', stateId: 'index-state',
+             onLoad: function (series, name) { ST.proxy = series; ST.proxyName = name; } });
     $('#add').addEventListener('click', function () {
       var t = prompt('Date, as YYYY-MM-DD');
       var a = prompt('Amount');

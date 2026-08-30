@@ -420,3 +420,17 @@ summary.linkish { list-style: revert; cursor: pointer; }
 }
 .guide-list dt:first-child { margin-top: 0; }
 .guide-list dd { margin: .15rem 0 0; }
+
+/* Review v4 §5: the door's questions and its gap note. A question is set like
+   a reading -- sentence, then the choice -- never as an alert. */
+.door-ask { margin-top: .9rem; }
+.door-ask .refusal { border-top: 0; padding-top: 0; }
+.scheme-list { max-height: 22rem; overflow-y: auto; margin-top: .5rem; }
+.scheme {
+  display: block; width: 100%; text-align: left; min-height: 48px;
+  background: none; border: 0; border-top: 1px solid var(--rule);
+  color: var(--ink); font: inherit; padding: .6rem 0; cursor: pointer;
+}
+.scheme:hover { color: var(--marker-ink); }
+.scheme .gloss { display: block; }
+.scheme-list .label { margin-top: 1rem; }

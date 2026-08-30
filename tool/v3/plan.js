@@ -244,15 +244,8 @@
     ['p-have', 'p-monthly', 'p-step', 'p-years', 'p-needed', 'p-rate'].forEach(function (id) {
       $('#' + id).addEventListener('input', run);
     });
-    $('#p-file-open').addEventListener('click', function () { $('#p-file').click(); });
-    $('#p-file').addEventListener('change', function (e) {
-      var f = e.target.files && e.target.files[0];
-      if (!f) return;
-      W.readFile(f).then(function (res) {
-        P.series = res.series; P.name = res.name;
-        drawFund(); run();
-      }).catch(function (err) { $('#p-fund-state').textContent = err.message; });
-    });
+    W.door({ openId: 'p-file-open', fileId: 'p-file', stateId: 'p-fund-state',
+             onLoad: function (series, name) { P.series = series; P.name = name; drawFund(); run(); } });
     drawFund();
   }
 

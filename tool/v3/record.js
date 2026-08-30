@@ -130,6 +130,12 @@
 
     out.innerHTML = html;
     wireDeposit(s);
+    /* The index-fund door is drawn inside the reading, so it is wired each
+       time the reading is. §5's conversation applies to the second file too. */
+    if ($('#r-index-open')) {
+      W.door({ openId: 'r-index-open', fileId: 'r-index-file', stateId: 'r-index-state',
+               onLoad: function (series, name) { R.index = series; R.indexName = name; run(); } });
+    }
     drawLine();
   }
 
@@ -181,7 +187,9 @@
       return '<div class="section"><p class="label">Against an index fund</p>' +
         '<p class="gloss">No index fund is loaded, so this fund’s record stands on its own here.</p>' +
         '<button class="linkish" id="r-index-open" type="button">Load an index fund</button>' +
-        '<input type="file" id="r-index-file" accept=".csv,.txt,.xlsx,.json" hidden></div>';
+        '<input type="file" id="r-index-file" accept=".csv,.txt,.xlsx,.json" multiple hidden>' +
+        '<p class="gloss" id="r-index-state" aria-live="polite"></p>' +
+        '<p class="gloss">Same source, same steps as the fund’s own file.</p></div>';
     }
     var theirs = E.rolling(R.index, { years: R.years });
     if (!theirs.ok) {
@@ -234,11 +242,8 @@
   /* ---------------------------------------------------------------- wiring */
   function load(series, name) {
     R.series = series; R.name = name; R.years = null;
-    /* Review v4 §5: confirm before computing, naming the file's own name and
-       the dates it actually covers, so a reader can check they loaded what
-       they meant to before a single figure is worked out. */
-    $('#r-state').textContent = 'Found ' + W.count(series.length) + ' NAVs for ' + name +
-      ', ' + W.span(series[0].t, series[series.length - 1].t) + '.';
+    /* The door writes the confirmation, gaps and all (review v4 §5). Writing
+       it again here overwrote the gap clause with a shorter version. */
     $('#r-window').hidden = false;
     $('#r-out').innerHTML = '';
     drawYears();
@@ -253,26 +258,10 @@
   root.WYSRecord = {
     state: R, load: load,
     init: function () {
-      $('#r-file-open').addEventListener('click', function () { $('#r-file').click(); });
-      $('#r-file').addEventListener('change', function (e) {
-        var f = e.target.files && e.target.files[0];
-        if (!f) return;
-        W.readFile(f).then(function (r) { load(r.series, r.name); })
-                     .catch(function (err) { $('#r-state').textContent = err.message; });
-      });
-      /* the index-fund door is rendered inside the reading, so it is wired
-         each time the reading is drawn */
-      document.addEventListener('click', function (e) {
-        if (e.target && e.target.id === 'r-index-open') $('#r-index-file').click();
-      });
-      document.addEventListener('change', function (e) {
-        if (!e.target || e.target.id !== 'r-index-file') return;
-        var f = e.target.files && e.target.files[0];
-        if (!f) return;
-        W.readFile(f).then(function (r) {
-          R.index = r.series; R.indexName = r.name; run();
-        });
-      });
+      /* Review v4 §5: one door, and it holds the whole conversation. */
+      W.door({ openId: 'r-file-open', fileId: 'r-file', stateId: 'r-state',
+               onLoad: function (series, name) { load(series, name); } });
+
     }
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

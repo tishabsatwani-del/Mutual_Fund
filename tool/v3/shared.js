@@ -104,17 +104,142 @@
    * can open and check.
    */
 
-  function readFile(file) {
+  /* One file into something sim/upload.js can read: text for .csv, .txt and
+     .json, rows for a workbook. */
+  function contentOf(file) {
+    if (/\.xlsx?$/i.test(file.name || '')) {
+      return root.SimWorkbook.readWorkbook(file)
+        .then(function (rows) { return { name: file.name, rows: rows }; })
+        .catch(function () {
+          throw new Error('That Excel file could not be read here. Open it and save it as CSV, ' +
+                          'then load that.');
+        });
+    }
     return new Promise(function (resolve, reject) {
       var reader = new FileReader();
-      reader.onerror = function () { reject(new Error('That file could not be read.')); };
-      reader.onload = function () {
-        var parsed = root.PRCParse.parseSeriesText(String(reader.result));
-        if (!parsed.ok) { reject(new Error(parsed.message)); return; }
-        resolve({ series: parsed.series, name: file.name.replace(/\.[^.]+$/, '') });
-      };
+      reader.onerror = function () { reject(new Error('That file could not be opened.')); };
+      reader.onload = function () { resolve({ name: file.name, text: String(reader.result) }); };
       reader.readAsText(file);
     });
+  }
+
+  /* --------------------------------------------------------------- the door
+   *
+   * Review v4 §5. Upload is the only door, so it holds a conversation rather
+   * than just parsing: three of §5's rules are questions the reader is the
+   * only one who can answer, and each is asked ONCE and then remembered.
+   *
+   * The screen supplies the ids and what to do with a loaded series; every
+   * question, refusal and confirmation is handled here, so all three doors
+   * behave identically and there is one place to change them.
+   */
+  function door(opts) {
+    var open = $('#' + opts.openId), input = $('#' + opts.fileId), state = $('#' + opts.stateId);
+    if (!open || !input || !state) return;
+    var answers = {}, chosen = [];
+
+    var panel = document.createElement('div');
+    panel.className = 'door-ask';
+    panel.hidden = true;
+    state.parentNode.insertBefore(panel, state.nextSibling);
+
+    open.addEventListener('click', function () { input.click(); });
+    input.addEventListener('change', function (e) {
+      var picked = Array.prototype.slice.call(e.target.files || []);
+      if (!picked.length) return;
+      answers = {};                       /* a new pile is a new conversation */
+      chosen = picked;
+      state.textContent = picked.length === 1
+        ? 'Reading ' + picked[0].name + '…'
+        : 'Reading ' + count(picked.length) + ' files…';
+      go();
+    });
+
+    function go() {
+      Promise.all(chosen.map(contentOf)).then(function (files) {
+        render(root.SimUpload.read(files, answers));
+      }).catch(function (err) {
+        panel.hidden = true;
+        state.textContent = err.message;
+      });
+    }
+
+    function render(v) {
+      if (v.ok) {
+        /* Clear it, not just hide it: a hidden panel that still holds the last
+           question keeps those buttons in the document, where a keyboard and a
+           screen reader can still reach them. */
+        panel.hidden = true;
+        panel.innerHTML = '';
+        state.textContent = v.confirmation;
+        /* A gap is not a refusal -- the series is usable -- so it is said
+           beside the confirmation rather than instead of it. */
+        if (v.gapMessage) {
+          panel.hidden = false;
+          panel.innerHTML = '<p class="gloss">' + esc(v.gapMessage) + '</p>';
+        }
+        opts.onLoad(v.series, v.name, v);
+        return;
+      }
+      state.textContent = '';
+      panel.hidden = false;
+      if (v.ask === 'day-first') return askDayFirst(v);
+      if (v.ask === 'scheme') return askScheme(v);
+      /* a refusal is set like a reading: sentence, then what to do */
+      panel.innerHTML = '<div class="refusal"><p>' + esc(v.message) + '</p></div>';
+    }
+
+    function askDayFirst(v) {
+      panel.innerHTML = '<div class="refusal"><p>' + esc(v.message) + '</p>' +
+        '<div class="chips"><button class="chip" type="button" data-answer="day">Day first</button>' +
+        '<button class="chip" type="button" data-answer="month">Month first</button></div></div>';
+      $$('[data-answer]', panel).forEach(function (b) {
+        b.addEventListener('click', function () {
+          answers.dayFirst = b.dataset.answer === 'day';
+          go();
+        });
+      });
+    }
+
+    function askScheme(v) {
+      var rows = [];
+      v.groups.forEach(function (g) {
+        rows.push('<p class="label">' + esc(g.family) + '</p>');
+        g.rows.forEach(function (r) {
+          rows.push('<button class="scheme" type="button" data-scheme="' + esc(r.name) + '">' +
+            esc(planWords(r)) + '<span class="gloss">' + count(r.count) + ' prices</span></button>');
+        });
+      });
+      panel.innerHTML = '<div class="refusal"><p>' + esc(v.message) + '</p>' +
+        '<label class="field" for="' + opts.fileId + '-find"><span class="label">Find it by name</span>' +
+        '<input type="text" id="' + opts.fileId + '-find" autocomplete="off"></label>' +
+        '<div class="scheme-list">' + rows.join('') + '</div></div>';
+
+      $$('[data-scheme]', panel).forEach(function (b) {
+        b.addEventListener('click', function () {
+          answers.scheme = b.dataset.scheme;
+          go();
+        });
+      });
+      var find = $('#' + opts.fileId + '-find');
+      find.addEventListener('input', function () {
+        var q = find.value.trim().toLowerCase();
+        $$('.scheme-list > *', panel).forEach(function (el) {
+          var name = (el.dataset.scheme || el.textContent || '').toLowerCase();
+          el.hidden = q !== '' && name.indexOf(q) < 0;
+        });
+      });
+    }
+
+    /* "Direct · Growth" reads faster than the whole scheme name repeated four
+       times, and plan and option are the only thing that differs inside a
+       family. */
+    function planWords(r) {
+      var plan = r.plan === 'direct' ? 'Direct' : r.plan === 'regular' ? 'Regular' : '';
+      var option = r.option === 'growth' ? 'Growth' : r.option === 'idcw' ? 'IDCW' : '';
+      var said = [plan, option].filter(Boolean).join(' · ');
+      return said || r.name;
+    }
   }
 
   /* --------------------------------------------------------------- routing */
@@ -154,7 +279,7 @@
     $: $, $$: $$, money: money, moneyWords: moneyWords, pct: pct, date: date,
     span: span, years: years, esc: esc, count: count, checkInput: F.checkInput, echo: F.echo,
     slot: slot, saying: saying, written: written, land: land,
-    readFile: readFile,
+    door: door, contentOf: contentOf,
     view: view, go: go, start: start, render: render,
     copy: COPY
   };

@@ -13,12 +13,15 @@ screens are still live at `../`; these replace them.
 | `stand.js` | Tool 3, *My money in this fund* |
 | `plan.js` | Tool 4, *My plan, tested* |
 | `boot.js` | Starts the four tools, and draws About |
+| *(shared)* `sim/upload.js` | The §5 door: its questions, its stitching, its messages |
+| *(shared)* `sim/workbook.js` | Reads an .xlsx without a library |
 | `shots/` | The twelve screenshots — run `node tools/v3/shoot.js` |
 | `deck.js` | Generated. Do not edit — run `python3 tools/v3/build_deck.py` |
 
 ```
 python3 tools/v3/build_deck.py     # after editing sim/copy.json or sim/states.json
-node tools/tool-tests/v3.test.js   # 215 checks, needs a server on 8781
+node tools/tool-tests/v3.test.js   # 234 checks, needs a server on 8781
+node sim/tests/upload.test.js      # 41 checks on the door, headless
 node tools/v3/shoot.js             # the twelve screenshots, same server
 ```
 
@@ -76,8 +79,35 @@ a calculator that fetches will read "load a file" as this tool being less
 capable unless the first thing they meet is why. §5's guide sits behind one
 tap so the door itself keeps to its word budget.
 
-The door also **confirms before computing**, in §5's own form: *Found 4,812
-NAVs for [name as in the file], 12-Mar-2007 to 28-Aug-2026.*
+### The door holds a conversation
+
+Because it is the only door, it cannot just parse. Three of §5's rules are
+**questions the reader is the only one who can answer**, and each is asked once
+and then remembered for that pile of files:
+
+* **Dates that read two ways.** Where day-first and month-first are both valid
+  for every row, the door shows the first row set both ways and offers two
+  answers. It used to default to day-first with a warning, and a warning is not
+  a question.
+* **A file holding many schemes.** Listed **grouped by family**, each row named
+  by what actually differs — *Direct · Growth* — with Direct before Regular and
+  Growth before IDCW, and a search box for a file with two hundred of them.
+* **An IDCW row.** Refused, with the reason and the row to pick instead: its
+  NAV falls at every payout, so every return on it reads low.
+
+And two of §5's rules are arithmetic over the whole pile. AMFI caps a download
+at 90 days, so a full history arrives in pieces: the door **stitches by date,
+removes the overlaps** readers leave to be safe, and **reports the gaps** that
+remain, naming the days and both dates and saying that a downloaded piece may
+be missing. A weekend is not a gap.
+
+Then it **confirms before computing**, in §5's own form: *Found 4,812 NAVs for
+[name as in the file], 12-Mar-2007 to 28-Aug-2026, no gaps.*
+
+All of it lives in `sim/upload.js` as pure functions over rows, so the whole
+conversation is tested headlessly (41 checks) as well as driven through a real
+screen. The index fund goes through the same door, with §5's *same source, same
+steps* note under it.
 
 ## About, and the footer
 
