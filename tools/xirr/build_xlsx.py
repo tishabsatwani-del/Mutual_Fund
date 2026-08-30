@@ -54,7 +54,7 @@ CELL_BORDER = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
 INSTRUCTION = (
     "Type in the cream cells only \u2014 everything else is worked out for you. "
     "One row for every payment, with no blank rows in between, and the last row "
-    "must be today's date, Value today, and what the holding is worth now."
+    "must be today's date, Worth today, and what the holding is worth now."
 )
 
 RESULT_FORMULA = (
@@ -65,7 +65,7 @@ RESULT_FORMULA = (
 
 STATUS_FORMULA = (
     '=IF(COUNT($B$8:$B$507)=0,"Add your first investment above.",'
-    'IF(Calc!$D$1=0,"Add a last row: today\'s date, Value today, and what the '
+    'IF(Calc!$D$1=0,"Add a last row: today\'s date, Worth today, and what the '
     'holding is worth now.",'
     'IF(Calc!$D$2=0,"Add at least one investment.","")))'
 )
@@ -78,7 +78,7 @@ def excel_serial(d):
 
 
 def flow_formula(row):
-    return f'=IF($B{row}="","",IF($C{row}="Investment",-$D{row},$D{row}))'
+    return f'=IF($B{row}="","",IF($C{row}="Money in",-$D{row},$D{row}))'
 
 
 def widths(ws):
@@ -158,10 +158,10 @@ def validations(ws):
         error="Enter a real date between 1-Jan-1990 and 31-Dec-2100.",
     )
     dv_kind = DataValidation(
-        type="list", formula1='"Investment,Withdrawal,Value today"',
+        type="list", formula1='"Money in,Money out,Worth today"',
         allow_blank=True, showErrorMessage=True,
         errorTitle="Pick one of the three",
-        error="Choose Investment, Withdrawal or Value today from the list.",
+        error="Choose Money in, Money out or Worth today from the list.",
     )
     dv_amt = DataValidation(
         type="decimal", operator="greaterThan", formula1="0",
@@ -194,9 +194,12 @@ lines = [
     "earned, and it shows what it would take to reach a goal.",
     "2. Save your own copy before you type anything, so you always have a clean one.",
     "3. On the My investments tab, enter one row for every payment you made: the "
-    "date, then Investment or Withdrawal from the dropdown, then the amount as a "
+    "date, then Money in or Money out from the dropdown, then the amount as a "
     "plain positive number.",
-    "4. In the last row, enter today's date, choose Value today, and type what the "
+    "Dates are shown as dd-mmm-yyyy. If a date you typed reads back as a different "
+    "day, your computer is set to American dates; retype it and check it reads the "
+    "way you meant. "
+    "4. In the last row, enter today's date, choose Worth today, and type what the "
     "holding is worth right now. Your XIRR appears at the top of that tab.",
     "5. On the Plan my goal tab, enter what you are aiming for, what you already "
     "have, and what you invest each month. It shows where you land and what would "
@@ -471,9 +474,9 @@ ex["B4"] = (
 entry_rows(ex, unlock=False)
 for row, (d, kind, amount) in enumerate(
     [
-        (dt.datetime(2024, 1, 1), "Investment", 100000),
-        (dt.datetime(2025, 1, 1), "Investment", 100000),
-        (dt.datetime(2026, 1, 1), "Value today", 228000),
+        (dt.datetime(2024, 1, 1), "Money in", 100000),
+        (dt.datetime(2025, 1, 1), "Money in", 100000),
+        (dt.datetime(2026, 1, 1), "Worth today", 228000),
     ],
     start=FIRST_ROW,
 ):
@@ -507,9 +510,9 @@ protect(about)
 
 # --------------------------------------------------------------- Calc (hidden)
 calc = wb.create_sheet("Calc")
-calc["C1"] = "Rows marked Value today"
+calc["C1"] = "Rows marked Worth today"
 calc["D1"] = f"=SUM($A${FIRST_ROW}:$A${LAST_ROW})"
-calc["C2"] = "Rows marked Investment"
+calc["C2"] = "Rows marked Money in"
 calc["D2"] = f"=SUM($B${FIRST_ROW}:$B${LAST_ROW})"
 # Helper columns live out at AA and beyond so they can never collide with the
 # goal tab's terms in F to I.
@@ -517,11 +520,11 @@ FLOW_COLS = ["AE", "AF", "AG", "AH", "AI"]      # each holding's cash flow
 PAID_COLS = ["AK", "AL", "AM", "AN", "AO"]      # each holding's money in
 
 for row in range(FIRST_ROW, LAST_ROW + 1):
-    calc[f"A{row}"] = f"=IF('My investments'!$C{row}=\"Value today\",1,0)"
-    calc[f"B{row}"] = f"=IF('My investments'!$C{row}=\"Investment\",1,0)"
-    calc[f"AA{row}"] = f"=IF('My investments'!$C{row}=\"Investment\",'My investments'!$D{row},0)"
-    calc[f"AB{row}"] = f"=IF('My investments'!$C{row}=\"Withdrawal\",'My investments'!$D{row},0)"
-    calc[f"AC{row}"] = f"=IF('My investments'!$C{row}=\"Value today\",'My investments'!$D{row},0)"
+    calc[f"A{row}"] = f"=IF('My investments'!$C{row}=\"Worth today\",1,0)"
+    calc[f"B{row}"] = f"=IF('My investments'!$C{row}=\"Money in\",1,0)"
+    calc[f"AA{row}"] = f"=IF('My investments'!$C{row}=\"Money in\",'My investments'!$D{row},0)"
+    calc[f"AB{row}"] = f"=IF('My investments'!$C{row}=\"Money out\",'My investments'!$D{row},0)"
+    calc[f"AC{row}"] = f"=IF('My investments'!$C{row}=\"Worth today\",'My investments'!$D{row},0)"
     # One column per holding: this row's flow if it belongs to that holding,
     # otherwise zero. A zero contributes nothing to XIRR, so each column is that
     # holding's own cash flow with every date left in place -- which is how a
@@ -547,7 +550,7 @@ calc["C3"] = "Total invested"
 calc["D3"] = f"=SUM($AA${FIRST_ROW}:$AA${LAST_ROW})"
 calc["C4"] = "Total withdrawn"
 calc["D4"] = f"=SUM($AB${FIRST_ROW}:$AB${LAST_ROW})"
-calc["C5"] = "Value today"
+calc["C5"] = "Worth today"
 calc["D5"] = f"=SUM($AC${FIRST_ROW}:$AC${LAST_ROW})"
 
 # ---- goal-tab helpers.

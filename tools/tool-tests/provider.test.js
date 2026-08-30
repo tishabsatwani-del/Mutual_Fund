@@ -88,6 +88,10 @@ window.PRC_PROVIDER = {
   ok('a fetched fund is ready to analyse like any other source',
      /Ready to analyse/.test(await page.locator('#r-loaded').innerText()),
      await page.locator('#r-loaded').innerText());
+  /* Review v4 §12.14: no default holding period, so the run begins by choosing
+     one -- nothing renders before the reader does. */
+  await page.locator('#r-years .chip[data-years="5"]').click();
+  await page.waitForTimeout(250);
   await page.click('#r-run');
   await page.waitForSelector('#r-out .result', { timeout: 20000 });
   const out = await page.locator('#r-out').innerText();

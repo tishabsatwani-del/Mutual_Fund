@@ -298,21 +298,13 @@
       'than the country&rsquo;s.</p></div></details></div>';
   }
 
-  /* Five checks that dissolve almost every "these two screens disagree". */
+  /* Review v4 §12.12: "When two screens disagree" set out the chapter's five
+   * checks in full on this screen. Section 4's rule: a sentence is on screen
+   * only if it could not have been written before the reader's data arrived.
+   * These could, so they are the book's, and what stays is a pointer of six
+   * words or fewer. */
   function disagreeCard() {
-    return '<details class="explain card"><summary>When two screens disagree about the same fund</summary>' +
-      '<div class="body"><p style="margin-top:0">Before you distrust anyone, run five checks.</p>' +
-      '<dl>' +
-      '<dt>The plan</dt><dd>Direct and Regular are different rows, and Regular carries the ' +
-      'distributor&rsquo;s commission.</dd>' +
-      '<dt>The option</dt><dd>Growth and IDCW are different histories. An IDCW NAV falls each time ' +
-      'money is paid out.</dd>' +
-      '<dt>The method</dt><dd>One screen may be showing a total while the other shows a yearly rate, ' +
-      'or one shows the fund&rsquo;s CAGR while the other shows your XIRR.</dd>' +
-      '<dt>The window</dt><dd>A one-year figure and a five-year figure answer different questions.</dd>' +
-      '<dt>The date</dt><dd>Returns are dated. A page refreshed yesterday and one refreshed last week ' +
-      'are photographs of two different days.</dd>' +
-      '</dl><p>Five checks, ten seconds, and almost every mismatch dissolves.</p></div></details>';
+    return '<p class="hint pointer">Chapter 13, the five checks.</p>';
   }
 
   function byLabel(flows, portfolioRate) {
@@ -739,40 +731,13 @@
 
   /* Four ways a published return misleads without anyone lying. Straight from
    * the chapter, because a reader who knows these cannot be sold with them. */
+  /* Review v4 §12.12: the four traps, in full, with the March 2020 worked
+   * example. All of it could have been written before the reader arrived, so
+   * all of it is the book's. Section 4 gives this pointer verbatim. */
   function trapsCard(years) {
-    return '<details class="explain card"><summary>Four traps in any published return</summary>' +
-      '<div class="body"><dl>' +
-      '<dt>The ' + years + '-year number changes while the fund does not</dt>' +
-      '<dd>Both ends of the window move forward together. Most days that changes nothing, but when the ' +
-      '<em>starting</em> day crosses a crash, the figure swings hard while the fund does nothing at all. ' +
-      'In March 2020 the Sensex fell to about 26,000; five years later it stood near 78,000, so the ' +
-      'five-year return read about 24% a year &mdash; measured from the bottom of a crash. Seventeen ' +
-      'months on, the index was still near 78,000, but the starting day had moved to a market that had ' +
-      'already recovered to about 55,500, and the same five-year return read about 7%. The market went ' +
-      'nowhere. The starting line moved. When a fund you hold shows a sudden drop, check where the new ' +
-      'number sits in the range above: inside it, what you saw was a good year leaving, not a bad year ' +
-      'arriving. A sudden jump deserves the same suspicion.</dd>' +
-      '<dt>Since launch depends on the launch date</dt>' +
-      '<dd>Every other window slides forward daily. This one is pinned to the fund&rsquo;s first day ' +
-      'forever. A fund born at the bottom of a crash spends its first years riding the recovery and ' +
-      'looks brilliant for life; one born near a peak drags a poor figure for years. Put the ' +
-      'since-launch figure beside the five- and ten-year figures. If it sits far from them, it is a ' +
-      'fact about the fund&rsquo;s birthday, not about the fund.</dd>' +
-      '<dt>The record stays when the manager leaves</dt>' +
-      '<dd>A ten-year record can be the work of someone who left two years ago. The factsheet prints ' +
-      'the date each manager took over, usually as <em>managing since</em>. If that date is recent, ' +
-      'everything before it was somebody else&rsquo;s work.</dd>' +
-      '<dt>The list you choose from has been cleaned</dt>' +
-      '<dd>Funds that do badly for years are usually merged into better ones from the same house, and ' +
-      'their record vanishes from every list and every average. So a category average is the average ' +
-      'of the survivors, and every &ldquo;most funds beat the index&rdquo; claim counts only the funds ' +
-      'that lived. Nothing brings them back and no page will footnote them, so carry the correction ' +
-      'yourself: the true figure was a little worse.</dd>' +
-      '</dl></div></details>';
+    return '<p class="hint pointer">Chapter 13, Section 2, the traps.</p>';
   }
 
-  /* Same holding period, same market, different starting day. This is the
-   * question a single headline return cannot answer. */
   function startDateCard(r, years) {
     var spread = r.best.r - r.worst.r;
     return '<div class="card"><h2>Would it still look this way if you had started elsewhere?</h2>' +
@@ -963,7 +928,11 @@
     report: null,          /* import report, when it came from a file */
     rows: null,            /* raw rows, kept so the scheme can be changed */
     schemes: null,
-    years: 5,
+    /* Review v4 §12.14 and §4: NO default. The chapter's rule is never the
+     * window the page opens on, because a default is a recommendation and the
+     * length a reader means to hold is the one thing this screen cannot guess.
+     * Nothing below renders until one is chosen. */
+    years: null,
     datesTouched: false,
     bundled: {},           /* name -> series, for the comparison list */
     ran: false
@@ -977,6 +946,7 @@
     $('#src-index').hidden = source !== 'index';
     $('#src-fund').hidden = source !== 'fund';
     $('#step-source').dataset.done = source ? 'yes' : 'no';
+    gateSteps();
     var prompt = $('#r-source-prompt');
     if (prompt) {
       prompt.textContent = source ? ''
@@ -1077,19 +1047,20 @@
         R.indexList = list;
         if (data && data.asOf) $('#asof').textContent = 'through ' + data.asOf;
         if (!list.length) {
-          sel.innerHTML = '<option value="">No index is bundled with this version</option>';
+          /* Review v4 §12.16: this was said three times on one screen -- in the
+             dropdown, in an information notice and in a help panel. Once, as a
+             line under the file chooser. */
+          sel.innerHTML = '<option value="">Load an index file below</option>';
           sel.disabled = true;
           $('#r-index-hint').textContent = '';
           $('#r-index-upload').innerHTML =
-            notice('', '<strong>No market data is bundled with this version.</strong> Nothing has ' +
-              'been invented to fill the gap: a guessed-at index would produce confident numbers ' +
-              'about a market that never existed. Load an official index file and every measurement ' +
-              'on this screen works exactly the same way.') +
             '<label class="fieldlabel" for="bm-pick">Index data file</label>' +
             '<div class="filebox" id="bm-drop" tabindex="0" role="button" aria-label="Choose an index file">' +
             '<button class="secondary" type="button" id="bm-pick">Choose a file</button>' +
             '<p>A date column and the index value on that date</p></div>' +
-            '<input type="file" id="bm-file" accept=".csv,.txt,.xlsx">';
+            '<input type="file" id="bm-file" accept=".csv,.txt,.xlsx">' +
+            '<p class="hint">No index is bundled with this version, and nothing has been ' +
+            'invented to fill the gap.</p>';
           A.wireDrop('bm-drop', 'bm-file', 'bm-pick', function (file) { loadIndexFile(file); });
           return;
         }
@@ -1279,6 +1250,28 @@
     return { name: name, series: R.bundled[name], meta: b };
   }
 
+  /* Review v4 §12.15: "Choose something to analyse first" sat under date fields
+   * that were themselves enabled, so a reader could fill in boxes that did
+   * nothing. The later steps are greyed and their controls disabled until the
+   * step above them is satisfied, which says the same thing without a sentence. */
+  function gateSteps() {
+    var haveSeries = !!R.series;
+    [['#step-period', haveSeries], ['#step-hold', haveSeries],
+     ['#step-compare', haveSeries]].forEach(function (pair) {
+      var card = $(pair[0]);
+      if (!card) return;
+      card.dataset.locked = pair[1] ? 'no' : 'yes';
+      A.$$('input, select, button', card).forEach(function (el) {
+        if (el.dataset.alwaysOn === 'yes') return;
+        el.disabled = !pair[1] || el.dataset.infeasible === 'yes';
+      });
+    });
+    /* Once a series is loaded, step 2 writes its own "Data available:" line,
+       so this only ever clears the placeholder it put there. */
+    var range = $('#r-range');
+    if (range && !haveSeries) range.textContent = 'Choose something to analyse first.';
+  }
+
   function yearChips() {
     var box = $('#r-years');
     box.innerHTML = '';
@@ -1308,16 +1301,19 @@
     $$('#r-years .chip').forEach(function (c) {
       var h = +c.dataset.years;
       var possible = spanYears == null || h <= spanYears;
+      c.dataset.infeasible = possible ? 'no' : 'yes';
       c.disabled = !possible;
       c.textContent = h + (h === 1 ? ' year' : ' years') +
         (possible ? '' : ' \u2014 needs ' + h + ' years of data');
       if (possible) best = h;
     });
-    if (best !== null && R.years > best) {
-      R.years = best;
-      $$('#r-years .chip').forEach(function (c) {
-        c.setAttribute('aria-checked', String(+c.dataset.years === best));
-      });
+    /* A length the history cannot measure is cleared rather than swapped for
+       one the reader did not ask for: silently moving them from 10 years to 3
+       is the same recommendation the default was. */
+    if (R.years !== null && best !== null && R.years > best) {
+      R.years = null;
+      $('#step-hold').dataset.done = 'no';
+      $$('#r-years .chip').forEach(function (c) { c.setAttribute('aria-checked', 'false'); });
     }
   }
 
@@ -1325,7 +1321,8 @@
 
   function runRolling() {
     var out = $('#r-out');
-    if (!R.series) { out.innerHTML = notice('bad', 'Choose something to analyse first.'); return; }
+    if (!R.series) { out.innerHTML = ''; return; }
+    if (R.years === null) { out.innerHTML = ''; return; }
 
     var from = A.isoToTs($('#r-start').value);
     var to = A.isoToTs($('#r-end').value);
@@ -1595,6 +1592,7 @@
 
     /* rolling returns: one module, four steps, nothing hidden */
     yearChips();
+    gateSteps();
     loadIndexList();
     $$('#r-source .chip').forEach(function (c) {
       c.addEventListener('click', function () { resetSource(c.dataset.source); });

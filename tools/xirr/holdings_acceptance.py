@@ -54,15 +54,15 @@ def xirr(flows):
 
 
 ROWS = [
-    (dt.date(2021, 1, 1), "Investment", 500000, "Fund A"),
-    (dt.date(2026, 1, 1), "Value today", 700000, "Fund A"),
-    (dt.date(2025, 1, 1), "Investment", 50000, "Fund B"),
-    (dt.date(2026, 1, 1), "Value today", 75000, "Fund B"),
+    (dt.date(2021, 1, 1), "Money in", 500000, "Fund A"),
+    (dt.date(2026, 1, 1), "Worth today", 700000, "Fund A"),
+    (dt.date(2025, 1, 1), "Money in", 50000, "Fund B"),
+    (dt.date(2026, 1, 1), "Worth today", 75000, "Fund B"),
 ]
 
 
 def signed(kind, amount):
-    return -amount if kind == "Investment" else amount
+    return -amount if kind == "Money in" else amount
 
 
 shutil.rmtree(WORK, ignore_errors=True)

@@ -82,6 +82,10 @@ function pretty(iso) {
        (await page.locator('#r-start').inputValue()) === FIRST &&
        (await page.locator('#r-end').inputValue()) === LAST);
 
+  /* Review v4 §12.14: no default holding period, so the run begins by choosing
+       one -- nothing renders before the reader does. */
+    await page.locator('#r-years .chip[data-years="5"]').click();
+    await page.waitForTimeout(250);
     await page.click('#r-run');
     await page.waitForSelector('#r-out .result', { timeout: 20000 });
     const out = await page.locator('#r-out').innerText();

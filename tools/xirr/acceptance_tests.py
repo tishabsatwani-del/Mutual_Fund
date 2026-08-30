@@ -45,39 +45,39 @@ def sip_rows():
     rows = []
     for n in range(60):
         y, m = divmod((2020 * 12) + n, 12)
-        rows.append((dt.date(y, m + 1, 1), "Investment", 10000))
-    rows.append((dt.date(2025, 1, 1), "Value today", 824864))
+        rows.append((dt.date(y, m + 1, 1), "Money in", 10000))
+    rows.append((dt.date(2025, 1, 1), "Worth today", 824864))
     return rows
 
 
 CASES = [
     ("1. Two lump sums", [
-        (dt.date(2024, 1, 1), "Investment", 100000),
-        (dt.date(2025, 1, 1), "Investment", 100000),
-        (dt.date(2026, 1, 1), "Value today", 228000),
+        (dt.date(2024, 1, 1), "Money in", 100000),
+        (dt.date(2025, 1, 1), "Money in", 100000),
+        (dt.date(2026, 1, 1), "Worth today", 228000),
     ], "9.1%"),
     ("2. Five-year monthly SIP", sip_rows(), "12.7%"),
     ("3. With a withdrawal", [
-        (dt.date(2022, 4, 1), "Investment", 500000),
-        (dt.date(2024, 4, 1), "Withdrawal", 200000),
-        (dt.date(2026, 4, 1), "Value today", 450000),
+        (dt.date(2022, 4, 1), "Money in", 500000),
+        (dt.date(2024, 4, 1), "Money out", 200000),
+        (dt.date(2026, 4, 1), "Worth today", 450000),
     ], "8.1%"),
-    ("a. Investments but no Value today row", [
-        (dt.date(2024, 1, 1), "Investment", 100000),
-        (dt.date(2025, 1, 1), "Investment", 100000),
+    ("a. Money in but no Worth today row", [
+        (dt.date(2024, 1, 1), "Money in", 100000),
+        (dt.date(2025, 1, 1), "Money in", 100000),
     ], "status line"),
     ("b. A single row", [
-        (dt.date(2024, 1, 1), "Investment", 100000),
+        (dt.date(2024, 1, 1), "Money in", 100000),
     ], "status line"),
     ("c. Empty table", [], "status line"),
-    ("d. Value today but no investment", [
-        (dt.date(2026, 1, 1), "Value today", 228000),
+    ("d. Worth today but no money in", [
+        (dt.date(2026, 1, 1), "Worth today", 228000),
     ], "status line"),
 ]
 
 
 def signed(kind, amount):
-    return -amount if kind == "Investment" else amount
+    return -amount if kind == "Money in" else amount
 
 
 # ---------------------------------------------------------------- workbook

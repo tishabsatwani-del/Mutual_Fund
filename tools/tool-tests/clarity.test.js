@@ -67,9 +67,16 @@ function longFile(file) {
      /needs 10 years of data/.test(await page.locator('#r-years .chip[data-years="10"]').innerText()));
   ok('three years is still offered',
      !(await page.locator('#r-years .chip[data-years="3"]').isDisabled()));
-  ok('the selection falls back to the longest period that fits',
-     (await page.locator('#r-years .chip[aria-checked="true"]').innerText()).trim() === '3 years',
-     await page.locator('#r-years .chip[aria-checked="true"]').innerText());
+  /* Review v4 §12.14: no selection, ever, and nothing below renders until the
+     reader makes one. The screen used to fall back to the longest period that
+     fits, which is the same recommendation a default is -- it just makes it
+     after the reader has looked away. */
+  ok('nothing is chosen for the reader, even as a fallback',
+     (await page.locator('#r-years .chip[aria-checked="true"]').count()) === 0,
+     String(await page.locator('#r-years .chip[aria-checked="true"]').count()));
+  ok('and nothing renders until they choose one',
+     (await page.locator('#r-out').innerText()).trim() === '',
+     (await page.locator('#r-out').innerText()).slice(0, 80));
 
   await page.setInputFiles('#f-file', long);
   await page.waitForTimeout(1200);
@@ -87,6 +94,10 @@ function longFile(file) {
      await page.locator('#r-compare').inputValue());
 
   section('A benchmark with no overlap says so, and the result is not lost');
+  /* A holding period is now the reader's to choose -- nothing renders before
+     they do -- so the run starts by choosing one. */
+  await page.click('#r-years .chip[data-years="3"]');
+  await page.waitForTimeout(300);
   await page.click('#r-run');
   await page.waitForTimeout(1500);
   const out = await page.locator('#r-out').innerText();

@@ -474,3 +474,15 @@ footer.foot p { margin: 0 0 .5rem; }
 }
 .skip:focus { left: 0; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* Review v4 §4: what the book explains gets a pointer of six words or fewer,
+   not a paragraph. It reads as a marginal note, not as a heading. */
+.pointer {
+  border-left: 2px solid var(--line-strong); padding-left: .7rem;
+  margin: 1rem 0 0; font-style: italic;
+}
+
+/* Review v4 §12.15: a step that cannot be used yet says so by looking unusable,
+   rather than by a sentence under fields a reader can still type into. */
+.step[data-locked="yes"] { opacity: .5; }
+.step[data-locked="yes"] h2 { opacity: 1; }

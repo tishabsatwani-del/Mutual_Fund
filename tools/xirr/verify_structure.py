@@ -37,7 +37,7 @@ check("B4 double XIRR with -0.5 fallback",
       and "Check the status line below" in inv["B4"].value)
 check("B4 formatted as percent, one decimal", inv["B4"].number_format == "0.0%")
 for phrase in ("Add your first investment above.",
-               "Add a last row: today's date, Value today,",
+               "Add a last row: today's date, Worth today,",
                "Add at least one investment."):
     check(f"status line: {phrase[:34]}...", phrase in inv["B5"].value)
 
@@ -46,8 +46,8 @@ check("headings on row 7",
       [inv[f"{c}7"].value for c in "BCDEF"]
       == ["Date", "What happened", "Amount", "Used by the sheet", "Which holding"])
 check("500 pre-formatted rows, 8 to 507",
-      inv["E8"].value == '=IF($B8="","",IF($C8="Investment",-$D8,$D8))'
-      and inv["E507"].value == '=IF($B507="","",IF($C507="Investment",-$D507,$D507))')
+      inv["E8"].value == '=IF($B8="","",IF($C8="Money in",-$D8,$D8))'
+      and inv["E507"].value == '=IF($B507="","",IF($C507="Money in",-$D507,$D507))')
 check("dates shown dd-mmm-yyyy", inv["B8"].number_format == "dd-mmm-yyyy")
 check("freeze panes at row 8", inv.freeze_panes == "A8")
 check("no merged cells anywhere",
@@ -66,7 +66,7 @@ dvs = {dv.type: dv for dv in inv.data_validations.dataValidation}
 check("date validation 1990-2100",
       dvs["date"].formula1 == "32874" and dvs["date"].formula2 == "73415")
 check("three dropdown options only",
-      dvs["list"].formula1 == '"Investment,Withdrawal,Value today"')
+      dvs["list"].formula1 == '"Money in,Money out,Worth today"')
 check("amount must be positive",
       dvs["decimal"].operator == "greaterThan" and dvs["decimal"].formula1 == "0")
 

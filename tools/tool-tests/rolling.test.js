@@ -123,6 +123,10 @@ function plainFile(file, rate, fromY, toY, start = 100) {
      (await page.locator('#r-start').getAttribute('min')) === '2010-01-01' &&
      (await page.locator('#r-end').getAttribute('max')) === '2025-01-01');
 
+  /* Review v4 §12.14: no default holding period, so the run begins by choosing
+     one -- nothing renders before the reader does. */
+  await page.locator('#r-years .chip[data-years="5"]').click();
+  await page.waitForTimeout(250);
   await page.click('#r-run');
   await page.waitForSelector('#r-out .result', { timeout: 20000 });
   let out = await page.locator('#r-out').innerText();
@@ -202,6 +206,10 @@ function plainFile(file, rate, fromY, toY, start = 100) {
   const cmpOpts = await page.locator('#r-compare option').allInnerTexts();
   ok('and it is named in the list', cmpOpts.length === 2, cmpOpts.join('|'));
   await page.selectOption('#r-compare', { index: 1 });
+  /* Review v4 §12.14: no default holding period, so the run begins by choosing
+     one -- nothing renders before the reader does. */
+  await page.locator('#r-years .chip[data-years="5"]').click();
+  await page.waitForTimeout(250);
   await page.click('#r-run');
   await page.waitForSelector('#r-out .result', { timeout: 20000 });
   out = await page.locator('#r-out').innerText();
@@ -218,11 +226,22 @@ function plainFile(file, rate, fromY, toY, start = 100) {
      await page.locator('#r-years .chip[data-years="5"]').isDisabled());
   ok('and the disabled chip says why',
      /needs 5 years of data/.test(await page.locator('#r-years .chip[data-years="5"]').innerText()));
-  ok('the selection falls back instead of erroring',
-     (await page.locator('#r-years .chip[aria-checked="true"]').textContent()).trim() === '1 year',
-     await page.locator('#r-years .chip[aria-checked="true"]').textContent());
+  /* Review v4 §12.14: a length the history can no longer measure is CLEARED,
+     not quietly swapped for a shorter one. Moving a reader from five years to
+     one after they have looked away is the same recommendation a default is. */
+  ok('a choice the history can no longer measure is cleared, not swapped',
+     (await page.locator('#r-years .chip[aria-checked="true"]').count()) === 0,
+     String(await page.locator('#r-years .chip[aria-checked="true"]').count()));
+  ok('and with nothing chosen, nothing below it is rendered',
+     (await page.locator('#r-out').innerText()).trim() === '',
+     (await page.locator('#r-out').innerText()).slice(0, 80));
+
+  /* Choosing one that still fits brings the reading back. */
+  await page.locator('#r-years .chip[data-years="1"]').click();
+  await page.waitForTimeout(600);
   out = await page.locator('#r-out').innerText();
-  ok('the analysis still shows a result', /What was measured/.test(out));
+  ok('the analysis shows a result once a feasible period is chosen',
+     /What was measured/.test(out), out.slice(0, 160));
   ok('no bare error code reaches the reader', !/NaN|undefined|#VALUE/.test(out));
 
   await page.fill('#r-start', '2024-08-01');
@@ -239,7 +258,10 @@ function plainFile(file, rate, fromY, toY, start = 100) {
 
   await page.click('#r-all');
   await page.waitForTimeout(700);
-  ok('resetting the range recovers', /came out ahead|Median/i.test(await page.locator('#r-out').innerText()));
+  await page.locator('#r-years .chip[data-years="5"]').click();
+  await page.waitForTimeout(700);
+  ok('resetting the range recovers', /came out ahead|Median/i.test(await page.locator('#r-out').innerText()),
+     (await page.locator('#r-out').innerText()).slice(0, 120));
 
   section('Start again clears everything');
   await page.click('#r-reset');
