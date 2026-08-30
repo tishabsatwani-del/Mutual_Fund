@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en-IN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My money in this fund · Where You Stand</title>
+<meta name="description" content="Your own return on one fund, the fund's own speed over your exact dates, where that stretch sits in the fund's whole record, and the same money in an index fund. Worked out on your phone.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23F1EFEA'/%3E%3Crect x='5' y='13' width='22' height='7' fill='%23FFE566'/%3E%3Cpath d='M5 20h22' stroke='%231E2433' stroke-width='1.5'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="theme.css">
+</head>
+<body>
+
+<header class="bar">
+  <span class="name">Where You Stand</span>
+  <button class="back" id="back" type="button" hidden>Start again</button>
+</header>
+
+<main class="page" id="main">
+
+  <!-- ============================================================ the fund -->
+  <section class="section" id="step-fund">
+    <h1>My money in this fund</h1>
+    <p class="gloss" id="fund-lede">Find the fund, then enter what you paid in and took out.</p>
+
+    <label class="field" for="q">
+      <span class="label">The fund</span>
+      <input type="text" id="q" autocomplete="off" placeholder="Type part of its name">
+    </label>
+    <div id="hits" role="listbox" aria-label="Matching funds"></div>
+    <p class="gloss" id="fund-state" aria-live="polite"></p>
+
+    <button class="linkish" id="use-file" type="button">Load a file instead</button>
+    <input type="file" id="file" accept=".csv,.txt,.xlsx,.json" multiple hidden>
+  </section>
+
+  <!-- ========================================================== the ledger -->
+  <section class="section" id="step-ledger" hidden>
+    <h2>What you paid in</h2>
+    <div class="boxed">
+      <table class="ledger">
+        <thead><tr><th>Date</th><th>In or out</th><th class="n">Amount</th><th></th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <div style="display:flex;gap:1.25rem;flex-wrap:wrap;margin:.35rem 0 1.25rem">
+      <button class="linkish" id="add" type="button">Add a line</button>
+      <button class="linkish" id="sip" type="button">Monthly instalments</button>
+      <button class="linkish" id="example" type="button">Try an example</button>
+      <button class="linkish" id="clear" type="button">Clear</button>
+    </div>
+
+    <div class="boxed" id="sip-box" hidden>
+      <label class="field" for="sip-from"><span class="label">First instalment</span>
+        <input type="date" id="sip-from"></label>
+      <label class="field" for="sip-amt"><span class="label">Amount each month</span>
+        <input type="number" id="sip-amt" inputmode="decimal" min="0" step="any"></label>
+      <label class="field" for="sip-n"><span class="label">How many</span>
+        <input type="number" id="sip-n" inputmode="numeric" min="1" max="600" step="1"></label>
+      <button class="primary" id="sip-add" type="button">Write these lines</button>
+    </div>
+
+    <h2 style="margin-top:1.5rem">Worth today</h2>
+    <label class="field" for="worth"><span class="label">What it is all worth</span>
+      <input type="number" id="worth" inputmode="decimal" min="0" step="any"
+             placeholder="Leave empty and the fund's own NAV is used"></label>
+    <p class="gloss">Leave it empty and the tool values your units at the fund's latest NAV.</p>
+
+    <button class="primary" id="run" type="button" disabled>Show me where I stand</button>
+  </section>
+
+  <!-- ========================================================= the reading -->
+  <section class="section" id="step-reading" hidden aria-live="polite">
+    <div id="reading"></div>
+  </section>
+
+  <footer class="foot">
+    <p id="foot-refrains"></p>
+    <p>Where You Stand · everything is worked out on this device.</p>
+  </footer>
+</main>
+
+<script src="deck.js"></script>
+<script src="../../sim/engines.js"></script>
+<script src="../../sim/schemes.js"></script>
+<script src="../../sim/position.js"></script>
+<script src="../../sim/states.js"></script>
+<script src="../parse.js"></script>
+<script src="lifeline.js"></script>
+<script src="stand.js"></script>
+</body>
+</html>

@@ -1,0 +1,238 @@
+/* Where You Stand — the materials.
+ *
+ * Review v3, section 6. Grounded in the one thing a reader does to a book they
+ * own: mark it. The materials are a ledger page's own — paper, ink, ruling,
+ * marker — and the tool follows the phone's day and night setting with no
+ * toggle: by day it looks like the book's page, by night like its screen.
+ *
+ * Every value below was measured, not eyeballed. See tools/tool-tests/v3.test.js,
+ * which fails if any text pair drops under 4.5:1 or any tappable edge under 3:1.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  /* ---- the page ---------------------------------------------------------
+     Cooler and greyer than cream: an uncoated book stock by day. */
+  --paper:       #F1EFEA;
+  --ink:         #1E2433;   /* 13.48:1 — the fund and everything written */
+  --muted:       #5F6779;   /*  4.94:1 — glosses, axis text, the footer */
+
+  /* The reader. By day their figures sit on a band of marker, the way a reader
+     marks a page. Nothing else is ever this colour. */
+  --marker-band: rgba(255, 229, 102, .55);
+  --marker-ink:  #1E2433;   /* 12.77:1 on the composited band */
+  --marker-line: #D8B93A;   /* the marker as a drawn line, day */
+
+  /* The comparison series only: the index fund's line and its figure. */
+  --slate:       #4C6A9C;   /*  4.75:1 */
+
+  /* Two grades of ruling. A line that only divides may be quiet; a line that is
+     the edge of something tappable is an affordance and reaches 3:1. */
+  --rule:        #B7C1D3;   /*  1.58:1 — divider */
+  --rule-edge:   #7D8AA0;   /*  3.04:1 — tappable edge */
+
+  --on-ink:      #F1EFEA;   /* text on an ink-filled button */
+
+  /* ---- type -------------------------------------------------------------
+     Section 6 asks for Source Serif 4 and IBM Plex Sans, self-hosted and
+     subset so that no request leaves the site. The font files are not in the
+     repository yet, so these stacks fall back to the system's own faces and
+     the page makes no external request either way. Adding the subsets is a
+     drop-in: the stacks already name them first. */
+  --serif: "Source Serif 4", "Source Serif Pro", Georgia, "Times New Roman", serif;
+  --sans:  "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  --figure:   3.5rem;   /* 56px */
+  --sentence: 1.375rem; /* 22px, serif */
+  --body:     1.0625rem;/* 17px */
+  --label:    .75rem;   /* 12px, small caps */
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper:       #12161E;   /* ink-black with a blue cast */
+    --ink:         #E8E6E1;   /* 14.52:1 */
+    --muted:       #9AA1AE;   /*  6.97:1 */
+    /* By night the marker is not a band behind the ink — it IS the ink the
+       reader's own figures are written in. */
+    --marker-band: transparent;
+    --marker-ink:  #F2CF5B;   /* 11.95:1 */
+    --marker-line: #F2CF5B;
+    --slate:       #8FA8D3;   /*  7.51:1 */
+    --rule:        #2C3442;   /*  1.45:1 — divider */
+    --rule-edge:   #5A6475;   /*  3.03:1 — tappable edge */
+    --on-ink:      #12161E;
+  }
+}
+
+/* The saved reading always renders in the day palette, so it looks like a page
+   from the book wherever it is sent. */
+.day-always { color-scheme: light; }
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: var(--body);
+  line-height: 1.6;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* One column, generous margins. */
+.page { max-width: 34rem; margin: 0 auto; padding: 0 1.25rem 4rem; }
+
+/* The sticky header is one line. */
+.bar {
+  position: sticky; top: 0; z-index: 10;
+  background: var(--paper);
+  border-bottom: 1px solid var(--rule);
+  display: flex; align-items: center; gap: .75rem;
+  min-height: 52px; padding: 0 1.25rem;
+}
+.bar .name { font-family: var(--serif); font-size: 1.05rem; margin-right: auto; }
+.bar .back {
+  background: none; border: 0; padding: .5rem .25rem; min-height: 48px;
+  font: inherit; font-size: .9rem; color: var(--muted); cursor: pointer;
+}
+.bar .back:hover { color: var(--ink); }
+
+/* Hairlines between sections. No cards inside cards. */
+.section { padding: 1.75rem 0; border-top: 1px solid var(--rule); }
+.section:first-of-type { border-top: 0; }
+
+h1 { font-family: var(--serif); font-weight: 400; font-size: 1.75rem; line-height: 1.2;
+     margin: 1.75rem 0 .5rem; letter-spacing: -.01em; text-wrap: balance; }
+h2 { font-family: var(--serif); font-weight: 400; font-size: 1.25rem; margin: 0 0 .75rem; }
+
+/* Labels are small caps with tracking, never bold. */
+.label {
+  font-family: var(--sans); font-size: var(--label); font-weight: 400;
+  font-variant-caps: all-small-caps; letter-spacing: .11em;
+  color: var(--muted); margin: 0 0 .15rem;
+}
+.gloss { color: var(--muted); font-size: .9375rem; margin: .25rem 0 0; }
+
+/* ---- figures -------------------------------------------------------------
+   Indian grouping, lining tabular figures, a true minus, and the percent sign
+   closed up. The reader's own figures wear the marker; the comparison series
+   wears slate; everything else is ink. */
+.figure {
+  font-family: var(--serif); font-size: var(--figure); line-height: 1.05;
+  font-variant-numeric: lining-nums tabular-nums; letter-spacing: -.02em;
+  margin: 0;
+}
+.figure.mine { color: var(--marker-ink); background: var(--marker-band);
+               box-decoration-break: clone; padding: 0 .12em; margin-left: -.12em; }
+.figure.theirs { color: var(--slate); }
+
+/* The placement is a sentence with a number in it, not a figure. At figure size
+   it wraps to two lines and dwarfs the two rates it is meant to sit beside. */
+.figure.placement { font-size: 2rem; line-height: 1.2; }
+.figure.placement b { font-weight: 400; }
+
+/* A reading the tool will not give. The row stays, at a third of its weight,
+   with a true em dash where the figure would be and one line saying why — the
+   tool declining to guess is part of its character, not an error. */
+.row.suppressed { opacity: .55; }
+.row.suppressed .figure { font-size: 2rem; color: var(--muted); }
+.num { font-variant-numeric: lining-nums tabular-nums; }
+
+/* The reading and the ledger are the only two boxed things in the product. */
+.boxed { border: 1px solid var(--rule-edge); border-radius: 6px; padding: 1.1rem 1rem; }
+
+/* the four figures, in reading order */
+.reading > .row { padding: 1.1rem 0; border-top: 1px solid var(--rule); }
+.reading > .row:first-child { border-top: 0; padding-top: .25rem; }
+
+/* the sentence, and the slot that is waiting for it */
+.sentence { font-family: var(--serif); font-size: var(--sentence); line-height: 1.45; margin: 0; }
+.slot-empty {
+  font-family: var(--sans); font-size: .875rem; color: var(--muted);
+  border: 1px dashed var(--rule-edge); border-radius: 6px; padding: .7rem .8rem;
+}
+.slot-empty code { font-family: ui-monospace, Menlo, monospace; color: var(--ink); }
+
+/* One primary action per screen: solid ink on paper by day, paper on ink by
+   night. The marker is never a button, because it means "you", not "press". */
+.primary {
+  display: block; width: 100%; min-height: 48px; padding: .75rem 1.25rem;
+  background: var(--ink); color: var(--on-ink);
+  border: 1px solid var(--ink); border-radius: 6px;
+  font: inherit; font-size: 1rem; cursor: pointer;
+}
+.primary:disabled { opacity: .4; cursor: not-allowed; }
+.linkish {
+  background: none; border: 0; padding: .75rem 0; min-height: 48px;
+  font: inherit; font-size: .9375rem; color: var(--ink); cursor: pointer;
+  text-decoration: underline; text-underline-offset: 3px;
+}
+
+/* fields */
+label.field { display: block; margin-bottom: .9rem; }
+label.field > .label { margin-bottom: .3rem; }
+input[type="text"], input[type="date"], input[type="number"] {
+  width: 100%; min-height: 48px; padding: .6rem .7rem;
+  background: var(--paper); color: var(--ink);
+  border: 1px solid var(--rule-edge); border-radius: 6px;
+  font: inherit; font-variant-numeric: lining-nums tabular-nums;
+}
+:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+/* the ledger: one ruled line per entry, entries aligned right */
+.ledger { width: 100%; border-collapse: collapse; }
+.ledger td, .ledger th { padding: .6rem .35rem; border-bottom: 1px solid var(--rule); }
+.ledger th { text-align: left; font: inherit; font-family: var(--sans);
+             font-size: var(--label); font-variant-caps: all-small-caps;
+             letter-spacing: .11em; color: var(--muted); font-weight: 400; }
+.ledger td.n { text-align: right; font-variant-numeric: lining-nums tabular-nums; }
+.ledger tr:last-child td { border-bottom: 0; }
+
+/* a refusal is set exactly like a reading: serif sentence, hairline, next step.
+   Never a red box with an exclamation mark. */
+.refusal { border-top: 1px solid var(--rule); padding-top: 1.1rem; }
+.refusal p { font-family: var(--serif); font-size: 1.125rem; margin: 0 0 .6rem; }
+
+.foot { border-top: 1px solid var(--rule); margin-top: 2.5rem; padding-top: 1.1rem;
+        font-size: .8125rem; color: var(--muted); }
+
+/* One orchestrated moment: the figures land in reading order, 250ms apart, and
+   the sentence fades in last. Nothing spins, nothing counts up. */
+@keyframes land { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.land { animation: land 300ms cubic-bezier(.22,1,.36,1) both; }
+@media (prefers-reduced-motion: reduce) {
+  .land { animation: none; }
+  * { transition: none !important; }
+}
+
+/* ---- the life-line -------------------------------------------------------
+   One thin ink line for the fund's whole life. By day the reader's stretch
+   sits on a band of marker; by night the stretch itself is drawn in marker,
+   because at night the marker is the ink the reader is written in. */
+.lifeline { display: block; width: 100%; height: 190px; overflow: visible; }
+.ll-life { stroke: var(--ink); stroke-width: 1.25; stroke-linejoin: round;
+           vector-effect: non-scaling-stroke; }
+.ll-band { fill: rgba(255, 229, 102, .55); }
+.ll-mine { stroke: var(--ink); stroke-width: 2; stroke-linejoin: round;
+           vector-effect: non-scaling-stroke; }
+.ll-mark { stroke: var(--rule-edge); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.ll-mark-text { fill: var(--muted); font-family: var(--sans); font-size: 13px;
+                font-variant-numeric: lining-nums tabular-nums; }
+
+@media (prefers-color-scheme: dark) {
+  .ll-band { fill: none; }
+  .ll-mine { stroke: var(--marker-line); stroke-width: 2.25; }
+}
+
+/* The life-line draws once, left to right, in under a second. */
+@keyframes draw-life { from { stroke-dashoffset: var(--len); } to { stroke-dashoffset: 0; } }
+.lifeline.drawing .ll-life {
+  stroke-dasharray: var(--len); stroke-dashoffset: var(--len);
+  animation: draw-life 900ms cubic-bezier(.22,1,.36,1) forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lifeline.drawing .ll-life { stroke-dasharray: none; stroke-dashoffset: 0; animation: none; }
+}
