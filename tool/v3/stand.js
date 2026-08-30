@@ -294,8 +294,8 @@
   /* ------------------------------------------------------------- the data */
   function loadSeries(series, name) {
     ST.series = series; ST.name = name;
-    $('#fund-state').textContent = name + ' · ' + series.length.toLocaleString() +
-      ' prices, ' + date(series[0].t) + ' to ' + date(series[series.length - 1].t);
+    $('#fund-state').textContent = 'Found ' + W.count(series.length) + ' NAVs for ' + name +
+      ', ' + W.span(series[0].t, series[series.length - 1].t) + '.';
     $('#step-ledger').hidden = false;
     refresh();
   }
@@ -358,12 +358,6 @@
     });
     $('#clear').addEventListener('click', function () { ST.rows = []; drawRows(); });
     $('#run').addEventListener('click', show);
-    $('#q').addEventListener('input', function () {
-      W.search($('#q').value).then(function (res) {
-        if (!res.ok) $('#fund-state').textContent =
-          'Live search is not connected in this build. Load a file instead.';
-      });
-    });
   }
 
   /* Coming back to this tool from elsewhere returns it to its ledger, not to

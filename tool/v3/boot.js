@@ -44,8 +44,9 @@
 
     W.$('#about-build').innerHTML = [
       ['Your entries', 'kept in this browser, only when you press Save'],
-      ['A fund’s prices', W.hasProvider() ? 'fetched from a public source' : 'read from a file you choose'],
+      ['A fund’s prices', 'a file you download and choose yourself'],
       ['What is sent anywhere', 'nothing'],
+      ['What is fetched', 'nothing'],
       ['What the figures leave out', 'tax and exit load']
     ].map(function (r) {
       /* Not .n: that column is for figures, and a sentence pushed to the right

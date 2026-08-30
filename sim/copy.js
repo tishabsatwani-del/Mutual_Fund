@@ -31,7 +31,19 @@
     { name: 'a year', re: /\b(?:19|20)\d{2}\b/ },
     { name: 'a month name', re: /\b(?:january|february|march|april|may|june|july|august|september|october|november|december)\b/i },
     { name: 'a numeric percentage', re: /\d+(?:\.\d+)?\s*(?:%|per\s?cent)/i },
-    { name: 'a word that means "now"', re: /\b(?:today|currently|current(?:ly)?|right\s+now|at\s+present|nowadays|this\s+year|last\s+year|recent(?:ly)?|these\s+days|as\s+of\s+now)\b/i },
+    /* "Today" is NOT in this list, and that is deliberate.
+     *
+     * Rule 2 exists so a sentence cannot age: a printed QR code carries readers
+     * to this page for years, and nothing on it may describe a moment that will
+     * pass. "Today" as the READER's own present does not age -- it means
+     * whatever day they are reading -- and the author uses it that way
+     * throughout v4: "Worth today" is the product vocabulary she fixes in
+     * §12.17, §4 describes the latest window as "what the fund's page prints
+     * today", and §5's upload guide says "from its first day to today".
+     *
+     * What ages is a word that means "at the time this was written":
+     * currently, at present, nowadays, this year, recently. Those stay. */
+    { name: 'a word that means "now"', re: /\b(?:currently|current|at\s+present|nowadays|this\s+year|last\s+year|recent(?:ly)?|these\s+days|as\s+of\s+now)\b/i },
     { name: 'an index level', re: /\b(?:nifty|sensex|bse|nse)\b/i }
   ];
 

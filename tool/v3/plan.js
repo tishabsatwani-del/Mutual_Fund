@@ -65,8 +65,8 @@
   function drawFund() {
     var f = fundNow();
     $('#p-fund-state').textContent = f
-      ? f.name + ' · ' + W.count(f.series.length) + ' prices, ' + date(f.series[0].t) +
-        ' to ' + date(f.series[f.series.length - 1].t)
+      ? 'Found ' + W.count(f.series.length) + ' NAVs for ' + f.name + ', ' +
+        W.span(f.series[0].t, f.series[f.series.length - 1].t) + '.'
       : '';
     $('#p-suppose').hidden = !!f;
   }
@@ -252,12 +252,6 @@
         P.series = res.series; P.name = res.name;
         drawFund(); run();
       }).catch(function (err) { $('#p-fund-state').textContent = err.message; });
-    });
-    $('#p-q').addEventListener('input', function () {
-      W.search($('#p-q').value).then(function (res) {
-        if (!res.ok) $('#p-fund-state').textContent =
-          'Live search is not connected in this build. Load a file instead.';
-      });
     });
     drawFund();
   }

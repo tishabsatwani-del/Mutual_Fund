@@ -112,7 +112,12 @@ const NIGHT = { paper: '#12161E', ink: '#E8E6E1', muted: '#9AA1AE', slate: '#8FA
 
     await page.setInputFiles('#file', navFile);
     await page.waitForTimeout(600);
-    ok('the upload door loads a history', /prices/.test(await page.locator('#fund-state').innerText()));
+    /* Review v4 §5: the door confirms before anything is computed, naming the
+       file's own name and the dates it actually covers. */
+    ok('the upload door confirms what it found, before computing',
+       /^Found [\d,]+ NAVs for .+, \d\d-[A-Z][a-z]{2}-\d{4} to \d\d-[A-Z][a-z]{2}-\d{4}\.$/
+         .test((await page.locator('#fund-state').innerText()).trim()),
+       await page.locator('#fund-state').innerText());
 
     await page.click('#example');
     await page.waitForTimeout(200);
@@ -817,11 +822,13 @@ const NIGHT = { paper: '#12161E', ink: '#E8E6E1', muted: '#9AA1AE', slate: '#8FA
        String(await page.locator('#about-refs li').count()));
 
     /* A privacy note is only worth anything if it describes what the code in
-       front of the reader actually does. With no provider registered, the
-       honest answer about a fund's prices is "a file you choose". */
+       front of the reader actually does. Review v4 §3 settles it: the tool
+       fetches nothing, so the answer is a file the reader downloaded. */
     ok('what this build reads is stated, and matches what it actually does',
-       /read from a file you choose/.test(about) && /nothing/.test(about),
-       about.slice(-300));
+       /a file you download and choose yourself/.test(about), about.slice(-400));
+    ok('and it states that nothing is sent and nothing is fetched',
+       /What is sent anywhere[\s\S]{0,40}nothing/.test(about) &&
+       /What is fetched[\s\S]{0,40}nothing/.test(about), about.slice(-400));
     ok('and the page says what the figures leave out', /tax and exit load/.test(about));
 
     ok('About has one h1 and it is the screen’s own',

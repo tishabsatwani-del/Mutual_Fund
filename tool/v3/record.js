@@ -234,8 +234,11 @@
   /* ---------------------------------------------------------------- wiring */
   function load(series, name) {
     R.series = series; R.name = name; R.years = null;
-    $('#r-state').textContent = name + ' · ' + W.count(series.length) + ' prices, ' +
-      W.date(series[0].t) + ' to ' + W.date(series[series.length - 1].t);
+    /* Review v4 §5: confirm before computing, naming the file's own name and
+       the dates it actually covers, so a reader can check they loaded what
+       they meant to before a single figure is worked out. */
+    $('#r-state').textContent = 'Found ' + W.count(series.length) + ' NAVs for ' + name +
+      ', ' + W.span(series[0].t, series[series.length - 1].t) + '.';
     $('#r-window').hidden = false;
     $('#r-out').innerHTML = '';
     drawYears();
@@ -256,12 +259,6 @@
         if (!f) return;
         W.readFile(f).then(function (r) { load(r.series, r.name); })
                      .catch(function (err) { $('#r-state').textContent = err.message; });
-      });
-      $('#r-q').addEventListener('input', function () {
-        W.search($('#r-q').value).then(function (res) {
-          if (!res.ok) $('#r-state').textContent =
-            'Live search is not connected in this build. Load a file instead.';
-        });
       });
       /* the index-fund door is rendered inside the reading, so it is wired
          each time the reading is drawn */

@@ -45,6 +45,7 @@ section('Rule 2 - timeless by construction');
   ['a month name', 'The rule changed in January.'],
   ['a percentage', 'A fixed deposit pays about 7% a year.'],
   ['a word meaning now', 'Rates are currently low.'],
+  ['a year that has passed', 'The rule changed last year.'],
   ['an index level', 'The Nifty has doubled since then.']
 ].forEach(function (row) {
   ok('caught ' + row[0] + ': "' + row[1].slice(0, 40) + '"', breaks(row[1], 'timeless'));
@@ -54,6 +55,15 @@ ok('a substitution token is not a reference to a moment',
    JSON.stringify(lint('This fund last published a NAV on [DATE].')));
 ok('a book pointer is not a reference to a moment',
    !breaks('The short-period rule is set out in [CH-REF:SHORT-PERIOD].', 'timeless'));
+/* "Today" meaning the reader's own present does not age, and the author uses
+   it that way throughout v4. A word meaning "when this was written" does. */
+ok('"today" as the reader\'s own present is allowed',
+   !breaks('Add what it is all worth today, and the date you read it.', 'timeless'),
+   JSON.stringify(lint('Add what it is all worth today, and the date you read it.')));
+ok('and so is the launch-to-today instruction in the upload guide',
+   !breaks('The daily NAV history of the scheme you own, from its first day to today.', 'timeless'));
+ok('but "currently" still is not', breaks('Rates are currently low.', 'timeless'));
+ok('and neither is "recently"', breaks('The fund recently changed manager.', 'timeless'));
 
 section('Rule 3 - the vocabulary exclusions');
 ok('caught "insider"', breaks('What the insiders know.', 'vocabulary'));

@@ -21,6 +21,7 @@
   function moneyWords(n) { return F.moneyWords(n); }
   function pct(r, dp) { return F.pct(r, { dp: dp }); }
   function date(t) { return F.date(t); }
+  function span(a, b) { return F.span(a, b); }
   function years(y) { return F.years(y); }
   function esc(x) {
     return String(x == null ? '' : x).replace(/[&<>"]/g, function (c) {
@@ -91,24 +92,17 @@
 
   /* ------------------------------------------------------------- the door
    *
-   * Live first: the reader types a name and taps once. When the sources cannot
-   * serve, the upload door appears and is complete on its own — and it is
-   * always reachable anyway, from every search screen.
+   * Review v4 §3, settled: the tool does not fetch anything. There is one
+   * door and it is the file the reader downloaded themselves, so there is no
+   * provider seam here to register anything into and no search that could
+   * quietly start making requests.
    *
-   * There is no provider registered in this build, so every search reports the
-   * door rather than pretending to look. Registering one is the only change
-   * needed here.
+   * The reason is said on screen rather than implied by an absence, because a
+   * reader arriving from a calculator that fetches will read "load a file" as
+   * this tool being less capable unless the first thing they meet is why:
+   * fetching is where the failures live, and a file you downloaded is one you
+   * can open and check.
    */
-  var PROVIDER = null;
-  function registerProvider(p) { PROVIDER = p; }
-  /* About says what this build reads. With no provider registered the honest
-     answer is "a file you choose", and it must change by itself when one is. */
-  function hasProvider() { return !!PROVIDER; }
-
-  function search(query) {
-    if (!PROVIDER) return Promise.resolve({ ok: false, reason: 'no-provider', schemes: [] });
-    return PROVIDER.search(query);
-  }
 
   function readFile(file) {
     return new Promise(function (resolve, reject) {
@@ -158,9 +152,9 @@
 
   root.WYS = {
     $: $, $$: $$, money: money, moneyWords: moneyWords, pct: pct, date: date,
-    years: years, esc: esc, count: count, checkInput: F.checkInput, echo: F.echo,
+    span: span, years: years, esc: esc, count: count, checkInput: F.checkInput, echo: F.echo,
     slot: slot, saying: saying, written: written, land: land,
-    registerProvider: registerProvider, hasProvider: hasProvider, search: search, readFile: readFile,
+    readFile: readFile,
     view: view, go: go, start: start, render: render,
     copy: COPY
   };

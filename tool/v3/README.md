@@ -1,6 +1,6 @@
 # Where You Stand — the v3 screens
 
-Built to the review of 30 August. All four tools now exist. The old twelve
+Built to the review of 30 August, v4. All four tools now exist. The old twelve
 screens are still live at `../`; these replace them.
 
 | File | What it is |
@@ -18,7 +18,7 @@ screens are still live at `../`; these replace them.
 
 ```
 python3 tools/v3/build_deck.py     # after editing sim/copy.json or sim/states.json
-node tools/tool-tests/v3.test.js   # 206 checks, needs a server on 8781
+node tools/tool-tests/v3.test.js   # 215 checks, needs a server on 8781
 node tools/v3/shoot.js             # the twelve screenshots, same server
 ```
 
@@ -64,6 +64,20 @@ the first ten years flat against the floor — which misrepresents exactly the
 years the reader is being asked to look at. Nobody reads a value off this line;
 the three marks carry the figures, so the axis owes the reader shape, and log is
 the shape that is true.
+
+## Upload only, and why the screen says so
+
+Review v4 §3 settles it: the tool fetches nothing. There is one door and it is
+the file the reader downloaded themselves, so there is no provider seam to
+register anything into and no search box that could quietly start making
+requests. Every screen's door now says the reason out loud — *Bring your own
+file. Nothing is fetched and nothing is sent.* — because a reader arriving from
+a calculator that fetches will read "load a file" as this tool being less
+capable unless the first thing they meet is why. §5's guide sits behind one
+tap so the door itself keeps to its word budget.
+
+The door also **confirms before computing**, in §5's own form: *Found 4,812
+NAVs for [name as in the file], 12-Mar-2007 to 28-Aug-2026.*
 
 ## About, and the footer
 

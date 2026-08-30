@@ -410,3 +410,13 @@ body[data-view="about"] #foot-about { display: none; }
 .hist-bar { display: inline-block; height: 8px; background: var(--ink); border-radius: 2px; min-width: 1px; }
 .ledger td.theirs { color: var(--slate); }
 summary.linkish { list-style: revert; cursor: pointer; }
+
+/* Review v4 §5, the upload guide. It is behind a disclosure so the door itself
+   keeps to its word budget, and set as a list of answers rather than prose. */
+.guide-list { margin: .75rem 0 0; }
+.guide-list dt {
+  font-family: var(--sans); font-size: var(--label); font-variant-caps: all-small-caps;
+  letter-spacing: .11em; color: var(--muted); margin-top: .9rem;
+}
+.guide-list dt:first-child { margin-top: 0; }
+.guide-list dd { margin: .15rem 0 0; }

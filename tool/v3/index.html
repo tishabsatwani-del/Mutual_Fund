@@ -38,11 +38,32 @@
     <h1>This fund’s record</h1>
 
     <div class="section" id="r-fund">
-      <label class="field" for="r-q"><span class="label">The fund</span>
-        <input type="text" id="r-q" autocomplete="off" placeholder="Type part of its name"></label>
-      <p class="gloss" id="r-state" aria-live="polite"></p>
-      <button class="linkish" id="r-file-open" type="button">Load a file instead</button>
+      <p class="label">The fund</p>
+      <button class="primary" id="r-file-open" type="button">Load your fund’s price history</button>
       <input type="file" id="r-file" accept=".csv,.txt,.xlsx,.json" multiple hidden>
+      <p class="gloss" id="r-state" aria-live="polite"></p>
+      <p class="gloss">Bring your own file. Nothing is fetched and nothing is sent.</p>
+      <details class="section guide">
+        <summary class="linkish">Which file, and where to get it</summary>
+        <dl class="guide-list">
+          <dt>Which file</dt>
+          <dd>The daily NAV history of the scheme you own, from its first day to today. One scheme is
+            enough; a file with every scheme of the fund house is fine.</dd>
+          <dt>Where</dt>
+          <dd>Your fund house’s website — search it for NAV history — or AMFI in 90-day pieces dropped
+            here together.</dd>
+          <dt>Dates</dt>
+          <dd>Launch to today. If you are unsure, the earliest the site allows.</dd>
+          <dt>Format</dt>
+          <dd>Whatever it gives you. Screenshots and PDFs do not work.</dd>
+          <dt>Then</dt>
+          <dd>Tap Load, choose the files, and check the name and dates shown back to you.</dd>
+          <dt>An index to compare against</dt>
+          <dd>niftyindices.com → Reports → Historical Data → Total Returns Index, the index named on
+            your factsheet, the widest dates allowed, in pieces if it refuses a long range. Same
+            source, same steps, both times.</dd>
+        </dl>
+      </details>
     </div>
 
     <!-- the plan toggle appears only when a file or a search offers both -->
@@ -66,11 +87,32 @@
     <h1>My money in this fund</h1>
 
     <div class="section" id="step-fund">
-      <label class="field" for="q"><span class="label">The fund</span>
-        <input type="text" id="q" autocomplete="off" placeholder="Type part of its name"></label>
-      <p class="gloss" id="fund-state" aria-live="polite"></p>
-      <button class="linkish" id="use-file" type="button">Load a file instead</button>
+      <p class="label">The fund</p>
+      <button class="primary" id="use-file" type="button">Load your fund’s price history</button>
       <input type="file" id="file" accept=".csv,.txt,.xlsx,.json" multiple hidden>
+      <p class="gloss" id="fund-state" aria-live="polite"></p>
+      <p class="gloss">Bring your own file. Nothing is fetched and nothing is sent.</p>
+      <details class="section guide">
+        <summary class="linkish">Which file, and where to get it</summary>
+        <dl class="guide-list">
+          <dt>Which file</dt>
+          <dd>The daily NAV history of the scheme you own, from its first day to today. One scheme is
+            enough; a file with every scheme of the fund house is fine.</dd>
+          <dt>Where</dt>
+          <dd>Your fund house’s website — search it for NAV history — or AMFI in 90-day pieces dropped
+            here together.</dd>
+          <dt>Dates</dt>
+          <dd>Launch to today. If you are unsure, the earliest the site allows.</dd>
+          <dt>Format</dt>
+          <dd>Whatever it gives you. Screenshots and PDFs do not work.</dd>
+          <dt>Then</dt>
+          <dd>Tap Load, choose the files, and check the name and dates shown back to you.</dd>
+          <dt>An index to compare against</dt>
+          <dd>niftyindices.com → Reports → Historical Data → Total Returns Index, the index named on
+            your factsheet, the widest dates allowed, in pieces if it refuses a long range. Same
+            source, same steps, both times.</dd>
+        </dl>
+      </details>
       <p class="gloss" id="index-state"></p>
       <button class="linkish" id="index-open" type="button">Load an index fund to compare against</button>
       <input type="file" id="index-file" accept=".csv,.txt,.xlsx,.json" hidden>
@@ -195,11 +237,32 @@
     <h1>My plan, tested</h1>
 
     <div class="section">
-      <label class="field" for="p-q"><span class="label">The fund to test it against</span>
-        <input type="text" id="p-q" autocomplete="off" placeholder="Type part of its name"></label>
-      <p class="gloss" id="p-fund-state" aria-live="polite"></p>
-      <button class="linkish" id="p-file-open" type="button">Load a file instead</button>
+      <p class="label">The fund to test it against</p>
+      <button class="primary" id="p-file-open" type="button">Load a fund’s price history</button>
       <input type="file" id="p-file" accept=".csv,.txt,.xlsx,.json" hidden>
+      <p class="gloss" id="p-fund-state" aria-live="polite"></p>
+      <p class="gloss">Bring your own file. Nothing is fetched and nothing is sent.</p>
+      <details class="section guide">
+        <summary class="linkish">Which file, and where to get it</summary>
+        <dl class="guide-list">
+          <dt>Which file</dt>
+          <dd>The daily NAV history of the scheme you own, from its first day to today. One scheme is
+            enough; a file with every scheme of the fund house is fine.</dd>
+          <dt>Where</dt>
+          <dd>Your fund house’s website — search it for NAV history — or AMFI in 90-day pieces dropped
+            here together.</dd>
+          <dt>Dates</dt>
+          <dd>Launch to today. If you are unsure, the earliest the site allows.</dd>
+          <dt>Format</dt>
+          <dd>Whatever it gives you. Screenshots and PDFs do not work.</dd>
+          <dt>Then</dt>
+          <dd>Tap Load, choose the files, and check the name and dates shown back to you.</dd>
+          <dt>An index to compare against</dt>
+          <dd>niftyindices.com → Reports → Historical Data → Total Returns Index, the index named on
+            your factsheet, the widest dates allowed, in pieces if it refuses a long range. Same
+            source, same steps, both times.</dd>
+        </dl>
+      </details>
       <label class="field" for="p-rate" id="p-suppose" style="max-width:14rem">
         <span class="label">Suppose, % a year</span>
         <input type="number" id="p-rate" inputmode="decimal" step="0.1" min="0" max="100"></label>
