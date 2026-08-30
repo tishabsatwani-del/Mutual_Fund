@@ -12,38 +12,10 @@
 (function () {
   'use strict';
 
-  var E = window.SimEngines, S = window.SimSchemes, P = window.SimPosition,
-      St = window.SimStates, COPY = window.SIM_COPY, LL = window.LifeLine;
+  var W = window.WYS, E = window.SimEngines, S = window.SimSchemes,
+      P = window.SimPosition, St = window.SimStates, LL = window.LifeLine;
 
-  var $ = function (s) { return document.querySelector(s); };
-  var inr = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 });
-  var MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-
-  function money(n) { return '₹' + inr.format(Math.round(n)); }
-  /* A true minus, not a hyphen, and the percent sign closed up. */
-  function pct(r) {
-    if (!isFinite(r)) return '—';
-    var v = (r * 100).toFixed(1);
-    return (v.charAt(0) === '-' ? '−' + v.slice(1) : v) + '%';
-  }
-  function date(t) {
-    var d = new Date(t);
-    return d.getUTCDate() + ' ' + MONTHS[d.getUTCMonth()] + ' ' + d.getUTCFullYear();
-  }
-  function esc(x) {
-    return String(x == null ? '' : x).replace(/[&<>"]/g, function (c) {
-      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c];
-    });
-  }
-
-  /* A slot the author has not written yet is named on screen, not hidden. A
-   * blank where a sentence belongs looks like a bug; a named empty slot looks
-   * like what it is, and it tells whoever is reviewing exactly what to send. */
-  function slot(id) {
-    var s = COPY.slots[id];
-    if (s && s.text) return '<p class="sentence">' + esc(s.text) + '</p>';
-    return '<p class="slot-empty">Awaiting copy slot <code>' + esc(id) + '</code></p>';
-  }
+  var $ = W.$, money = W.money, pct = W.pct, date = W.date, esc = W.esc, slot = W.slot;
 
   /* ------------------------------------------------------------ the state */
   var ST = { series: null, name: '', rows: [], proxy: null, proxyName: '' };
@@ -158,7 +130,6 @@
     $('#step-reading').hidden = false;
     $('#step-fund').hidden = true;
     $('#step-ledger').hidden = true;
-    $('#back').hidden = false;
     animate();
     window.scrollTo(0, 0);
   }
@@ -167,14 +138,14 @@
    * that the question was asked and answered honestly, rather than wondering
    * where the fourth reading went. */
   function suppressed(label, i, why) {
-    return '<div class="row suppressed land" style="animation-delay:' + (i * 250) + 'ms">' +
+    return '<div class="row suppressed"' + W.land(i) + '>' +
       '<p class="label">' + label + '</p>' +
       '<p class="figure">—</p>' +
       '<p class="gloss">' + why + '</p></div>';
   }
 
   function row(label, value, tone, i, gloss) {
-    return '<div class="row land" style="animation-delay:' + (i * 250) + 'ms">' +
+    return '<div class="row"' + W.land(i) + '>' +
       '<p class="label">' + label + '</p>' +
       '<p class="figure ' + tone + '">' + value + '</p>' +
       (gloss ? '<p class="gloss">' + gloss + '</p>' : '') + '</div>';
@@ -251,7 +222,6 @@
       '<button class="linkish" id="fix" type="button">Go back to the ledger</button></div>';
     $('#step-reading').hidden = false;
     $('#step-ledger').hidden = false;
-    $('#back').hidden = false;
     var fix = $('#fix');
     if (fix) fix.addEventListener('click', function () {
       $('#step-reading').hidden = true;
@@ -282,10 +252,6 @@
 
   function init() {
     drawRows();
-    $('#foot-refrains').innerHTML = COPY.slots['FOOTER-REFRAINS'].text
-      ? esc(COPY.slots['FOOTER-REFRAINS'].text)
-      : '<span class="slot-empty" style="display:inline-block">Awaiting copy slot <code>FOOTER-REFRAINS</code></span>';
-
     $('#use-file').addEventListener('click', function () { $('#file').click(); });
     $('#file').addEventListener('change', function (e) {
       var f = e.target.files && e.target.files[0];
@@ -333,15 +299,21 @@
     });
     $('#clear').addEventListener('click', function () { ST.rows = []; drawRows(); });
     $('#run').addEventListener('click', show);
-    $('#back').addEventListener('click', function () {
-      $('#step-reading').hidden = true; $('#step-fund').hidden = false;
-      $('#step-ledger').hidden = false; $('#back').hidden = true;
-      window.scrollTo(0, 0);
+    $('#q').addEventListener('input', function () {
+      W.search($('#q').value).then(function (res) {
+        if (!res.ok) $('#fund-state').textContent =
+          'Live search is not connected in this build. Load a file instead.';
+      });
     });
   }
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
-  else init();
+  /* Coming back to this tool from elsewhere returns it to its ledger, not to
+     a stale reading of somebody else's numbers. */
+  W.view('stand', {
+    enter: function () {
+      if (!ST.series) { $('#step-ledger').hidden = true; $('#step-reading').hidden = true; }
+    }
+  });
 
-  window.WhereYouStand = { state: ST, loadSeries: loadSeries, show: show, slot: slot };
+  window.WhereYouStand = { state: ST, loadSeries: loadSeries, show: show, init: init };
 })();

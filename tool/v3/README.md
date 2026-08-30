@@ -7,12 +7,15 @@ Built to the review of 30 August. The old twelve screens are still live at
 |---|---|
 | `theme.css` | The materials of review §6: paper, ink, ruling, marker |
 | `lifeline.js` | The signature — the fund's whole life with the reader's stretch marked |
+| `shared.js` | Formatting, the copy-slot reader, the data door, the router |
+| `record.js` | Tool 2, *This fund's record* |
 | `stand.js` | Tool 3, *My money in this fund* |
+| `boot.js` | Starts the four tools |
 | `deck.js` | Generated. Do not edit — run `python3 tools/v3/build_deck.py` |
 
 ```
 python3 tools/v3/build_deck.py     # after editing sim/copy.json or sim/states.json
-node tools/tool-tests/v3.test.js   # 57 checks, needs a server on 8781
+node tools/tool-tests/v3.test.js   # 84 checks, needs a server on 8781
 ```
 
 ## The materials
@@ -68,3 +71,40 @@ like a bug; a named empty slot looks like what it is.
 The eighteen Tool 3 slots and their nine next steps are the author's, drafted in
 §10 of the review. They are addressable by id alone, so wording can change at any
 time without a line of code moving.
+
+## Two bugs the browser pass caught, both worth knowing
+
+**The router hid the whole page.** Sections are hidden by `[data-view]`, and
+`<body>` carries the same attribute as a styling hook. An unscoped selector
+matched the body, set `hidden` on it, and everything was in the DOM with nothing
+clickable. The selector is now `#main > [data-view]`, and a check asserts the
+body is never hidden.
+
+**The histogram's bar was also the sticky header.** Both were `.bar`; the later
+rule won, so the header rendered as a small dark inline-block with a browser-blue
+link in it. The histogram's is now `.hist-bar`, and three checks pin the header's
+width, ground and brand colour.
+
+## Tool 2
+
+Fund, then plan, then *how long will you hold?* — six lengths with **no default
+and nothing rendered until one is chosen**, because the length a reader means to
+hold is the one thing this screen must not guess. Lengths the history cannot
+measure are disabled.
+
+The reading puts the **worst window first and largest**, the typical one second,
+the best third, and the mean appears nowhere. Then the life-line with the worst,
+best and latest windows marked — and no marker band, because on this screen the
+stretch shown is not the reader's own. Then which window is which, and where the
+latest one places out of a hundred, which is the question a fund's own page can
+never answer.
+
+The deposit rate ships empty. Below-zero windows are a **count**, not a share: a
+share reads as a property of the fund when it is a property of the dates the
+history happens to cover.
+
+Guards are set as readings, never as alert boxes. The screen prints the
+arithmetic itself — *this history is 6.0 years and you asked for 5-year windows,
+so every window begins inside a band of 1.0 years* — and names the author's
+sentence beside it. The figures are a reading of the reader's own data and belong
+on screen; the meaning is the author's and is never invented here.

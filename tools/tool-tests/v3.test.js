@@ -102,7 +102,7 @@ const NIGHT = { paper: '#12161E', ink: '#E8E6E1', muted: '#9AA1AE', slate: '#8FA
     page.on('console', m => { if (m.type() === 'error' && !/favicon/.test(m.text())) errors.push(m.text()); });
     page.on('request', r => { if (!r.url().startsWith(new URL(BASE).origin + '/')) external.push(r.url()); });
 
-    await page.goto(BASE, { waitUntil: 'networkidle' });
+    await page.goto(BASE + '#stand', { waitUntil: 'networkidle' });
     ok('loads with no script errors', errors.length === 0, errors.join(' | '));
 
     const ground = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
@@ -159,6 +159,125 @@ const NIGHT = { paper: '#12161E', ink: '#E8E6E1', muted: '#9AA1AE', slate: '#8FA
     ok('money carries Indian grouping', /₹\d,\d\d,\d\d\d/.test(money), money.slice(0, 80));
 
     await page.screenshot({ path: path.join(TMP, `v3-${scheme}.png`), fullPage: true });
+    await ctx.close();
+  }
+
+  section('The shell: four tools behind one address');
+  {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 900 } });
+    const page = await ctx.newPage();
+    const errors = [];
+    page.on('pageerror', e => errors.push(e.message));
+    await page.goto(BASE, { waitUntil: 'networkidle' });
+
+    ok('home offers the four tools by name',
+       (await page.locator('.entry b').allInnerTexts()).join(' | ') ===
+       'My return | This fund’s record | My money in this fund | My plan, tested',
+       (await page.locator('.entry b').allInnerTexts()).join(' | '));
+
+    await page.click('a[href="#record"]');
+    await page.waitForTimeout(200);
+
+    /* The router hides sections by [data-view]. The <body> carries the same
+       attribute as a styling hook, so an unscoped selector hid the entire page
+       — everything was in the DOM and nothing could be clicked. */
+    ok('navigating does not hide the page itself',
+       (await page.evaluate(() => document.body.hidden)) === false);
+    ok('and the tool asked for is the one shown',
+       (await page.locator('#main > [data-view="record"]').isVisible()) === true &&
+       (await page.locator('#main > [data-view="home"]').isVisible()) === false);
+
+    /* The sticky header is .bar. So, once, was the histogram's bar, and the
+       later rule won: the header became a histogram bar. */
+    const bar = await page.evaluate(() => {
+      const b = document.querySelector('.bar'), cs = getComputedStyle(b);
+      return { w: b.getBoundingClientRect().width, bg: cs.backgroundColor, display: cs.display,
+               link: getComputedStyle(document.querySelector('.bar .name')).color };
+    });
+    ok('the header spans the screen', bar.w === 390, String(bar.w));
+    ok('on paper, not ink', bar.bg === 'rgb(241, 239, 234)', bar.bg);
+    ok('and its brand is ink, not a browser link colour', bar.link === 'rgb(30, 36, 51)', bar.link);
+
+    section('Tool 2 · This fund’s record');
+    await page.setInputFiles('#r-file', navFile);
+    await page.waitForTimeout(700);
+
+    const chips = await page.locator('#r-years .chip').allInnerTexts();
+    ok('the six holding periods are offered',
+       chips.join(',') === '1 year,3 years,5 years,7 years,10 years,15 years', chips.join(','));
+    ok('none is chosen for the reader',
+       (await page.locator('#r-years .chip[aria-checked="true"]').count()) === 0);
+    ok('and nothing renders until one is',
+       (await page.locator('#r-out').innerText()).trim() === '');
+
+    await page.click('#r-years .chip[data-y="5"]');
+    await page.waitForTimeout(900);
+
+    const order = await page.locator('#r-out .windows .label').allInnerTexts();
+    ok('the worst window is read first',  /worst/i.test(order[0]), order.join(' | '));
+    ok('the typical one second',          /typical/i.test(order[1]), order.join(' | '));
+    ok('the best third',                  /best/i.test(order[2]), order.join(' | '));
+
+    const worstSize = await page.evaluate(() =>
+      parseFloat(getComputedStyle(document.querySelector('.w-worst .figure')).fontSize));
+    const bestSize = await page.evaluate(() =>
+      parseFloat(getComputedStyle(document.querySelector('.w-best .figure')).fontSize));
+    ok('and the worst is the largest figure on the screen', worstSize > bestSize,
+       worstSize + ' vs ' + bestSize);
+
+    const body = await page.locator('#r-out').innerText();
+    ok('the mean is nowhere on the screen', !/\bmean\b|\baverage\b/i.test(body));
+    ok('the latest window is placed out of a hundred',
+       /higher than \d+ of every 100/i.test(body), body.slice(0, 200));
+
+    ok('the life-line is drawn here too', (await page.locator('#r-out .lifeline').count()) === 1);
+    ok('with the worst, best and latest windows marked',
+       (await page.locator('#r-out .ll-mark').count()) === 3);
+    ok('and no marker band, because this is not the reader’s own stretch',
+       (await page.locator('#r-out .ll-band').count()) === 0);
+
+    ok('the deposit rate ships empty',
+       (await page.locator('#r-dep').inputValue()) === '');
+    ok('below-zero windows are a count, not a share',
+       /\d+ of [\d,]+/.test(body), body.slice(0, 200));
+    await page.fill('#r-dep', '7');
+    await page.waitForTimeout(200);
+    ok('typing a deposit adds the second count',
+       /of [\d,]+/.test(await page.locator('#r-dep-row').innerText()));
+
+    ok('the histogram is one tap away, not on the screen',
+       (await page.locator('#r-out details').count()) === 1 &&
+       (await page.evaluate(() => document.querySelector('#r-out details').open)) === false);
+
+    /* A short history must be refused as a reading, with the arithmetic shown
+       and the author's sentence named. */
+    const shortFile = path.join(TMP, 'v3-short.csv');
+    {
+      const lines = ['Date,NAV']; let t = Date.UTC(2019, 0, 1), v = 10;
+      while (t <= Date.UTC(2025, 0, 1)) {
+        const d = new Date(t);
+        lines.push(`${String(d.getUTCDate()).padStart(2, '0')}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${d.getUTCFullYear()},${v.toFixed(4)}`);
+        v *= Math.pow(1.13, 1 / 365.2425); t += 86400000;
+      }
+      fs.writeFileSync(shortFile, lines.join('\n'));
+    }
+    await page.setInputFiles('#r-file', shortFile);
+    await page.waitForTimeout(700);
+    ok('lengths the history cannot measure are disabled',
+       (await page.locator('#r-years .chip[disabled]').count()) >= 2,
+       String(await page.locator('#r-years .chip[disabled]').count()));
+    await page.click('#r-years .chip[data-y="5"]');
+    await page.waitForTimeout(700);
+    const guarded = await page.locator('#r-out').innerText();
+    ok('the age guard states the arithmetic itself',
+       /6\.0 years .*5-year windows.*band of 1\.0 years/s.test(guarded), guarded.slice(0, 240));
+    ok('and names the author’s sentence rather than inventing one',
+       /RR-AGE-GUARD/.test(guarded));
+    ok('it is set as a reading, not as an alert box',
+       (await page.locator('#r-out .refusal').count()) >= 1);
+
+    ok('no script errors across the whole run', errors.length === 0, errors.join(' | '));
+    await page.screenshot({ path: path.join(TMP, 'v3-record.png'), fullPage: true });
     await ctx.close();
   }
 

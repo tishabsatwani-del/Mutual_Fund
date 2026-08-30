@@ -93,7 +93,11 @@ body {
   display: flex; align-items: center; gap: .75rem;
   min-height: 52px; padding: 0 1.25rem;
 }
-.bar .name { font-family: var(--serif); font-size: 1.05rem; margin-right: auto; }
+.bar .name {
+  font-family: var(--serif); font-size: 1.05rem; margin-right: auto;
+  color: var(--ink); text-decoration: none;
+}
+.bar .name:hover { text-decoration: underline; text-underline-offset: 3px; }
 .bar .back {
   background: none; border: 0; padding: .5rem .25rem; min-height: 48px;
   font: inherit; font-size: .9rem; color: var(--muted); cursor: pointer;
@@ -236,3 +240,42 @@ input[type="text"], input[type="date"], input[type="number"] {
 @media (prefers-reduced-motion: reduce) {
   .lifeline.drawing .ll-life { stroke-dasharray: none; stroke-dashoffset: 0; animation: none; }
 }
+
+/* ---- home ---------------------------------------------------------------
+   One line, four entries, footer. Ruled entries, not cards: nothing on this
+   page is boxed, because the only two boxed things in the product are the
+   ledger and the reading. */
+.entries { display: block; margin-top: 1.5rem; }
+.entry {
+  display: block; padding: 1.1rem 0; border-top: 1px solid var(--rule);
+  color: inherit; text-decoration: none;
+}
+.entry:last-child { border-bottom: 1px solid var(--rule); }
+.entry b { display: block; font-family: var(--serif); font-weight: 400; font-size: 1.25rem; }
+.entry span { display: block; color: var(--muted); font-size: .9375rem; margin-top: .15rem; }
+.entry:hover b { text-decoration: underline; text-underline-offset: 3px; }
+
+.actions { display: flex; gap: 1.25rem; flex-wrap: wrap; margin: .35rem 0 1.25rem; }
+
+/* chips: a row of choices with no default chosen */
+.chips { display: flex; flex-wrap: wrap; gap: .5rem; }
+.chip {
+  min-height: 48px; padding: .5rem 1rem; border-radius: 6px;
+  border: 1px solid var(--rule-edge); background: var(--paper); color: var(--ink);
+  font: inherit; cursor: pointer;
+}
+.chip[aria-checked="true"] { background: var(--ink); color: var(--on-ink); border-color: var(--ink); }
+.chip:disabled { opacity: .35; cursor: not-allowed; }
+
+/* the three headline windows: worst first and largest */
+.windows > div { padding: 1.1rem 0; border-top: 1px solid var(--rule); }
+.windows > div:first-child { border-top: 0; }
+.w-worst .figure { font-size: var(--figure); }
+.w-typical .figure, .w-best .figure { font-size: 2.25rem; }
+
+/* The distribution's bars: ink, never coloured by sign.
+   Named hist-bar, not bar: the sticky header is .bar, and a later rule with
+   the same class silently turned the header into a histogram bar. */
+.hist-bar { display: inline-block; height: 8px; background: var(--ink); border-radius: 2px; min-width: 1px; }
+.ledger td.theirs { color: var(--slate); }
+summary.linkish { list-style: revert; cursor: pointer; }
