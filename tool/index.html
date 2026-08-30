@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>The Portfolio Reality Check</title>
+<title>Where You Stand</title>
 <meta name="description" content="Measure what your own money actually earned, see what the number means, and work out what it would take to reach your goal. Runs entirely in your browser.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231f4e5f'/%3E%3Cpath d='M7 22.5 13 15l4.5 4.5L25 9.5' fill='none' stroke='%23ffffff' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="styles.css">
@@ -13,7 +13,7 @@
 
 <header class="topbar">
   <div class="topbar-inner">
-    <a class="brand" href="#home">The Portfolio Reality Check<span>The book explains it. This runs it on your own money.</span></a>
+    <a class="brand" href="#home">Where You Stand<span>The book explains it. This runs it on your own money.</span></a>
     <button class="backlink" id="back" type="button">&#8592; All tools</button>
   </div>
 </header>
@@ -490,15 +490,17 @@
     <p style="margin:0">There is no account, no sign-up, no email, and nothing that asks who you are.</p>
   </div>
   <div class="card">
-    <h2>How this fits with the book</h2>
-    <p style="margin:0 0 .6rem">The book does the explaining. It has the room to take a chapter over why
-    three different arithmetics all call themselves &ldquo;return&rdquo;, why the same fund shows two
-    figures on one screen, and why a start date decides an answer.</p>
-    <p style="margin:0 0 .6rem">This is where you use it. Separate from the book, reached by the link
-    printed in it, and built for one thing: running those ideas on your own dates and your own amounts,
-    live, instead of reading about someone else&rsquo;s example.</p>
-    <p style="margin:0">Nothing here teaches from scratch and nothing here replaces the chapter. Keep
-    the book open beside it the first time.</p>
+    <h2>About and privacy</h2>
+    <!-- The author's own paragraph, slot ABOUT-MAIN in sim/copy.json. Kept
+         word for word; nothing here is the developer's wording. -->
+    <p style="margin:0" id="about-main">This page runs the book&rsquo;s five questions on your own money.
+    You enter what you paid in and took out; it fetches the fund&rsquo;s public NAV history, for any fund,
+    including ones launched after this book was printed, and works everything out on your phone. Nothing
+    you type leaves it. It does not rate funds, rank them, or tell you what to buy, sell or switch. It
+    tells you where you stand and what to check next. Every sentence it shows is tied to a number it has
+    just calculated, so the same figures will get the same sentence in ten years. It compares your fund
+    with an index fund you could actually have bought, not with the index itself. Figures are before tax
+    and exit load. It describes what has already happened and predicts nothing.</p>
   </div>
   <div class="card">
     <h2>The fifth question: who kept it?</h2>

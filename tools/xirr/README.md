@@ -1,7 +1,7 @@
 # The spreadsheet — build tooling and maintenance
 
 The XIRR sheet is no longer a separate destination. It is delivered from inside
-The Portfolio Reality Check, at `/Mutual_Fund/tool/#sheet`, because the book can
+Where You Stand, at `/Mutual_Fund/tool/#sheet`, because the book can
 carry only one printed address.
 
 | What | Where |

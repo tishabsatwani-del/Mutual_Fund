@@ -1,328 +1,292 @@
 {
   "$comment": [
-    "The copy deck of Build Specification v2, section 13. Every visitor-facing",
-    "string in the Simulator is read from this file.",
+    "Where You Stand — the copy deck.",
     "",
-    "The author writes every 'text' value. The developer wires slots and never",
-    "writes or edits prose, which is why every text below ships empty: an empty",
-    "slot is a slot still waiting for the author, and the build says so rather",
-    "than inventing a sentence to fill it.",
+    "Every visitor-facing string is read from this file, by slot id. The author",
+    "writes every 'text'; the developer wires slots and never writes prose.",
+    "An empty slot is a slot still waiting, and the build says which.",
     "",
-    "'budget' is the proposed character budget for that slot, to be agreed with",
-    "the designer. 'where' says where the slot appears, so the author can write",
-    "with the screen in mind.",
+    "The eighteen Tool 3 slots and their nine next steps are drafted in section",
+    "10 of the review. They are addressable by id alone, so wording can change",
+    "at any time without touching code.",
     "",
-    "Three rules apply to every slot and are enforced by sim/tests/copy.test.js:",
-    "no sentence may tell the reader to buy, sell, switch, hold, redeem, stop,",
-    "start or continue an investment; nothing may reference a moment (no dates,",
-    "no index levels, no fund names, no rate presented as current), so the copy",
-    "never ages; and the words 'insider' and 'veteran' must not appear."
+    "Three rules, enforced by sim/tests/copy.test.js: no sentence may tell the",
+    "reader to buy, sell, switch, hold, redeem, stop or start anything; nothing",
+    "may reference a moment, so the copy never ages; and the words 'insider'",
+    "and 'veteran' never appear."
   ],
-  "version": 1,
+  "version": 3,
+  "product": "Where You Stand",
+  "tools": {
+    "myReturn": "My return",
+    "thisFundsRecord": "This fund's record",
+    "myMoneyInThisFund": "My money in this fund",
+    "myPlanTested": "My plan, tested"
+  },
   "locale": "en-IN",
   "chapterRefs": {
-    "$comment": "Book pointers resolve through this table so chapter numbering stays under the author's control. Fill each value with the chapter reference as it should read.",
-    "SHORT-PERIOD": "",
-    "INSTALMENT-TIMING": "",
-    "ROLLING-RETURNS": "",
-    "XIRR": "",
-    "BENCHMARKS": ""
+    "$comment": "Book pointers resolve here, so chapter numbering stays the author's. Six words or fewer on screen.",
+    "WHOSE-MATHS": "",
+    "WHICH-WINDOW": "",
+    "THE-TRAPS": "",
+    "WHAT-IT-COST": "",
+    "WHO-KEPT-IT": ""
   },
   "slots": {
-    "POS-INTRO": {
+    "POS-CELL-LOWER-BOTTOM": {
       "text": "",
-      "budget": 240,
-      "where": "Module A, above the transaction table: what this reading will tell them."
+      "budget": 220,
+      "where": "Tool 3, the cell sentence when the reader's rate is at least half a point below the fund's, and that stretch sits in the bottom quarter of the fund's record."
     },
-    "POS-TOO-EARLY": {
+    "POS-NEXT-LOWER-BOTTOM": {
       "text": "",
-      "budget": 320,
-      "where": "State S-EARLY. Totals are shown; every annualised reading is suppressed."
+      "budget": 90,
+      "where": "Tool 3, the next step for that cell. An in-tool action or a six-word chapter pointer."
     },
-    "POS-STALE": {
+    "POS-CELL-LOWER-MIDDLE": {
+      "text": "",
+      "budget": 220,
+      "where": "Tool 3, the cell sentence when the reader's rate is at least half a point below the fund's, and it sits in the middle half."
+    },
+    "POS-NEXT-LOWER-MIDDLE": {
+      "text": "",
+      "budget": 90,
+      "where": "Tool 3, the next step for that cell. An in-tool action or a six-word chapter pointer."
+    },
+    "POS-CELL-LOWER-TOP": {
+      "text": "",
+      "budget": 220,
+      "where": "Tool 3, the cell sentence when the reader's rate is at least half a point below the fund's, and it sits in the top quarter."
+    },
+    "POS-NEXT-LOWER-TOP": {
+      "text": "",
+      "budget": 90,
+      "where": "Tool 3, the next step for that cell. An in-tool action or a six-word chapter pointer."
+    },
+    "POS-CELL-SIMILAR-BOTTOM": {
+      "text": "",
+      "budget": 220,
+      "where": "Tool 3, the cell sentence when the two are within half a point of each other, and that stretch sits in the bottom quarter of the fund's record."
+    },
+    "POS-NEXT-SIMILAR-BOTTOM": {
+      "text": "",
+      "budget": 90,
+      "where": "Tool 3, the next step for that cell. An in-tool action or a six-word chapter pointer."
+    },
+    "POS-CELL-SIMILAR-MIDDLE": {
+      "text": "",
+      "budget": 220,
+      "where": "Tool 3, the cell sentence when the two are within half a point of each other, and it sits in the middle half."
+    },
+    "POS-NEXT-SIMILAR-MIDDLE": {
+      "text": "",
+      "budget": 90,
+      "where": "Tool 3, the next step for that cell. An in-tool action or a six-word chapter pointer."
+    },
+    "POS-CELL-SIMILAR-TOP": {
+      "text": "",
+      "budget": 220,
+      "where": "Tool 3, the cell sentence when the two are within half a point of each other, and it sits in the top quarter."
+    },
+    "POS-NEXT-SIMILAR-TOP": {
+      "text": "",
+      "budget": 90,
+      "where": "Tool 3, the next step for that cell. An in-tool action or a six-word chapter pointer."
+    },
+    "POS-CELL-HIGHER-BOTTOM": {
+      "text": "",
+      "budget": 220,
+      "where": "Tool 3, the cell sentence when the reader's rate is at least half a point above the fund's, and that stretch sits in the bottom quarter of the fund's record."
+    },
+    "POS-NEXT-HIGHER-BOTTOM": {
+      "text": "",
+      "budget": 90,
+      "where": "Tool 3, the next step for that cell. An in-tool action or a six-word chapter pointer."
+    },
+    "POS-CELL-HIGHER-MIDDLE": {
+      "text": "",
+      "budget": 220,
+      "where": "Tool 3, the cell sentence when the reader's rate is at least half a point above the fund's, and it sits in the middle half."
+    },
+    "POS-NEXT-HIGHER-MIDDLE": {
+      "text": "",
+      "budget": 90,
+      "where": "Tool 3, the next step for that cell. An in-tool action or a six-word chapter pointer."
+    },
+    "POS-CELL-HIGHER-TOP": {
+      "text": "",
+      "budget": 220,
+      "where": "Tool 3, the cell sentence when the reader's rate is at least half a point above the fund's, and it sits in the top quarter."
+    },
+    "POS-NEXT-HIGHER-TOP": {
+      "text": "",
+      "budget": 90,
+      "where": "Tool 3, the next step for that cell. An in-tool action or a six-word chapter pointer."
+    },
+    "POS-UNDER-A-YEAR": {
       "text": "",
       "budget": 200,
-      "where": "State S-STALE. A banner above the report. The date is substituted by the app."
+      "where": "Tool 3 override: span under a year. The yearly rate is withheld and the total shown; no cell fires."
     },
-    "POS-VALUE-APPROX": {
-      "text": "",
-      "budget": 220,
-      "where": "Beside an estimated value: what the estimate excludes."
-    },
-    "POS-UNITS-NEGATIVE": {
-      "text": "",
-      "budget": 260,
-      "where": "Stop condition: the entries and the fund do not reconcile."
-    },
-    "POS-ROW-BEFORE-FUND": {
-      "text": "",
-      "budget": 240,
-      "where": "Stop condition: a row is dated before the fund's first NAV."
-    },
-    "POS-ROW-NO-NAV": {
-      "text": "",
-      "budget": 220,
-      "where": "Beside a row with no NAV within seven days of its date."
-    },
-    "POS-GAP-BEHIND": {
-      "text": "",
-      "budget": 400,
-      "where": "State S-GAP-BEHIND. The instalment-timing reading."
-    },
-    "POS-GAP-AHEAD": {
-      "text": "",
-      "budget": 400,
-      "where": "State S-GAP-AHEAD."
-    },
-    "POS-GAP-NEUTRAL": {
-      "text": "",
-      "budget": 400,
-      "where": "State S-GAP-NEUTRAL."
-    },
-    "POS-STRETCH-LOW": {
-      "text": "",
-      "budget": 400,
-      "where": "State S-STRETCH-LOW. Percentile at or below the low threshold."
-    },
-    "POS-STRETCH-MID": {
-      "text": "",
-      "budget": 400,
-      "where": "State S-STRETCH-MID."
-    },
-    "POS-STRETCH-HIGH": {
-      "text": "",
-      "budget": 400,
-      "where": "State S-STRETCH-HIGH. Percentile at or above the high threshold."
-    },
-    "POS-STRETCH-NA": {
-      "text": "",
-      "budget": 300,
-      "where": "State S-STRETCH-NA. Not enough record to place the stretch in."
-    },
-    "POS-ALT-BEHIND": {
-      "text": "",
-      "budget": 400,
-      "where": "State S-ALT-BEHIND. Against the replay in the proxy fund."
-    },
-    "POS-ALT-AHEAD": {
-      "text": "",
-      "budget": 400,
-      "where": "State S-ALT-AHEAD."
-    },
-    "POS-ALT-CLOSE": {
-      "text": "",
-      "budget": 400,
-      "where": "State S-ALT-CLOSE."
-    },
-    "POS-ALT-NONE": {
-      "text": "",
-      "budget": 300,
-      "where": "State S-ALT-NONE. No proxy, or the proxy does not cover the span."
-    },
-    "POS-REPLAY-LINE": {
+    "POS-WITHDRAWALS": {
       "text": "",
       "budget": 200,
-      "where": "The one-sentence replay pattern; the proxy fund name is substituted."
+      "where": "Tool 3 override: money-out rows are present. Printed above the cell, which still fires."
     },
-    "POS-NEXT-SHORT-PERIOD": {
-      "text": "",
-      "budget": 90,
-      "where": "Next-step label for S-EARLY. Carries [CH-REF:SHORT-PERIOD]."
-    },
-    "POS-NEXT-STALE-RECORD": {
-      "text": "",
-      "budget": 90,
-      "where": "Next-step label for S-STALE. Opens Module B at the full range."
-    },
-    "POS-NEXT-GAP-TIMING": {
-      "text": "",
-      "budget": 90,
-      "where": "Next-step label for the gap states. Carries [CH-REF:INSTALMENT-TIMING]."
-    },
-    "POS-NEXT-EVERY-STRETCH": {
-      "text": "",
-      "budget": 90,
-      "where": "Next-step label for the stretch states. Opens Module B at the visitor's span."
-    },
-    "POS-NEXT-FULL-RECORD": {
-      "text": "",
-      "budget": 90,
-      "where": "Next-step label for S-STRETCH-NA. Opens Module B at the full range."
-    },
-    "POS-NEXT-OVERLAY": {
-      "text": "",
-      "budget": 90,
-      "where": "Next-step label for the alternative states. Opens Module B with the overlay on."
-    },
-    "RR-MEANING-1Y": {
-      "text": "",
-      "budget": 500,
-      "where": "The interpretation panel for the 1-year window."
-    },
-    "RR-MEANING-3Y": {
-      "text": "",
-      "budget": 500,
-      "where": "The interpretation panel for the 3-year window."
-    },
-    "RR-MEANING-5Y": {
-      "text": "",
-      "budget": 500,
-      "where": "The interpretation panel for the 5-year window."
-    },
-    "RR-MEANING-7Y": {
-      "text": "",
-      "budget": 500,
-      "where": "The interpretation panel for the 7-year window."
-    },
-    "RR-MEANING-10Y": {
-      "text": "",
-      "budget": 500,
-      "where": "The interpretation panel for the 10-year window."
-    },
-    "RR-MEANING-OVERLAY": {
-      "text": "",
-      "budget": 500,
-      "where": "The interpretation panel addition when a benchmark overlay is drawn."
-    },
-    "RR-NO-PROXY": {
-      "text": "",
-      "budget": 220,
-      "where": "No index-fund proxy exists for this category."
-    },
-    "RR-PROXY-LABEL": {
-      "text": "",
-      "budget": 220,
-      "where": "The transparency label under the overlay: what the proxy is and is not."
-    },
-    "RR-PROXY-SHORT": {
-      "text": "",
-      "budget": 220,
-      "where": "The proxy is younger than the range being shown."
-    },
-    "RR-IDCW-ROUTE": {
-      "text": "",
-      "budget": 300,
-      "where": "Why an IDCW selection was routed to its Growth twin."
-    },
-    "RR-STALE": {
+    "POS-REPLAY-BEHIND": {
       "text": "",
       "budget": 200,
-      "where": "The scheme has stopped publishing NAV. The date is substituted."
+      "where": "Tool 3, figure 4: the reader is at least a point below the same money in the index fund."
     },
-    "RR-NO-HISTORY": {
+    "POS-REPLAY-CLOSE": {
       "text": "",
-      "budget": 240,
-      "where": "No provider has any NAV history for the selected scheme. Distinct from every provider being unreachable, which is ERR-DATA-DOWN."
+      "budget": 200,
+      "where": "Tool 3, figure 4: within a point either way."
+    },
+    "POS-REPLAY-AHEAD": {
+      "text": "",
+      "budget": 200,
+      "where": "Tool 3, figure 4: at least a point above."
+    },
+    "POS-DRIP-HELPED": {
+      "text": "",
+      "budget": 220,
+      "where": "Tool 3, the conditional fifth line: the reader's own dates did as well as or better than an even drip."
+    },
+    "POS-DRIP-COST": {
+      "text": "",
+      "budget": 220,
+      "where": "Tool 3, the conditional fifth line: an even drip would have done better. In rupees."
+    },
+    "POS-FALLING-MARKET": {
+      "text": "",
+      "budget": 180,
+      "where": "Tool 3, one line: the latest NAV is below the NAV twelve months earlier."
+    },
+    "POS-RECENT-LUMP": {
+      "text": "",
+      "budget": 180,
+      "where": "Tool 3, one line: a purchase inside the last twelve months is 40% or more of all money in."
+    },
+    "RR-WORST-GENTLER": {
+      "text": "",
+      "budget": 180,
+      "where": "Tool 2: this fund's worst window was gentler than the index fund's over the same dates, by more than a point."
+    },
+    "RR-WORST-SIMILAR": {
+      "text": "",
+      "budget": 180,
+      "where": "Tool 2: the two worst windows are within a point of each other."
+    },
+    "RR-WORST-HARSHER": {
+      "text": "",
+      "budget": 180,
+      "where": "Tool 2: this fund's worst window was harsher, by more than a point."
     },
     "RR-TOO-YOUNG": {
       "text": "",
+      "budget": 220,
+      "where": "Tool 2 refusal: the history is shorter than one full window."
+    },
+    "RR-AGE-GUARD": {
+      "text": "",
       "budget": 260,
-      "where": "The fund is younger than the window. The two figures are substituted."
+      "where": "Tool 2 reading, three sentences: the history is shorter than the window plus three years."
+    },
+    "RR-BEFORE-2008": {
+      "text": "",
+      "budget": 200,
+      "where": "Tool 2: this history begins after the 2008 fall, so its worst window is the worst of a kinder era. Names the series by its own name."
+    },
+    "RR-IDCW-ROUTE": {
+      "text": "",
+      "budget": 200,
+      "where": "An IDCW row was chosen. Its NAV falls at every payout."
+    },
+    "RR-STALE": {
+      "text": "",
+      "budget": 180,
+      "where": "The scheme has stopped publishing a NAV."
     },
     "RR-FEW-WINDOWS": {
       "text": "",
-      "budget": 260,
-      "where": "Fewer than the minimum windows; the count is printed prominently."
+      "budget": 180,
+      "where": "Fewer windows than the minimum; the count is printed prominently."
+    },
+    "RR-NO-PROXY": {
+      "text": "",
+      "budget": 180,
+      "where": "No index fund is mapped to this fund's category."
     },
     "XIRR-MEANING": {
       "text": "",
-      "budget": 500,
-      "where": "The interpretation panel under the XIRR result."
-    },
-    "XIRR-SUB-YEAR": {
-      "text": "",
-      "budget": 320,
-      "where": "Span under a year: why an annualised rate misleads over a short span."
+      "budget": 220,
+      "where": "Tool 1, under the figure."
     },
     "XIRR-NEED-IN": {
       "text": "",
-      "budget": 160,
-      "where": "Validation 1: no Money in row."
+      "budget": 140,
+      "where": "Tool 1: no money-in row."
     },
     "XIRR-NEED-VALUE": {
       "text": "",
-      "budget": 160,
-      "where": "Validation 2: not exactly one Value today row."
+      "budget": 140,
+      "where": "Tool 1: worth-today is empty."
     },
     "XIRR-ROW-FIX": {
       "text": "",
-      "budget": 160,
-      "where": "Validation 3: the first incomplete row."
+      "budget": 140,
+      "where": "Tool 1: the first unfinished row."
     },
     "XIRR-SAME-SIGN": {
       "text": "",
-      "budget": 240,
-      "where": "Validation 4: every flow points the same way."
+      "budget": 200,
+      "where": "Tool 1: every flow points the same way."
     },
     "XIRR-NO-SOLVE": {
       "text": "",
-      "budget": 300,
-      "where": "Solver 9.3: no single yearly rate settles these entries."
+      "budget": 220,
+      "where": "Tool 1: no single yearly rate settles these entries."
     },
-    "XIRR-COMPARE-STEADY": {
+    "XIRR-MANY-FUNDS": {
       "text": "",
-      "budget": 240,
-      "where": "The 'compare against a steady rate' comparator. Ships with no rate filled."
+      "budget": 140,
+      "where": "Tool 1: several funds shown separately. One line."
     },
-    "XIRR-WORKBOOK-OFFER": {
+    "PLAN-TOO-SHORT": {
+      "text": "",
+      "budget": 200,
+      "where": "Tool 4: the fund's history is too short for the length asked; the longest it can give."
+    },
+    "PLAN-NO-FUND": {
       "text": "",
       "budget": 160,
-      "where": "The workbook download offer."
+      "where": "Tool 4: no fund chosen, so the rate is the reader's own supposition."
     },
     "LANDING-PROMISE": {
       "text": "",
-      "budget": 300,
-      "where": "The home screen promise, under the product name."
+      "budget": 120,
+      "where": "Home. Fifty words for the whole screen, so this is one line."
     },
     "EMPTY-SEARCH": {
       "text": "",
-      "budget": 200,
-      "where": "Search ran and matched nothing."
+      "budget": 140,
+      "where": "Search matched nothing."
     },
     "ERR-DATA-DOWN": {
       "text": "",
-      "budget": 260,
-      "where": "Every provider is unreachable; cached data is being shown."
+      "budget": 200,
+      "where": "Every source unreachable; the upload door is offered."
     },
-    "ABOUT-1": {
-      "text": "",
-      "budget": 600,
-      "where": "About & Data page, paragraph 1."
+    "ABOUT-MAIN": {
+      "text": "This page runs the book's five questions on your own money. You enter what you paid in and took out; it fetches the fund's public NAV history, for any fund, including ones launched after this book was printed, and works everything out on your phone. Nothing you type leaves it. It does not rate funds, rank them, or tell you what to buy, sell or switch. It tells you where you stand and what to check next. Every sentence it shows is tied to a number it has just calculated, so the same figures will get the same sentence in ten years. It compares your fund with an index fund you could actually have bought, not with the index itself. Figures are before tax and exit load. It describes what has already happened and predicts nothing.",
+      "budget": 900,
+      "where": "About and privacy. The section 8 draft, kept."
     },
-    "ABOUT-2": {
+    "FOOTER-REFRAINS": {
       "text": "",
-      "budget": 600,
-      "where": "About & Data page, paragraph 2."
-    },
-    "ABOUT-3": {
-      "text": "",
-      "budget": 600,
-      "where": "About & Data page, paragraph 3."
-    },
-    "ABOUT-4": {
-      "text": "",
-      "budget": 600,
-      "where": "About & Data page, paragraph 4."
-    },
-    "ABOUT-5": {
-      "text": "",
-      "budget": 600,
-      "where": "About & Data page, paragraph 5."
-    },
-    "ABOUT-6": {
-      "text": "",
-      "budget": 600,
-      "where": "About & Data page, paragraph 6."
-    },
-    "ABOUT-7": {
-      "text": "",
-      "budget": 600,
-      "where": "About & Data page, paragraph 7."
-    },
-    "ABOUT-8": {
-      "text": "",
-      "budget": 600,
-      "where": "About & Data page, paragraph 8."
+      "budget": 400,
+      "where": "The five refrains, pasted from the final assembled chapter."
     }
   }
 }

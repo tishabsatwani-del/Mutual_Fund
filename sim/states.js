@@ -1,129 +1,192 @@
-/* The Simulator - the state evaluator of section 7.3.
+/* Where You Stand — the state evaluator.
  *
- * A pure function from the figures Module A computed to a set of state IDs.
- * It reads no clock, makes no network call, and contains no randomness, so the
- * same figures always produce the same reading -- which is acceptance criterion
- * 9 ("twice in a row, on two different machines").
+ * A pure function from the figures the engine computed to the set of state ids
+ * that fire. No clock, no network, no randomness: the same figures produce the
+ * same reading today and in ten years, which is the promise the About paragraph
+ * makes on the product's behalf.
  *
- * It decides which sentence is shown. It never writes one: each state carries
- * the copy.json slot whose words are the author's (section 13).
+ * It decides which sentence is shown. It never writes one. Every state names a
+ * slot in copy.json and nothing else.
+ *
+ * The thresholds live in states.json and were signed off on 30 August 2026.
+ * Each sentence in the deck was written to be true at its own band, so moving a
+ * threshold silently makes a sentence false. Move one only on purpose.
  */
 (function (root) {
   'use strict';
 
-  var CONFIG = (typeof require === 'function')
-    ? require('./states.json')
-    : (root.SIM_STATES || null);
+  var CONFIG = (typeof require === 'function') ? require('./states.json') : (root.SIM_STATES || null);
 
-  /* Thresholds are stated in percentage points; the figures arrive as decimals. */
   function points(rate) { return rate * 100; }
 
-  function evaluate(figures, override) {
-    var cfg = override || CONFIG;
-    var th = cfg.thresholds;
-    var f = figures || {};
-
-    var early = !(f.spanDays >= th.earlySpanDays);
-    var stale = isFinite(f.latestNavAgeDays) && f.latestNavAgeDays > th.staleAfterDays;
-
-    var report = early ? 'S-EARLY' : 'S-FULL';
-    var fundStatus = stale ? 'S-STALE' : 'S-LIVE';
-
-    /* Section 7.3: under S-EARLY the totals are still shown but every
-     * annualised reading is suppressed, per the book's own short-period rule.
-     * A suppressed section has no state, not a neutral one. */
-    var gap = null, stretch = null, alternative = null;
-
-    if (!early) {
-      gap = gapState(f, th);
-      stretch = stretchState(f, th);
-      alternative = altState(f, th);
-    }
-
-    var active = [report, fundStatus, gap, stretch, alternative]
-      .filter(function (s) { return s !== null; });
-
-    return {
-      early: early,
-      suppressedAnnualised: early,
-      states: {
-        report: report,
-        fundStatus: fundStatus,
-        gap: gap,
-        stretch: stretch,
-        alternative: alternative
-      },
-      active: active,
-      slots: active.map(function (id) { return slotFor(cfg, id); })
-                   .filter(function (s) { return s !== null; }),
-      nextSteps: nextSteps(cfg, active)
-    };
+  /* ------------------------------------------------- Tool 3, the nine cells
+   *
+   * Axis one: the reader's own speed against the fund's speed over the reader's
+   * exact dates, at the half-point band.
+   * Axis two: where that stretch sits among every window of the same length in
+   * days, at the quartiles.
+   */
+  function gapAxis(mine, fund, band) {
+    if (!isFinite(mine) || !isFinite(fund)) return null;
+    var a = points(mine), b = points(fund);
+    if (a <= b - band) return 'LOWER';
+    if (a >= b + band) return 'HIGHER';
+    return 'SIMILAR';
   }
 
-  function gapState(f, th) {
-    if (!isFinite(f.personalXirr) || !isFinite(f.fundSpeed)) return 'S-GAP-NEUTRAL';
-    var mine = points(f.personalXirr), fund = points(f.fundSpeed);
-    if (mine <= fund - th.gapPoints) return 'S-GAP-BEHIND';
-    if (mine >= fund + th.gapPoints) return 'S-GAP-AHEAD';
-    return 'S-GAP-NEUTRAL';
+  function placementAxis(place, low, high) {
+    if (!isFinite(place)) return null;
+    if (place <= low) return 'BOTTOM';
+    if (place >= high) return 'TOP';
+    return 'MIDDLE';
   }
 
-  function stretchState(f, th) {
-    if (!f.stretchOk || !isFinite(f.percentile) || f.windows < th.stretchMinWindows) {
-      return 'S-STRETCH-NA';
-    }
-    if (f.percentile <= th.stretchLowPercentile) return 'S-STRETCH-LOW';
-    if (f.percentile >= th.stretchHighPercentile) return 'S-STRETCH-HIGH';
-    return 'S-STRETCH-MID';
-  }
-
-  function altState(f, th) {
-    if (!f.proxyOk || !isFinite(f.replayXirr) || !isFinite(f.personalXirr)) return 'S-ALT-NONE';
-    var mine = points(f.personalXirr), replay = points(f.replayXirr);
-    if (mine <= replay - th.altPoints) return 'S-ALT-BEHIND';
-    if (mine >= replay + th.altPoints) return 'S-ALT-AHEAD';
-    return 'S-ALT-CLOSE';
-  }
-
-  function slotFor(cfg, stateId) {
-    for (var i = 0; i < cfg.sections.length; i++) {
-      var list = cfg.sections[i].states;
-      for (var k = 0; k < list.length; k++) {
-        if (list[k].id === stateId) {
-          return list[k].slot ? { state: stateId, section: cfg.sections[i].id, slot: list[k].slot,
-                                  presentation: list[k].presentation || 'sentence' } : null;
-        }
-      }
+  function cellFor(cfg, gap, place) {
+    var cells = cfg.tools.myMoneyInThisFund.cells;
+    for (var i = 0; i < cells.length; i++) {
+      if (cells[i].gap === gap && cells[i].placement === place) return cells[i];
     }
     return null;
   }
 
-  /* Section 7.5: at most three next steps, collected in the order the sections
-   * are evaluated, each one either an in-Simulator action or a book pointer. */
-  function nextSteps(cfg, active) {
-    var out = [], seen = {};
-    for (var i = 0; i < active.length && out.length < cfg.maxNextSteps; i++) {
-      var list = cfg.nextSteps[active[i]] || [];
-      for (var k = 0; k < list.length && out.length < cfg.maxNextSteps; k++) {
-        if (seen[list[k].id]) continue;
-        seen[list[k].id] = true;
-        out.push(list[k]);
+  /* input: the figures Module A computed. Everything is a plain number or a
+   * boolean; nothing here reaches for anything it was not handed. */
+  function evaluate(figures, override) {
+    var cfg = override || CONFIG;
+    var t = cfg.thresholds;
+    var tool = cfg.tools.myMoneyInThisFund;
+    var f = figures || {};
+    var fired = [], slots = [];
+
+    function fire(id, slot) {
+      if (!id) return;
+      fired.push(id);
+      if (slot) slots.push({ state: id, slot: slot });
+    }
+
+    /* Under a year the yearly rate is withheld and no cell fires. The book's
+     * own rule: a rate on seven months is a stretch, and a stretched number is
+     * worse than no number. */
+    var early = !(f.spanDays >= t.earlySpanDays);
+    if (early) {
+      fire('S-UNDER-A-YEAR', tool.overrides[0].slot);
+    }
+
+    /* Money out changes what the figures mean, so it is said above the cell —
+     * and the cell still fires. */
+    if (f.hasWithdrawals) fire('S-WITHDRAWALS', tool.overrides[1].slot);
+
+    var cell = null;
+    if (!early) {
+      var gap = gapAxis(f.personalXirr, f.fundSpeed, t.similarPoints);
+      var place = f.placementOk
+        ? placementAxis(f.placement, t.placementLowPercentile, t.placementHighPercentile)
+        : null;
+      if (gap && place) {
+        cell = cellFor(cfg, gap, place);
+        if (cell) { fire(cell.id, cell.slot); slots.push({ state: cell.id, slot: cell.nextSlot, kind: 'next' }); }
       }
     }
+
+    /* The replay: the same rupees, on the same dates, in the index fund the
+     * reader could actually have bought. One point either way is "close". */
+    var replay = null;
+    if (!early && f.replayOk && isFinite(f.replayXirr) && isFinite(f.personalXirr)) {
+      var mine = points(f.personalXirr), rep = points(f.replayXirr);
+      replay = mine <= rep - t.comparisonPoints ? tool.replay[0]
+             : mine >= rep + t.comparisonPoints ? tool.replay[2]
+             : tool.replay[1];
+      fire(replay.id, replay.slot);
+    }
+
+    /* The even-drip twin fires only when the reader's own dates carry a story.
+     * Otherwise it prints nothing, which is the point: it exists to separate
+     * what the fund did from what the reader's timing did, and when the timing
+     * was unremarkable there is nothing to separate. */
+    var drip = null;
+    if (!early && f.dripFires && isFinite(f.dripActual) && isFinite(f.dripEven)) {
+      drip = f.dripActual >= f.dripEven ? tool.drip.lines[0] : tool.drip.lines[1];
+      fire(drip.id, drip.slot);
+    }
+
+    if (f.fallingMarket) fire(tool.extra[0].id, tool.extra[0].slot);
+    if (f.recentLump) fire(tool.extra[1].id, tool.extra[1].slot);
+
+    return {
+      early: early,
+      cell: cell ? cell.id : null,
+      cellSlot: cell ? cell.slot : null,
+      nextSlot: cell ? cell.nextSlot : null,
+      replay: replay ? replay.id : null,
+      drip: drip ? drip.id : null,
+      fired: fired,
+      slots: slots
+    };
+  }
+
+  /* Does the reader's own timing deserve the even-drip twin? Purchases only,
+   * and only when one is more than three times the median instalment or a gap
+   * runs longer than two months. */
+  function dripTriggers(purchases, override) {
+    var t = (override || CONFIG).thresholds;
+    var rows = (purchases || []).slice().sort(function (a, b) { return a.t - b.t; });
+    if (rows.length < 3) return false;
+    var amounts = rows.map(function (r) { return r.amount; }).sort(function (a, b) { return a - b; });
+    var median = amounts[Math.floor(amounts.length / 2)];
+    if (median > 0 && amounts[amounts.length - 1] > median * t.dripLumpMultiple) return true;
+    for (var i = 1; i < rows.length; i++) {
+      var months = (rows[i].t - rows[i - 1].t) / (30.44 * 86400000);
+      if (months > t.dripGapMonths) return true;
+    }
+    return false;
+  }
+
+  /* A single purchase inside the last twelve months worth 40% or more of every
+   * rupee put in. It drags the yearly rate down for reasons that have nothing
+   * to do with the fund, so the reader is told before they read the figure. */
+  function recentLump(purchases, asOfT, override) {
+    var t = (override || CONFIG).thresholds;
+    var rows = purchases || [];
+    var total = rows.reduce(function (s, r) { return s + r.amount; }, 0);
+    if (!(total > 0)) return false;
+    var cutoff = asOfT - t.recentLumpMonths * 30.44 * 86400000;
+    for (var i = 0; i < rows.length; i++) {
+      if (rows[i].t >= cutoff && rows[i].amount / total >= t.recentLumpShare) return true;
+    }
+    return false;
+  }
+
+  /* Tool 2's one state line on the comparison, at one point. */
+  function worstAgainstIndex(fundWorst, indexWorst, override) {
+    var cfg = override || CONFIG, band = cfg.thresholds.comparisonPoints;
+    if (!isFinite(fundWorst) || !isFinite(indexWorst)) return null;
+    var a = points(fundWorst), b = points(indexWorst);
+    var list = cfg.tools.thisFundsRecord.comparison;
+    if (a >= b + band) return list[0];
+    if (a <= b - band) return list[2];
+    return list[1];
+  }
+
+  /* Every slot the code can ask the deck for, so CI can prove the deck covers
+   * the code and the author can see what is still unwritten. */
+  function allSlots(override) {
+    var cfg = override || CONFIG, out = [];
+    var t3 = cfg.tools.myMoneyInThisFund;
+    t3.cells.forEach(function (c) { out.push(c.slot); out.push(c.nextSlot); });
+    t3.overrides.forEach(function (o) { out.push(o.slot); });
+    t3.replay.forEach(function (r) { out.push(r.slot); });
+    t3.drip.lines.forEach(function (d) { out.push(d.slot); });
+    t3.extra.forEach(function (e) { out.push(e.slot); });
+    cfg.tools.thisFundsRecord.comparison.forEach(function (c) { out.push(c.slot); });
+    cfg.tools.thisFundsRecord.guards.forEach(function (g) { out.push(g.slot); });
     return out;
   }
 
-  /* Every state the report can reach, so a fixture can assert the table is whole
-   * and CI can check each one has a slot the author has filled. */
-  function allStates(cfg) {
-    var c = cfg || CONFIG, out = [];
-    c.sections.forEach(function (s) {
-      s.states.forEach(function (st) { out.push({ section: s.id, id: st.id, slot: st.slot }); });
-    });
-    return out;
-  }
-
-  var api = { config: CONFIG, evaluate: evaluate, allStates: allStates, slotFor: slotFor };
+  var api = {
+    config: CONFIG, evaluate: evaluate, allSlots: allSlots,
+    gapAxis: gapAxis, placementAxis: placementAxis,
+    dripTriggers: dripTriggers, recentLump: recentLump, worstAgainstIndex: worstAgainstIndex
+  };
   if (typeof module === 'object' && module.exports) module.exports = api;
   root.SimStates = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

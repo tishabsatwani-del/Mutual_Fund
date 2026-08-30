@@ -1,4 +1,4 @@
-/* The Portfolio Reality Check — interface.
+/* Where You Stand — interface.
  *
  * No framework, no network, no storage. Every figure a reader types stays in
  * this page's memory and dies with the tab, which is the only honest way to

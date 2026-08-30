@@ -1,4 +1,4 @@
-# The Portfolio Reality Check
+# Where You Stand
 
 A static, offline-capable analysis tool for readers of the book. Four modules on
 one page: portfolio XIRR, a goal planner, market rolling returns, and rolling

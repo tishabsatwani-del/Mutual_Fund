@@ -253,125 +253,110 @@ var crashy = dailySeries(crashFrom, crashTo, function (n) {
 var lump = [{ t: d(2018, 1, 1), type: 'in', amount: 100000 }];
 var stood = P.whereYouStand({ rows: lump, fundSeries: crashy, proxySeries: null, asOfT: crashTo });
 ok('the reading ran', stood.ok, JSON.stringify(stood).slice(0, 200));
-ok('the stretch could be placed', stood.figures.stretchOk, JSON.stringify(stood.stretch));
+ok('the stretch could be placed', stood.figures.placementOk, JSON.stringify(stood.stretch));
 ok('there were at least 30 windows', stood.figures.windows >= 30, 'windows ' + stood.figures.windows);
-ok('the percentile is in the bottom quartile', stood.figures.percentile <= 25,
-   'percentile ' + stood.figures.percentile.toFixed(2));
+ok('placement is a whole number out of a hundred, never a decimal',
+   Number.isInteger(stood.figures.placement), String(stood.figures.placement));
+ok('and it lands in the bottom quartile', stood.figures.placement <= 25,
+   'higher than ' + stood.figures.placement + ' of every 100');
 var crashStates = States.evaluate(stood.figures);
-ok('and the state fired is S-STRETCH-LOW', crashStates.states.stretch === 'S-STRETCH-LOW',
-   crashStates.states.stretch);
-ok('its copy slot is POS-STRETCH-LOW',
-   crashStates.slots.some(function (s) { return s.slot === 'POS-STRETCH-LOW'; }));
+ok('so the cell that fires is a BOTTOM one', /-BOTTOM$/.test(crashStates.cell || ''), crashStates.cell);
+ok('and it names a slot for the author to write',
+   crashStates.slots.some(function (s) { return /^POS-CELL-/.test(s.slot); }));
 
 /* ==================================== 9. State determinism (spec 17.9) */
-section('Criterion 9 - a fixture table of transaction sets gives exactly these states');
+section('Criterion 9 - the state grid is exact and repeatable');
 
-/* One steady fund and one proxy, both synthetic, so every expected state below
- * is arithmetic rather than opinion. */
-var fundFrom = d(2005, 1, 1), fundTo = d(2025, 1, 1);
-var steadyFund = dailySeries(fundFrom, fundTo, function (n) { return 10 * Math.pow(1.12, n / 365); });
-var slowProxy = dailySeries(fundFrom, fundTo, function (n) { return 10 * Math.pow(1.08, n / 365); });
-var fastProxy = dailySeries(fundFrom, fundTo, function (n) { return 10 * Math.pow(1.18, n / 365); });
-
-var CASES = [
-  {
-    name: 'a holding under a year suppresses every annualised reading',
-    input: { rows: [{ t: d(2024, 6, 1), type: 'in', amount: 100000 }],
-             fundSeries: steadyFund, proxySeries: slowProxy, asOfT: fundTo },
-    expect: { report: 'S-EARLY', fundStatus: 'S-LIVE', gap: null, stretch: null, alternative: null }
-  },
-  {
-    name: 'a fund that stopped publishing raises the stale banner',
-    input: { rows: [{ t: d(2010, 1, 1), type: 'in', amount: 100000 }],
-             fundSeries: steadyFund, proxySeries: slowProxy, asOfT: d(2025, 6, 1) },
-    expect: { report: 'S-FULL', fundStatus: 'S-STALE', gap: 'S-GAP-NEUTRAL',
-              stretch: 'S-STRETCH-MID', alternative: 'S-ALT-AHEAD' }
-  },
-  {
-    name: 'one lump sum in a steady fund tracks the fund exactly',
-    input: { rows: [{ t: d(2010, 1, 1), type: 'in', amount: 100000 }],
-             fundSeries: steadyFund, proxySeries: null, asOfT: fundTo },
-    expect: { report: 'S-FULL', fundStatus: 'S-LIVE', gap: 'S-GAP-NEUTRAL',
-              stretch: 'S-STRETCH-MID', alternative: 'S-ALT-NONE' }
-  },
-  {
-    name: 'no proxy at all leaves the alternative unspoken',
-    input: { rows: P.repeatMonthly(d(2015, 1, 1), 5000, 60, 'in'),
-             fundSeries: steadyFund, proxySeries: null, asOfT: fundTo },
-    expect: { report: 'S-FULL', fundStatus: 'S-LIVE', gap: 'S-GAP-NEUTRAL',
-              stretch: 'S-STRETCH-MID', alternative: 'S-ALT-NONE' }
-  },
-  {
-    name: 'a slower proxy puts the visitor ahead of the alternative',
-    input: { rows: [{ t: d(2012, 1, 1), type: 'in', amount: 100000 }],
-             fundSeries: steadyFund, proxySeries: slowProxy, asOfT: fundTo },
-    expect: { report: 'S-FULL', fundStatus: 'S-LIVE', gap: 'S-GAP-NEUTRAL',
-              stretch: 'S-STRETCH-MID', alternative: 'S-ALT-AHEAD' }
-  },
-  {
-    name: 'a faster proxy puts the visitor behind it',
-    input: { rows: [{ t: d(2012, 1, 1), type: 'in', amount: 100000 }],
-             fundSeries: steadyFund, proxySeries: fastProxy, asOfT: fundTo },
-    expect: { report: 'S-FULL', fundStatus: 'S-LIVE', gap: 'S-GAP-NEUTRAL',
-              stretch: 'S-STRETCH-MID', alternative: 'S-ALT-BEHIND' }
-  },
-  {
-    name: 'a proxy younger than the holding cannot be compared against',
-    input: { rows: [{ t: d(2006, 1, 1), type: 'in', amount: 100000 }],
-             fundSeries: steadyFund,
-             proxySeries: dailySeries(d(2015, 1, 1), fundTo, function (n) { return 10 * Math.pow(1.12, n / 365); }),
-             asOfT: fundTo },
-    expect: { report: 'S-FULL', fundStatus: 'S-LIVE', gap: 'S-GAP-NEUTRAL',
-              stretch: 'S-STRETCH-MID', alternative: 'S-ALT-NONE' }
-  },
-  {
-    name: 'buying only into the crash leaves the visitor behind the fund',
-    input: { rows: P.repeatMonthly(d(2019, 6, 1), 20000, 12, 'in'),
-             fundSeries: crashy, proxySeries: null, asOfT: crashTo },
-    expect: { report: 'S-FULL', fundStatus: 'S-LIVE', gap: 'S-GAP-BEHIND',
-              stretch: 'S-STRETCH-LOW', alternative: 'S-ALT-NONE' }
-  },
-  {
-    name: 'a fund without span plus a year of history cannot place the stretch',
-    input: { rows: [{ t: d(2021, 6, 1), type: 'in', amount: 100000 }],
-             fundSeries: dailySeries(d(2021, 1, 1), d(2025, 1, 1),
-                                     function (n) { return 10 * Math.pow(1.12, n / 365); }),
-             proxySeries: null, asOfT: d(2025, 1, 1) },
-    expect: { report: 'S-FULL', fundStatus: 'S-LIVE', gap: 'S-GAP-NEUTRAL',
-              stretch: 'S-STRETCH-NA', alternative: 'S-ALT-NONE' }
-  }
+/* The nine cells are a grid, so the fixture walks the grid rather than a
+ * handful of examples: every combination of the gap band and the placement
+ * quartile must land on its own cell and no other. */
+var GRID = [
+  { mine: 0.100, fund: 0.132, place: 10, cell: 'S-CELL-LOWER-BOTTOM' },
+  { mine: 0.100, fund: 0.132, place: 50, cell: 'S-CELL-LOWER-MIDDLE' },
+  { mine: 0.100, fund: 0.132, place: 90, cell: 'S-CELL-LOWER-TOP' },
+  { mine: 0.130, fund: 0.132, place: 10, cell: 'S-CELL-SIMILAR-BOTTOM' },
+  { mine: 0.130, fund: 0.132, place: 50, cell: 'S-CELL-SIMILAR-MIDDLE' },
+  { mine: 0.130, fund: 0.132, place: 90, cell: 'S-CELL-SIMILAR-TOP' },
+  { mine: 0.160, fund: 0.132, place: 10, cell: 'S-CELL-HIGHER-BOTTOM' },
+  { mine: 0.160, fund: 0.132, place: 50, cell: 'S-CELL-HIGHER-MIDDLE' },
+  { mine: 0.160, fund: 0.132, place: 90, cell: 'S-CELL-HIGHER-TOP' }
 ];
-
-function run(c) {
-  var stand = P.whereYouStand(c.input);
-  if (!stand.ok) return { error: stand.code };
-  return States.evaluate(stand.figures).states;
+function figs(o) {
+  return {
+    spanDays: 2000, personalXirr: o.mine, fundSpeed: o.fund,
+    placement: o.place, placementOk: true,
+    replayOk: false, hasWithdrawals: false, dripFires: false,
+    fallingMarket: false, recentLump: false
+  };
 }
-
-CASES.forEach(function (c) {
-  var first = run(c), second = run(c);
-  var wanted = JSON.stringify(c.expect);
-  ok(c.name, JSON.stringify(first) === wanted, 'got ' + JSON.stringify(first));
-  ok('  ... and identically on a second run', JSON.stringify(first) === JSON.stringify(second));
+GRID.forEach(function (g) {
+  var a = States.evaluate(figs(g)), b = States.evaluate(figs(g));
+  ok(g.cell, a.cell === g.cell, 'got ' + a.cell);
+  ok('  ... and identically on a second run', a.cell === b.cell);
 });
-ok('the table carries at least six transaction sets', CASES.length >= 6, 'has ' + CASES.length);
+ok('all nine cells are reachable and distinct',
+   new Set(GRID.map(function (g) { return States.evaluate(figs(g)).cell; })).size === 9);
+
+section('Criterion 9 - the bands are exactly where the author signed them');
+var T = States.config.thresholds;
+ok('half a point below is LOWER, a hair less is SIMILAR',
+   States.gapAxis(0.1270, 0.1320, T.similarPoints) === 'LOWER' &&
+   States.gapAxis(0.1271, 0.1320, T.similarPoints) === 'SIMILAR');
+ok('half a point above is HIGHER, a hair less is SIMILAR',
+   States.gapAxis(0.1370, 0.1320, T.similarPoints) === 'HIGHER' &&
+   States.gapAxis(0.1369, 0.1320, T.similarPoints) === 'SIMILAR');
+ok('the quartiles are inclusive at 25 and 75',
+   States.placementAxis(25, 25, 75) === 'BOTTOM' &&
+   States.placementAxis(26, 25, 75) === 'MIDDLE' &&
+   States.placementAxis(75, 25, 75) === 'TOP');
+
+section('Criterion 9 - the overrides and the conditional lines');
+var early = States.evaluate({ spanDays: 200, personalXirr: 0.34, fundSpeed: 0.12,
+  placement: 50, placementOk: true, replayOk: true, replayXirr: 0.12 });
+ok('under a year no cell fires at all', early.cell === null && early.early === true);
+ok('and the yearly rate is withheld by naming that state',
+   early.fired.indexOf('S-UNDER-A-YEAR') >= 0);
+ok('the replay is withheld too, since it is also a yearly rate', early.replay === null);
+
+var wd = States.evaluate(Object.assign(figs(GRID[4]), { hasWithdrawals: true }));
+ok('withdrawals are said above the cell, and the cell still fires',
+   wd.fired.indexOf('S-WITHDRAWALS') >= 0 && wd.cell === 'S-CELL-SIMILAR-MIDDLE');
+
+['BEHIND', 'CLOSE', 'AHEAD'].forEach(function (want, i) {
+  var mine = [0.100, 0.120, 0.140][i];
+  var r = States.evaluate(Object.assign(figs(GRID[4]),
+    { personalXirr: mine, replayOk: true, replayXirr: 0.120 }));
+  ok('the replay reads ' + want + ' at one point', r.replay === 'S-REPLAY-' + want, r.replay);
+});
+
+section('Criterion 9 - the drip fires only when the dates carry a story');
+var monthly = [];
+for (var mi = 0; mi < 24; mi++) monthly.push({ t: E.addMonths(d(2022, 1, 1), mi), amount: 10000 });
+ok('an even monthly run does not trigger it', States.dripTriggers(monthly) === false);
+var withLump = monthly.slice();
+withLump.push({ t: d(2023, 6, 1), amount: 40000 });
+ok('a purchase above three times the median does', States.dripTriggers(withLump) === true);
+var gapped = monthly.slice(0, 6).concat(monthly.slice(12));
+ok('and so does a gap longer than two months', States.dripTriggers(gapped) === true);
+
+section('Criterion 9 - the recent lump');
+var asOf = d(2026, 8, 1);
+ok('40% of all money in, inside twelve months, fires it',
+   States.recentLump([{ t: d(2020, 1, 1), amount: 600000 },
+                      { t: d(2026, 3, 1), amount: 400000 }], asOf) === true);
+ok('the same lump older than twelve months does not',
+   States.recentLump([{ t: d(2020, 1, 1), amount: 600000 },
+                      { t: d(2024, 3, 1), amount: 400000 }], asOf) === false);
+ok('and a smaller recent purchase does not',
+   States.recentLump([{ t: d(2020, 1, 1), amount: 900000 },
+                      { t: d(2026, 3, 1), amount: 100000 }], asOf) === false);
 
 section('Criterion 9 - the evaluator is pure');
 var src = require('fs').readFileSync(require('path').join(__dirname, '../states.js'), 'utf8');
 ok('states.js never reads the clock', !/Date\.now|new Date\(\s*\)/.test(src));
 ok('states.js makes no network call', !/fetch|XMLHttpRequest|require\('http/.test(src));
 ok('states.js contains no randomness', !/Math\.random/.test(src));
-ok('every state in the table has an entry',
-   States.allStates().length === 15, 'found ' + States.allStates().length);
-ok('the two states that say nothing are the quiet ones',
-   States.allStates().filter(function (s) { return !s.slot; })
-         .map(function (s) { return s.id; }).join(',') === 'S-FULL,S-LIVE');
-ok('every other state names a copy slot for the author to write',
-   States.allStates().filter(function (s) { return s.slot; }).length === 13);
-ok('no more than three next steps are ever offered',
-   States.evaluate({ spanDays: 4000, latestNavAgeDays: 900, personalXirr: 0.02, fundSpeed: 0.12,
-                     stretchOk: true, percentile: 3, windows: 900,
-                     proxyOk: true, replayXirr: 0.14 }).nextSteps.length <= 3);
+ok('the thresholds are signed off', States.config.signedOff === true);
 
 /* ============================================ the data layer, sections 5.2-5.4 */
 section('Section 5.2 - the cleaning rules');

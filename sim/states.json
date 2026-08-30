@@ -1,122 +1,129 @@
 {
   "$comment": [
-    "The state system of Build Specification v2, section 7.3. Every interpretive",
-    "sentence in the Where You Stand report is selected by an exact arithmetic",
-    "condition, and this file holds those conditions' thresholds and the fixed",
-    "mapping from active states to next steps (section 7.5).",
+    "Where You Stand — the state system.",
     "",
-    "It carries identifiers and numbers only. No prose lives here: each state",
-    "names the copy.json slot whose sentence the author writes.",
+    "Every interpretive sentence the product shows is selected by an exact",
+    "arithmetic condition. This file holds those conditions and the copy slot",
+    "each one selects. It carries identifiers and numbers only: no prose lives",
+    "here, and none ever should.",
     "",
-    "The thresholds below are the values the specification states. They are set",
-    "once by the author and then frozen (section 19, item 4); until that sign-off",
-    "arrives, signedOff stays false and the build will say so."
+    "Thresholds signed off by the author, 30 August 2026, as written in the",
+    "review's section 9. They are frozen. Changing one is a decision, not a",
+    "tweak: every sentence in copy.json was written to be true at its own band."
   ],
-  "version": 1,
-  "signedOff": false,
+  "version": 3,
+  "signedOff": true,
+  "signedOffOn": "2026-08-30",
   "thresholds": {
+    "$comment": "Points are percentage points a year unless said otherwise.",
+    "similarPoints": 0.5,
+    "placementLowPercentile": 25,
+    "placementHighPercentile": 75,
+    "comparisonPoints": 1.0,
+    "recentLumpShare": 0.40,
+    "recentLumpMonths": 12,
+    "dripLumpMultiple": 3,
+    "dripGapMonths": 2,
     "earlySpanDays": 365,
     "staleAfterDays": 30,
-    "gapPoints": 2.0,
-    "altPoints": 1.0,
-    "stretchLowPercentile": 25,
-    "stretchHighPercentile": 75,
     "stretchMinWindows": 30,
     "stretchMinExtraDays": 365
   },
-  "sections": [
-    {
-      "id": "report",
-      "states": [
-        { "id": "S-EARLY", "slot": "POS-TOO-EARLY", "suppressesAnnualised": true },
-        { "id": "S-FULL", "slot": null }
+
+  "tools": {
+    "myMoneyInThisFund": {
+      "$comment": [
+        "Tool 3. Nine cells: how the reader's own speed compares with the fund's",
+        "over the same dates, crossed with where that stretch sits in the fund's",
+        "whole record. One cell fires. Each carries a sentence and a next step.",
+        "",
+        "Axis one, the gap: the reader's XIRR against the fund's speed over the",
+        "reader's exact dates, at the half-point band.",
+        "Axis two, the placement: the fund's speed over those dates, ranked among",
+        "every window of the same length in days, at the quartiles."
+      ],
+      "gapAxis": [
+        { "id": "LOWER",   "condition": "mine <= fund - 0.5" },
+        { "id": "SIMILAR", "condition": "within 0.5 points either way" },
+        { "id": "HIGHER",  "condition": "mine >= fund + 0.5" }
+      ],
+      "placementAxis": [
+        { "id": "BOTTOM", "condition": "placement <= 25" },
+        { "id": "MIDDLE", "condition": "between 25 and 75" },
+        { "id": "TOP",    "condition": "placement >= 75" }
+      ],
+      "cells": [
+        { "id": "S-CELL-LOWER-BOTTOM",   "gap": "LOWER",   "placement": "BOTTOM", "slot": "POS-CELL-LOWER-BOTTOM",   "nextSlot": "POS-NEXT-LOWER-BOTTOM" },
+        { "id": "S-CELL-LOWER-MIDDLE",   "gap": "LOWER",   "placement": "MIDDLE", "slot": "POS-CELL-LOWER-MIDDLE",   "nextSlot": "POS-NEXT-LOWER-MIDDLE" },
+        { "id": "S-CELL-LOWER-TOP",      "gap": "LOWER",   "placement": "TOP",    "slot": "POS-CELL-LOWER-TOP",      "nextSlot": "POS-NEXT-LOWER-TOP" },
+        { "id": "S-CELL-SIMILAR-BOTTOM", "gap": "SIMILAR", "placement": "BOTTOM", "slot": "POS-CELL-SIMILAR-BOTTOM", "nextSlot": "POS-NEXT-SIMILAR-BOTTOM" },
+        { "id": "S-CELL-SIMILAR-MIDDLE", "gap": "SIMILAR", "placement": "MIDDLE", "slot": "POS-CELL-SIMILAR-MIDDLE", "nextSlot": "POS-NEXT-SIMILAR-MIDDLE" },
+        { "id": "S-CELL-SIMILAR-TOP",    "gap": "SIMILAR", "placement": "TOP",    "slot": "POS-CELL-SIMILAR-TOP",    "nextSlot": "POS-NEXT-SIMILAR-TOP" },
+        { "id": "S-CELL-HIGHER-BOTTOM",  "gap": "HIGHER",  "placement": "BOTTOM", "slot": "POS-CELL-HIGHER-BOTTOM",  "nextSlot": "POS-NEXT-HIGHER-BOTTOM" },
+        { "id": "S-CELL-HIGHER-MIDDLE",  "gap": "HIGHER",  "placement": "MIDDLE", "slot": "POS-CELL-HIGHER-MIDDLE",  "nextSlot": "POS-NEXT-HIGHER-MIDDLE" },
+        { "id": "S-CELL-HIGHER-TOP",     "gap": "HIGHER",  "placement": "TOP",    "slot": "POS-CELL-HIGHER-TOP",     "nextSlot": "POS-NEXT-HIGHER-TOP" }
+      ],
+      "overrides": [
+        {
+          "id": "S-UNDER-A-YEAR", "slot": "POS-UNDER-A-YEAR",
+          "condition": "span < 365 days",
+          "effect": "the yearly rate is withheld; the total is shown; no cell fires"
+        },
+        {
+          "id": "S-WITHDRAWALS", "slot": "POS-WITHDRAWALS",
+          "condition": "any money-out row present",
+          "effect": "printed above the cell, which still fires"
+        }
+      ],
+      "replay": [
+        { "id": "S-REPLAY-BEHIND", "slot": "POS-REPLAY-BEHIND", "condition": "mine <= replay - 1.0" },
+        { "id": "S-REPLAY-CLOSE",  "slot": "POS-REPLAY-CLOSE",  "condition": "within 1.0 point either way" },
+        { "id": "S-REPLAY-AHEAD",  "slot": "POS-REPLAY-AHEAD",  "condition": "mine >= replay + 1.0" }
+      ],
+      "drip": {
+        "$comment": [
+          "The even-drip twin fires only when the reader's own dates carry a",
+          "story: a purchase above three times the median instalment, or a gap",
+          "longer than two months. Purchases only. Otherwise it prints nothing."
+        ],
+        "trigger": { "lumpMultiple": 3, "gapMonths": 2, "purchasesOnly": true },
+        "lines": [
+          { "id": "S-DRIP-HELPED", "slot": "POS-DRIP-HELPED", "condition": "actual >= even-drip" },
+          { "id": "S-DRIP-COST",   "slot": "POS-DRIP-COST",   "condition": "actual < even-drip" }
+        ]
+      },
+      "extra": [
+        {
+          "id": "S-FALLING-MARKET", "slot": "POS-FALLING-MARKET",
+          "condition": "latest NAV below the NAV twelve months earlier"
+        },
+        {
+          "id": "S-RECENT-LUMP", "slot": "POS-RECENT-LUMP",
+          "condition": "a single purchase inside the last 12 months worth 40% or more of all money in"
+        }
       ]
     },
-    {
-      "id": "fundStatus",
-      "states": [
-        { "id": "S-STALE", "slot": "POS-STALE", "presentation": "banner" },
-        { "id": "S-LIVE", "slot": null }
-      ]
-    },
-    {
-      "id": "gap",
-      "states": [
-        { "id": "S-GAP-BEHIND", "slot": "POS-GAP-BEHIND" },
-        { "id": "S-GAP-AHEAD", "slot": "POS-GAP-AHEAD" },
-        { "id": "S-GAP-NEUTRAL", "slot": "POS-GAP-NEUTRAL" }
-      ]
-    },
-    {
-      "id": "stretch",
-      "states": [
-        { "id": "S-STRETCH-NA", "slot": "POS-STRETCH-NA" },
-        { "id": "S-STRETCH-LOW", "slot": "POS-STRETCH-LOW" },
-        { "id": "S-STRETCH-HIGH", "slot": "POS-STRETCH-HIGH" },
-        { "id": "S-STRETCH-MID", "slot": "POS-STRETCH-MID" }
-      ]
-    },
-    {
-      "id": "alternative",
-      "states": [
-        { "id": "S-ALT-NONE", "slot": "POS-ALT-NONE" },
-        { "id": "S-ALT-BEHIND", "slot": "POS-ALT-BEHIND" },
-        { "id": "S-ALT-AHEAD", "slot": "POS-ALT-AHEAD" },
-        { "id": "S-ALT-CLOSE", "slot": "POS-ALT-CLOSE" }
+
+    "thisFundsRecord": {
+      "$comment": "Tool 2. One state line on the index-fund comparison, at one point.",
+      "comparison": [
+        { "id": "S-WORST-GENTLER", "slot": "RR-WORST-GENTLER", "condition": "fund worst >= index worst + 1.0" },
+        { "id": "S-WORST-SIMILAR", "slot": "RR-WORST-SIMILAR", "condition": "within 1.0 point either way" },
+        { "id": "S-WORST-HARSHER", "slot": "RR-WORST-HARSHER", "condition": "fund worst <= index worst - 1.0" }
+      ],
+      "guards": [
+        { "id": "S-TOO-YOUNG", "slot": "RR-TOO-YOUNG", "condition": "history shorter than one full window" },
+        { "id": "S-AGE-GUARD", "slot": "RR-AGE-GUARD", "condition": "history shorter than window + 3 years" },
+        { "id": "S-BEFORE-2008", "slot": "RR-BEFORE-2008", "condition": "history begins after mid-2009" }
       ]
     }
-  ],
-  "nextSteps": {
-    "$comment": [
-      "Section 7.5. At most three are shown, taken in the order the sections are",
-      "evaluated. Every step is either an in-Simulator action that opens another",
-      "mode pre-filled, or a pointer into the book through the [CH-REF] token",
-      "convention resolved from copy.json. No step links outside the Simulator",
-      "and no step carries a transaction instruction."
-    ],
-    "S-EARLY": [
-      { "id": "NEXT-SHORT-PERIOD", "kind": "book", "ref": "[CH-REF:SHORT-PERIOD]", "labelSlot": "POS-NEXT-SHORT-PERIOD" }
-    ],
-    "S-STALE": [
-      { "id": "NEXT-STALE-RECORD", "kind": "action", "labelSlot": "POS-NEXT-STALE-RECORD",
-        "target": { "module": "B", "fund": "current", "range": "max" } }
-    ],
-    "S-GAP-BEHIND": [
-      { "id": "NEXT-GAP-TIMING", "kind": "book", "ref": "[CH-REF:INSTALMENT-TIMING]", "labelSlot": "POS-NEXT-GAP-TIMING" }
-    ],
-    "S-GAP-AHEAD": [
-      { "id": "NEXT-GAP-TIMING", "kind": "book", "ref": "[CH-REF:INSTALMENT-TIMING]", "labelSlot": "POS-NEXT-GAP-TIMING" }
-    ],
-    "S-GAP-NEUTRAL": [],
-    "S-STRETCH-LOW": [
-      { "id": "NEXT-EVERY-STRETCH", "kind": "action", "labelSlot": "POS-NEXT-EVERY-STRETCH",
-        "target": { "module": "B", "fund": "current", "window": "visitor-span" } }
-    ],
-    "S-STRETCH-HIGH": [
-      { "id": "NEXT-EVERY-STRETCH", "kind": "action", "labelSlot": "POS-NEXT-EVERY-STRETCH",
-        "target": { "module": "B", "fund": "current", "window": "visitor-span" } }
-    ],
-    "S-STRETCH-MID": [
-      { "id": "NEXT-EVERY-STRETCH", "kind": "action", "labelSlot": "POS-NEXT-EVERY-STRETCH",
-        "target": { "module": "B", "fund": "current", "window": "visitor-span" } }
-    ],
-    "S-STRETCH-NA": [
-      { "id": "NEXT-FULL-RECORD", "kind": "action", "labelSlot": "POS-NEXT-FULL-RECORD",
-        "target": { "module": "B", "fund": "current", "range": "max" } }
-    ],
-    "S-ALT-NONE": [],
-    "S-ALT-BEHIND": [
-      { "id": "NEXT-OVERLAY", "kind": "action", "labelSlot": "POS-NEXT-OVERLAY",
-        "target": { "module": "B", "fund": "current", "benchmark": "on" } }
-    ],
-    "S-ALT-AHEAD": [
-      { "id": "NEXT-OVERLAY", "kind": "action", "labelSlot": "POS-NEXT-OVERLAY",
-        "target": { "module": "B", "fund": "current", "benchmark": "on" } }
-    ],
-    "S-ALT-CLOSE": [
-      { "id": "NEXT-OVERLAY", "kind": "action", "labelSlot": "POS-NEXT-OVERLAY",
-        "target": { "module": "B", "fund": "current", "benchmark": "on" } }
-    ]
   },
-  "maxNextSteps": 3
+
+  "$slotInventory": [
+    "The eighteen Tool 3 slots the author is writing, in the order the review",
+    "names them: nine cell sentences with their nine next steps, two overrides,",
+    "three replay lines, two drip lines, and the falling-market and recent-lump",
+    "lines. Each is addressable by the id above and by nothing else, so wording",
+    "can change without touching a line of code."
+  ]
 }

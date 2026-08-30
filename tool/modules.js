@@ -1,4 +1,4 @@
-/* The Portfolio Reality Check — the four modules.
+/* Where You Stand — the four modules.
  *
  * Every result follows the same shape: the number, what it means, what it does
  * not mean, and what to look at next. A number on its own is what ordinary

@@ -171,9 +171,13 @@
         units: run.units,
         personalXirr: personal.ok ? personal.rate : NaN,
         fundSpeed: fundSpeed.ok ? fundSpeed.rate : NaN,
-        stretchOk: stretch.ok,
-        percentile: stretch.ok ? stretch.percentile : NaN,
+        /* Placement is an integer out of a hundred, never a decimal percentile:
+         * a decimal invites a precision the data has not got and reads as a
+         * score, while "higher than N of every 100" reads as a place. */
+        placementOk: stretch.ok,
+        placement: stretch.ok ? E.placeInHundred(fundSpeed.ok ? fundSpeed.rate : NaN, stretch.stats.values) : NaN,
         windows: stretch.ok ? stretch.count : 0,
+        hasWithdrawals: rows.some(function (r) { return r.type === 'out'; }),
         proxyOk: alternative.ok,
         proxySpeed: alternative.ok ? alternative.speed : NaN,
         replayXirr: alternative.ok ? alternative.replayXirr : NaN,

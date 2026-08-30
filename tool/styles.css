@@ -24,10 +24,18 @@
                                under the 4.5 floor, so it is lifted just enough to
                                pass while staying the same slate. */
 
-  /* The hairline on cards is the accent at low alpha, which is what makes the
-     turquoise read as a system rather than as a highlight colour. */
-  --line:        rgba(0, 242, 254, .14);
+  /* Two grades of ruling, per the review's note taken.
+     A line that only divides may be quiet. A line that is the EDGE of
+     something tappable is an affordance and has to reach 3:1.
+     The author proposed #93A0B6 by day and #3C4657 by night; measured, those
+     come to 2.30:1 and 1.90:1, so they are walked to the nearest values in the
+     same slate that clear the floor. Dividers stay exactly as set. */
+  --line:        rgba(0, 242, 254, .14);   /* divider only */
   --line-strong: rgba(0, 242, 254, .34);
+  --rule-divide-day:   #B7C1D3;   /* 1.58:1 — quiet by intent */
+  --rule-divide-night: #2C3442;   /* 1.45:1 — quiet by intent */
+  --rule-edge-day:     #7D8AA0;   /* 3.04:1 — the edge of something tappable */
+  --rule-edge-night:   #5A6475;   /* 3.03:1 */
 
   --accent:      #00F2FE;   /* electric turquoise */
   --accent-2:    #4FACFE;   /* the gradient's other end */

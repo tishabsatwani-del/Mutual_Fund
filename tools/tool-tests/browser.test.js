@@ -44,7 +44,7 @@ fs.mkdirSync(TMP + '/shots', { recursive: true });
   console.log('\nLoading');
   await page.goto(BASE, { waitUntil: 'networkidle' });
   ok('page loads with no script errors', errors.length === 0, errors.join(' | '));
-  ok('title is the product name', (await page.title()) === 'The Portfolio Reality Check');
+  ok('title is the product name', (await page.title()) === 'Where You Stand', await page.title());
   ok('four analysis modules are offered', (await page.locator('.tile[data-go="portfolio"], .tile[data-go="goal"], .tile[data-go="rolling"]').count()) === 4);
   ok('rolling returns is named on the home screen',
      /Rolling returns/.test(await page.locator('.tiles').innerText()));

@@ -74,29 +74,51 @@ ok('every slot says where it appears',
 
 section('The deck covers every slot the code asks for');
 var have = Object.keys(deck.slots);
-var wanted = [];
-States.allStates().forEach(function (s) { if (s.slot) wanted.push(s.slot); });
-var cfg = States.config;
-Object.keys(cfg.nextSteps).forEach(function (k) {
-  if (k.charAt(0) === '$') return;
-  cfg.nextSteps[k].forEach(function (n) { wanted.push(n.labelSlot); });
-});
-var missing = wanted.filter(function (w) { return have.indexOf(w) < 0; });
-ok('every state and next-step slot exists in copy.json', missing.length === 0, missing.join(', '));
+var missing = States.allSlots().filter(function (id) { return have.indexOf(id) < 0; });
+ok('every slot the evaluator can ask for exists in the deck', missing.length === 0, missing.join(', '));
 
-var refs = [];
-Object.keys(cfg.nextSteps).forEach(function (k) {
-  if (k.charAt(0) === '$') return;
-  cfg.nextSteps[k].forEach(function (n) { if (n.ref) refs.push(n.ref.replace(/^\[CH-REF:|\]$/g, '')); });
-});
-var missingRefs = refs.filter(function (r) { return !(r in deck.chapterRefs); });
-ok('every [CH-REF] token resolves from the chapter table', missingRefs.length === 0, missingRefs.join(', '));
+section('The eighteen Tool 3 slots are addressable');
+var t3 = States.config.tools.myMoneyInThisFund;
+var eighteen = t3.cells.map(function (c) { return c.slot; })
+  .concat(t3.overrides.map(function (o) { return o.slot; }))
+  .concat(t3.replay.map(function (r) { return r.slot; }))
+  .concat(t3.drip.lines.map(function (d) { return d.slot; }))
+  .concat(t3.extra.map(function (e) { return e.slot; }));
+ok('there are exactly eighteen of them', eighteen.length === 18, 'found ' + eighteen.length);
+ok('and nine next steps beside them', t3.cells.filter(function (c) { return c.nextSlot; }).length === 9);
+ok('every one resolves in the deck',
+   eighteen.concat(t3.cells.map(function (c) { return c.nextSlot; }))
+     .every(function (id) { return deck.slots[id]; }));
+ok('the ids are unique, so wording can change without touching code',
+   new Set(eighteen).size === 18);
+ok('the thresholds are signed off and dated',
+   States.config.signedOff === true && /^\d{4}-\d{2}-\d{2}$/.test(States.config.signedOffOn || ''));
+ok('and they are the values the author signed', (function () {
+  var t = States.config.thresholds;
+  return t.similarPoints === 0.5 && t.placementLowPercentile === 25 &&
+         t.placementHighPercentile === 75 && t.comparisonPoints === 1.0 &&
+         t.recentLumpShare === 0.40 && t.recentLumpMonths === 12 &&
+         t.dripLumpMultiple === 3 && t.dripGapMonths === 2;
+})());
+
+section('The About paragraph the author kept');
+ok('ABOUT-MAIN is written', !!deck.slots['ABOUT-MAIN'].text);
+ok('and it breaks none of the three rules',
+   C.check({ slots: { A: deck.slots['ABOUT-MAIN'] } }).length === 0);
+ok('the product is named', deck.product === 'Where You Stand');
+ok('and the four tools are named',
+   Object.values(deck.tools).join(' | ') ===
+   'My return | This fund\'s record | My money in this fund | My plan, tested');
+
+var refs = Object.keys(deck.chapterRefs).filter(function (k) { return k.charAt(0) !== '$'; });
+ok('the chapter-pointer table has entries for the five questions', refs.length === 5, refs.join(', '));
 
 section('What the author still has to write');
 var todo = C.unwritten(deck);
 console.log('  ' + todo.length + ' slots are still empty, which is the expected state before the author writes.');
-ok('the build can name every unwritten slot', todo.length === Object.keys(deck.slots).length + 5,
-   'named ' + todo.length);
+ok('the build can name every slot still waiting',
+   todo.length === Object.keys(deck.slots).length - 1 + Object.keys(deck.chapterRefs).length - 1,
+   'named ' + todo.length + ' of ' + Object.keys(deck.slots).length + ' slots');
 
 console.log('\n' + passed + ' passed, ' + failed.length + ' failed');
 if (failed.length) { console.log('\nFAILED:\n  ' + failed.join('\n  ')); process.exit(1); }
