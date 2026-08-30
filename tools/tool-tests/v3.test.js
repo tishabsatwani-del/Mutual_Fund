@@ -182,11 +182,31 @@ const NIGHT = { paper: '#12161E', ink: '#E8E6E1', muted: '#9AA1AE', slate: '#8FA
          return { squeeze: box.width / vb, nameSize: parseFloat(getComputedStyle(n).fontSize) };
        }).then(r => r && r.squeeze < 0.6 && r.nameSize >= 12)) === true);
 
+    /* Review v4 §10: the eighteen are written, so the reading now carries the
+       author's own sentences rather than the names of empty slots. */
+    const sentences = await page.locator('#reading .sentence').allInnerTexts();
+    ok('the author’s sentence is on screen', sentences.length >= 1, sentences.join(' | '));
+    ok('and her next step is set with it, not at the foot of the screen',
+       (await page.locator('#reading .sentence.next-step').count()) === 1,
+       String(await page.locator('#reading .sentence.next-step').count()));
+    ok('the cell prints before its extras',
+       (await page.evaluate(() => {
+         const all = [...document.querySelectorAll('#reading .sentence')];
+         const firstExtra = all.findIndex(e => e.classList.contains('extra'));
+         const plainBefore = all.slice(0, firstExtra < 0 ? all.length : firstExtra)
+           .some(e => !e.classList.contains('extra'));
+         return plainBefore;
+       })) === true);
+    ok('no brace is left unfilled where the engine should have supplied a figure',
+       !/[{}]|\[(GAP|MONTHS|YOURS|INDEX|DRIP|AMOUNT)\]/.test(sentences.join(' ')),
+       sentences.join(' | ').slice(0, 200));
+    ok('and a tool she names in brackets is the thing you tap',
+       (await page.locator('#reading .sentence a[href^="#"]').count()) >= 1);
+    /* Any slot she has NOT written still names itself, which is what tells a
+       reviewer exactly what is left to send. */
     const named = await page.locator('#reading .slot-empty code').allInnerTexts();
-    ok('every unwritten sentence is named on screen, not left blank',
-       named.length >= 1 && named.every(n => /^[A-Z0-9-]+$/.test(n)), named.join(', '));
-    ok('and no sentence is invented in the meantime',
-       (await page.locator('#reading .sentence').count()) === 0);
+    ok('and any slot still waiting names itself rather than printing nothing',
+       named.every(n => /^[A-Z0-9-]+$/.test(n)), named.join(', '));
 
     ok('no request leaves the site', external.length === 0, external.join(', '));
 
@@ -409,8 +429,9 @@ const NIGHT = { paper: '#12161E', ink: '#E8E6E1', muted: '#9AA1AE', slate: '#8FA
     ok('it wears the marker, and it is the only large figure on the screen',
        (await page.locator('#m-out .figure.mine').count()) === 1 &&
        (await page.locator('#m-out .figure').count()) === 1);
+    /* Review v4 §11: dates are dd-MMM-yyyy everywhere, with "to" between them. */
     ok('the span line carries the dates, the years and the count',
-       /1 Jan 2015 to 1 Jan 2025 · 10\.0 years · 1 payment/
+       /01-Jan-2015 to 01-Jan-2025 · 10\.0 years · 1 payment/
          .test(await page.locator('#m-out .gloss').first().innerText()),
        await page.locator('#m-out .gloss').first().innerText());
 
@@ -466,8 +487,12 @@ const NIGHT = { paper: '#12161E', ink: '#E8E6E1', muted: '#9AA1AE', slate: '#8FA
     await page.click('#m-run');
     await page.waitForTimeout(300);
     const short = await page.locator('#m-out').innerText();
-    ok('under a year the screen says how many days, and names the sentence',
-       /122 days, which is under a year/.test(short) && /POS-UNDER-A-YEAR/.test(short), short.slice(0, 500));
+    /* POS-UNDER-A-YEAR is written now, so the screen carries her sentence with
+       the engine's month count in it rather than the slot's name. */
+    ok('under a year the screen carries the author’s sentence, with the months filled',
+       /This money is 4 months old/.test(short) &&
+       /yearly rate on 4 months/.test(short) && !/POS-UNDER-A-YEAR/.test(short),
+       short.slice(0, 400));
     ok('and drops the words "a year" from beside the figure',
        (await page.locator('#m-out .unit').count()) === 0);
     ok('two funds in one ledger is a reading of its own',

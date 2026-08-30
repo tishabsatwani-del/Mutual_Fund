@@ -8,44 +8,85 @@
 
   var E = root.SimEngines, S = root.SimSchemes, COPY = root.SIM_COPY;
 
-  var inr = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 });
-  var MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  /* Review v4 §11 and §13: every figure in the product goes through ONE
+   * formatting module, and nothing is formatted at the point of use. These
+   * four are thin adapters onto sim/format.js so the four screens, the older
+   * tool and the workbook cannot drift apart again. */
+  var F = root.SimFormat;
 
   function $(s, within) { return (within || document).querySelector(s); }
   function $$(s, within) { return Array.prototype.slice.call((within || document).querySelectorAll(s)); }
 
-  function money(n) { return '₹' + inr.format(Math.round(n)); }
-
-  /* A true minus, not a hyphen, and the percent sign closed up. */
-  function pct(r, dp) {
-    if (!isFinite(r)) return '—';
-    var v = (r * 100).toFixed(dp == null ? 1 : dp);
-    return (v.charAt(0) === '-' ? '−' + v.slice(1) : v) + '%';
-  }
-  function date(t) {
-    var d = new Date(t);
-    return d.getUTCDate() + ' ' + MONTHS[d.getUTCMonth()] + ' ' + d.getUTCFullYear();
-  }
+  function money(n) { return F.money(n); }
+  function moneyWords(n) { return F.moneyWords(n); }
+  function pct(r, dp) { return F.pct(r, { dp: dp }); }
+  function date(t) { return F.date(t); }
+  function years(y) { return F.years(y); }
   function esc(x) {
     return String(x == null ? '' : x).replace(/[&<>"]/g, function (c) {
       return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c];
     });
   }
-  function count(n) { return inr.format(n); }
+  function count(n) { return F.count(n); }
 
   /* A slot the author has not written is NAMED on screen. A blank where a
    * sentence belongs looks like a bug; a named empty slot looks like what it
    * is, and tells whoever is reviewing exactly what to send. */
-  function slot(id, subs) {
+  /* Where each tool name goes when the author writes it in brackets. Her next
+   * steps read "[This fund's record], and the worst window there", so the tool
+   * name is the action -- it should be the thing you tap. Both apostrophes are
+   * accepted, because a deck edited in a word processor will carry the curly
+   * one and a deck edited in an editor will carry the straight one. */
+  var TOOL_HREF = { mine: 'mine', record: 'record', stand: 'stand', plan: 'plan' };
+  function toolLinks(html) {
+    var names = COPY.tools || {};
+    var order = [['myReturn','mine'], ['thisFundsRecord','record'],
+                 ['myMoneyInThisFund','stand'], ['myPlanTested','plan']];
+    order.forEach(function (pair) {
+      var name = names[pair[0]];
+      if (!name) return;
+      var loose = esc(name).replace(/['\u2019]/g, "['\u2019]");
+      html = html.replace(new RegExp('\\[' + loose + '\\]', 'g'),
+        '<a href="#' + TOOL_HREF[pair[1]] + '">' + esc(name) + '</a>');
+    });
+    return html;
+  }
+
+  /* A slot the author has not written is NAMED on screen. A blank where a
+   * sentence belongs looks like a bug; a named empty slot looks like what it
+   * is, and tells whoever is reviewing exactly what to send.
+   *
+   * Order matters here: the text is escaped FIRST, then the engine's figures
+   * are substituted in (escaped themselves), then the author's tool names
+   * become links. Substituting before escaping would let a figure carry markup
+   * into the page, and linkifying before escaping would have the escape eat
+   * the anchor it had just written. */
+  function slot(id, subs, tone) {
     var s = COPY.slots[id];
     if (s && s.text) {
-      var text = s.text;
+      var text = esc(s.text);
       if (subs) Object.keys(subs).forEach(function (k) {
-        text = text.split('[' + k + ']').join(subs[k]);
+        text = text.split('[' + k + ']').join(esc(subs[k]));
       });
-      return '<p class="sentence">' + esc(text) + '</p>';
+      return '<p class="sentence' + (tone ? ' ' + tone : '') + '">' + toolLinks(text) + '</p>';
     }
     return '<p class="slot-empty">Awaiting copy slot <code>' + esc(id) + '</code></p>';
+  }
+
+  /* Is this slot written yet? The screens print their own arithmetic beside a
+   * slot only while it is empty, so a safety warning is never silent -- and
+   * stand down the moment the author's sentence arrives, which is both the
+   * copy rule and the word budget. */
+  function written(id) {
+    var s = COPY.slots[id];
+    return !!(s && s.text);
+  }
+
+  /* A reading: the author's sentence where she has written one, and the
+   * arithmetic plus the named slot where she has not. */
+  function saying(id, subs, arithmetic, tone) {
+    if (written(id)) return slot(id, subs, tone);
+    return '<div class="refusal"><p>' + esc(arithmetic) + '</p>' + slot(id, subs) + '</div>';
   }
 
   /* ------------------------------------------------------------- the door
@@ -116,8 +157,9 @@
   function land(i) { return ' class="land" style="animation-delay:' + (i * 250) + 'ms"'; }
 
   root.WYS = {
-    $: $, $$: $$, money: money, pct: pct, date: date, esc: esc, count: count,
-    slot: slot, land: land,
+    $: $, $$: $$, money: money, moneyWords: moneyWords, pct: pct, date: date,
+    years: years, esc: esc, count: count, checkInput: F.checkInput, echo: F.echo,
+    slot: slot, saying: saying, written: written, land: land,
     registerProvider: registerProvider, hasProvider: hasProvider, search: search, readFile: readFile,
     view: view, go: go, start: start, render: render,
     copy: COPY

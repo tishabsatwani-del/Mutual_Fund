@@ -308,35 +308,47 @@
       '<tr><td>Worth on ' + date(on) + '</td><td class="n">' + money(worth) + '</td></tr>' +
       '</tbody></table></div></div>';
 
-    /* the state readings this screen carries, and only these */
-    html += '<div class="section">' + W.slot('XIRR-MEANING');
+    /* The state readings this screen carries, and only these.
+     *
+     * Each is the author's sentence where she has written one. Where she has
+     * not, the screen prints the arithmetic and names the slot, so a reading
+     * that matters is never silent while the deck is being written -- and that
+     * scaffolding stands down by itself the moment her sentence lands, which
+     * is what keeps this screen inside its hundred and thirty words. */
+    var purchases = rows.filter(function (r) { return r.type === 'in'; });
+    var subs = {
+      MONTHS: String(Math.max(1, Math.round(spanDays / 30.44))),
+      YOURS: pct(res.rate),
+      AMOUNT: money(biggestRecentLump(purchases, on))
+    };
+
+    html += '<div class="section">' + W.slot('XIRR-MEANING', subs);
     if (early) {
-      html += reading('This runs ' + W.count(spanDays) + ' days, which is under a year, so the ' +
-        'yearly rate above is a short stretch stretched to twelve months.', 'POS-UNDER-A-YEAR');
+      html += W.saying('POS-UNDER-A-YEAR', subs,
+        'This runs ' + W.count(spanDays) + ' days, which is under a year.', 'extra');
     }
     if (took > 0) {
-      html += reading('Money came out on the way, so the rate above is measured across what stayed ' +
-        'in as well as what left.', 'POS-WITHDRAWALS');
+      html += W.saying('POS-WITHDRAWALS', subs,
+        'Money came out on the way.', 'extra');
     }
-    var lump = St.recentLump(rows.filter(function (r) { return r.type === 'in'; }), on);
-    if (lump) {
-      html += reading('A large part of this money went in inside the last twelve months, so most of ' +
-        'it has not been invested for anything like ' + years.toFixed(1) + ' years.', 'POS-RECENT-LUMP');
+    if (St.recentLump(purchases, on)) {
+      html += W.saying('POS-RECENT-LUMP', subs,
+        'A large part of this money went in inside the last twelve months.', 'extra');
     }
     var funds = fundsNamed();
     if (funds.length > 1) {
-      html += reading(funds.length + ' funds are named in this ledger, on ' + W.count(rows.length) +
-        ' payments across ' + years.toFixed(1) + ' years.', 'XIRR-MANY-FUNDS');
+      html += W.saying('XIRR-MANY-FUNDS', subs,
+        funds.length + ' funds are named in this ledger.', 'extra');
     }
     html += '</div>';
 
     /* Inflation ships blank. A rate typed here by the tool would be the tool
      * telling the reader what to expect, and that is not its job. */
-    html += '<div class="section"><p class="label">After inflation</p>' +
+    html += '<div class="section">' +
       '<label class="field" for="m-infl" style="max-width:14rem">' +
       '<span class="label">Inflation, % a year</span>' +
-      '<input type="number" id="m-infl" inputmode="decimal" step="0.1" min="0" max="100"></label>' +
-      '<div id="m-real"></div></div>';
+      '<input type="number" id="m-infl" inputmode="decimal" step="0.1" min="0" max="20"></label>' +
+      '<p class="gloss" id="m-infl-bad"></p><div id="m-real"></div></div>';
 
     html += '<div class="section"><button class="linkish" id="m-back" type="button">' +
       'Back to the ledger</button></div>';
@@ -356,19 +368,24 @@
   function crossover(abs, rate, years) {
     if (years < 1) {
       return 'Read the total. The yearly rate above stretches ' + (years * 12).toFixed(0) +
-        ' months to a twelve-month pace, which is not something that has happened yet.';
+        ' months into a year that has not happened.';
     }
+    /* Review v4 §4's own wording, which is true for a lump sum and for a
+       monthly plan alike, because it counts the reader's own years. */
     return abs > rate
-      ? 'The total is the larger of the two because it has ' + years.toFixed(1) +
-        ' years inside it. The rate has one.'
-      : 'The rate is the larger of the two because most of this money has been invested for ' +
-        'less than a year so far. The rate is still a per-year figure.';
+      ? 'The total is bigger than the yearly rate because it has ' + years.toFixed(1) +
+        ' years inside it; the rate has one.'
+      : 'The yearly rate is bigger than the total because most of this money has been ' +
+        'invested for less than a year; the rate is still a per-year figure.';
   }
 
-  /* A reading and then the author's sentence: the arithmetic is the reader's
-   * own data and belongs on screen; the meaning is never invented here. */
-  function reading(arithmetic, slotId) {
-    return '<div class="refusal"><p>' + esc(arithmetic) + '</p>' + W.slot(slotId) + '</div>';
+  /* The purchase that set the recent-lump line off, in rupees. */
+  function biggestRecentLump(purchases, asOfT) {
+    var cutoff = asOfT - 12 * 30.44 * 86400000, biggest = 0;
+    (purchases || []).forEach(function (r) {
+      if (r.t >= cutoff && r.amount > biggest) biggest = r.amount;
+    });
+    return biggest;
   }
 
   function refuse(bad, rows) {
@@ -401,9 +418,12 @@
     input.addEventListener('input', function () {
       var i = parseFloat(input.value);
       if (!isFinite(i)) { out.innerHTML = ''; return; }
+      var bad = W.checkInput('inflation', i);
+      var note = W.$('#m-infl-bad');
+      if (note) { note.textContent = bad || ''; note.classList.toggle('refuse', !!bad); }
+      if (bad) { out.innerHTML = ''; return; }
       var real = (1 + rate) / (1 + i / 100) - 1;
-      out.innerHTML = '<div class="line"><div class="what">What is left after inflation' +
-        '<br><span class="gloss">(1 + your rate) ÷ (1 + inflation) − 1</span></div>' +
+      out.innerHTML = '<div class="line"><div class="what">What is left</div>' +
         '<div class="val">' + pct(real) + '</div></div>';
     });
   }

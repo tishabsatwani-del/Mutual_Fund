@@ -72,9 +72,8 @@
     f.recentLump = St.recentLump(purchases, asOf);
     f.fallingMarket = fallingMarket(ST.series, asOf);
     if (f.dripFires) {
-      var drip = evenDrip(purchases, ST.series, asOf);
-      f.dripActual = f.value;
-      f.dripEven = drip;
+      f.dripActual = f.personalXirr;
+      f.dripEven = evenDripRate(purchases, ST.series, asOf);
     }
     var states = St.evaluate(f);
 
@@ -115,16 +114,43 @@
      * the reader reads along it rather than up into it. */
     html += lifeLineBlock(stood, f);
 
-    /* ---- the sentence, then the next step ------------------------------ */
+    /* ---- the sentence, then the next step ------------------------------
+     *
+     * Review v4 §10's two rules for whoever wires these:
+     *
+     *   a cell sentence and its next step are ONE slot, never split, so the
+     *   next step is set immediately under its cell rather than at the foot of
+     *   the screen;
+     *
+     *   and when two lines fire together, the CELL PRINTS FIRST and the extras
+     *   follow as short lines, never merged into one paragraph.
+     *
+     * The two overrides sit above the cell, which is what they are for: under
+     * a year no cell fires at all, and the withdrawals line qualifies every
+     * comparison beneath it.
+     *
+     * The braces in her drafts are the engine's to fill. Every one is a
+     * reading of the reader's own data, formatted by the one formatter. */
+    var subs = {
+      GAP:    W.pct(Math.abs(f.personalXirr - f.fundSpeed)).replace('%', ''),
+      MONTHS: String(Math.max(1, Math.round(f.spanDays / 30.44))),
+      YOURS:  W.pct(f.personalXirr),
+      INDEX:  W.pct(f.replayXirr),
+      DRIP:   W.pct(f.dripEven),
+      AMOUNT: W.money(recentLumpAmount(purchases, asOf))
+    };
+
     html += '<div class="section">';
-    if (states.early) html += slot('POS-UNDER-A-YEAR');
-    if (f.hasWithdrawals) html += slot('POS-WITHDRAWALS');
-    if (states.cellSlot) html += slot(states.cellSlot);
-    if (states.replay) html += slot(replaySlot(states.replay));
-    if (states.drip) html += slot(dripSlot(states.drip));
-    if (f.fallingMarket) html += slot('POS-FALLING-MARKET');
-    if (f.recentLump) html += slot('POS-RECENT-LUMP');
-    if (states.nextSlot) html += slot(states.nextSlot);
+    if (states.early) html += slot('POS-UNDER-A-YEAR', subs);
+    if (f.hasWithdrawals) html += slot('POS-WITHDRAWALS', subs);
+    /* the cell and its next step, as one thing */
+    if (states.cellSlot) html += slot(states.cellSlot, subs);
+    if (states.nextSlot) html += slot(states.nextSlot, subs, 'next-step');
+    /* then the extras, each its own short line */
+    if (states.replay) html += slot(replaySlot(states.replay), subs, 'extra');
+    if (states.drip) html += slot(dripSlot(states.drip), subs, 'extra');
+    if (f.fallingMarket) html += slot('POS-FALLING-MARKET', subs, 'extra');
+    if (f.recentLump) html += slot('POS-RECENT-LUMP', subs, 'extra');
     html += '</div>';
 
     /* ---- the money, plainly -------------------------------------------- */
@@ -189,6 +215,16 @@
     return { 'S-DRIP-HELPED': 'POS-DRIP-HELPED', 'S-DRIP-COST': 'POS-DRIP-COST' }[id];
   }
 
+  /* Which purchase set the recent-lump line off, in rupees. states.js answers
+   * whether it fired; the sentence needs the amount that fired it. */
+  function recentLumpAmount(purchases, asOfT) {
+    var cutoff = asOfT - 12 * 30.44 * 86400000, biggest = 0;
+    (purchases || []).forEach(function (r) {
+      if (r.t >= cutoff && r.amount > biggest) biggest = r.amount;
+    });
+    return biggest;
+  }
+
   /* The latest NAV against the NAV twelve months earlier. */
   function fallingMarket(series, asOfT) {
     var year = asOfT - 365 * 86400000, prior = null;
@@ -196,9 +232,14 @@
     return !!(prior && series[series.length - 1].v < prior.v);
   }
 
-  /* The same total, dripped evenly across the same span, valued at the latest
-   * NAV. It is a comparison, never something that happened. */
-  function evenDrip(purchases, series, asOfT) {
+  /* The same total, dripped evenly across the same span, in the SAME fund, and
+   * the yearly rate that drip would have earned. Review v4 §10 lines 15 and 16
+   * are written in points a year against the reader's own rate, so a rupee
+   * total is the wrong figure to hand them.
+   *
+   * It is a comparison and never something that happened, which is what the
+   * author's own sentence says out loud. */
+  function evenDripRate(purchases, series, asOfT) {
     if (!purchases.length) return NaN;
     var total = purchases.reduce(function (s, r) { return s + r.amount; }, 0);
     var from = Math.min.apply(null, purchases.map(function (r) { return r.t; }));
@@ -207,7 +248,12 @@
     var each = total / months, rows = [];
     for (var i = 0; i < months; i++) rows.push({ t: E.addMonths(from, i), amount: each, type: 'in' });
     var run = P.execute(rows, series);
-    return run.ok ? run.units * series[series.length - 1].v : NaN;
+    if (!run.ok) return NaN;
+    var worth = run.units * series[series.length - 1].v;
+    var flows = run.executed.map(function (e) { return { t: e.t, amount: -e.amount }; });
+    flows.push({ t: asOfT, amount: worth });
+    var solved = E.xirr(flows);
+    return solved.ok ? solved.rate : NaN;
   }
 
   /* A refusal is set exactly like a reading: serif sentence, hairline, next

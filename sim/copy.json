@@ -34,137 +34,137 @@
   },
   "slots": {
     "POS-CELL-LOWER-BOTTOM": {
-      "text": "",
+      "text": "The fund had one of its poorer stretches over your years, and your dates made it poorer still. Most of this figure is the window you walked into, not the choices you made.",
       "budget": 220,
       "where": "Tool 3, the cell sentence when the reader's rate is at least half a point below the fund's, and that stretch sits in the bottom quarter of the fund's record."
     },
     "POS-NEXT-LOWER-BOTTOM": {
-      "text": "",
+      "text": "Your holding period in [This fund's record], and the worst window there.",
       "budget": 90,
       "where": "Tool 3, the next step for that cell. An in-tool action or a six-word chapter pointer."
     },
     "POS-CELL-LOWER-MIDDLE": {
-      "text": "",
+      "text": "Your years were ordinary ones for this fund, and your own dates cost you [GAP] points a year against it.",
       "budget": 220,
       "where": "Tool 3, the cell sentence when the reader's rate is at least half a point below the fund's, and it sits in the middle half."
     },
     "POS-NEXT-LOWER-MIDDLE": {
-      "text": "",
+      "text": "The drip line below, which shows what those dates cost in rupees.",
       "budget": 90,
       "where": "Tool 3, the next step for that cell. An in-tool action or a six-word chapter pointer."
     },
     "POS-CELL-LOWER-TOP": {
-      "text": "",
+      "text": "The fund had a strong stretch and you got less of it than the fund did. That usually means most of your money arrived after the rise, which is what monthly investing does in a rising market. Nothing is wrong.",
       "budget": 220,
       "where": "Tool 3, the cell sentence when the reader's rate is at least half a point below the fund's, and it sits in the top quarter."
     },
     "POS-NEXT-LOWER-TOP": {
-      "text": "",
+      "text": "[My plan, tested], because this rate is the one your plan is running on.",
       "budget": 90,
       "where": "Tool 3, the next step for that cell. An in-tool action or a six-word chapter pointer."
     },
     "POS-CELL-SIMILAR-BOTTOM": {
-      "text": "",
+      "text": "You got almost exactly what the fund gave, and the fund's stretch was among its poorest. Your dates did nothing to you; the window did.",
       "budget": 220,
       "where": "Tool 3, the cell sentence when the two are within half a point of each other, and that stretch sits in the bottom quarter of the fund's record."
     },
     "POS-NEXT-SIMILAR-BOTTOM": {
-      "text": "",
+      "text": "The worst window in [This fund's record].",
       "budget": 90,
       "where": "Tool 3, the next step for that cell. An in-tool action or a six-word chapter pointer."
     },
     "POS-CELL-SIMILAR-MIDDLE": {
-      "text": "",
+      "text": "You got almost exactly what the fund gave, over ordinary years for it. There is nothing in your dates to explain, in either direction.",
       "budget": 220,
       "where": "Tool 3, the cell sentence when the two are within half a point of each other, and it sits in the middle half."
     },
     "POS-NEXT-SIMILAR-MIDDLE": {
-      "text": "",
+      "text": "[My plan, tested].",
       "budget": 90,
       "where": "Tool 3, the next step for that cell. An in-tool action or a six-word chapter pointer."
     },
     "POS-CELL-SIMILAR-TOP": {
-      "text": "",
+      "text": "You got almost exactly what the fund gave, over one of its strongest stretches. Read the worst window before you assume the next stretch looks like this one.",
       "budget": 220,
       "where": "Tool 3, the cell sentence when the two are within half a point of each other, and it sits in the top quarter."
     },
     "POS-NEXT-SIMILAR-TOP": {
-      "text": "",
+      "text": "[This fund's record].",
       "budget": 90,
       "where": "Tool 3, the next step for that cell. An in-tool action or a six-word chapter pointer."
     },
     "POS-CELL-HIGHER-BOTTOM": {
-      "text": "",
+      "text": "The fund had a poor stretch and you still finished ahead of it. That happens when money keeps going in through a fall. It is a fact about your dates, not a skill to repeat.",
       "budget": 220,
       "where": "Tool 3, the cell sentence when the reader's rate is at least half a point above the fund's, and that stretch sits in the bottom quarter of the fund's record."
     },
     "POS-NEXT-HIGHER-BOTTOM": {
-      "text": "",
+      "text": "[This fund's record], because the fall is in the range there.",
       "budget": 90,
       "where": "Tool 3, the next step for that cell. An in-tool action or a six-word chapter pointer."
     },
     "POS-CELL-HIGHER-MIDDLE": {
-      "text": "",
+      "text": "You finished [GAP] points a year ahead of the fund over ordinary years for it, because of when your money went in.",
       "budget": 220,
       "where": "Tool 3, the cell sentence when the reader's rate is at least half a point above the fund's, and it sits in the middle half."
     },
     "POS-NEXT-HIGHER-MIDDLE": {
-      "text": "",
+      "text": "[My plan, tested].",
       "budget": 90,
       "where": "Tool 3, the next step for that cell. An in-tool action or a six-word chapter pointer."
     },
     "POS-CELL-HIGHER-TOP": {
-      "text": "",
+      "text": "A strong stretch for the fund, and your dates beat it as well. Both parts are unusual, and neither is repeatable on purpose.",
       "budget": 220,
       "where": "Tool 3, the cell sentence when the reader's rate is at least half a point above the fund's, and it sits in the top quarter."
     },
     "POS-NEXT-HIGHER-TOP": {
-      "text": "",
+      "text": "[This fund's record], and read the worst window rather than this one.",
       "budget": 90,
       "where": "Tool 3, the next step for that cell. An in-tool action or a six-word chapter pointer."
     },
     "POS-UNDER-A-YEAR": {
-      "text": "",
-      "budget": 200,
+      "text": "This money is [MONTHS] months old. A yearly rate on [MONTHS] months stretches a short period into a year that has not happened. Read your total gain instead. The yearly rate starts meaning something after a year, and so does everything below it.",
+      "budget": 260,
       "where": "Tool 3 override: span under a year. The yearly rate is withheld and the total shown; no cell fires."
     },
     "POS-WITHDRAWALS": {
-      "text": "",
+      "text": "You have taken money out of this fund, so the comparisons below run only on money that stayed in. Your own figure above counts every rupee, in and out, on its date.",
       "budget": 200,
       "where": "Tool 3 override: money-out rows are present. Printed above the cell, which still fires."
     },
     "POS-REPLAY-BEHIND": {
-      "text": "",
+      "text": "The same rupees on the same days, in an index fund, would have earned [INDEX] a year against your [YOURS]. That is what this fund cost you over your years, and it says nothing about the years ahead.",
       "budget": 200,
       "where": "Tool 3, figure 4: the reader is at least a point below the same money in the index fund."
     },
     "POS-REPLAY-CLOSE": {
-      "text": "",
+      "text": "The same rupees on the same days, in an index fund, would have earned about the same. Over your years, the choice of fund made almost no difference.",
       "budget": 200,
       "where": "Tool 3, figure 4: within a point either way."
     },
     "POS-REPLAY-AHEAD": {
-      "text": "",
+      "text": "The same rupees on the same days, in an index fund, would have earned [INDEX] a year against your [YOURS]. This fund paid you more over your years. One stretch is not a record.",
       "budget": 200,
       "where": "Tool 3, figure 4: at least a point above."
     },
     "POS-DRIP-HELPED": {
-      "text": "",
+      "text": "Had the same total gone in evenly, month by month, you would have earned [DRIP] a year instead of [YOURS]. Your timing worked in your favour. Read it as luck until it has happened three times.",
       "budget": 220,
-      "where": "Tool 3, the conditional fifth line: the reader's own dates did as well as or better than an even drip."
+      "where": "Tool 3, the conditional fifth line: the reader's own dates did as well as or better than an even drip. Section 10 draft of v4."
     },
     "POS-DRIP-COST": {
-      "text": "",
+      "text": "Had the same total gone in evenly, month by month, you would have earned [DRIP] a year instead of [YOURS]. The gap is what your own timing did, with the fund held still.",
       "budget": 220,
-      "where": "Tool 3, the conditional fifth line: an even drip would have done better. In rupees."
+      "where": "Tool 3, the conditional fifth line: an even drip would have done better. Section 10 draft of v4."
     },
     "POS-FALLING-MARKET": {
-      "text": "",
+      "text": "This fund is below where it stood a year ago. Instalments paid through a fall drag this figure down while the fall lasts and lift it again as prices recover.",
       "budget": 180,
       "where": "Tool 3, one line: the latest NAV is below the NAV twelve months earlier."
     },
     "POS-RECENT-LUMP": {
-      "text": "",
+      "text": "[AMOUNT] of your money arrived in the last [MONTHS] months and has earned almost nothing yet. It pulls this figure down for now. That is arithmetic, not a verdict on the fund.",
       "budget": 180,
       "where": "Tool 3, one line: a purchase inside the last twelve months is 40% or more of all money in."
     },

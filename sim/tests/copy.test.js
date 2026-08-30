@@ -115,10 +115,45 @@ ok('the chapter-pointer table has entries for the five questions', refs.length =
 
 section('What the author still has to write');
 var todo = C.unwritten(deck);
-console.log('  ' + todo.length + ' slots are still empty, which is the expected state before the author writes.');
-ok('the build can name every slot still waiting',
-   todo.length === Object.keys(deck.slots).length - 1 + Object.keys(deck.chapterRefs).length - 1,
-   'named ' + todo.length + ' of ' + Object.keys(deck.slots).length + ' slots');
+console.log('  ' + todo.length + ' slots are still empty, which is the expected state while the author writes.');
+/* What this actually has to prove is that unwritten() agrees with the deck:
+   every slot with no text is named, and no slot that HAS text is. Counting
+   against a fixed total only held while exactly one slot was written. */
+var emptyIds = Object.keys(deck.slots).filter(function (k) { return !String(deck.slots[k].text || '').trim(); });
+var writtenIds = Object.keys(deck.slots).filter(function (k) { return String(deck.slots[k].text || '').trim(); });
+ok('the build names every slot still waiting',
+   emptyIds.every(function (id) { return todo.indexOf(id) >= 0; }),
+   emptyIds.filter(function (id) { return todo.indexOf(id) < 0; }).join(', '));
+ok('and names no slot the author has already written',
+   writtenIds.every(function (id) { return todo.indexOf(id) < 0; }),
+   writtenIds.filter(function (id) { return todo.indexOf(id) >= 0; }).join(', '));
+
+section('Review v4 section 10 - the eighteen, and their nine next steps');
+var t3v4 = States.config.tools.myMoneyInThisFund;
+var eighteenIds = t3v4.cells.map(function (c) { return c.slot; })
+  .concat(t3v4.overrides.map(function (o) { return o.slot; }))
+  .concat(t3v4.replay.map(function (r) { return r.slot; }))
+  .concat(t3v4.drip.lines.map(function (d) { return d.slot; }))
+  .concat(t3v4.extra.map(function (e) { return e.slot; }));
+ok('all eighteen are written', eighteenIds.every(function (id) { return deck.slots[id].text; }),
+   eighteenIds.filter(function (id) { return !deck.slots[id].text; }).join(', '));
+ok('and all nine next steps with them',
+   t3v4.cells.every(function (c) { return deck.slots[c.nextSlot].text; }),
+   t3v4.cells.filter(function (c) { return !deck.slots[c.nextSlot].text; }).map(function (c) { return c.nextSlot; }).join(', '));
+ok('every one is inside its budget',
+   eighteenIds.every(function (id) { return deck.slots[id].text.length <= deck.slots[id].budget; }));
+/* The braces in her drafts became named tokens; a token the engine does not
+   fill would print as literal brackets on the reader's screen. */
+var TOKENS = ['GAP', 'MONTHS', 'YOURS', 'INDEX', 'DRIP', 'AMOUNT'];
+var strays = [];
+eighteenIds.concat(t3v4.cells.map(function (c) { return c.nextSlot; })).forEach(function (id) {
+  var found = String(deck.slots[id].text).match(/\[([A-Z_]+)\]/g) || [];
+  found.forEach(function (tok) {
+    var name = tok.slice(1, -1);
+    if (TOKENS.indexOf(name) < 0) strays.push(id + ': ' + tok);
+  });
+});
+ok('and every figure token is one the engine knows how to fill', strays.length === 0, strays.join(', '));
 
 console.log('\n' + passed + ' passed, ' + failed.length + ' failed');
 if (failed.length) { console.log('\nFAILED:\n  ' + failed.join('\n  ')); process.exit(1); }

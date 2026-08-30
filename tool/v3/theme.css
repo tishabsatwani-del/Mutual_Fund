@@ -181,7 +181,20 @@ h2 { font-family: var(--serif); font-weight: 400; font-size: 1.25rem; margin: 0 
 .line.suppressed { opacity: .55; }
 
 /* the sentence, and the slot that is waiting for it */
+/* Review v4 §10: the cell sentence carries the reading; its next step sits
+   under it as one thing; and where other lines fire they follow as SHORT
+   lines, never merged into the paragraph above. Three weights say that
+   without a heading between them. */
 .sentence { font-family: var(--serif); font-size: var(--sentence); line-height: 1.45; margin: 0; }
+.sentence + .sentence { margin-top: .9rem; }
+.sentence.next-step { font-size: 1.125rem; color: var(--muted); margin-top: .7rem; }
+.sentence.next-step a { color: var(--ink); }
+.sentence.extra { font-size: 1.0625rem; padding-top: .9rem; border-top: 1px solid var(--rule); }
+/* An inline link inside a sentence cannot be a 44px block without tearing the
+   line apart. Vertical padding on an inline box enlarges the hit area without
+   moving a single glyph, so the target is a finger and the paragraph still
+   reads as a paragraph. */
+.sentence a { text-underline-offset: 3px; padding: .75rem 0; }
 .slot-empty {
   font-family: var(--sans); font-size: .875rem; color: var(--muted);
   border: 1px dashed var(--rule-edge); border-radius: 6px; padding: .7rem .8rem;
