@@ -241,11 +241,50 @@ textarea { min-height: 8rem; resize: vertical; font-family: ui-monospace, Menlo,
              font-size: var(--label); font-variant-caps: all-small-caps;
              letter-spacing: .11em; color: var(--muted); font-weight: 400; }
 .ledger td.n { text-align: right; font-variant-numeric: lining-nums tabular-nums; }
-/* a date is one thing and should not break in half across two lines, and
-   neither is "Money out". The fund is the secondary column and is the one
-   allowed to wrap when four columns meet a phone. */
-.ledger td:first-child, .ledger td.nw { white-space: nowrap; }
+/* A date is one thing and should not break in half across two lines, and
+   neither is "Money out". Scoped to the entry ledger: written unscoped it also
+   caught the tables whose first column is a sentence, and pushed those out
+   past the edge of a phone. The fund is the secondary column and is the one
+   allowed to wrap when four columns meet a small screen. */
+#m-rows td:first-child, .ledger td.nw { white-space: nowrap; }
 .ledger .fund { font-size: .875rem; color: var(--muted); }
+
+/* No screen scrolls sideways. A table that cannot fit scrolls inside its own
+   box instead, which keeps the whole page readable on a 320px phone. */
+.boxed, .section, details { max-width: 100%; }
+.ledger { table-layout: auto; }
+.scroller { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+/* Announced to a screen reader, off the screen for everyone else. Home's
+   heading is the product name, which the header already carries; the page
+   still needs one so the document has a top. */
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px; margin: -1px;
+  padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* A plain list: About's tool list and chapter pointers, without bullets. */
+ul.plain { list-style: none; margin: .5rem 0 0; padding: 0; }
+ul.plain li { border-top: 1px solid var(--rule); }
+ul.plain li:first-child { border-top: 0; }
+ul.plain li:not(.slot-empty) { padding: 0; }
+ul.plain li.slot-empty { margin: .4rem 0; }
+/* the whole row is the link, so the target is the row's height */
+ul.plain a { color: var(--ink); display: block; min-height: 44px; line-height: 44px; }
+
+/* The brand in the header is a link, and a link is a target. */
+.bar .name { display: inline-flex; align-items: center; min-height: 44px; }
+/* About's build table: the label is the narrow column and the answer reads
+   left to right like everything else on the page. */
+#about-build td.what { width: 40%; color: var(--muted); }
+
+/* The footer's link is the only way to About, so it is a target and not just
+   underlined words: 44px tall, with the separator kept off the tap area.
+   On About itself it points at the screen the reader is already on, so it and
+   its separator step out together. */
+body[data-view="about"] #foot-about { display: none; }
+.foot a { color: var(--muted); display: inline-block; min-height: 44px; line-height: 44px; }
+.foot a:hover { color: var(--ink); }
 .ledger tr:last-child td { border-bottom: 0; }
 
 /* a refusal is set exactly like a reading: serif sentence, hairline, next step.
@@ -308,7 +347,9 @@ textarea { min-height: 8rem; resize: vertical; font-family: ui-monospace, Menlo,
   display: block; padding: 1.1rem 0; border-top: 1px solid var(--rule);
   color: inherit; text-decoration: none;
 }
-.entry:last-child { border-bottom: 1px solid var(--rule); }
+/* The last entry closes the list, and the footer's own rule then closed it a
+   second time a few pixels below. One rule, not two. */
+.entry:last-child { border-bottom: 0; }
 .entry b { display: block; font-family: var(--serif); font-weight: 400; font-size: 1.25rem; }
 .entry span { display: block; color: var(--muted); font-size: .9375rem; margin-top: .15rem; }
 .entry:hover b { text-decoration: underline; text-underline-offset: 3px; }

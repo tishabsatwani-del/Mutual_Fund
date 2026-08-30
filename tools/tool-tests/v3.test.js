@@ -9,6 +9,8 @@
  */
 'use strict';
 const { chromium } = require('playwright');
+const COPY = require('../../sim/copy.js');
+const COPY_DECK = require('../../sim/copy.json');
 const fs = require('fs');
 const path = require('path');
 const CHROME = process.env.PRC_CHROME || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
@@ -603,6 +605,216 @@ const NIGHT = { paper: '#12161E', ink: '#E8E6E1', muted: '#9AA1AE', slate: '#8FA
     ok('no script errors across Tool 4', errors.length === 0, errors.join(' | '));
     await page.screenshot({ path: path.join(TMP, 'v3-plan.png'), fullPage: true });
     await ctx.close();
+  }
+
+  /* ============================================ step 6 · copy, cut to budgets
+   *
+   * The author's deck is linted where it lives, in sim/tests/copy.test.js.
+   * This lints the OTHER half: the labels, glosses and readings the screens
+   * themselves carry. Those are words a reader reads, so they answer to the
+   * same rules and the same budgets, and nobody had been counting them.
+   *
+   * Rules 1 and 3 -- no sentence tells the reader to act, and the excluded
+   * words never appear -- apply to every word on screen, readings included.
+   * Rule 2, timeless, applies to the STATIC markup only: a reading prints the
+   * reader's own dates and percentages by design, and those come from their
+   * data rather than from a sheet that has to survive a printed QR code.
+   */
+  section('Step 6 · the screens’ own words, against the rules and the budgets');
+  {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 900 } });
+    const page = await ctx.newPage();
+    const errors = [];
+    page.on('pageerror', e => errors.push(e.message));
+    await page.goto(BASE, { waitUntil: 'networkidle' });
+
+    /* An unwritten slot names itself on screen, which is scaffolding and not
+       copy, so it is taken out before anything is counted. */
+    const read = async sel => (await page.locator(sel).innerText())
+      .replace(/Awaiting copy slot [A-Z0-9-]+/g, '')
+      .replace(/Awaiting chapter pointer [A-Z0-9-]+/g, '');
+    const words = t => t.trim().split(/\s+/).filter(Boolean).length;
+
+    const screens = {};
+    screens.home = await read('#main > [data-view="home"]');
+
+    await page.evaluate(() => { location.hash = 'mine'; });
+    await page.waitForTimeout(200);
+    screens.mineLedger = await read('#m-ledger');
+    await page.click('#m-example');
+    await page.waitForTimeout(200);
+    await page.click('#m-run');
+    await page.waitForTimeout(400);
+    await page.fill('#m-infl', '6');
+    await page.waitForTimeout(200);
+    screens.mineResult = await read('#m-out');
+
+    await page.evaluate(() => { location.hash = 'record'; });
+    await page.waitForTimeout(200);
+    await page.setInputFiles('#r-file', navFile);
+    await page.waitForTimeout(700);
+    await page.click('#r-years .chip[data-y="5"]');
+    await page.waitForTimeout(700);
+    screens.recordResult = await read('#r-out');
+
+    await page.evaluate(() => { location.hash = 'plan'; });
+    await page.waitForTimeout(300);
+    await page.fill('#p-have', '100000');
+    await page.fill('#p-monthly', '10000');
+    await page.fill('#p-years', '10');
+    await page.fill('#p-needed', '5000000');
+    await page.waitForTimeout(400);
+    screens.planResult = await read('#p-out');
+
+    /* The two budgets review §4 states for Tool 1, in words. */
+    ok('Tool 1’s ledger keeps inside its forty words of labels',
+       words(screens.mineLedger) <= 40, words(screens.mineLedger) + ' words');
+    ok('and its reading inside its hundred and thirty',
+       words(screens.mineResult) <= 130, words(screens.mineResult) + ' words');
+
+    /* Home is fifty words for the WHOLE screen, and the author's line has not
+       landed yet. Her slot is budgeted at 120 characters, so twenty of the
+       fifty are hers and thirty are the screen's own. */
+    const promiseBudget = COPY_DECK.slots['LANDING-PROMISE'].budget;
+    const hers = Math.ceil(promiseBudget / 6);
+    ok('home leaves room for the author’s line inside her fifty words',
+       words(screens.home) + hers <= 50,
+       words(screens.home) + ' of the screen’s own + ' + hers + ' reserved for LANDING-PROMISE');
+
+    /* Rule 1 and rule 3, over every word a reader sees. */
+    const slots = {};
+    Object.entries(screens).forEach(([k, v]) => { slots[k] = { text: v, budget: 1e6 }; });
+    const spoken = COPY.check({ slots }).filter(f => f.rule !== 'timeless');
+    ok('no screen tells the reader to buy, sell, switch, hold or redeem anything',
+       spoken.filter(f => f.rule === 'transaction-verb').length === 0, JSON.stringify(spoken));
+    ok('and the excluded words appear nowhere',
+       spoken.filter(f => f.rule === 'vocabulary').length === 0, JSON.stringify(spoken));
+
+    /* Rule 2, over the markup that ships. A year, a month name, a percentage
+       or a word meaning "now" written into the page itself would go stale in
+       a book that cannot be reissued. */
+    const markup = fs.readFileSync(path.join(__dirname, '../../tool/v3/index.html'), 'utf8')
+      .replace(/<script[\s\S]*?<\/script>/g, '')
+      .replace(/<!--[\s\S]*?-->/g, '')
+      .replace(/<[^>]+>/g, ' ');
+    const stale = COPY.check({ slots: { 'index.html': { text: markup, budget: 1e6 } } })
+      .filter(f => f.rule === 'timeless');
+    ok('nothing written into the page itself references a moment', stale.length === 0,
+       JSON.stringify(stale));
+
+    /* Counted and printed for the screens the review has not budgeted yet, so
+       the author sets those numbers against something measured. */
+    console.log('        measured: ' + Object.entries(screens)
+      .map(([k, v]) => k + ' ' + words(v)).join(' · '));
+
+    ok('no script errors across the copy pass', errors.length === 0, errors.join(' | '));
+    await ctx.close();
+  }
+
+  /* ==================================================== step 6 · About */
+  section('Step 6 · About, and the footer that reaches it');
+  {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 900 } });
+    const page = await ctx.newPage();
+    const errors = [];
+    page.on('pageerror', e => errors.push(e.message));
+    await page.goto(BASE, { waitUntil: 'networkidle' });
+
+    /* The footer rides on every screen, so About is one tap from anywhere. */
+    for (const v of ['home', 'mine', 'record', 'stand', 'plan']) {
+      await page.evaluate(h => { location.hash = h; }, v);
+      await page.waitForTimeout(150);
+      const link = page.locator('.foot a[href="#about"]');
+      if (!(await link.isVisible())) { ok('About is reachable from ' + v, false); break; }
+    }
+    ok('About is one tap from every screen',
+       (await page.locator('.foot a[href="#about"]').isVisible()) === true);
+
+    await page.click('.foot a[href="#about"]');
+    await page.waitForTimeout(250);
+    ok('and on About itself the link to About steps out, separator and all',
+       (await page.locator('#foot-about').isVisible()) === false);
+    const about = await page.locator('#main > [data-view="about"]').innerText();
+
+    /* ABOUT-MAIN is the one slot the author has written and signed off, and
+       until now it was rendered nowhere in the app. */
+    ok('the About paragraph the author kept is on screen, in full',
+       about.includes(COPY_DECK.slots['ABOUT-MAIN'].text),
+       about.slice(0, 200));
+    ok('and it is set as a reading, in the serif, not as small print',
+       (await page.locator('#about-main .reading .sentence').count()) === 1);
+
+    ok('the four tools are named from the deck and each is a way in',
+       (await page.locator('#about-tools a').allInnerTexts()).join(' | ') ===
+       Object.values(COPY_DECK.tools).join(' | '),
+       (await page.locator('#about-tools a').allInnerTexts()).join(' | '));
+
+    ok('the five chapter pointers each name themselves until the author writes them',
+       (await page.locator('#about-refs li.slot-empty').count()) === 5,
+       String(await page.locator('#about-refs li').count()));
+
+    /* A privacy note is only worth anything if it describes what the code in
+       front of the reader actually does. With no provider registered, the
+       honest answer about a fund's prices is "a file you choose". */
+    ok('what this build reads is stated, and matches what it actually does',
+       /read from a file you choose/.test(about) && /nothing/.test(about),
+       about.slice(-300));
+    ok('and the page says what the figures leave out', /tax and exit load/.test(about));
+
+    ok('About has one h1 and it is the screen’s own',
+       (await page.locator('#main > [data-view="about"] h1').count()) === 1);
+
+    ok('no script errors across About', errors.length === 0, errors.join(' | '));
+    await page.screenshot({ path: path.join(TMP, 'v3-about.png'), fullPage: true });
+    await ctx.close();
+  }
+
+  /* ================================================ step 6 · the design pass */
+  section('Step 6 · the design pass, measured');
+  {
+    for (const width of [320, 390]) {
+      const ctx = await browser.newContext({ viewport: { width, height: 900 } });
+      const page = await ctx.newPage();
+      await page.goto(BASE, { waitUntil: 'networkidle' });
+
+      for (const v of ['home', 'about', 'mine', 'record', 'stand', 'plan']) {
+        await page.evaluate(h => { location.hash = h; }, v);
+        await page.waitForTimeout(200);
+        if (v === 'mine') { await page.click('#m-example'); await page.waitForTimeout(200); }
+        if (v === 'record') {
+          await page.setInputFiles('#r-file', navFile); await page.waitForTimeout(700);
+          await page.click('#r-years .chip[data-y="5"]'); await page.waitForTimeout(600);
+        }
+        if (v === 'stand') {
+          await page.setInputFiles('#file', navFile); await page.waitForTimeout(700);
+          await page.click('#example'); await page.waitForTimeout(200);
+          await page.click('#run'); await page.waitForTimeout(600);
+        }
+        if (v === 'plan') {
+          await page.fill('#p-have', '100000'); await page.fill('#p-monthly', '10000');
+          await page.fill('#p-years', '10'); await page.fill('#p-needed', '5000000');
+          await page.waitForTimeout(400);
+        }
+        const m = await page.evaluate(() => {
+          const doc = document.documentElement;
+          return {
+            over: doc.scrollWidth - doc.clientWidth,
+            h1: document.querySelectorAll('#main > [data-view]:not([hidden]) h1').length,
+            small: [...document.querySelectorAll('button,a,select,summary,input')]
+              .filter(e => { const b = e.getBoundingClientRect();
+                             return b.width > 0 && b.height > 0 && b.height < 40; })
+              .map(e => e.id || e.className || e.tagName)
+          };
+        });
+        /* A page that scrolls sideways on a phone has lost the reader's place.
+           A table that cannot fit scrolls inside its own box instead. */
+        ok(v + ' does not scroll sideways at ' + width, m.over <= 0, 'over by ' + m.over);
+        ok(v + ' has exactly one h1 at ' + width, m.h1 === 1, String(m.h1));
+        ok(v + '’s controls are all a finger wide at ' + width, m.small.length === 0,
+           m.small.join(', '));
+      }
+      await ctx.close();
+    }
   }
 
   section('Reduced motion');

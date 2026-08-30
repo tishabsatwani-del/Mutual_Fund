@@ -18,14 +18,18 @@
 <main class="page" id="main">
 
   <!-- ============================================================== HOME -->
+  <!-- Fifty words for the whole screen, the author's budget for LANDING-PROMISE.
+       The header already carries the name, so home does not repeat it as a
+       heading; the promise line leads, and the four entries are cut to four
+       words each so the author's line fits inside the fifty. -->
   <section data-view="home">
-    <h1>Where You Stand</h1>
+    <h1 class="visually-hidden">Where You Stand</h1>
     <div id="home-promise"></div>
     <nav class="entries">
-      <a class="entry" href="#mine"><b>My return</b><span>What your own money earned, on your dates.</span></a>
-      <a class="entry" href="#record"><b>This fund’s record</b><span>Every window of your length, worst first.</span></a>
+      <a class="entry" href="#mine"><b>My return</b><span>Your money, your dates.</span></a>
+      <a class="entry" href="#record"><b>This fund’s record</b><span>Every window, worst first.</span></a>
       <a class="entry" href="#stand"><b>My money in this fund</b><span>Your number, placed.</span></a>
-      <a class="entry" href="#plan"><b>My plan, tested</b><span>Against the worst stretch a fund has had, not one assumed rate.</span></a>
+      <a class="entry" href="#plan"><b>My plan, tested</b><span>Against what happened.</span></a>
     </nav>
   </section>
 
@@ -74,7 +78,7 @@
 
     <div class="section" id="step-ledger" hidden>
       <h2>What you paid in</h2>
-      <div class="boxed">
+      <div class="boxed scroller">
         <table class="ledger">
           <thead><tr><th>Date</th><th>In or out</th><th class="n">Amount</th><th></th></tr></thead>
           <tbody id="rows"></tbody>
@@ -97,8 +101,8 @@
         <button class="primary" id="sip-add" type="button">Write these lines</button>
       </div>
 
-      <h2 style="margin-top:1.5rem">Worth today</h2>
-      <label class="field" for="worth"><span class="label">What it is all worth</span>
+      <h2 style="margin-top:1.5rem">What it is worth</h2>
+      <label class="field" for="worth"><span class="label">The whole holding</span>
         <input type="number" id="worth" inputmode="decimal" min="0" step="any"
                placeholder="Leave empty and the fund’s own NAV is used"></label>
 
@@ -113,7 +117,7 @@
     <h1>My return</h1>
 
     <div class="section" id="m-ledger">
-      <div class="boxed">
+      <div class="boxed scroller">
         <table class="ledger">
           <thead><tr><th>Date</th><th>In or out</th><th class="n">Amount</th>
             <th class="fund" id="m-head-fund" hidden>Fund</th></tr></thead>
@@ -172,11 +176,11 @@
         <button class="primary" id="m-paste-read" type="button">Read these lines</button>
       </div>
 
-      <h2 style="margin-top:1.75rem">Worth today</h2>
+      <h2 style="margin-top:1.75rem">What it is worth</h2>
       <div class="pair">
-        <label class="field" for="m-worth"><span class="label">What it is all worth</span>
+        <label class="field" for="m-worth"><span class="label">The whole holding</span>
           <input type="number" id="m-worth" inputmode="decimal" min="0" step="any"></label>
-        <label class="field" for="m-worth-on"><span class="label">On</span>
+        <label class="field" for="m-worth-on"><span class="label">On this date</span>
           <input type="date" id="m-worth-on"></label>
       </div>
 
@@ -218,9 +222,27 @@
     <div id="p-out" aria-live="polite"></div>
   </section>
 
+  <!-- ========================================================= ABOUT -->
+  <section data-view="about" hidden>
+    <h1>About this page</h1>
+    <div id="about-main"></div>
+    <div class="section">
+      <p class="label">The four tools</p>
+      <ul class="plain" id="about-tools"></ul>
+    </div>
+    <div class="section">
+      <p class="label">Where the book says more</p>
+      <ul class="plain" id="about-refs"></ul>
+    </div>
+    <div class="section">
+      <p class="label">What this build reads</p>
+      <div class="scroller"><table class="ledger"><tbody id="about-build"></tbody></table></div>
+    </div>
+  </section>
+
   <footer class="foot">
     <p id="foot-refrains"></p>
-    <p>Everything is worked out on this device.</p>
+    <p><span id="foot-about"><a href="#about">About this page</a> · </span>Everything is worked out on this device.</p>
   </footer>
 </main>
 

@@ -302,11 +302,11 @@
     html += '<p class="sentence" id="m-crossover" style="margin-top:1.25rem">' + esc(crossover(abs, res.rate, years)) + '</p>';
 
     /* the money, plainly */
-    html += '<div class="section"><p class="label">Your money</p><table class="ledger"><tbody>' +
+    html += '<div class="section"><p class="label">Your money</p><div class="scroller"><table class="ledger"><tbody>' +
       '<tr><td>Put in</td><td class="n">' + money(put) + '</td></tr>' +
       '<tr><td>Taken out</td><td class="n">' + (took ? money(took) : '—') + '</td></tr>' +
       '<tr><td>Worth on ' + date(on) + '</td><td class="n">' + money(worth) + '</td></tr>' +
-      '</tbody></table></div>';
+      '</tbody></table></div></div>';
 
     /* the state readings this screen carries, and only these */
     html += '<div class="section">' + W.slot('XIRR-MEANING');

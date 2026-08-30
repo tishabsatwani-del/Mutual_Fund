@@ -78,9 +78,11 @@
     }
     var states = St.evaluate(f);
 
-    /* The header already names the product, so the page heading names the fund.
-     * The span line carries the dates and the count and nothing else. */
-    var html = '<h1>' + esc(ST.name) + '</h1>';
+    /* The section already carries the screen's h1, so the fund is named beneath
+     * it rather than as a second one: two h1s in one document leave a screen
+     * reader with no top to the page. The span line carries the dates and the
+     * count and nothing else. */
+    var html = '<h2>' + esc(ST.name) + '</h2>';
     html += '<p class="gloss">' +
       date(stood.firstExecution.t) + ' to ' + date(stood.latest.t) + ' · ' +
       ST.rows.length + (ST.rows.length === 1 ? ' entry' : ' entries') + '</p>';
@@ -127,12 +129,12 @@
 
     /* ---- the money, plainly -------------------------------------------- */
     html += '<div class="section"><p class="label">Your money</p>' +
-      '<table class="ledger"><tbody>' +
+      '<div class="scroller"><table class="ledger"><tbody>' +
       '<tr><td>Put in</td><td class="n">' + money(f.put) + '</td></tr>' +
       '<tr><td>Taken out</td><td class="n">' + (f.took ? money(f.took) : '—') + '</td></tr>' +
       '<tr><td>Worth ' + (f.valueSource === 'visitor' ? 'today, as you entered it' :
         'at the latest NAV') + '</td><td class="n">' + money(f.value) + '</td></tr>' +
-      '</tbody></table></div>';
+      '</tbody></table></div></div>';
 
     $('#reading').innerHTML = html;
     $('#step-reading').hidden = false;
@@ -174,9 +176,9 @@
     return '<div class="section"><p class="label">This fund’s whole life, and your stretch of it</p>' +
       svg +
       '<details style="margin-top:.75rem"><summary class="linkish" style="padding:.4rem 0">Read it as dates</summary>' +
-      '<table class="ledger"><tbody>' +
+      '<div class="scroller"><table class="ledger"><tbody>' +
       rows.map(function (r) { return '<tr><td>' + esc(r[0]) + '</td><td class="n">' + esc(r[1]) + '</td></tr>'; }).join('') +
-      '</tbody></table></details></div>';
+      '</tbody></table></div></details></div>';
   }
 
   function replaySlot(id) {

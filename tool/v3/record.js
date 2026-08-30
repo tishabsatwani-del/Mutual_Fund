@@ -100,11 +100,11 @@
     var latest = pts[pts.length - 1];
     var place = E.placeInHundred(latest.r, s.values);
     html += '<div class="section"><p class="label">Which window is which</p>' +
-      '<table class="ledger"><tbody>' +
+      '<div class="scroller"><table class="ledger"><tbody>' +
       trow('The worst began', W.date(s.worst.startT), W.pct(s.worst.r)) +
       trow('The best began', W.date(s.best.startT), W.pct(s.best.r)) +
       trow('The latest began', W.date(latest.startT), W.pct(latest.r)) +
-      '</tbody></table>' +
+      '</tbody></table></div>' +
       '<p class="gloss">The latest window is what this fund’s own page prints today. ' +
       'It is higher than ' + place + ' of every 100 windows of this length.</p></div>';
 
@@ -154,11 +154,11 @@
       '<label class="field" for="r-dep" style="max-width:14rem">' +
       '<span class="label">What a fixed deposit pays today, %</span>' +
       '<input type="number" id="r-dep" inputmode="decimal" step="0.1" min="0" max="100"></label>' +
-      '<table class="ledger"><tbody>' +
+      '<div class="scroller"><table class="ledger"><tbody>' +
       '<tr><td>Windows that ended below zero</td><td class="n">' + W.count(below) + ' of ' +
       W.count(s.count) + '</td></tr>' +
       '<tr id="r-dep-row" hidden><td>Windows above the deposit</td><td class="n" id="r-dep-count">—</td></tr>' +
-      '</tbody></table></div>';
+      '</tbody></table></div></div>';
   }
 
   function wireDeposit(s) {
@@ -191,11 +191,11 @@
     }
     var state = St.worstAgainstIndex(s.worst.r, theirs.stats.worst.r);
     return '<div class="section"><p class="label">Against an index fund</p>' +
-      '<table class="ledger"><tbody>' +
+      '<div class="scroller"><table class="ledger"><tbody>' +
       '<tr><td>' + W.esc(R.name) + ', worst</td><td class="n">' + W.pct(s.worst.r) + '</td></tr>' +
       '<tr><td>' + W.esc(R.indexName) + ', worst</td><td class="n theirs">' +
       W.pct(theirs.stats.worst.r) + '</td></tr>' +
-      '</tbody></table>' +
+      '</tbody></table></div>' +
       (state ? W.slot(state.slot) : '') + '</div>';
   }
 
@@ -207,14 +207,14 @@
       return { lo: lo, hi: hi, n: values.filter(function (v) { return v >= lo && v < hi; }).length };
     });
     var most = Math.max.apply(null, bins.map(function (b) { return b.n; })) || 1;
-    return '<table class="ledger" style="margin-top:.75rem"><tbody>' + bins.map(function (b) {
+    return '<div class="scroller"><table class="ledger" style="margin-top:.75rem"><tbody>' + bins.map(function (b) {
       var label = b.lo === -Infinity ? 'below −10%'
         : b.hi === Infinity ? '25% and above'
         : W.pct(b.lo, 0) + ' to ' + W.pct(b.hi, 0);
       return '<tr><td>' + label + '</td><td class="n">' + W.count(b.n) + '</td>' +
         '<td style="width:40%"><span class="hist-bar" style="width:' +
         (b.n / most * 100).toFixed(1) + '%"></span></td></tr>';
-    }).join('') + '</tbody></table>';
+    }).join('') + '</tbody></table></div>';
   }
 
   /* A guard printed as a reading: the arithmetic, then the author's sentence. */

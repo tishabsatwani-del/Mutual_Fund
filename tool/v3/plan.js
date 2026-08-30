@@ -146,11 +146,11 @@
     ]);
 
     html += '<div class="section"><p class="label">Where these three rates come from</p>' +
-      '<table class="ledger"><tbody>' +
+      '<div class="scroller"><table class="ledger"><tbody>' +
       '<tr><td>Worst window, from ' + date(r.worstFrom) + '</td><td class="n">' + pct(r.worst) + '</td></tr>' +
       '<tr><td>Typical of all of them</td><td class="n">' + pct(r.typical) + '</td></tr>' +
       '<tr><td>Best window, from ' + date(r.bestFrom) + '</td><td class="n">' + pct(r.best) + '</td></tr>' +
-      '</tbody></table>' +
+      '</tbody></table></div>' +
       '<p class="gloss">' + W.count(r.count) + ' window' + (r.count === 1 ? '' : 's') +
       ' of ' + r.length + ' year' + (r.length === 1 ? '' : 's') +
       ', one for every day this fund published a price.</p></div>';

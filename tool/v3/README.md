@@ -12,12 +12,12 @@ screens are still live at `../`; these replace them.
 | `record.js` | Tool 2, *This fund's record* |
 | `stand.js` | Tool 3, *My money in this fund* |
 | `plan.js` | Tool 4, *My plan, tested* |
-| `boot.js` | Starts the four tools |
+| `boot.js` | Starts the four tools, and draws About |
 | `deck.js` | Generated. Do not edit — run `python3 tools/v3/build_deck.py` |
 
 ```
 python3 tools/v3/build_deck.py     # after editing sim/copy.json or sim/states.json
-node tools/tool-tests/v3.test.js   # 150 checks, needs a server on 8781
+node tools/tool-tests/v3.test.js   # 203 checks, needs a server on 8781
 ```
 
 ## The materials
@@ -63,6 +63,23 @@ years the reader is being asked to look at. Nobody reads a value off this line;
 the three marks carry the figures, so the axis owes the reader shape, and log is
 the shape that is true.
 
+## About, and the footer
+
+`ABOUT-MAIN` is the one slot the author has written and signed off — §8's draft,
+kept — and until step 6 it was rendered nowhere in the app. It now leads the
+**About** screen, set as a reading in the serif rather than as small print, and
+the footer rides on every screen so About is one tap from anywhere. On About
+itself the link steps out, separator and all.
+
+Beneath it: the four tools named **from the deck**, so renaming one never
+touches this file; the five chapter pointers, each naming itself until the
+author writes it; and **what this build reads** — a four-row statement of what
+the code in front of the reader actually does. That last table asks
+`WYS.hasProvider()` rather than asserting anything, so with no provider
+registered it says a fund's prices are *read from a file you choose*, and it
+will change by itself the day one is wired. A privacy note is worth nothing if
+it cannot be checked against the build it ships with.
+
 ## Copy
 
 Every sentence comes from `sim/copy.json` by slot id. Where a slot is unwritten
@@ -97,6 +114,49 @@ now states the intent once, `[hidden] { display: none !important }`.
 `.reading .line`, so the levers on Tool 4 and the inflation line on Tool 1 lost
 their layout and dropped each figure onto the row beneath its own label. The
 layout belongs to the line, not to the box it happens to sit in.
+
+## Step 6 · the copy, cut to budgets
+
+The author's deck is linted where it lives. The *other* half — the labels,
+glosses and readings the screens themselves carry — had never been counted, and
+those are words a reader reads. The suite now lints them too:
+
+* **Rules 1 and 3** — no sentence tells the reader to act, and the excluded
+  words never appear — over every word on screen, readings included. Clean.
+* **Rule 2**, timeless, over the **static markup only**. A reading prints the
+  reader's own dates and percentages by design; those come from their data, not
+  from a sheet that has to outlive a printed QR code. This caught one real hit:
+  *Worth today*, and *what a fixed deposit pays today*. Both are now written
+  without the moment — and *What it is worth · On this date* was the more
+  accurate label anyway, since the reader picks that date.
+* **The budgets.** Review §4 gives Tool 1 forty words of ledger labels and a
+  hundred and thirty for the reading: measured at 39 and 127. Home is fifty
+  words for the *whole* screen, and the author's line has not landed yet — her
+  slot is budgeted at 120 characters, so twenty of the fifty are hers. The home
+  screen was at 46 of its own, which would have blown the budget the moment her
+  line arrived; it is cut to 30. The header already carries the product name, so
+  home no longer repeats it as a visible heading.
+
+Screens the review has not budgeted are measured and printed, so those numbers
+get set against something real: record 138, plan 126.
+
+## Step 6 · the design pass
+
+Measured at **320px as well as 390**, on all six screens, in the suite:
+
+* **Nothing scrolls sideways.** Every tool screen did, by 35–51px on a 320px
+  phone, because a three-column table cannot fit there. Tables now scroll
+  inside their own box; the page never does.
+* **One h1 per screen.** Tool 3 printed the fund's name as a second h1 inside
+  its reading, which leaves a screen reader with no top to the page. The fund is
+  an h2 beneath the screen's own heading.
+* **Every control is a finger wide.** The header's brand, the footer's link and
+  About's rows were 15–27px tall. All are 44 now, and the whole row is the
+  target rather than the words in it.
+
+One regression this pass caught and fixed: the `nowrap` added to the ledger's
+date column in step 5 was written unscoped, so it also caught the tables whose
+first column is a sentence and pushed those clean off the edge of a phone.
 
 ## Tool 1
 

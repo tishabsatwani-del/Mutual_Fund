@@ -60,6 +60,9 @@
    */
   var PROVIDER = null;
   function registerProvider(p) { PROVIDER = p; }
+  /* About says what this build reads. With no provider registered the honest
+     answer is "a file you choose", and it must change by itself when one is. */
+  function hasProvider() { return !!PROVIDER; }
 
   function search(query) {
     if (!PROVIDER) return Promise.resolve({ ok: false, reason: 'no-provider', schemes: [] });
@@ -115,7 +118,7 @@
   root.WYS = {
     $: $, $$: $$, money: money, pct: pct, date: date, esc: esc, count: count,
     slot: slot, land: land,
-    registerProvider: registerProvider, search: search, readFile: readFile,
+    registerProvider: registerProvider, hasProvider: hasProvider, search: search, readFile: readFile,
     view: view, go: go, start: start, render: render,
     copy: COPY
   };
