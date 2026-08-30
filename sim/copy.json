@@ -279,9 +279,9 @@
       "where": "Every source unreachable; the upload door is offered."
     },
     "ABOUT-MAIN": {
-      "text": "This page runs the book's five questions on your own money. You enter what you paid in and took out; it fetches the fund's public NAV history, for any fund, including ones launched after this book was printed, and works everything out on your phone. Nothing you type leaves it. It does not rate funds, rank them, or tell you what to buy, sell or switch. It tells you where you stand and what to check next. Every sentence it shows is tied to a number it has just calculated, so the same figures will get the same sentence in ten years. It compares your fund with an index fund you could actually have bought, not with the index itself. Figures are before tax and exit load. It describes what has already happened and predicts nothing.",
-      "budget": 900,
-      "where": "About and privacy. The section 8 draft, kept."
+      "text": "This page runs the book's five questions on your own money. You enter what you paid in and took out, and you load your fund's NAV history as a file you download yourself. Nothing is sent anywhere and nothing is fetched, so no request leaves this page while you use it. That is deliberate. A tool that fetches breaks the day a source changes its format or disappears, and it can go wrong quietly; a file you downloaded is one you can open and check, and it will still work in ten years. Where to get each file, and what to do with it, is explained at the step that needs it. Everything is worked out on your phone. This page does not rate funds, rank them, or tell you what to buy, sell or switch. It tells you where you stand and what to check next. Every sentence it shows is tied to a number it has just calculated, so the same figures will get the same sentence in ten years. It compares your fund with an index fund you could actually have bought, not with the index itself. Figures are before tax and exit load. It describes what has already happened and predicts nothing.",
+      "budget": 1100,
+      "where": "About and privacy. The section 8 draft of v4, replacing the v3 draft that described live fetching."
     },
     "FOOTER-REFRAINS": {
       "text": "",

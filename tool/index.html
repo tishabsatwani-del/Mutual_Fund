@@ -13,8 +13,8 @@
 
 <header class="topbar">
   <div class="topbar-inner">
-    <a class="brand" href="#home">Where You Stand<span>The book explains it. This runs it on your own money.</span></a>
-    <button class="backlink" id="back" type="button">&#8592; All tools</button>
+    <a class="brand" href="#home">Where You Stand</a>
+    <button class="backlink" id="back" type="button">All tools</button>
   </div>
 </header>
 
@@ -195,7 +195,8 @@
       </div>
       <div class="field">
         <label for="g-years">Years left</label>
-        <input type="number" id="g-years" value="15" min="0.5" max="60" step="0.5" inputmode="decimal">
+        <input type="number" id="g-years" aria-describedby="g-years-bad" value="15" min="1" max="50" step="0.5" inputmode="decimal">
+        <p class="hint refuse" id="g-years-bad" hidden></p>
       </div>
       <div class="field">
         <label for="g-sip">Investing each month now (&#8377;)</label>
@@ -203,7 +204,8 @@
       </div>
       <div class="field">
         <label for="g-rate">Assumed return each year (%)</label>
-        <input type="number" id="g-rate" value="10" min="-50" max="50" step="0.5" inputmode="decimal">
+        <input type="number" id="g-rate" aria-describedby="g-rate-bad" value="10" min="0" max="30" step="0.5" inputmode="decimal">
+        <p class="hint refuse" id="g-rate-bad" hidden></p>
         <p class="hint">An assumption you are choosing, not a rate anyone can promise you. This tool
         will not suggest a number. Not sure?
         <button class="link" type="button" data-go="rolling" data-source="index">See what this kind of
@@ -211,7 +213,8 @@
       </div>
       <div class="field">
         <label for="g-step">Raise the monthly amount each year by (%)</label>
-        <input type="number" id="g-step" value="0" min="0" max="50" step="1" inputmode="decimal">
+        <input type="number" id="g-step" aria-describedby="g-step-bad" value="0" min="0" max="25" step="1" inputmode="decimal">
+        <p class="hint refuse" id="g-step-bad" hidden></p>
         <p class="hint">Most people's income rises. Nothing says the instalment has to stay still.</p>
       </div>
     </div>
@@ -388,10 +391,10 @@
     <ol style="margin:0;padding-left:1.2rem;color:var(--ink-2)">
       <li>Download the file and open it in Excel. Save your own copy first, so you always have a clean one.</li>
       <li>On the <strong>My investments</strong> tab, enter one row for every payment you have made. Date,
-      then choose <strong>Investment</strong> from the dropdown, then the amount. Always type the amount as
+      then choose <strong>Money in</strong> from the dropdown, then the amount. Always type the amount as
       a plain positive number.</li>
-      <li>If you have taken money out, enter that as a row too, choosing <strong>Withdrawal</strong>.</li>
-      <li>In the last row, enter today's date, choose <strong>Value today</strong>, and type what the holding
+      <li>If you have taken money out, enter that as a row too, choosing <strong>Money out</strong>.</li>
+      <li>In the last row, enter today's date, choose <strong>Worth today</strong>, and type what the holding
       is worth right now.</li>
     </ol>
     <p style="margin:.9rem 0 0;color:var(--ink-2)">Your XIRR appears at the top of the sheet. That is the
@@ -402,7 +405,7 @@
     <h2>If something looks wrong</h2>
     <ul style="margin:0;padding-left:1.2rem;color:var(--ink-2)">
       <li><strong>No answer yet.</strong> Read the line under the result. It will tell you what is still
-      missing, usually the Value today row.</li>
+      missing, usually the Worth today row.</li>
       <li><strong>The date looks odd.</strong> The sheet shows dates as 05-Aug-2026. If yours reads
       08-May-2026, your computer is set to American dates. Retype the date the other way round.</li>
       <li><strong>A number will not go in.</strong> Type digits only, with no rupee sign and no commas.</li>
@@ -536,6 +539,7 @@
 
 </main>
 
+<script src="../sim/format.js"></script>
 <script src="engine.js"></script>
 <script src="parse.js"></script>
 <script src="provider.js"></script>

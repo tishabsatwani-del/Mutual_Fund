@@ -95,21 +95,26 @@ body {
   background: var(--bg);
   border-bottom: 1px solid var(--line);
 }
+/* Review v4 §12.9: the header was two lines of title plus a two-line
+   "← All tools" box on every inner screen, and it ate the top of the phone
+   with the section heading sitting behind it. One line, 48 tall: name left,
+   "All tools" right, and nothing else. */
 .topbar-inner {
-  max-width: 46rem; margin: 0 auto; padding: .7rem 1rem;
-  display: flex; align-items: center; gap: .75rem;
+  max-width: 46rem; margin: 0 auto; padding: 0 1rem;
+  min-height: 48px; display: flex; align-items: center; gap: .75rem;
 }
 .brand {
   font-family: var(--serif); font-size: 1.05rem; font-weight: 700;
   letter-spacing: -.01em; color: var(--ink); text-decoration: none;
-  margin-right: auto;
+  margin-right: auto; white-space: nowrap;
 }
-.brand span { display: block; font-family: var(--sans); font-size: .7rem; font-weight: 400; color: var(--muted); letter-spacing: .02em; }
 .backlink {
-  display: none; align-items: center; gap: .3rem;
-  background: none; border: 1px solid var(--line-strong); border-radius: 8px;
-  color: var(--ink-2); font: inherit; font-size: .85rem; padding: .4rem .7rem; cursor: pointer;
+  display: none; align-items: center; white-space: nowrap;
+  background: none; border: 0; border-radius: 8px;
+  color: var(--muted); font: inherit; font-size: .9rem; padding: 0 .2rem;
+  min-height: 44px; cursor: pointer;
 }
+.backlink:hover { color: var(--ink); }
 body[data-view="home"] .backlink { display: none !important; }
 .backlink.on { display: inline-flex; }
 
@@ -256,40 +261,64 @@ button.link {
 
 /* ------------------------------------------------------------- entry table */
 .rows { display: grid; gap: .5rem; }
+/* Review v4 §12.6 and §13: PHONE FIRST. The row is [fields][×] and nothing
+ * else, at every width up to a real table's worth of room.
+ *
+ * What was here before laid five columns out by default and only stacked them
+ * under 33rem. Between that and a desktop the five columns had nowhere to go:
+ * every field crushed to about sixty pixels ("Inv", "Amou", "Whicl", an empty
+ * date box) while the × kept its full 44. Two properties prevent that class of
+ * failure for good -- min-width:0 on the column that must give, and
+ * flex-shrink:0 on the one that must not. */
 .row-head, .entry {
-  display: grid; grid-template-columns: 1fr 1.05fr .85fr .95fr 44px; gap: .4rem; align-items: center;
+  display: grid; grid-template-columns: 1fr 44px; gap: .4rem; align-items: start;
 }
-.row-head { font-size: .75rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
-.entry input, .entry select { min-height: 44px; font-size: .95rem; padding: .45rem .5rem; }
-#pf-rows .entry { grid-template-columns: 1fr 1.05fr .85fr .95fr 44px; }
+.entry > .c-fields { min-width: 0; display: grid; gap: .4rem; }
+.entry .del { flex-shrink: 0; }
+.row-head { font-size: .75rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; display: none; }
+.entry input, .entry select { min-height: 44px; font-size: .95rem; padding: .45rem .5rem; width: 100%; min-width: 0; }
 .entry .del {
   min-height: 44px; width: 44px; background: none; border: 1px solid var(--line);
   border-radius: 8px; color: var(--muted); font-size: 1.1rem; cursor: pointer;
+  align-self: center;
 }
 .entry .del:hover { border-color: var(--critical); color: var(--critical); }
-.entry label { display: none; }
-.c-num { display: none; }
 
-@media (max-width: 33rem) {
-  .row-head { display: none; }
+/* §12.5: the native control shows the browser's locale, so the date it holds
+   is echoed in the one form that reads a single way. */
+.date-echo, .amt-echo {
+  display: block; font-size: .78rem; color: var(--muted); margin-top: .2rem;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+.date-echo:empty, .amt-echo:empty { display: none; }
+.refuse { color: var(--critical); }
+
+/* The five-column table only where five columns genuinely fit. */
+@media (min-width: 48rem) {
+  .row-head { display: grid; grid-template-columns: 1fr 1.05fr .85fr .95fr 44px; }
+  .entry > .c-fields { grid-template-columns: 1fr 1.05fr .85fr .95fr; align-items: center; }
+  .entry label { display: none; }
+  .c-num { display: none; }
+  .date-echo, .amt-echo { display: none; }
+}
+
+@media (max-width: 47.99rem) {
   /* the headings are gone at this width, so each field names itself */
   .entry label {
     display: block; font-size: .78rem; font-weight: 600; color: var(--ink-2);
     margin: 0 0 .2rem;
   }
+  /* No grid-area here. It named an area that the template no longer defines,
+     and an unresolved name still creates an implicit track -- which put the
+     fields back into two columns and crushed them to 59px at 320. */
   .c-num {
-    display: block; grid-area: num;
+    display: block;
     font-size: .72rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
     color: var(--muted); margin-bottom: .3rem;
   }
   .entry {
-    grid-template-columns: 1fr 44px;
-    grid-template-areas: "num num" "date del" "kind del" "amt del" "tag del";
     padding: .55rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2);
   }
-  .entry .c-date { grid-area: date; } .entry .c-kind { grid-area: kind; }
-  .entry .c-amt { grid-area: amt; } .entry .c-tag { grid-area: tag; }
-  .entry .del { grid-area: del; align-self: center; }
 }
 
 /* ------------------------------------------------------------------ result */
@@ -318,6 +347,28 @@ button.link {
 }
 .result .value.small { font-size: 1.4rem; }
 .result .sub { color: var(--ink-2); font-size: .95rem; }
+
+/* Review v4 §12.8: rupee strings ran off the right edge of the goal result
+   with no wrap and no truncation. The words-for-size rule removes the cause --
+   a headline is now "₹1.26 crore", not fourteen digits -- and these two stop
+   any figure that still would not fit from escaping its card. */
+.result .value, .result .sub, .stat b, .data td {
+  overflow-wrap: anywhere; word-break: normal;
+}
+@media (max-width: 24rem) { .result .value { font-size: 2.2rem; } }
+
+/* Review v4 §12.7: "Two numbers, two different questions" put the gloss in a
+   narrow left column and let "in total · no clock in it" wrap to three lines
+   on the right. Under 480px the pair stacks: label and figure on one line,
+   the gloss on the next. */
+@media (max-width: 30rem) {
+  .data, .data tbody, .data tr, .data td { display: block; width: auto; }
+  .data tr { padding: .6rem 0; border-bottom: 1px solid var(--line); }
+  .data tr:last-child { border-bottom: 0; }
+  .data td { border: 0; padding: 0; }
+  .data td + td { margin-top: .25rem; color: var(--ink-2); }
+  .data td .qsub { display: block; margin-top: .15rem; }
+}
 
 .stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: .5rem; margin: .9rem 0; }
 @media (min-width: 34rem) { .stats { grid-template-columns: repeat(4, 1fr); } }

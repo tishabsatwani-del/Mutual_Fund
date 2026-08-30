@@ -60,13 +60,13 @@ fs.mkdirSync(TMP + '/shots', { recursive: true });
   /* the spreadsheet-verified case: two lump sums -> 9.1% */
   const rows = page.locator('#pf-rows .entry');
   await rows.nth(0).locator('.in-date').fill('2024-01-01');
-  await rows.nth(0).locator('.in-kind').selectOption('Investment');
+  await rows.nth(0).locator('.in-kind').selectOption('Money in');
   await rows.nth(0).locator('.in-amt').fill('100000');
   await rows.nth(1).locator('.in-date').fill('2025-01-01');
-  await rows.nth(1).locator('.in-kind').selectOption('Investment');
+  await rows.nth(1).locator('.in-kind').selectOption('Money in');
   await rows.nth(1).locator('.in-amt').fill('100000');
   await rows.nth(2).locator('.in-date').fill('2026-01-01');
-  await rows.nth(2).locator('.in-kind').selectOption('Value today');
+  await rows.nth(2).locator('.in-kind').selectOption('Worth today');
   await rows.nth(2).locator('.in-amt').fill('228000');
   await rows.nth(3).locator('.del').click();
   await page.click('#pf-calc');
@@ -81,14 +81,14 @@ fs.mkdirSync(TMP + '/shots', { recursive: true });
   await page.screenshot({ path: path.join(SHOTS, '02-portfolio.png'), fullPage: true });
 
   /* error handling: no current value */
-  await rows.nth(2).locator('.in-kind').selectOption('Investment');
+  await rows.nth(2).locator('.in-kind').selectOption('Money in');
   await page.click('#pf-calc');
   await page.waitForSelector('#pf-out .notice.bad');
   const err = await page.locator('#pf-out .notice').innerText();
-  ok('a missing current value gives a human sentence', /Value today/.test(err) && !/NaN|undefined/.test(err), err);
+  ok('a missing current value gives a human sentence', /Worth today/.test(err) && !/NaN|undefined/.test(err), err);
 
   /* bad amount */
-  await rows.nth(2).locator('.in-kind').selectOption('Value today');
+  await rows.nth(2).locator('.in-kind').selectOption('Worth today');
   await rows.nth(0).locator('.in-amt').fill('-5000');
   await page.click('#pf-calc');
   const err2 = await page.locator('#pf-out .notice').innerText();
@@ -118,10 +118,26 @@ fs.mkdirSync(TMP + '/shots', { recursive: true });
   ok('the chart has a text alternative', !!(await page.locator('#g-out svg[aria-label]').count()));
   await page.screenshot({ path: path.join(SHOTS, '03-goal.png'), fullPage: true });
 
-  /* nonsense input */
+  /* Nonsense input. Review v4 §11 caps a return at 30%, and §12.1 requires the
+     refusal to happen ON THE FIELD before anything is computed -- a step-up of
+     10000000 was accepted and returned a 68-digit figure. */
   await page.fill('#g-rate', '90');
+  ok('an out-of-range return is refused on the field as it is typed',
+     (await page.locator('#g-rate-bad').isVisible()) === true &&
+     /between 0% and 30%/.test(await page.locator('#g-rate-bad').innerText()),
+     await page.locator('#g-rate-bad').innerText());
   await page.click('#g-calc');
-  ok('a fantasy return is refused', /50%/.test(await page.locator('#g-out').innerText()));
+  ok('a fantasy return is refused, with the range named',
+     /between 0% and 30%/.test(await page.locator('#g-out').innerText()),
+     await page.locator('#g-out').innerText());
+  /* the step-up on its own, with every other field back inside its range */
+  await page.fill('#g-rate', '10');
+  await page.fill('#g-step', '10000000');
+  await page.click('#g-calc');
+  const stepped = await page.locator('#g-out').innerText();
+  ok('and the step-up that produced the 68-digit figure never computes',
+     /between 0% and 25%/.test(stepped) && !/e\+/i.test(stepped), JSON.stringify(stepped));
+  await page.fill('#g-step', '0');
   await page.fill('#g-rate', '10');
 
   /* The fund, index, hurdle-rate and benchmark journeys are covered in full by
@@ -192,6 +208,45 @@ fs.mkdirSync(TMP + '/shots', { recursive: true });
   ok('desktop renders without error', true);
 
   ok('no script errors during the whole run', errors.length === 0, errors.slice(0, 3).join(' | '));
+
+  /* ============================ review v4 §12.6, §12.9: the phone layout
+   *
+   * The recording showed ledger rows where every field was crushed to about
+   * sixty pixels -- "Inv", "Amou", "Whicl", an empty date box -- while the ×
+   * kept its full width, and a header two lines of title tall with the section
+   * heading sitting behind it. Both are measured here, at the four widths the
+   * review names.
+   */
+  console.log('\nThe phone layout, measured at 320, 360, 390 and 430');
+  for (const width of [320, 360, 390, 430]) {
+    const ctx2 = await browser.newContext({ viewport: { width, height: 900 } });
+    const p2 = await ctx2.newPage();
+    await p2.goto(BASE_URL + '#portfolio', { waitUntil: 'networkidle' });
+    await p2.waitForTimeout(250);
+    const m = await p2.evaluate(() => {
+      const doc = document.documentElement;
+      const fields = [...document.querySelectorAll(
+        '#pf-rows .entry .in-date, #pf-rows .entry .in-kind, ' +
+        '#pf-rows .entry .in-amt, #pf-rows .entry .in-tag')];
+      const bar = document.querySelector('.topbar-inner');
+      return {
+        over: doc.scrollWidth - doc.clientWidth,
+        narrowest: fields.length ? Math.min(...fields.map(e => e.getBoundingClientRect().width)) : 0,
+        header: bar ? bar.getBoundingClientRect().height : 0,
+        del: (document.querySelector('#pf-rows .entry .del') || {}).getBoundingClientRect
+             ? document.querySelector('#pf-rows .entry .del').getBoundingClientRect().width : 0
+      };
+    });
+    ok('no sideways scroll at ' + width, m.over <= 0, 'over by ' + m.over);
+    /* the defect was ~60px; a field a reader can actually type into is far wider */
+    ok('ledger fields are not crushed at ' + width, m.narrowest >= 140,
+       'narrowest field ' + Math.round(m.narrowest) + 'px');
+    ok('and the × keeps its 44 without taking their room at ' + width,
+       Math.round(m.del) === 44, String(Math.round(m.del)));
+    ok('the header is one line at ' + width, Math.round(m.header) <= 56,
+       Math.round(m.header) + 'px');
+    await ctx2.close();
+  }
 
   await browser.close();
   console.log('\n' + pass + ' passed, ' + fails.length + ' failed');

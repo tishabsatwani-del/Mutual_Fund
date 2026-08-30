@@ -12,7 +12,7 @@
 
   /* ============================================================== PORTFOLIO */
 
-  var KINDS = ['Investment', 'Withdrawal', 'Value today'];
+  var KINDS = ['Money in', 'Money out', 'Worth today'];
   var rowSeq = 0;
 
   function addRow(values) {
@@ -21,23 +21,58 @@
     var wrap = A.el('div', { class: 'entry', 'data-row': id });
     /* The labels are visible on a phone, where the column headings are not: an
      * error saying "row 4" is useless if row 4 is four unlabelled boxes. */
+    /* Review v4 §12.6: the row is [fields][×]. The fields sit in their own
+     * column so the × can never take space from them, and that column carries
+     * min-width:0 -- without it a grid column refuses to shrink below its
+     * content's minimum and the fields crush to about 60 pixels each ("Inv",
+     * "Amou", "Whicl") while the × keeps its full width. */
     wrap.innerHTML =
-      '<div class="c-num" aria-hidden="true"></div>' +
-      '<div class="c-date"><label for="' + id + 'd">Date</label>' +
-        '<input type="date" id="' + id + 'd" class="in-date" value="' + esc(v.date || '') + '"></div>' +
-      '<div class="c-kind"><label for="' + id + 'k">What happened</label>' +
-        '<select id="' + id + 'k" class="in-kind">' +
-        KINDS.map(function (k) {
-          return '<option' + (v.kind === k ? ' selected' : '') + '>' + k + '</option>';
-        }).join('') + '</select></div>' +
-      '<div class="c-amt"><label for="' + id + 'a">Amount in rupees</label>' +
-        '<input type="number" id="' + id + 'a" class="in-amt" inputmode="decimal" min="0" step="1" ' +
-        'placeholder="Amount" value="' + (v.amount != null ? esc(v.amount) : '') + '"></div>' +
-      '<div class="c-tag"><label for="' + id + 't">Which fund or goal</label>' +
-        '<input type="text" id="' + id + 't" class="in-tag" autocomplete="off" ' +
-        'placeholder="Which fund?" value="' + esc(v.label || '') + '"></div>' +
+      '<div class="c-fields">' +
+        '<div class="c-num" aria-hidden="true"></div>' +
+        '<div class="c-date"><label for="' + id + 'd">Date</label>' +
+          '<input type="date" id="' + id + 'd" class="in-date" value="' + esc(v.date || '') + '">' +
+          '<span class="date-echo" id="' + id + 'de"></span></div>' +
+        '<div class="c-kind"><label for="' + id + 'k">What happened</label>' +
+          '<select id="' + id + 'k" class="in-kind">' +
+          KINDS.map(function (k) {
+            return '<option' + (v.kind === k ? ' selected' : '') + '>' + k + '</option>';
+          }).join('') + '</select></div>' +
+        '<div class="c-amt"><label for="' + id + 'a">Amount in rupees</label>' +
+          '<input type="number" id="' + id + 'a" class="in-amt" inputmode="decimal" min="0" step="1" ' +
+          'placeholder="Amount" value="' + (v.amount != null ? esc(v.amount) : '') + '">' +
+          '<span class="amt-echo" id="' + id + 'ae"></span></div>' +
+        '<div class="c-tag"><label for="' + id + 't">Which fund or goal</label>' +
+          '<input type="text" id="' + id + 't" class="in-tag" autocomplete="off" ' +
+          'placeholder="Which fund?" value="' + esc(v.label || '') + '"></div>' +
+      '</div>' +
       '<button type="button" class="del" aria-label="Remove this row">&times;</button>';
     wrap.querySelector('.del').addEventListener('click', function () { wrap.remove(); numberRows(); });
+
+    /* Review v4 §12.5: a native date input renders in the BROWSER's locale, and
+     * 04/01/2022 is 4 January to an Indian reader and 1 April to this tool.
+     * The control stays -- it is the right one on a phone -- and the date it
+     * holds is echoed underneath in dd-MMM-yyyy, which reads one way only. */
+    var dateInput = wrap.querySelector('.in-date');
+    var dateEcho = wrap.querySelector('.date-echo');
+    function sayDate() {
+      var t = A.isoToTs(dateInput.value);
+      dateEcho.textContent = isFinite(t) ? A.fmtDate(t) : '';
+    }
+    dateInput.addEventListener('input', sayDate);
+    dateInput.addEventListener('change', sayDate);
+    sayDate();
+
+    /* And the rupee helper the review asks for under every rupee input. */
+    var amtInput = wrap.querySelector('.in-amt');
+    var amtEcho = wrap.querySelector('.amt-echo');
+    function sayAmt() {
+      var n = parseFloat(amtInput.value);
+      var say = amtInput.value.trim() === '' ? '' : A.checkInput('rupees', n);
+      amtEcho.textContent = say || A.echo(n);
+      amtEcho.classList.toggle('refuse', !!say);
+    }
+    amtInput.addEventListener('input', sayAmt);
+    sayAmt();
     $('#pf-rows').appendChild(wrap);
     numberRows();
     return wrap;
@@ -86,9 +121,9 @@
         problems.push('Row ' + (i + 1) + ' needs an amount greater than zero, typed as a plain positive number.');
         return;
       }
-      var signed = r.kind === 'Investment' ? -r.amount : r.amount;
-      if (r.kind === 'Investment') invested += r.amount;
-      else if (r.kind === 'Withdrawal') withdrawn += r.amount;
+      var signed = r.kind === 'Money in' ? -r.amount : r.amount;
+      if (r.kind === 'Money in') invested += r.amount;
+      else if (r.kind === 'Money out') withdrawn += r.amount;
       else { current += r.amount; currentDate = currentDate == null ? t : Math.max(currentDate, t); }
       flows.push({ t: t, amount: signed, kind: r.kind, label: r.label });
     });
@@ -100,7 +135,7 @@
     var res = E.xirr(flows);
     if (!res.ok) {
       var extra = res.code === 'NO_VALUE'
-        ? ' Add a last row with today\'s date, <strong>Value today</strong>, and what the holding is worth now.'
+        ? ' Add a last row with today\'s date, <strong>Worth today</strong>, and what the holding is worth now.'
         : '';
       out.innerHTML = notice('bad', esc(res.message) + extra);
       return;
@@ -359,7 +394,7 @@
     for (var i = 0; i < count; i++) {
       var t = E.addMonths(t0, i);
       if (t > todayTs()) { skipped++; continue; }
-      addRow({ date: new Date(t).toISOString().slice(0, 10), kind: 'Investment',
+      addRow({ date: new Date(t).toISOString().slice(0, 10), kind: 'Money in',
                amount: amount, label: name });
       added++;
     }
@@ -371,10 +406,10 @@
 
   function fillExample() {
     $('#pf-rows').innerHTML = '';
-    addRow({ date: '2021-04-01', kind: 'Investment', amount: 200000 });
-    addRow({ date: '2022-04-01', kind: 'Investment', amount: 150000 });
-    addRow({ date: '2024-04-01', kind: 'Withdrawal', amount: 100000 });
-    addRow({ date: A.isoToday(), kind: 'Value today', amount: 420000 });
+    addRow({ date: '2021-04-01', kind: 'Money in', amount: 200000 });
+    addRow({ date: '2022-04-01', kind: 'Money in', amount: 150000 });
+    addRow({ date: '2024-04-01', kind: 'Money out', amount: 100000 });
+    addRow({ date: A.isoToday(), kind: 'Worth today', amount: 420000 });
   }
 
   function exportRows() {
@@ -392,7 +427,45 @@
 
   /* =================================================================== GOAL */
 
+  /* Review v4 §12.1: the planner accepted any number at all. A step-up of
+   * 10000000 was taken as 100,000 times a year and returned a 68-digit figure.
+   * No formatting rule can rescue that number -- the refusal has to happen at
+   * the field, before anything is computed. Section 11 sets the ranges; the
+   * field says which one it broke and the screen does not compute. */
+  var GOAL_FIELDS = [
+    { id: 'g-target',  kind: 'rupees' },
+    { id: 'g-current', kind: 'rupees' },
+    { id: 'g-sip',     kind: 'rupees' },
+    { id: 'g-years',   kind: 'years'  },
+    { id: 'g-rate',    kind: 'rate'   },
+    { id: 'g-step',    kind: 'stepUp' }
+  ];
+
+  function goalOutOfRange() {
+    var broken = [];
+    GOAL_FIELDS.forEach(function (f) {
+      var el = $('#' + f.id);
+      if (!el) return;
+      var v = parseFloat(el.value);
+      var say = A.checkInput(f.kind, v);
+      var note = $('#' + f.id + '-bad');
+      if (note) { note.textContent = say || ''; note.hidden = !say; }
+      el.setAttribute('aria-invalid', say ? 'true' : 'false');
+      if (say) broken.push(say);
+    });
+    return broken;
+  }
+
   function calcGoal() {
+    var out = $('#g-out');
+    var broken = goalOutOfRange();
+    if (broken.length) {
+      out.innerHTML = notice('bad', esc(broken[0]) +
+        (broken.length > 1 ? ' And ' + (broken.length - 1) + ' other field' +
+          (broken.length > 2 ? 's are' : ' is') + ' out of range.' : ''));
+      return;
+    }
+
     var input = {
       currentValue: parseFloat($('#g-current').value),
       monthlySip: parseFloat($('#g-sip').value),
@@ -401,21 +474,23 @@
       annualStepUpRate: parseFloat($('#g-step').value) / 100,
       target: parseFloat($('#g-target').value)
     };
-    var out = $('#g-out');
     var plan = E.projectGoal(input);
     if (!plan.ok) { out.innerHTML = notice('bad', esc(plan.message)); return; }
 
     var name = $('#g-name').value.trim() || 'this goal';
     var html = '';
 
+    /* The headline is the figure in words -- section 11's rule for a headline
+     * and for any figure inside a sentence -- with the full digits beneath it
+     * for a reader checking against their own arithmetic. Both go through the
+     * one formatter, which is what makes an exponent unrepresentable. */
     html += '<div class="result"><div class="label">If nothing changes, you reach</div>' +
-      '<div class="value">' + money(plan.projected) + '</div>' +
-      '<div class="sub">' + (A.scale(plan.projected) ? 'About ₹' + A.scale(plan.projected) + '. ' : '') +
-      'Goal: ' + money(plan.target) + '</div></div>';
+      '<div class="value">' + A.moneyWords(plan.projected) + '</div>' +
+      '<div class="sub">' + money(plan.projected) + ' · Goal: ' + money(plan.target) + '</div></div>';
 
     if (plan.onTrack) {
       html += notice('ok', '<strong>On track.</strong> On the return you assumed, ' + esc(name) +
-        ' is covered with ' + esc(money(-plan.gap)) + ' to spare.');
+        ' is covered with ' + esc(A.moneyWords(plan.surplus)) + ' to spare.');
     } else {
       html += notice('bad', '<strong>Short by ' + esc(money(plan.gap)) + '.</strong> On the return you ' +
         'assumed, ' + esc(name) + ' is not covered by what you are doing now.');
@@ -1480,7 +1555,7 @@
 
     /* portfolio */
     for (var i = 0; i < 3; i++) addRow({});
-    addRow({ date: A.isoToday(), kind: 'Value today' });
+    addRow({ date: A.isoToday(), kind: 'Worth today' });
     $('#pf-add').addEventListener('click', function () { addRow({}); });
     $('#pf-sip').addEventListener('click', function () { toggleSip($('#sip-builder').hidden); });
     $('#sip-add').addEventListener('click', addSipRows);
@@ -1489,7 +1564,7 @@
     $('#pf-clear').addEventListener('click', function () {
       $('#pf-rows').innerHTML = ''; $('#pf-out').innerHTML = '';
       for (var k = 0; k < 3; k++) addRow({});
-      addRow({ date: A.isoToday(), kind: 'Value today' });
+      addRow({ date: A.isoToday(), kind: 'Worth today' });
     });
     $('#pf-group').addEventListener('change', function () { if ($('#pf-out').innerHTML) calcPortfolio(); });
     $('#pf-calc').addEventListener('click', calcPortfolio);
@@ -1501,11 +1576,20 @@
       if (!input || !echo) return;
       function say() {
         var v = parseFloat(input.value);
-        var scaled = isFinite(v) && v > 0 ? A.scale(v) : null;
-        echo.textContent = scaled ? '= about \u20b9' + scaled : '';
+        /* Section 12's "not defects, worth keeping": this helper is exactly
+           right and belongs under every rupee input. */
+        var bad = A.checkInput('rupees', v);
+        echo.textContent = input.value.trim() === '' ? ''
+          : bad ? bad
+          : A.echo(v);
+        echo.classList.toggle('refuse', !!bad && input.value.trim() !== '');
       }
       input.addEventListener('input', say);
       say();
+    });
+    GOAL_FIELDS.forEach(function (f) {
+      var el = $('#' + f.id);
+      if (el) el.addEventListener('input', goalOutOfRange);
     });
     $('#g-calc').addEventListener('click', calcGoal);
 

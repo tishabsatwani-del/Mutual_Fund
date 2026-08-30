@@ -106,7 +106,7 @@ function longFile(file) {
   await page.goto(BASE_URL + '#portfolio', { waitUntil: 'networkidle' });
   const rows = page.locator('#pf-rows .entry');
   await rows.nth(0).locator('.in-date').fill('2035-01-01');
-  await rows.nth(0).locator('.in-kind').selectOption('Investment');
+  await rows.nth(0).locator('.in-kind').selectOption('Money in');
   await rows.nth(0).locator('.in-amt').fill('100000');
   await page.click('#pf-calc');
   await page.waitForTimeout(400);
@@ -151,17 +151,20 @@ function longFile(file) {
      await page.locator('#g-target-echo').innerText());
   await page.fill('#g-target', '1000000');
   await page.waitForTimeout(200);
+  /* Review v4 §11: two decimals below a hundred units, so a missing zero moves
+     the echo from ₹1.00 crore to ₹10.00 lakh -- a different word, not a
+     different digit, which is the whole point of the helper. */
   ok('a missing zero visibly changes the echo',
-     /10 lakh/.test(await page.locator('#g-target-echo').innerText()),
+     /10\.00 lakh/.test(await page.locator('#g-target-echo').innerText()),
      await page.locator('#g-target-echo').innerText());
   ok('what you already have is echoed too',
      /lakh|crore/.test(await page.locator('#g-current-echo').innerText()));
 
   section('The assumed return points somewhere for a basis');
-  const rateHint = await page.locator('#g-rate').locator('xpath=following-sibling::p[1]').innerText();
+  const rateHint = await page.locator('#g-rate').locator('xpath=following-sibling::p[not(@hidden)]').first().innerText();
   ok('it admits the tool will not suggest a number', /will not suggest/.test(rateHint), rateHint);
   ok('and offers a route to historical evidence', /actually returned/.test(rateHint));
-  await page.locator('#g-rate').locator('xpath=following-sibling::p[1]').locator('button').click();
+  await page.locator('#g-rate').locator('xpath=following-sibling::p').locator('button[data-go]').first().click();
   await page.waitForTimeout(400);
   ok('that route reaches the rolling module on the index source',
      await page.locator('#view-rolling').isVisible() &&

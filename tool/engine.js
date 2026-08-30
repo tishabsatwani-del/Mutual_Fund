@@ -430,6 +430,13 @@
       fromSip: fromSip,
       target: target,
       gap: short ? gap : 0,
+      /* Review v4 §12.2: surplus is reached MINUS goal, always, computed here
+       * rather than derived from gap on the screen. gap is clamped to zero when
+       * the plan is on track -- correct for a shortfall -- and the result screen
+       * was negating that clamped zero, so a plan that cleared its goal by
+       * lakhs printed "covered with ₹0 to spare". A surplus has its own field
+       * now, and it cannot be zero unless the plan lands exactly on target. */
+      surplus: projected - target,
       onTrack: !short,
       extraMonthly: extraMonthly,
       totalContributed: contributions(monthlySip, years, stepUp),

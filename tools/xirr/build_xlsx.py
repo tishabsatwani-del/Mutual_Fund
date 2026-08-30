@@ -23,7 +23,16 @@ FIRST_ROW, LAST_ROW = 8, 507
 HEAD_ROW = 7
 
 DATE_FMT = "dd-mmm-yyyy"
-MONEY_FMT = '"₹"\\ ##,##,##0'
+# Review v4 section 11. Indian grouping: the last three digits, then twos.
+# The previous single-section format grouped four digits past the first comma
+# (₹568,7111 for what should be ₹56,87,111). Three sections, one per
+# magnitude, so the repeat is long enough for a crore and for a lakh.
+MONEY_FMT = ("[>=10000000]\u20b9\\ ##\\,##\\,##\\,##0;"
+    "[>=100000]\u20b9\\ ##\\,##\\,##0;"
+    "\u20b9\\ ##,##0"
+)
+# The same standard inside a TEXT() formula, where a cell format cannot reach.
+MONEY_TEXT = '"[>=10000000]\u20b9 ##\\,##\\,##\\,##0;[>=100000]\u20b9 ##\\,##\\,##0;\u20b9 ##,##0"'
 PCT_FMT = "0.0%"
 
 BODY = Font(name="Calibri", size=12)
@@ -356,8 +365,8 @@ goal["A14"] = "Against your goal"
 goal["A14"].font = LABEL_FONT
 goal["B14"] = (
     '=IF(Calc!$G$10=0,"",'
-    'IF(Calc!$G$13>0.5,"Short by "&TEXT(Calc!$G$13,"\u20b9 ##,##,##0"),'
-    'IF(Calc!$G$13<-0.5,"Covered, with "&TEXT(-Calc!$G$13,"\u20b9 ##,##,##0")&" to spare",'
+    f'IF(Calc!$G$13>0.5,"Short by "&TEXT(Calc!$G$13,{MONEY_TEXT}),'
+    f'IF(Calc!$G$13<-0.5,"Covered, with "&TEXT(-Calc!$G$13,{MONEY_TEXT})&" to spare",'
     '"Covered, exactly on target")))'
 )
 goal["B14"].font = BODY_BOLD
@@ -411,8 +420,8 @@ for row, label, ref in SCENARIOS:
     v.number_format = MONEY_FMT
     d = goal.cell(row=row, column=3, value=(
         f'=IF(Calc!$G$10=0,"",IF({ref}>=$B$4,'
-        f'"covered, +"&TEXT({ref}-$B$4,"\u20b9 ##,##,##0"),'
-        f'"short by "&TEXT($B$4-{ref},"\u20b9 ##,##,##0")))'
+        f'"covered, +"&TEXT({ref}-$B$4,{MONEY_TEXT}),'
+        f'"short by "&TEXT($B$4-{ref},{MONEY_TEXT})))'
     ))
     d.font = BODY
 

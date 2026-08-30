@@ -21,10 +21,10 @@ fs.mkdirSync(TMP + '/shots', { recursive: true });
      Each fund's own return is known; the portfolio must NOT be their average. */
   const rows=p.locator('#pf-rows .entry');
   const data=[
-    ['2021-01-01','Investment','500000','Fund A'],
-    ['2026-01-01','Value today','700000','Fund A'],
-    ['2025-01-01','Investment','50000','Fund B'],
-    ['2026-01-01','Value today','75000','Fund B'],
+    ['2021-01-01','Money in','500000','Fund A'],
+    ['2026-01-01','Worth today','700000','Fund A'],
+    ['2025-01-01','Money in','50000','Fund B'],
+    ['2026-01-01','Worth today','75000','Fund B'],
   ];
   for (let i=0;i<data.length;i++){
     if (await rows.count() <= i) await p.click('#pf-add');

@@ -14,36 +14,28 @@
 
   /* ------------------------------------------------------------ formatting */
 
-  var rupee, plain;
-  try {
-    rupee = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
-    plain = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 });
-  } catch (e) { rupee = null; plain = null; }
+  /* Review v4 section 11: every figure in the product goes through ONE
+   * formatting module, web and workbook, and nothing is formatted at the point
+   * of use. These are the thin adapters that keep the old call sites working.
+   *
+   * What was here before divided by 1e7 for crore and called toFixed, and
+   * toFixed falls back to exponent notation at 1e21 -- which is how the goal
+   * screen came to print "₹1.264244546793246e+68 crore". sim/format.js uses
+   * Intl at every magnitude and never produces an exponent. */
+  var F = window.SimFormat;
 
-  function money(n) {
-    if (!isFinite(n)) return '—';
-    var v = Math.round(n);
-    return rupee ? rupee.format(v) : '₹' + v.toLocaleString();
-  }
-  /* Indian readers think in lakh and crore, so say it their way alongside. */
-  function scale(n) {
-    var a = Math.abs(n);
-    if (a >= 1e7) return (n / 1e7).toFixed(a >= 1e8 ? 0 : 2) + ' crore';
-    if (a >= 1e5) return (n / 1e5).toFixed(a >= 1e6 ? 0 : 1) + ' lakh';
-    return null;
-  }
+  function money(n) { return F.money(n); }
+  function moneyWords(n) { return F.moneyWords(n); }
+  /* Full digits with the words beside them, for a figure the reader is
+     checking against a statement. */
   function moneyLong(n) {
-    var s = scale(n);
-    return money(n) + (s ? ' (about ₹' + s + ')' : '');
+    var words = F.echo(n);
+    return money(n) + (words ? ' (' + words.replace(/^= /, '') + ')' : '');
   }
-  function pct(r, dp) { return (r * 100).toFixed(dp == null ? 1 : dp) + '%'; }
-  function signedPct(r) { return (r > 0 ? '+' : '') + pct(r); }
-
-  function fmtDate(t) {
-    var d = new Date(t);
-    var M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    return String(d.getUTCDate()).padStart(2, '0') + '-' + M[d.getUTCMonth()] + '-' + d.getUTCFullYear();
-  }
+  function pct(r, dp) { return F.pct(r, { dp: dp }); }
+  function signedPct(r) { return F.pct(r, { signed: true }); }
+  function fmtDate(t) { return F.date(t); }
+  function fmtYears(y) { return F.years(y); }
   function isoToday() { return new Date().toISOString().slice(0, 10); }
   function isoToTs(s) {
     var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s || ''));
@@ -414,8 +406,9 @@
 
   window.PRCApp = {
     E: E, P: P, VERSION: VERSION, SHEET_VERSION: SHEET_VERSION, HORIZONS: HORIZONS,
-    money: money, moneyLong: moneyLong, scale: scale, pct: pct, signedPct: signedPct,
-    fmtDate: fmtDate, isoToday: isoToday, isoToTs: isoToTs,
+    money: money, moneyLong: moneyLong, moneyWords: moneyWords,
+    pct: pct, signedPct: signedPct, echo: F.echo, checkInput: F.checkInput,
+    fmtDate: fmtDate, fmtYears: fmtYears, isoToday: isoToday, isoToTs: isoToTs,
     $: $, $$: $$, el: el, esc: esc, notice: notice, show: show,
     histogramChart: histogramChart, goalChart: goalChart,
     readFile: readFile, wireDrop: wireDrop, initRouter: initRouter
