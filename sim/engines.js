@@ -297,6 +297,78 @@
     return n / points.length;
   }
 
+  /* --------------------------------------------------------------- planning
+   *
+   * Tool 4 tests a plan against what a fund's own history actually produced,
+   * so these live beside the rest of the engine rather than in a second copy.
+   *
+   * The monthly rate is (1+r)^(1/12) - 1, never r/12. Dividing by twelve
+   * quietly overstates the answer, and over twenty years the overstatement is
+   * not small.
+   */
+  function monthlyRate(annual) { return Math.pow(1 + annual, 1 / 12) - 1; }
+
+  function futureValueOfLump(present, annual, years) {
+    return present * Math.pow(1 + annual, years);
+  }
+
+  /* Instalments paid at the START of each month, with an optional step-up
+   * applied on each anniversary. Summed month by month rather than in closed
+   * form: the step-up makes the closed form a geometric series that is easy to
+   * get subtly wrong, and a few hundred iterations cost nothing here. */
+  function futureValueOfSip(monthly, annual, years, stepUp) {
+    var months = Math.round(years * 12);
+    if (months <= 0 || !(monthly > 0)) return 0;
+    var i = monthlyRate(annual), step = stepUp || 0, amount = monthly, total = 0;
+    for (var m = 0; m < months; m++) {
+      if (m > 0 && m % 12 === 0) amount = amount * (1 + step);
+      total = (total + amount) * (1 + i);
+    }
+    return total;
+  }
+
+  /* What one rupee a month grows into. The future value of a SIP is linear in
+   * the instalment, so the instalment that closes a gap is a division, never a
+   * search. */
+  function sipGrowthFactor(annual, years, stepUp) {
+    return futureValueOfSip(1, annual, years, stepUp);
+  }
+
+  /* Where a plan lands at one rate, and what it would take to arrive. */
+  function landing(plan, annual) {
+    var years = plan.years, step = plan.stepUp || 0;
+    var fromLump = futureValueOfLump(plan.have || 0, annual, years);
+    var fromSip = futureValueOfSip(plan.monthly || 0, annual, years, step);
+    var lands = fromLump + fromSip;
+    var gap = (plan.needed || 0) - lands;
+    var perRupee = sipGrowthFactor(annual, years, step);
+    return {
+      rate: annual,
+      lands: lands,
+      fromLump: fromLump,
+      fromSip: fromSip,
+      gap: gap,
+      shortfall: gap > 0 ? gap : 0,
+      /* The monthly amount that arrives, at this rate. */
+      monthlyToArrive: perRupee > 0 ? Math.max(0, (plan.needed - fromLump) / perRupee) : NaN
+    };
+  }
+
+  /* How many more years this rate needs to reach the same target. Searched
+   * month by month rather than solved: with a step-up there is no closed form,
+   * and the answer is only ever printed to a tenth of a year. */
+  function yearsToArrive(plan, annual, cap) {
+    var limit = cap || 60;
+    for (var m = 1; m <= limit * 12; m++) {
+      var y = m / 12;
+      if (futureValueOfLump(plan.have || 0, annual, y) +
+          futureValueOfSip(plan.monthly || 0, annual, y, plan.stepUp || 0) >= plan.needed) {
+        return y;
+      }
+    }
+    return Infinity;
+  }
+
   /* Point-to-point annualised return between two dated values (§7.2c, 7.2e). */
   function pointToPoint(startValue, endValue, startT, endT) {
     if (!(startValue > 0) || !(endValue > 0)) return fail('BAD-VALUES', 'Both values must be above zero.');
@@ -312,6 +384,9 @@
     npv: npv, xirr: xirr, validateRows: validateRows, toFlows: toFlows,
     rolling: rolling, describe: describe, quantile: quantile,
     percentileOf: percentileOf, placeInHundred: placeInHundred,
+    monthlyRate: monthlyRate, futureValueOfLump: futureValueOfLump,
+    futureValueOfSip: futureValueOfSip, sipGrowthFactor: sipGrowthFactor,
+    landing: landing, yearsToArrive: yearsToArrive,
     shareAtOrAbove: shareAtOrAbove, pointToPoint: pointToPoint
   };
   if (typeof module === 'object' && module.exports) module.exports = api;

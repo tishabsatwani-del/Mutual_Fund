@@ -450,6 +450,108 @@ ok('and reports how much history there is against how much is needed',
 var oneYear = E.rolling(young, { years: 1 });
 ok('the largest feasible window still works', oneYear.ok && oneYear.stats.count > 300);
 
+
+/* ======================================================= the goal maths
+ *
+ * Tool 4 tests a plan at rates taken from a fund's own record, so the
+ * compounding underneath has to be right before any of those rates mean
+ * anything. Every expectation below is written out here from scratch --
+ * a closed form, or a month-by-month sum written independently of
+ * sim/engines.js -- so agreement is evidence and not an echo.
+ */
+section('The goal maths - Tool 4');
+
+/* A monthly rate is the twelfth ROOT of a year, never a year divided by
+ * twelve. At 12% the difference is a fifth of a point a month, which
+ * compounds into a visible gap over a decade. */
+close('the monthly rate is the twelfth root, not r/12',
+      E.monthlyRate(0.12), Math.pow(1.12, 1 / 12) - 1, 1e-15);
+ok('and it is below r/12, as a root of a number above one must be',
+   E.monthlyRate(0.12) < 0.12 / 12);
+
+close('a lump sum compounds as (1+r)^years',
+      E.futureValueOfLump(100000, 0.10, 7), 100000 * Math.pow(1.10, 7), 1e-9);
+
+/* An annuity DUE: the instalment is paid at the start of the month and so
+ * earns that month's growth. The closed form for a level SIP is written
+ * out here rather than looped, so it does not share a mistake with the
+ * loop it is checking. */
+(function () {
+  var annual = 0.11, years = 8, monthly = 7500;
+  var i = Math.pow(1 + annual, 1 / 12) - 1, n = years * 12;
+  var expected = monthly * ((Math.pow(1 + i, n) - 1) / i) * (1 + i);
+  close('a level SIP matches the closed-form annuity due',
+        E.futureValueOfSip(monthly, annual, years, 0), expected, 1e-6);
+})();
+
+/* With a step-up there is no closed form worth trusting, so this is a
+ * second, independent month-by-month sum: the anniversary raise applied
+ * before the month it first applies to, and each instalment compounded
+ * for the months that remain after it. */
+(function () {
+  var annual = 0.12, years = 10, monthly = 5000, step = 0.10;
+  var i = Math.pow(1 + annual, 1 / 12) - 1, n = years * 12, total = 0;
+  for (var m = 0; m < n; m++) {
+    var amount = monthly * Math.pow(1 + step, Math.floor(m / 12));
+    total += amount * Math.pow(1 + i, n - m);
+  }
+  close('a stepped-up SIP matches an independent month-by-month sum',
+        E.futureValueOfSip(monthly, annual, years, step), total, 1e-6);
+  ok('and a step-up raises the landing, never lowers it',
+     E.futureValueOfSip(monthly, annual, years, step) >
+     E.futureValueOfSip(monthly, annual, years, 0));
+})();
+
+ok('no instalment means no SIP, not NaN', E.futureValueOfSip(0, 0.12, 10, 0) === 0);
+ok('no months means nothing has been paid in', E.futureValueOfSip(5000, 0.12, 0, 0) === 0);
+
+/* The growth factor is what one rupee a month becomes, and the landing is
+ * linear in the instalment. That linearity is the whole reason the lever
+ * below is a division rather than a search. */
+close('one rupee a month scaled up is the same as the SIP itself',
+      E.sipGrowthFactor(0.09, 6, 0.05) * 4000,
+      E.futureValueOfSip(4000, 0.09, 6, 0.05), 1e-6);
+
+/* The landing, and the lever. */
+(function () {
+  var plan = { have: 500000, monthly: 10000, stepUp: 0, years: 12, needed: 5000000 };
+  var got = E.landing(plan, 0.09);
+  close('the landing is the lump plus the SIP, and nothing else',
+        got.lands,
+        E.futureValueOfLump(500000, 0.09, 12) + E.futureValueOfSip(10000, 0.09, 12, 0), 1e-9);
+  close('the gap is what is needed minus what it lands on',
+        got.gap, 5000000 - got.lands, 1e-9);
+
+  /* The one lever that matters: the instalment that ARRIVES. Checked by
+   * putting it back through the engine and seeing it land on the target. */
+  var arrives = E.landing({ have: plan.have, monthly: got.monthlyToArrive,
+                            stepUp: 0, years: plan.years, needed: plan.needed }, 0.09);
+  close('the monthly amount that arrives actually arrives', arrives.lands, 5000000, 1);
+
+  /* A plan already past its target asks for nothing more, and never a
+   * negative instalment. */
+  var over = E.landing({ have: 9000000, monthly: 0, stepUp: 0, years: 5, needed: 1000000 }, 0.08);
+  ok('a plan already past its target has no shortfall', over.shortfall === 0);
+  ok('and never asks for a negative instalment', over.monthlyToArrive === 0);
+})();
+
+/* The second lever: the years the worst rate would add. Checked by the
+ * definition -- one month earlier misses, the answer itself arrives. */
+(function () {
+  var plan = { have: 200000, monthly: 8000, stepUp: 0, years: 10, needed: 2500000 };
+  var y = E.yearsToArrive(plan, 0.06);
+  ok('the years to arrive is a real number of years', isFinite(y) && y > 0);
+  var at = E.futureValueOfLump(plan.have, 0.06, y) + E.futureValueOfSip(plan.monthly, 0.06, y, 0);
+  var justBefore = E.futureValueOfLump(plan.have, 0.06, y - 1 / 12) +
+                   E.futureValueOfSip(plan.monthly, 0.06, y - 1 / 12, 0);
+  ok('it is the first month that reaches the target', at >= plan.needed && justBefore < plan.needed,
+     justBefore + ' then ' + at);
+  ok('a lower rate never needs fewer years',
+     E.yearsToArrive(plan, 0.06) >= E.yearsToArrive(plan, 0.12));
+  ok('a target beyond any reach inside the cap reports Infinity, not a wrong year',
+     E.yearsToArrive({ have: 0, monthly: 100, stepUp: 0, years: 10, needed: 1e12 }, 0.05) === Infinity);
+})();
+
 /* ==================================================================== done */
 console.log('\n' + passed + ' passed, ' + failed.length + ' failed, ' + pending.length + ' pending');
 if (pending.length) console.log('\nPENDING (needs the live environment):\n  ' + pending.join('\n  '));

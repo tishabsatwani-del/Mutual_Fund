@@ -136,6 +136,8 @@ h2 { font-family: var(--serif); font-weight: 400; font-size: 1.25rem; margin: 0 
 /* The placement is a sentence with a number in it, not a figure. At figure size
    it wraps to two lines and dwarfs the two rates it is meant to sit beside. */
 .figure.placement { font-size: 2rem; line-height: 1.2; }
+/* rupees run to nine glyphs where a percentage runs to four */
+.figure.money { font-size: 2.5rem; }
 .figure.placement b { font-weight: 400; }
 
 /* A reading the tool will not give. The row stays, at a third of its weight,
@@ -156,18 +158,23 @@ h2 { font-family: var(--serif); font-weight: 400; font-size: 1.25rem; margin: 0 
 .hero .label { margin-bottom: .1rem; }
 .hero .figure { display: inline; }
 .hero .unit { font-family: var(--sans); font-size: 1rem; color: var(--muted); margin-left: .45rem; }
-.reading .line {
+/* A ruled line: what it is on the left, the figure aligned right. It began
+   life inside .reading and was scoped there, which left every line drawn
+   outside one -- the levers on Tool 4, the inflation line on Tool 1 -- stacked
+   in a column with the figure orphaned beneath its own label. The layout is
+   the line's, not the box's. */
+.line {
   display: flex; align-items: baseline; gap: 1rem;
   padding: .7rem 0; border-top: 1px solid var(--rule);
 }
 .reading .line:first-of-type { margin-top: 1rem; }
-.reading .line .what { flex: 1; }
-.reading .line .val {
+.line .what { flex: 1; }
+.line .val {
   font-family: var(--serif); font-size: 1.25rem;
   font-variant-numeric: lining-nums tabular-nums; white-space: nowrap;
 }
-.reading .line.theirs .what, .reading .line.theirs .val { color: var(--slate); }
-.reading .line.suppressed { opacity: .55; }
+.line.theirs .what, .line.theirs .val { color: var(--slate); }
+.line.suppressed { opacity: .55; }
 
 /* the sentence, and the slot that is waiting for it */
 .sentence { font-family: var(--serif); font-size: var(--sentence); line-height: 1.45; margin: 0; }
@@ -192,16 +199,40 @@ h2 { font-family: var(--serif); font-weight: 400; font-size: 1.25rem; margin: 0 
   text-decoration: underline; text-underline-offset: 3px;
 }
 
-/* fields */
+/* fields.
+ *
+ * [hidden] carries no weight of its own -- the browser's own sheet sets it at
+ * the lowest specificity there is -- so any rule here that names an element
+ * and a class silently outranks it. A field hidden by the script stayed on
+ * screen because of the line below it. This states the intent once, for
+ * everything: hidden means hidden. */
+[hidden] { display: none !important; }
 label.field { display: block; margin-bottom: .9rem; }
 label.field > .label { margin-bottom: .3rem; }
-input[type="text"], input[type="date"], input[type="number"] {
+input[type="text"], input[type="date"], input[type="number"], select, textarea {
   width: 100%; min-height: 48px; padding: .6rem .7rem;
   background: var(--paper); color: var(--ink);
   border: 1px solid var(--rule-edge); border-radius: 6px;
   font: inherit; font-variant-numeric: lining-nums tabular-nums;
 }
 :focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+textarea { min-height: 8rem; resize: vertical; font-family: ui-monospace, Menlo, monospace;
+           font-size: .9375rem; line-height: 1.6; }
+/* The select keeps the browser's own arrow. A drawn one would be a gradient
+   or an image, and this page has neither; :root sets color-scheme, so the
+   native control follows the sheet the reader is on. */
+
+/* two fields that belong to one question sit side by side once there is room */
+.pair { display: grid; gap: 0 .9rem; grid-template-columns: 1fr; }
+@media (min-width: 26rem) { .pair { grid-template-columns: 2fr 1fr; } }
+
+/* a ledger line the reader can open. The whole line is the control, so the
+   target is the height of the row rather than a word at the end of it. */
+.ledger tr.tap { cursor: pointer; }
+.ledger tr.tap:hover td { background: rgba(255, 229, 102, .22); }
+@media (prefers-color-scheme: dark) {
+  .ledger tr.tap:hover td { background: rgba(242, 207, 91, .10); }
+}
 
 /* the ledger: one ruled line per entry, entries aligned right */
 .ledger { width: 100%; border-collapse: collapse; }
@@ -210,6 +241,11 @@ input[type="text"], input[type="date"], input[type="number"] {
              font-size: var(--label); font-variant-caps: all-small-caps;
              letter-spacing: .11em; color: var(--muted); font-weight: 400; }
 .ledger td.n { text-align: right; font-variant-numeric: lining-nums tabular-nums; }
+/* a date is one thing and should not break in half across two lines, and
+   neither is "Money out". The fund is the secondary column and is the one
+   allowed to wrap when four columns meet a phone. */
+.ledger td:first-child, .ledger td.nw { white-space: nowrap; }
+.ledger .fund { font-size: .875rem; color: var(--muted); }
 .ledger tr:last-child td { border-bottom: 0; }
 
 /* a refusal is set exactly like a reading: serif sentence, hairline, next step.

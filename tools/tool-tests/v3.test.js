@@ -302,6 +302,309 @@ const NIGHT = { paper: '#12161E', ink: '#E8E6E1', muted: '#9AA1AE', slate: '#8FA
     await ctx.close();
   }
 
+  /* ==================================================== Tool 1 · My return */
+  section('Tool 1 · My return — the ledger');
+  {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 900 } });
+    const page = await ctx.newPage();
+    const errors = [];
+    page.on('pageerror', e => errors.push(e.message));
+    await page.goto(BASE + '#mine', { waitUntil: 'networkidle' });
+
+    ok('an empty ledger says so rather than showing a blank table',
+       /Nothing written yet/.test(await page.locator('#m-rows').innerText()));
+    ok('the four links the review asks for are all here',
+       (await page.locator('#m-ledger > .actions .linkish').allInnerTexts()).join(' | ') ===
+       'Add a line | Monthly instalments | Paste from a spreadsheet | Try an example | ' +
+       'Save entries | Load entries | Clear',
+       (await page.locator('#m-ledger > .actions .linkish').allInnerTexts()).join(' | '));
+
+    /* The generator writes ONE line, not sixty. */
+    await page.click('#m-sip');
+    ok('asking for instalments relabels the date rather than opening a second box',
+       (await page.locator('#m-e-date-label').innerText()) === 'First instalment');
+    ok('and instalments have no in-or-out question, because they are always in',
+       (await page.locator('#m-e-dir-field').isVisible()) === false);
+    await page.fill('#m-e-date', '2021-04-05');
+    await page.fill('#m-e-amount', '5000');
+    await page.fill('#m-e-n', '60');
+    await page.click('#m-e-save');
+    await page.waitForTimeout(150);
+
+    ok('sixty instalments are one line in the ledger',
+       (await page.locator('#m-rows tr').count()) === 1,
+       String(await page.locator('#m-rows tr').count()));
+    const sipLine = await page.locator('#m-rows tr').innerText();
+    ok('and that line reads as a sentence, with both ends and the count',
+       /₹5,000 monthly/.test(sipLine) && /Apr 2021/.test(sipLine) &&
+       /Mar 2026/.test(sipLine) && /60 instalments/.test(sipLine), sipLine);
+    ok('while the engine sees all sixty payments',
+       /60 payments/.test(await page.locator('#m-total').innerText()),
+       await page.locator('#m-total').innerText());
+
+    /* Tap to edit: the whole line is the control. */
+    await page.click('#m-rows tr');
+    ok('tapping a line opens it for editing, prefilled',
+       (await page.locator('#m-edit').isVisible()) === true &&
+       (await page.inputValue('#m-e-amount')) === '5000' &&
+       (await page.inputValue('#m-e-n')) === '60');
+    ok('and an existing line can be removed from where it is edited',
+       (await page.locator('#m-e-drop').isVisible()) === true);
+    await page.click('#m-e-cancel');
+
+    /* Two columns, a minus for money out. */
+    await page.click('#m-paste-open');
+    await page.fill('#m-paste-text', '2023-08-14\t-50000\n2024-01-09\t25000\nnot a line at all');
+    await page.click('#m-paste-read');
+    await page.waitForTimeout(150);
+    ok('a pasted minus becomes money out, and a line that is not one is skipped',
+       (await page.locator('#m-rows tr').count()) === 3 &&
+       /Money out/.test(await page.locator('#m-rows').innerText()),
+       await page.locator('#m-rows').innerText());
+    ok('and the paste says how many lines it read',
+       /2 lines read, 1 skipped/.test(await page.locator('#m-paste-note').innerText()),
+       await page.locator('#m-paste-note').innerText());
+
+    /* Worth today is one fixed field, not a row type. */
+    ok('worth today is a field at the foot of the ledger, not a line in it',
+       (await page.locator('#m-worth').count()) === 1 &&
+       (await page.locator('#m-rows tr:has-text("Worth")').count()) === 0);
+
+    section('Tool 1 · the reading');
+    /* A ledger whose answer is known without running the tool: one payment,
+       one value, ten years, exactly double. */
+    await page.click('#m-clear');
+    await page.click('#m-add');
+    await page.fill('#m-e-date', '2015-01-01');
+    await page.fill('#m-e-amount', '100000');
+    await page.click('#m-e-save');
+    await page.fill('#m-worth', '200000');
+    await page.fill('#m-worth-on', '2025-01-01');
+    await page.click('#m-run');
+    await page.waitForTimeout(300);
+
+    const days = Math.round((Date.UTC(2025, 0, 1) - Date.UTC(2015, 0, 1)) / 86400000);
+    const expect = Math.pow(2, 365 / days) - 1;
+    const hero = await page.locator('#m-out .figure').innerText();
+    ok('the figure is the rate the arithmetic gives, worked out here separately',
+       Math.abs(parseFloat(hero) - expect * 100) < 0.05,
+       hero + ' against ' + (expect * 100).toFixed(2) + '%');
+    ok('it wears the marker, and it is the only large figure on the screen',
+       (await page.locator('#m-out .figure.mine').count()) === 1 &&
+       (await page.locator('#m-out .figure').count()) === 1);
+    ok('the span line carries the dates, the years and the count',
+       /1 Jan 2015 to 1 Jan 2025 · 10\.0 years · 1 payment/
+         .test(await page.locator('#m-out .gloss').first().innerText()),
+       await page.locator('#m-out .gloss').first().innerText());
+
+    const out = await page.locator('#m-out').innerText();
+    ok('absolute return stands beside the yearly rate, each saying what it answers',
+       /Absolute return/.test(out) && /no clock in it/.test(out) &&
+       /XIRR/.test(out) && /counts every date/.test(out));
+    ok('and the total doubling is printed as 100%', /100\.0%/.test(out), out.slice(0, 400));
+    ok('one crossover line, and it counts the reader’s own years',
+       (await page.locator('#m-crossover').count()) === 1 &&
+       /10\.0 years inside it/.test(await page.locator('#m-crossover').innerText()),
+       await page.locator('#m-crossover').innerText());
+
+    ok('inflation ships blank — the tool never picks a rate for the reader',
+       (await page.inputValue('#m-infl')) === '' &&
+       (await page.locator('#m-real').innerText()).trim() === '');
+    await page.fill('#m-infl', '6');
+    await page.waitForTimeout(150);
+    const real = await page.locator('#m-real').innerText();
+    const expectReal = ((1 + expect) / 1.06 - 1) * 100;
+    ok('and once typed it divides rather than subtracts',
+       Math.abs(parseFloat(real.match(/(−?\d+\.\d)%/)[1].replace('−', '-')) - expectReal) < 0.05,
+       real + ' against ' + expectReal.toFixed(2));
+
+    section('Tool 1 · what it will not do');
+    await page.click('#m-back');
+    await page.fill('#m-worth', '');
+    await page.click('#m-run');
+    await page.waitForTimeout(200);
+    ok('with nothing entered for worth today it says so, and names the sentence',
+       /no figure for what it is worth today/.test(await page.locator('#m-out').innerText()) &&
+       /XIRR-NEED-VALUE/.test(await page.locator('#m-out').innerText()),
+       await page.locator('#m-out').innerText());
+
+    /* Under a year, and two funds — both readings the review asks this screen
+       to carry, both printed as arithmetic beside the author's named slot. */
+    await page.click('#m-back');
+    await page.click('#m-clear');
+    await page.click('#m-add');
+    await page.fill('#m-e-date', '2025-06-01');
+    await page.fill('#m-e-amount', '100000');
+    await page.fill('#m-e-fund', 'One Fund');
+    await page.click('#m-e-save');
+    await page.click('#m-add');
+    await page.fill('#m-e-date', '2025-07-01');
+    await page.fill('#m-e-amount', '50000');
+    await page.fill('#m-e-fund', 'Another Fund');
+    await page.click('#m-e-save');
+    ok('a named fund brings out the fund column, and only then',
+       (await page.locator('#m-head-fund').isVisible()) === true);
+    await page.fill('#m-worth', '160000');
+    await page.fill('#m-worth-on', '2025-10-01');
+    await page.click('#m-run');
+    await page.waitForTimeout(300);
+    const short = await page.locator('#m-out').innerText();
+    ok('under a year the screen says how many days, and names the sentence',
+       /122 days, which is under a year/.test(short) && /POS-UNDER-A-YEAR/.test(short), short.slice(0, 500));
+    ok('and drops the words "a year" from beside the figure',
+       (await page.locator('#m-out .unit').count()) === 0);
+    ok('two funds in one ledger is a reading of its own',
+       /2 funds are named in this ledger/.test(short) && /XIRR-MANY-FUNDS/.test(short));
+
+    section('Tool 1 · saved on this device and nowhere else');
+    await page.click('#m-back');
+    await page.click('#m-save');
+    await page.waitForTimeout(100);
+    ok('saving says where it went', /Saved on this device/.test(await page.locator('#m-store-note').innerText()));
+    await page.click('#m-clear');
+    ok('clearing empties the ledger', (await page.locator('#m-rows tr').count()) === 1 &&
+       /Nothing written yet/.test(await page.locator('#m-rows').innerText()));
+    await page.click('#m-load');
+    await page.waitForTimeout(150);
+    ok('and loading brings back exactly what was written',
+       (await page.locator('#m-rows tr').count()) === 2 &&
+       (await page.inputValue('#m-worth')) === '160000');
+
+    ok('no script errors across Tool 1', errors.length === 0, errors.join(' | '));
+    await page.screenshot({ path: path.join(TMP, 'v3-mine.png'), fullPage: true });
+    await ctx.close();
+  }
+
+  /* ================================================ Tool 4 · My plan, tested */
+  section('Tool 4 · My plan, tested');
+  {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 900 } });
+    const page = await ctx.newPage();
+    const errors = [];
+    page.on('pageerror', e => errors.push(e.message));
+    await page.goto(BASE + '#plan', { waitUntil: 'networkidle' });
+
+    ok('with no fund loaded the Suppose field is the way in',
+       (await page.locator('#p-suppose').isVisible()) === true);
+    await page.fill('#p-have', '100000');
+    await page.fill('#p-monthly', '10000');
+    await page.fill('#p-years', '10');
+    await page.fill('#p-needed', '5000000');
+    await page.fill('#p-rate', '12');
+    await page.waitForTimeout(200);
+    ok('a supposed rate is tested, and the screen says the reader typed it',
+       /that is what you typed/.test(await page.locator('#p-out').innerText()) &&
+       /PLAN-NO-FUND/.test(await page.locator('#p-out').innerText()),
+       (await page.locator('#p-out').innerText()).slice(0, 300));
+
+    /* Now a real record underneath it. The fund loaded in any tool is the fund
+       here: one search, one data layer, four screens. */
+    await page.evaluate(() => { location.hash = 'record'; });
+    await page.waitForTimeout(200);
+    await page.setInputFiles('#r-file', navFile);
+    await page.waitForTimeout(700);
+    await page.evaluate(() => { location.hash = 'plan'; });
+    await page.waitForTimeout(300);
+    ok('the fund loaded in another tool is the fund here',
+       /v3-nav/.test(await page.locator('#p-fund-state').innerText()),
+       await page.locator('#p-fund-state').innerText());
+    ok('and the Suppose field steps aside once there is a record to test against',
+       (await page.locator('#p-suppose').isVisible()) === false);
+
+    const landings = await page.locator('#p-landings .figure, #p-landings .val').allInnerTexts();
+    ok('the plan lands three times, not once', landings.length === 3, landings.join(' | '));
+
+    const rateRows = await page.locator('#p-out .ledger tr').allInnerTexts();
+    ok('and the three rates are shown with the windows they came from',
+       rateRows.length === 3 && /Worst window, from/.test(rateRows[0]) &&
+       /Typical of all of them/.test(rateRows[1]) && /Best window, from/.test(rateRows[2]),
+       rateRows.join(' | '));
+
+    const rupees = t => parseFloat(t.replace(/[^0-9.]/g, ''));
+    ok('the worst is the hero, and it is the smallest of the three landings',
+       rupees(landings[0]) < rupees(landings[1]) && rupees(landings[1]) < rupees(landings[2]),
+       landings.join(' | '));
+    ok('the hero wears the marker, and nothing else on the screen is that size',
+       (await page.locator('#p-landings .figure.mine').count()) === 1 &&
+       (await page.locator('#p-out .figure').count()) === 1);
+
+    /* The landing is checked here against the compounding written out again. */
+    const worstPct = parseFloat(rateRows[0].replace('−', '-').match(/(-?\d+\.\d)%/)[1]) / 100;
+    const i = Math.pow(1 + worstPct, 1 / 12) - 1;
+    let sip = 0; for (let m = 0; m < 120; m++) sip = (sip + 10000) * (1 + i);
+    const expectLand = 100000 * Math.pow(1 + worstPct, 10) + sip;
+    ok('the worst landing is that rate compounded, worked out here separately',
+       Math.abs(rupees(landings[0]) - expectLand) / expectLand < 0.005,
+       landings[0] + ' against ' + Math.round(expectLand));
+
+    ok('every landing carries its gap',
+       (await page.locator('#p-landings').innerText().then(t => (t.match(/short of|over by/g) || []).length)) === 3,
+       await page.locator('#p-landings').innerText());
+
+    /* Two levers. Never a third. */
+    ok('there are exactly two levers',
+       (await page.locator('#p-levers .line').count()) === 2,
+       String(await page.locator('#p-levers .line').count()));
+    const levers = await page.locator('#p-levers').innerText();
+    ok('and they are the two the review names, both the reader’s own',
+       /The monthly amount that arrives, at the typical rate/.test(levers) &&
+       /The years the worst rate would add/.test(levers), levers);
+
+    section('Tool 4 · a history that cannot reach');
+    const shortFile2 = path.join(TMP, 'v3-short.csv');
+    if (!fs.existsSync(shortFile2)) {
+      const lines = ['Date,NAV']; let t = Date.UTC(2019, 0, 1), v = 10;
+      while (t <= Date.UTC(2025, 0, 1)) {
+        const d = new Date(t);
+        lines.push(`${String(d.getUTCDate()).padStart(2, '0')}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${d.getUTCFullYear()},${v.toFixed(4)}`);
+        v *= Math.pow(1.11, 1 / 365.2425); t += 86400000;
+      }
+      fs.writeFileSync(shortFile2, lines.join('\n'));
+    }
+    await page.setInputFiles('#p-file', shortFile2);
+    await page.fill('#p-years', '15');
+    await page.waitForTimeout(500);
+    const stretched = await page.locator('#p-out').innerText();
+    ok('a plan longer than the history is tested at the longest the history can give',
+       /6\.0 years of published prices/.test(stretched) &&
+       /tested against its 6-year windows — the longest it can give/.test(stretched),
+       stretched.slice(0, 400));
+    ok('and it names the author’s sentence rather than inventing one',
+       /PLAN-TOO-SHORT/.test(stretched));
+    ok('the plan still lands three times on the shorter window',
+       (await page.locator('#p-landings .figure, #p-landings .val').count()) === 3);
+    ok('and there are still two levers, never a third',
+       (await page.locator('#p-levers .line').count()) === 2);
+    ok('a history with no spread left in it says so rather than printing one figure three times',
+       /the worst, the typical and the best of them all come to/.test(stretched) &&
+       /RR-FEW-WINDOWS/.test(stretched), stretched.slice(-500));
+    ok('and it counts its windows in the singular when there is one',
+       / 1 window of /.test(stretched), stretched.match(/[^.]*window[^.]*\./g).join(' | '));
+
+    /* The hero is money, not a percentage, and has to fit a phone. */
+    const heroBox = await page.locator('#p-landings .figure').boundingBox();
+    ok('the landing figure fits the screen it is read on',
+       heroBox.width < 350, JSON.stringify(heroBox));
+    const leverVals = await page.locator('#p-levers .val').allInnerTexts();
+    ok('and each lever answers in one short figure, not a sentence',
+       leverVals.every(v => v.trim().length <= 14), leverVals.join(' | '));
+
+    /* .line was scoped to .reading, so a line drawn anywhere else lost its
+       layout and dropped its figure onto the row below its own label. */
+    const laid = await page.evaluate(() => {
+      const l = document.querySelector('#p-levers .line');
+      return { display: getComputedStyle(l).display,
+               sameRow: Math.abs(l.querySelector('.what').getBoundingClientRect().top -
+                                 l.querySelector('.val').getBoundingClientRect().top) < 30 };
+    });
+    ok('a ruled line keeps its layout outside the reading box too',
+       laid.display === 'flex' && laid.sameRow, JSON.stringify(laid));
+
+    ok('no script errors across Tool 4', errors.length === 0, errors.join(' | '));
+    await page.screenshot({ path: path.join(TMP, 'v3-plan.png'), fullPage: true });
+    await ctx.close();
+  }
+
   section('Reduced motion');
   {
     const ctx = await browser.newContext({ viewport: { width: 390, height: 900 }, reducedMotion: 'reduce' });

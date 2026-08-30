@@ -108,14 +108,114 @@
     <div class="section" id="step-reading" hidden aria-live="polite"><div id="reading"></div></div>
   </section>
 
-  <!-- ==================================================== TOOL 1 and TOOL 4 -->
+  <!-- ================================================= TOOL 1 · my return -->
   <section data-view="mine" hidden>
     <h1>My return</h1>
-    <p class="gloss">Not built yet. Build order step 4.</p>
+
+    <div class="section" id="m-ledger">
+      <div class="boxed">
+        <table class="ledger">
+          <thead><tr><th>Date</th><th>In or out</th><th class="n">Amount</th>
+            <th class="fund" id="m-head-fund" hidden>Fund</th></tr></thead>
+          <tbody id="m-rows"></tbody>
+        </table>
+      </div>
+      <p class="gloss" id="m-total"></p>
+      <div class="actions">
+        <button class="linkish" id="m-add" type="button">Add a line</button>
+        <button class="linkish" id="m-sip" type="button">Monthly instalments</button>
+        <button class="linkish" id="m-paste-open" type="button">Paste from a spreadsheet</button>
+      </div>
+      <div class="actions">
+        <button class="linkish" id="m-example" type="button">Try an example</button>
+        <button class="linkish" id="m-save" type="button">Save entries</button>
+        <button class="linkish" id="m-load" type="button">Load entries</button>
+        <button class="linkish" id="m-clear" type="button">Clear</button>
+      </div>
+      <p class="gloss" id="m-store-note" aria-live="polite"></p>
+
+      <!-- one editor, for a single payment or for a run of instalments -->
+      <div class="boxed" id="m-edit" hidden>
+        <p class="label" id="m-e-title">A new line</p>
+        <label class="field" for="m-e-kind"><span class="label">What kind of line</span>
+          <select id="m-e-kind">
+            <option value="one">One payment</option>
+            <option value="sip">Monthly instalments</option>
+          </select></label>
+        <label class="field" for="m-e-date"><span class="label" id="m-e-date-label">Date</span>
+          <input type="date" id="m-e-date"></label>
+        <label class="field" for="m-e-dir" id="m-e-dir-field"><span class="label">In or out</span>
+          <select id="m-e-dir">
+            <option value="in">Money in</option>
+            <option value="out">Money out</option>
+          </select></label>
+        <label class="field" for="m-e-amount"><span class="label" id="m-e-amount-label">Amount</span>
+          <input type="number" id="m-e-amount" inputmode="decimal" min="0" step="any"></label>
+        <label class="field" for="m-e-n" id="m-e-n-field" hidden><span class="label">How many</span>
+          <input type="number" id="m-e-n" inputmode="numeric" min="1" max="600" step="1"></label>
+        <label class="field" for="m-e-fund"><span class="label">Fund, if you keep more than one</span>
+          <input type="text" id="m-e-fund" autocomplete="off"></label>
+        <p class="gloss" id="m-e-note" aria-live="polite"></p>
+        <div class="actions">
+          <button class="primary" id="m-e-save" type="button">Keep this line</button>
+          <button class="linkish" id="m-e-cancel" type="button">Cancel</button>
+          <button class="linkish" id="m-e-drop" type="button" hidden>Remove this line</button>
+        </div>
+      </div>
+
+      <div class="boxed" id="m-paste" hidden>
+        <p class="label">Two columns: the date, then the amount</p>
+        <p class="gloss">A minus in front of an amount means money out.</p>
+        <textarea id="m-paste-text" rows="6" spellcheck="false"
+                  placeholder="2021-04-05&#9;5000&#10;2023-08-14&#9;-50000"></textarea>
+        <p class="gloss" id="m-paste-note" aria-live="polite"></p>
+        <button class="primary" id="m-paste-read" type="button">Read these lines</button>
+      </div>
+
+      <h2 style="margin-top:1.75rem">Worth today</h2>
+      <div class="pair">
+        <label class="field" for="m-worth"><span class="label">What it is all worth</span>
+          <input type="number" id="m-worth" inputmode="decimal" min="0" step="any"></label>
+        <label class="field" for="m-worth-on"><span class="label">On</span>
+          <input type="date" id="m-worth-on"></label>
+      </div>
+
+      <button class="primary" id="m-run" type="button" disabled style="margin-top:1.25rem">Show me my return</button>
+    </div>
+
+    <div class="section" id="m-result" hidden aria-live="polite"><div id="m-out"></div></div>
   </section>
+
+  <!-- ================================================ TOOL 4 · plan, tested -->
   <section data-view="plan" hidden>
     <h1>My plan, tested</h1>
-    <p class="gloss">Not built yet. Build order step 5.</p>
+
+    <div class="section">
+      <label class="field" for="p-q"><span class="label">The fund to test it against</span>
+        <input type="text" id="p-q" autocomplete="off" placeholder="Type part of its name"></label>
+      <p class="gloss" id="p-fund-state" aria-live="polite"></p>
+      <button class="linkish" id="p-file-open" type="button">Load a file instead</button>
+      <input type="file" id="p-file" accept=".csv,.txt,.xlsx,.json" hidden>
+      <label class="field" for="p-rate" id="p-suppose" style="max-width:14rem">
+        <span class="label">Suppose, % a year</span>
+        <input type="number" id="p-rate" inputmode="decimal" step="0.1" min="0" max="100"></label>
+    </div>
+
+    <div class="section">
+      <p class="label">The plan</p>
+      <label class="field" for="p-have"><span class="label">What you have already</span>
+        <input type="number" id="p-have" inputmode="decimal" min="0" step="any"></label>
+      <label class="field" for="p-monthly"><span class="label">What you can put in each month</span>
+        <input type="number" id="p-monthly" inputmode="decimal" min="0" step="any"></label>
+      <label class="field" for="p-step"><span class="label">Raise it each year by, % (optional)</span>
+        <input type="number" id="p-step" inputmode="decimal" min="0" max="50" step="0.5"></label>
+      <label class="field" for="p-years"><span class="label">For how many years</span>
+        <input type="number" id="p-years" inputmode="numeric" min="1" max="40" step="1"></label>
+      <label class="field" for="p-needed"><span class="label">How much you need at the end</span>
+        <input type="number" id="p-needed" inputmode="decimal" min="0" step="any"></label>
+    </div>
+
+    <div id="p-out" aria-live="polite"></div>
   </section>
 
   <footer class="foot">
@@ -134,6 +234,8 @@
 <script src="lifeline.js"></script>
 <script src="record.js"></script>
 <script src="stand.js"></script>
+<script src="mine.js"></script>
+<script src="plan.js"></script>
 <script src="boot.js"></script>
 </body>
 </html>

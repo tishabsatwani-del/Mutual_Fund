@@ -9,14 +9,14 @@
   var W = root.WYS;
 
   W.view('home', {});
-  W.view('mine', {});
-  W.view('plan', {});
 
   function boot() {
     W.$('#home-promise').innerHTML = W.slot('LANDING-PROMISE');
     W.$('#foot-refrains').innerHTML = W.slot('FOOTER-REFRAINS');
     root.WYSRecord.init();
     root.WhereYouStand.init();
+    root.WYSMine.init();
+    root.WYSPlan.init();
     W.start();
   }
 
