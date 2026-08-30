@@ -15,6 +15,7 @@ screens are still live at `../`; these replace them.
 | `boot.js` | Starts the four tools, draws About, registers the shell |
 | `reading.js` | Draws a saved reading as an image, always on day paper |
 | `sw.js`, `manifest.webmanifest`, `icon/` | The offline shell |
+| `tokens.html`, `tokens.js` | The token sheet, built from the build |
 | *(shared)* `sim/upload.js` | The §5 door: its questions, its stitching, its messages |
 | *(shared)* `sim/workbook.js` | Reads an .xlsx without a library |
 | `shots/` | The twelve screenshots — run `node tools/v3/shoot.js` |
@@ -22,7 +23,7 @@ screens are still live at `../`; these replace them.
 
 ```
 python3 tools/v3/build_deck.py     # after editing sim/copy.json or sim/states.json
-node tools/tool-tests/v3.test.js   # 258 checks, needs a server on 8781
+node tools/tool-tests/v3.test.js   # 281 checks, needs a server on 8781
 node sim/tests/upload.test.js      # 41 checks on the door, headless
 node tools/v3/shoot.js             # the twelve screenshots, same server
 ```
@@ -162,6 +163,32 @@ Two overflows the suite caught, both of them section 11's "never wider than its
 container" in text: the footer ran off the right edge, and so did an AMFI-length
 fund name. Both wrap now, and a check paints the right margin and fails if a
 single pixel lands in it.
+
+## The token sheet
+
+`tokens.html` is §13's last deliverable: colours, type scale, spacing, radii and
+the number formats, on one page. It is **generated from the build** — it fetches
+`theme.css`, parses both palettes out of it, and calls `sim/format.js` for every
+example — so the sheet and the product cannot disagree. If a value on that page
+is wrong, it is wrong in the product.
+
+Every contrast ratio is **measured there, not quoted**. A number a designer
+cannot check is one they have to take on trust, and this whole product is an
+argument against doing that. Each token is measured against the ground it
+actually sits on: the reader's own figures against the composited marker band,
+button text against ink. A ratio taken against a colour the pair never meets on
+screen proves nothing.
+
+Building it that way surfaced two things immediately. `--marker-ink` had been
+documented against paper when by day it always sits on the band — the sheet now
+reports 12.77:1, which is the review's own figure and the pair that actually
+appears. And `--marker-line`'s day value is **never used**: every use of it sits
+inside a dark-scheme block. The sheet reads usage out of the stylesheet and says
+so, rather than showing a ratio for a colour nobody sees.
+
+The suite drives the sheet too, so it is a **checker** as well as a document: if
+a colour drops below the floor its job needs, or a number format drifts, the
+build fails rather than the sheet quietly lying.
 
 ## Copy
 

@@ -40,6 +40,8 @@ var SHELL = [
   'plan.js',
   'boot.js',
   'reading.js',
+  'tokens.html',
+  'tokens.js',
   '../parse.js',
   '../../sim/format.js',
   '../../sim/workbook.js',

@@ -1195,6 +1195,75 @@ const NIGHT = { paper: '#12161E', ink: '#E8E6E1', muted: '#9AA1AE', slate: '#8FA
     await ctx.close();
   }
 
+  /* ============================ review v4 §13 · the token sheet, as a check
+   *
+   * The sheet builds itself from theme.css and sim/format.js, which makes it
+   * a checker as well as a document: if a colour moves below its floor or a
+   * number format drifts, this fails rather than the sheet quietly lying.
+   */
+  section('Step 13 · the token sheet');
+  {
+    const ctx = await browser.newContext({ viewport: { width: 900, height: 1200 } });
+    const page = await ctx.newPage();
+    const errors = [];
+    page.on('pageerror', e => errors.push(e.message));
+    await page.goto(BASE + 'tokens.html', { waitUntil: 'networkidle' });
+    await page.waitForTimeout(500);
+
+    ok('the sheet builds itself from the stylesheet',
+       (await page.evaluate(() => document.body.dataset.ready)) === 'yes');
+    ok('no colour pair is below the floor its job needs',
+       (await page.locator('#colours .fail').count()) === 0,
+       await page.locator('#colours .fail').allInnerTexts().then(t => t.join(', ')));
+
+    /* The ratios the review states, measured here rather than quoted there. */
+    const measured = await page.locator('#colours').innerText();
+    for (const [token, ratio] of [['--ink', '13.48:1'], ['--muted', '4.94:1'],
+                                  ['--slate', '4.75:1'], ['--rule-edge', '3.04:1'],
+                                  ['--marker-ink', '12.77:1']]) {
+      const row = measured.split('\n').find(l => l.startsWith(token));
+      ok('the measured ratio for ' + token + ' is the one the review states',
+         !!row && row.includes(ratio), row || 'row not found');
+    }
+    ok('and the night edge clears three to one as well', /3\.03:1/.test(measured));
+
+    /* A token measured against a ground the pair never meets proves nothing,
+       so the reader's own figures are measured on the composited band. */
+    ok('the composited marker band is named and measured',
+       /the composited band/.test(measured) && /#f9eaa1/i.test(measured), measured.slice(-200));
+    /* A declared token nobody uses should not sit here looking live. */
+    ok('a token unused on a sheet says so rather than showing a ratio',
+       /not used by day/.test(measured), measured);
+
+    const numbers = await page.locator('#numbers').innerText();
+    [['₹87,500'], ['₹4.20 lakh'], ['₹4,20,000'], ['₹1.26 crore'],
+     ['₹1,26,42,444'], ['₹4,312 crore'], ['₹43,12,00,00,000']].forEach(([cell]) => {
+      ok('the sheet prints ' + cell + ' from the module itself', numbers.includes(cell), numbers);
+    });
+
+    const other = await page.locator('#other-formats').innerText();
+    ok('a true minus, a closed-up percent and a dd-MMM-yyyy date are all shown',
+       /−3\.4%/.test(other) && /9\.2%/.test(other) && /01-Apr-2021/.test(other), other);
+    ok('and the span uses "to", never a dash',
+       /01-Apr-2021 to 30-Aug-2026/.test(other), other);
+
+    const caps = await page.locator('#caps').innerText();
+    ok('every input cap is stated with the sentence it refuses with',
+       /0% to 30%/.test(caps) && /0% to 25%/.test(caps) && /0% to 20%/.test(caps) &&
+       /1 to 50/.test(caps) && /₹1,000 crore/.test(caps), caps);
+
+    ok('the rules that are not values are on it too',
+       /No red and no green anywhere/.test(await page.locator('.rules').innerText()) &&
+       /Marker means/.test(await page.locator('.rules').innerText()));
+
+    ok('the sheet does not scroll sideways either',
+       (await page.evaluate(() => document.documentElement.scrollWidth -
+                                  document.documentElement.clientWidth)) <= 0);
+    ok('no script errors building the sheet', errors.length === 0, errors.join(' | '));
+    await page.screenshot({ path: path.join(TMP, 'v3-tokens.png'), fullPage: true });
+    await ctx.close();
+  }
+
   section('Reduced motion');
   {
     const ctx = await browser.newContext({ viewport: { width: 390, height: 900 }, reducedMotion: 'reduce' });
