@@ -138,10 +138,44 @@ var stepped = [
   { t: d(2022, 1, 1), v: 200 }
 ];
 var oneYear = E.rollingReturns(stepped, 1);
-close('a doubling year measures 100%', oneYear.stats.max, 1.0, 1e-9);
+
+/* These three expectations look like they should be round numbers and are not,
+ * because 2020 is a leap year and the tool's year is 365 days.
+ *
+ * The money doubled, but it took 366 days to do it, so its rate per 365-day
+ * year is 2^(365/366) - 1 = 99.62%, not 100%. That is not an approximation of
+ * the "right" answer; it IS the right answer once a year is fixed at 365 days,
+ * which the whole product does so that the screens and the workbook and Excel's
+ * own XIRR cannot disagree. Anyone tempted to round these back to 1.0 should
+ * change the convention deliberately, not the assertion. */
+var LEAP_DOUBLE = Math.pow(2, 365 / 366) - 1;
+close('a doubling leap year measures 99.62%, not 100%', oneYear.stats.max, LEAP_DOUBLE, 1e-12);
+close('and the closed form agrees', oneYear.stats.max, 0.9962158948735886, 1e-12);
 close('a flat year measures 0%', oneYear.stats.min, 0.0, 1e-9);
-close('two-year window over a double then flat = 41.42%',
-  E.rollingReturns(stepped, 2).stats.mean, Math.sqrt(2) - 1, 1e-9);
+
+/* Two years spanning one leap day: 731 elapsed days, not 730. */
+close('two-year window over a double then flat = 41.35%',
+  E.rollingReturns(stepped, 2).stats.mean, Math.pow(2, 365 / 731) - 1, 1e-12);
+
+section('Rolling returns — the annualisation convention');
+/* The window that decides this is one that ended short of its target date,
+ * which the seven-day matching rule produces on any weekday-only NAV file.
+ * Under the nominal reading it would be priced over the window's full nominal
+ * length; under the convention the review fixes, it is priced over the days
+ * that actually elapsed. */
+var weekdays = [];
+for (var wt = d(2015, 1, 1); wt <= d(2023, 1, 1); wt += 86400000) {
+  var dow = new Date(wt).getUTCDay();
+  if (dow !== 0 && dow !== 6) weekdays.push({ t: wt, v: 100 * Math.pow(1.11, E.dayCount(d(2015, 1, 1), wt) / 365) });
+}
+var wd = E.rollingReturns(weekdays, 5);
+var shortWindow = wd.pairs.filter(function (p) { return p.days !== E.dayCount(p.t, E.addYears(p.t, 5)); })[0];
+ok('a real weekday file produces windows that end short of target', !!shortWindow);
+close('and such a window is priced over the days that actually elapsed',
+  shortWindow.r,
+  Math.pow(Math.pow(1.11, shortWindow.days / 365), 365 / shortWindow.days) - 1, 1e-12);
+close('which on an 11% series is 11%, whatever the window length',
+  wd.stats.median, 0.11, 1e-9);
 
 section('Rolling returns — which start date produced which result');
 var dated = E.rollingReturns(stepped, 1);
@@ -149,7 +183,7 @@ ok('the best window names the day it started', dated.best.t === d(2020, 1, 1),
    String(dated.best && dated.best.t));
 ok('the worst window names its own start day', dated.worst.t === d(2021, 1, 1),
    String(dated.worst && dated.worst.t));
-close('the best window carries its own return', dated.best.r, 1.0, 1e-9);
+close('the best window carries its own return', dated.best.r, LEAP_DOUBLE, 1e-12);
 ok('every window is kept, not just the summary', dated.pairs.length === dated.values.length);
 
 section('Rolling returns — refuses rather than guesses');
