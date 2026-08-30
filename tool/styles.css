@@ -5,65 +5,62 @@
  * because a chart colour has a job that a brand colour does not. */
 
 :root {
-  color-scheme: light;
-  --bg: #fbfaf8;
-  --surface: #ffffff;
-  --surface-2: #f4f2ee;
-  --ink: #16181c;
-  --ink-2: #4b5563;
-  --muted: #6b7280;
-  --line: #e3e1dc;
-  --line-strong: #cfccc4;
-  --accent: #1f4e5f;
-  --accent-ink: #ffffff;
-  --accent-soft: #eaf3f6;
-  --series-1: #2a78d6;
-  --series-2: #eb6834;
-  --good: #0ca30c;
-  --critical: #d03b3b;
-  --shadow: 0 1px 2px rgba(20, 24, 28, .06), 0 8px 24px rgba(20, 24, 28, .05);
+  /* One committed dark world, not a light theme with a dark variant. The
+     palette is the author's: deep obsidian ground, electric turquoise as the
+     one accent, cards a shade lighter with a hairline of the accent on them.
+     Every colour below is painted explicitly so the page never borrows a
+     ground from anywhere else. */
+  color-scheme: dark;
+
+  --bg:          #0A0E17;   /* deep obsidian — better than pure black, gives depth */
+  --surface:     #161F30;   /* cards and panels */
+  --surface-2:   #1E2942;   /* inputs, insets, table stripes */
+  --surface-3:   #0E1522;   /* wells, deeper than the ground */
+
+  --ink:         #FFFFFF;   /* headings and figures — 19.3:1 */
+  --ink-2:       #C9D4E3;   /* body text — 12.6:1 */
+  --muted:       #8593A8;   /* least important text and captions — 5.3:1 on a card.
+                               The supplied #64748B measured 3.47:1 there, which is
+                               under the 4.5 floor, so it is lifted just enough to
+                               pass while staying the same slate. */
+
+  /* The hairline on cards is the accent at low alpha, which is what makes the
+     turquoise read as a system rather than as a highlight colour. */
+  --line:        rgba(0, 242, 254, .14);
+  --line-strong: rgba(0, 242, 254, .34);
+
+  --accent:      #00F2FE;   /* electric turquoise */
+  --accent-2:    #4FACFE;   /* the gradient's other end */
+  --accent-ink:  #04121A;   /* text on a turquoise surface — 15.1:1 */
+  --accent-soft: rgba(0, 242, 254, .10);
+  --emerald:     #05FFC4;
+
+  /* Data marks are a separate job from brand colour, so they are separate
+     tokens. Turquoise and neo-emerald cannot be two lines on one chart:
+     measured against each other they are ΔE 9.8 for normal vision and 1.5 for
+     tritan, which is indistinguishable. So the second series is amber, which
+     separates at ΔE 26 and still belongs to this world. */
+  --series-1:    #22D3EE;   /* the reader's own data */
+  --series-2:    #F0A93B;   /* the comparison */
+  --series-3:    #A78BFA;
+  --good:        #05FFC4;
+  --critical:    #FF7A6B;
+
+  --glow:        0 0 24px -6px rgba(0, 242, 254, .55);
+  --shadow:      0 1px 2px rgba(0, 0, 0, .55), 0 10px 30px rgba(0, 0, 0, .45);
   --radius: 12px;
   --serif: Georgia, "Times New Roman", serif;
   --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    color-scheme: dark;
-    --bg: #16181c;
-    --surface: #1d2026;
-    --surface-2: #23272e;
-    --ink: #eef1f4;
-    --ink-2: #c2cad4;
-    --muted: #9aa5b1;
-    --line: #2b3038;
-    --line-strong: #3a414b;
-    --accent: #7fc6dd;
-    --accent-ink: #0d1b21;
-    --accent-soft: #1c2c33;
-    --series-1: #3987e5;
-    --series-2: #d95926;
-    --good: #0ca30c;
-    --critical: #d03b3b;
-    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px rgba(0, 0, 0, .3);
-  }
+
+/* The one place the gradient appears as type: the single most important word
+   in a heading. Everything else stays white. */
+.grad {
+  background: linear-gradient(96deg, var(--accent) 0%, var(--accent-2) 100%);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: var(--accent);
 }
-:root[data-theme="dark"] {
-  color-scheme: dark;
-  --bg: #16181c;
-  --surface: #1d2026;
-  --surface-2: #23272e;
-  --ink: #eef1f4;
-  --ink-2: #c2cad4;
-  --muted: #9aa5b1;
-  --line: #2b3038;
-  --line-strong: #3a414b;
-  --accent: #7fc6dd;
-  --accent-ink: #0d1b21;
-  --accent-soft: #1c2c33;
-  --series-1: #3987e5;
-  --series-2: #d95926;
-  --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px rgba(0, 0, 0, .3);
-}
+@supports not (background-clip: text) { .grad { -webkit-text-fill-color: var(--accent); } }
 
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
@@ -74,6 +71,13 @@ body {
   font-family: var(--sans);
   font-size: 16px;
   line-height: 1.55;
+  /* Two soft pools of light, fixed, so the ground has depth without a single
+     extra layer to composite while scrolling. */
+  background-image:
+    radial-gradient(90rem 44rem at 12% -12%, rgba(0, 242, 254, .07), transparent 62%),
+    radial-gradient(70rem 38rem at 96% 6%, rgba(79, 172, 254, .06), transparent 60%);
+  background-attachment: scroll;
+  background-repeat: no-repeat;
 }
 .wrap { max-width: 46rem; margin: 0 auto; padding: 0 1rem 5rem; }
 
@@ -113,11 +117,39 @@ body[data-view="home"] .backlink { display: none !important; }
   padding: 1.05rem 1.1rem; cursor: pointer; font: inherit; color: inherit;
   box-shadow: var(--shadow); transition: border-color .12s ease, transform .12s ease;
 }
-.tile:hover { border-color: var(--accent); }
+.tile { position: relative; overflow: hidden; }
+/* A thread of the accent along the top edge, brightening on approach. It is
+   the cheapest way to make a flat dark card read as lit rather than printed. */
+.tile::before {
+  content: ""; position: absolute; inset: 0 0 auto 0; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  opacity: .35; transition: opacity .16s ease;
+}
+.tile:hover { border-color: rgba(0, 242, 254, .55); box-shadow: var(--shadow), 0 0 26px -12px rgba(0, 242, 254, .6); }
+.tile:hover::before { opacity: 1; }
 .tile:active { transform: translateY(1px); }
 .tile-step { font-size: .7rem; text-transform: uppercase; letter-spacing: .09em; color: var(--muted); }
 .tile h2 { font-family: var(--serif); font-size: 1.15rem; margin: .3rem 0 .25rem; }
 .tile p { margin: 0; color: var(--ink-2); font-size: .92rem; }
+
+.questions { background:
+    radial-gradient(50rem 18rem at 100% 0%, rgba(5, 255, 196, .07), transparent 65%),
+    var(--surface); }
+.qlist { margin: 0; padding-left: 0; list-style: none; counter-reset: q; }
+.qlist li {
+  counter-increment: q; position: relative;
+  padding: .5rem 0 .5rem 2.4rem; color: var(--ink-2); font-size: .95rem;
+  border-top: 1px solid var(--line);
+}
+.qlist li:first-child { border-top: 0; }
+.qlist li b { color: var(--ink); font-weight: 600; }
+.qlist li::before {
+  content: counter(q); position: absolute; left: 0; top: .55rem;
+  width: 1.6rem; height: 1.6rem; border-radius: 50%;
+  border: 1px solid var(--line-strong); color: var(--accent);
+  font-size: .8rem; font-weight: 700; font-variant-numeric: tabular-nums;
+  display: inline-flex; align-items: center; justify-content: center;
+}
 
 /* ------------------------------------------------------------------- views */
 .view { display: none; }
@@ -129,7 +161,8 @@ body[data-view="home"] .backlink { display: none !important; }
 
 .card {
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
-  padding: 1.1rem; margin-bottom: 1rem; box-shadow: var(--shadow);
+  padding: 1.1rem; margin-bottom: 1rem;
+  box-shadow: var(--shadow), inset 0 1px 0 rgba(255, 255, 255, .04);
 }
 .card > h2 { font-family: var(--serif); font-size: 1.1rem; margin: 0 0 .8rem; }
 .card > h3 { font-size: .95rem; margin: 1.2rem 0 .5rem; }
@@ -163,10 +196,17 @@ input:disabled, select:disabled, button:disabled {
 .field .hint { font-size: .8rem; color: var(--muted); margin-top: .25rem; }
 input[type="text"], input[type="number"], input[type="date"], select {
   width: 100%; min-height: 44px; padding: .55rem .7rem;
-  background: var(--surface); color: var(--ink);
+  /* A well, not another card. On a dark ground an input that shares the card's
+     fill stops looking like somewhere you can type. */
+  background: var(--surface-3); color: var(--ink);
   border: 1px solid var(--line-strong); border-radius: 9px;
   font: inherit; font-size: 1rem;
   font-variant-numeric: tabular-nums;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, .5);
+  transition: border-color .12s ease, box-shadow .12s ease;
+}
+input[type="text"]:hover, input[type="number"]:hover, input[type="date"]:hover, select:hover {
+  border-color: rgba(0, 242, 254, .5);
 }
 input:focus-visible, select:focus-visible, button:focus-visible, .tile:focus-visible, a:focus-visible {
   outline: 3px solid var(--accent); outline-offset: 2px;
@@ -180,10 +220,15 @@ input:focus-visible, select:focus-visible, button:focus-visible, .tile:focus-vis
 button.primary, .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: .4rem;
   min-height: 46px; padding: .6rem 1.1rem;
-  background: var(--accent); color: var(--accent-ink);
+  background: linear-gradient(96deg, var(--accent) 0%, var(--accent-2) 130%);
+  color: var(--accent-ink);
   border: 1px solid var(--accent); border-radius: 9px;
   font: inherit; font-weight: 600; font-size: 1rem; cursor: pointer; text-decoration: none;
+  box-shadow: var(--glow);
+  transition: transform .1s ease, box-shadow .16s ease, filter .12s ease;
 }
+button.primary:hover, .btn:hover { box-shadow: 0 0 30px -4px rgba(0, 242, 254, .7); }
+button.primary:active, .btn:active { transform: translateY(1px); filter: brightness(.95); }
 button.secondary {
   min-height: 44px; padding: .5rem .9rem;
   background: var(--surface); color: var(--ink); border: 1px solid var(--line-strong);
@@ -241,13 +286,27 @@ button.link {
 
 /* ------------------------------------------------------------------ result */
 .result {
-  background: var(--accent-soft); border: 1px solid var(--line);
-  border-radius: var(--radius); padding: 1.15rem; margin-bottom: 1rem;
+  position: relative; overflow: hidden;
+  background:
+    radial-gradient(60rem 20rem at 0% 0%, rgba(0, 242, 254, .13), transparent 70%),
+    var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius); padding: 1.3rem 1.15rem; margin-bottom: 1rem;
+  box-shadow: var(--shadow), inset 0 1px 0 rgba(255, 255, 255, .05);
 }
-.result .label { font-size: .8rem; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-2); }
+.result::before {
+  content: ""; position: absolute; inset: 0 0 auto 0; height: 2px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2), transparent);
+}
+.result .label { font-size: .8rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
 .result .value {
-  font-family: var(--serif); font-size: 2.6rem; line-height: 1.05; font-weight: 700;
-  margin: .2rem 0 .1rem; font-variant-numeric: tabular-nums; letter-spacing: -.02em;
+  font-family: var(--serif); font-size: 2.9rem; line-height: 1.05; font-weight: 700;
+  margin: .25rem 0 .15rem; font-variant-numeric: tabular-nums; letter-spacing: -.025em;
+  /* The headline figure is white. It is deliberately NOT coloured by whether it
+     is positive: the book's whole argument is that a return is not good or bad
+     until five questions have been asked of it, and a green number answers the
+     question before the reader has asked it. */
+  color: var(--ink);
 }
 .result .value.small { font-size: 1.4rem; }
 .result .sub { color: var(--ink-2); font-size: .95rem; }
@@ -255,12 +314,16 @@ button.link {
 .stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: .5rem; margin: .9rem 0; }
 @media (min-width: 34rem) { .stats { grid-template-columns: repeat(4, 1fr); } }
 .stat {
-  background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: .65rem .7rem;
+  background: var(--surface-3); border: 1px solid var(--line); border-radius: 10px; padding: .7rem .75rem;
 }
 .stat .k { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
 .stat .v { font-size: 1.15rem; font-weight: 700; font-variant-numeric: tabular-nums; margin-top: .15rem; }
 
-.meaning { border-left: 3px solid var(--accent); padding: .1rem 0 .1rem .85rem; margin: 1rem 0; }
+.meaning {
+  border-left: 3px solid transparent;
+  border-image: linear-gradient(180deg, var(--accent), var(--accent-2)) 1;
+  padding: .1rem 0 .1rem .85rem; margin: 1rem 0;
+}
 .meaning h3 { font-size: .8rem; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin: 0 0 .3rem; }
 .meaning p { margin: 0 0 .6rem; color: var(--ink-2); font-size: .95rem; }
 .meaning p:last-child { margin-bottom: 0; }
@@ -280,6 +343,8 @@ table.data th, table.data td { text-align: right; padding: .45rem .4rem; border-
 table.data th:first-child, table.data td:first-child { text-align: left; }
 table.data.spread th, table.data.spread td { text-align: center; white-space: nowrap; }
 table.data.spread th:first-child, table.data.spread td:first-child { text-align: center; }
+.qsub { color: var(--muted); font-size: .82rem; font-weight: 400; }
+details.explain.card { padding: 1.1rem; border-top: 1px solid var(--line); }
 table.data th { font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; }
 .scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 

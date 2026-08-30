@@ -130,6 +130,18 @@
       trow('Period', years.toFixed(1) + ' years') +
       '</tbody></table>';
 
+    /* ------------------------------------------------ whose maths is it?
+     * Two arithmetics are on this screen and they will not match. The book's
+     * first question is exactly this, so the tool answers it out loud rather
+     * than leaving the reader to wonder which number is wrong. Neither is. */
+    html += twoNumbersCard(abs, rate, years);
+
+    /* ------------------------------------------- after the bill, what is left?
+     * Inflation is the one return that compounds against every rupee. It ships
+     * with no rate filled in: a number here would be the tool telling the
+     * reader what to expect, and that is not its job. */
+    html += realReturnCard(rate);
+
     html += '<div class="meaning"><h3>What this means</h3>' +
       '<p>Your money grew at about <strong>' + pct(rate) + ' a year</strong>, taking into account the date ' +
       'every rupee went in and came out. Money you invested early had longer to work than money you ' +
@@ -142,7 +154,13 @@
       '<p>This is not the fund\'s return. A fund can publish a strong number while your own is weaker, ' +
       'simply because of when you happened to invest. The fund\'s figure describes the fund. This one ' +
       'describes you.</p>' +
-      '<p>It is before exit load and before tax, so what you finally keep will be a little less.</p></div>';
+      '<p>It compares with nothing else, either. Not the fund\'s own return, not another investor\'s, ' +
+      'not your other fund. Each of those ran on a different set of dates.</p>' +
+      '<p>It is before exit load and before tax, so what you finally keep will be a little less. On an ' +
+      'equity fund held for years, plan on roughly a point a year less once the tax is paid, and more ' +
+      'than that if you sell early.</p></div>';
+
+    html += disagreeCard();
 
     html += '<div class="meaning"><h3>What to look at next</h3>' +
       '<p>A return means little without a period and a comparison. Use <button class="link" data-go="history">' +
@@ -154,6 +172,110 @@
 
     if ($('#pf-group').value === 'on') html += byLabel(flows, rate);
     out.innerHTML = html;
+    wireRealReturn(rate);
+  }
+
+  function wireRealReturn(rate) {
+    var input = $('#pf-infl'), out = $('#pf-real-out');
+    if (!input || !out) return;
+    input.addEventListener('input', function () {
+      var i = parseFloat(input.value);
+      if (!isFinite(i)) { out.innerHTML = ''; return; }
+      var real = (1 + rate) / (1 + i / 100) - 1;
+      out.innerHTML = '<div class="stats" style="margin:.2rem 0 0">' +
+        stat('Your return', pct(rate)) +
+        stat('Inflation', i.toFixed(1) + '%') +
+        stat('What is left', pct(real)) +
+        '</div>' +
+        '<p class="hint" style="margin:.7rem 0 0">' +
+        (real < 0
+          ? 'Below zero. Over this period your money bought less at the end than at the start, and no ' +
+            'statement anywhere printed a minus sign for it.'
+          : 'This is the part that actually bought you something. Everything above it went on holding ' +
+            'the price of things steady.') + '</p>';
+    });
+  }
+
+  /* The book's first question, answered on the reader's own numbers.
+   *
+   * Absolute return has no clock in it. XIRR is a yearly rate. Early on, a
+   * small total gain gets stretched to a yearly pace and XIRR reads higher; as
+   * the years pile up the total keeps growing while the yearly rate does not,
+   * and somewhere near the two-year mark the total overtakes it for good. That
+   * crossover is the single most common reason two figures on one screen look
+   * like a contradiction, so the tool says which side of it the reader is on. */
+  function twoNumbersCard(abs, rate, years) {
+    var absAhead = abs > rate;
+    var sentence = years < 1
+      ? 'Under a year, the yearly rate is the one to ignore. It stretches a short stretch to a ' +
+        'twelve-month pace: a 5% gain in two months reads as about 34% a year, which is not something ' +
+        'that has happened to anyone. Read the total gain instead.'
+      : absAhead
+        ? 'Your total gain is now the bigger of the two. That happens to everyone somewhere near the ' +
+          'two-year mark and it means nothing is wrong: the total keeps piling up year after year, ' +
+          'while the yearly rate stays a per-year figure.'
+        : 'Your yearly rate is currently the bigger of the two. Early on, the total gain is still small ' +
+          'and the yearly rate stretches it to a twelve-month pace. As the years pass the total will ' +
+          'overtake it, usually near the two-year mark.';
+
+    return '<div class="card"><h2>Two numbers, two different questions</h2>' +
+      '<p class="hint" style="margin:0 0 .9rem">Both are on this screen, they do not match, and ' +
+      'nothing is wrong. They are answering different questions.</p>' +
+      '<div class="scroll"><table class="data"><tbody>' +
+      '<tr><td><strong>Absolute return</strong><br><span class="qsub">How much more do I have than ' +
+      'I put in?</span></td><td>' + esc(A.signedPct(abs)) + '<br><span class="qsub">in total &middot; ' +
+      'no clock in it</span></td></tr>' +
+      '<tr><td><strong>XIRR</strong><br><span class="qsub">At what yearly speed did my own money ' +
+      'travel?</span></td><td>' + pct(rate) + '<br><span class="qsub">a year &middot; counts every ' +
+      'date</span></td></tr>' +
+      '</tbody></table></div>' +
+      '<p style="margin:.9rem 0 0;color:var(--ink-2);font-size:.95rem">' + sentence + '</p>' +
+      '<details class="explain"><summary>And the third one, CAGR, which is not yours</summary>' +
+      '<div class="body"><p>CAGR is the number a fund publishes. It answers one question: if a single ' +
+      'rupee had gone in on the first day of the period shown and had never been touched, at what ' +
+      'steady yearly speed did it grow?</p>' +
+      '<p>If you invested monthly, that is not your return, because it measures one lump sum that went ' +
+      'in on day one and stayed. It is also measured between the first and last day of the period the ' +
+      'fund printed, not between the day you bought and the day you are reading.</p>' +
+      '<p>Use CAGR to compare one fund with another over the same period. Use the XIRR above to see ' +
+      'what your own money did. They are not rivals; they are answers to different questions.</p>' +
+      '</div></details></div>';
+  }
+
+  /* The book's third question. The subtraction most statements never print. */
+  function realReturnCard(rate) {
+    return '<div class="card" id="pf-real"><h2>After the bill, what is left?</h2>' +
+      '<p class="hint" style="margin:0 0 .9rem">Your return is printed on the statement. Your real ' +
+      'earning is printed on the shop&rsquo;s bill. Type the inflation figure you want to measure ' +
+      'against &mdash; this tool does not choose one for you.</p>' +
+      '<div class="field" style="max-width:15rem"><label for="pf-infl">Inflation, % a year</label>' +
+      '<input type="number" id="pf-infl" inputmode="decimal" step="0.1" min="0" max="100" ' +
+      'placeholder="e.g. 6"></div>' +
+      '<div id="pf-real-out"></div>' +
+      '<details class="explain"><summary>How this is worked out</summary><div class="body">' +
+      '<p>The quick version is your return minus inflation. The exact version, which this tool uses, ' +
+      'is (1 + return) &divide; (1 + inflation) &minus; 1. On a 12% return in a 6% year the quick ' +
+      'maths says 6 and the exact maths says 5.66.</p>' +
+      '<p>The official basket is not your basket. If your life is heavy with school fees or hospital ' +
+      'bills, both of which have outrun the headline figure for years, your real subtraction is bigger ' +
+      'than the country&rsquo;s.</p></div></details></div>';
+  }
+
+  /* Five checks that dissolve almost every "these two screens disagree". */
+  function disagreeCard() {
+    return '<details class="explain card"><summary>When two screens disagree about the same fund</summary>' +
+      '<div class="body"><p style="margin-top:0">Before you distrust anyone, run five checks.</p>' +
+      '<dl>' +
+      '<dt>The plan</dt><dd>Direct and Regular are different rows, and Regular carries the ' +
+      'distributor&rsquo;s commission.</dd>' +
+      '<dt>The option</dt><dd>Growth and IDCW are different histories. An IDCW NAV falls each time ' +
+      'money is paid out.</dd>' +
+      '<dt>The method</dt><dd>One screen may be showing a total while the other shows a yearly rate, ' +
+      'or one shows the fund&rsquo;s CAGR while the other shows your XIRR.</dd>' +
+      '<dt>The window</dt><dd>A one-year figure and a five-year figure answer different questions.</dd>' +
+      '<dt>The date</dt><dd>Returns are dated. A page refreshed yesterday and one refreshed last week ' +
+      'are photographs of two different days.</dd>' +
+      '</dl><p>Five checks, ten seconds, and almost every mismatch dissolves.</p></div></details>';
   }
 
   function byLabel(flows, portfolioRate) {
@@ -425,6 +547,23 @@
     RATE_DATA[key] = r.values;
     var html = '';
 
+    /* The book's rule for trusting this page at all: the history should be at
+     * least three years longer than the window. Any less and every row starts
+     * inside a narrow band of dates, so the table is one short stretch of
+     * market measured over and over with its edges moved a little. The range it
+     * prints then comes from one period of history, and many periods is the
+     * entire point of the page. */
+    var spanYears = (series[series.length - 1].t - series[0].t) / (365.2425 * 86400000);
+    if (spanYears < years + 3) {
+      html += notice('bad',
+        '<strong>Read this range with suspicion.</strong> This data covers ' + spanYears.toFixed(1) +
+        ' years and you have asked for ' + years + '-year windows, so every window here begins inside a ' +
+        'band of about ' + Math.max(0, spanYears - years).toFixed(1) + ' years. They are not independent ' +
+        'stretches of market &mdash; they are one stretch measured over and over with its edges moved a ' +
+        'little. Three years of spare history is roughly the least it takes for windows to begin in ' +
+        'genuinely different markets. Shorten the window, or load a longer history.');
+    }
+
     html += '<div class="result"><div class="label">Median ' + years + '-year return, % a year</div>' +
       '<div class="value">' + pct(s.median) + '</div>' +
       '<div class="sub">' + esc(meta.name) + ' \u00b7 the middle of ' + s.count.toLocaleString() +
@@ -435,6 +574,10 @@
      * top of a screen becomes the number people remember, and it hides the
      * spread that actually decided what any one investor got. */
     html += '<div class="card"><h2>The range, not the average</h2>' +
+      '<p class="hint" style="margin:0 0 .8rem"><strong>Read the worst figure first.</strong> It is what ' +
+      'this market did over your holding period at its most unkind, and nobody tells you in advance ' +
+      'which stretch you are walking into. Read the average last, and never on its own &mdash; on its ' +
+      'own it is one more single number, which is the very thing this page exists to replace.</p>' +
       '<div class="scroll"><table class="data spread">' +
       '<caption>Annualised return, % a year, over every ' + years + '-year holding period</caption>' +
       '<thead><tr>' +
@@ -457,6 +600,7 @@
         caption: 'Each bar counts the ' + years + '-year periods that ended in that range'
       }) + '</div>';
 
+    html += worstIsNotWorstCard(series, s, years);
     html += startDateCard(r, years);
     html += drawdownCard(series);
     html += rateCheckCard(key, years, r.values);
@@ -479,6 +623,8 @@
       '<p>Periods overlap, so they are not independent samples. And the median is not a typical experience ' +
       'anyone actually had — it is the middle of many possible starting days.</p></div>';
 
+    html += trapsCard(years);
+
     html += '<details class="explain"><summary>See the numbers as a table</summary><div class="body"><div class="scroll">' +
       '<table class="data"><thead><tr><th>Return range</th><th>Periods</th><th>Share</th></tr></thead><tbody>' +
       E.histogram(r.values).map(function (b) {
@@ -490,6 +636,60 @@
       'rather than stretched.</p></div></details>';
 
     return html;
+  }
+
+  /* The worst window in a file is only the worst of the years the file covers.
+   * A history that begins after a crash has never been measured through one. */
+  function worstIsNotWorstCard(series, s, years) {
+    var firstT = series[0].t;
+    var first = new Date(firstT);
+    var startsAfter2008 = firstT > Date.UTC(2009, 5, 1);
+    return '<div class="card"><h2>The worst here is not the worst possible</h2>' +
+      '<p style="margin:0 0 .7rem;color:var(--ink-2)">The lowest figure on this page, ' +
+      '<strong>' + pct(s.min) + ' a year</strong>, is the worst this data has ever produced over ' +
+      years + ' years. It is not a floor. It is the worst of the years this file happens to cover, ' +
+      'which begin on ' + fmtDate(firstT) + '.</p>' +
+      (startsAfter2008
+        ? '<p style="margin:0;color:var(--ink-2)">This history begins after the crash of 2008, so it ' +
+          'has never been measured through that fall. Its worst window is the worst of a kinder era. ' +
+          'Treat the figure above as the worst <em>so far</em>, not the worst there is.</p>'
+        : '<p style="margin:0;color:var(--ink-2)">This history reaches back far enough to include the ' +
+          'crash of 2008, so the worst figure above has been tested against one of the deepest falls ' +
+          'this market has produced.</p>');
+  }
+
+  /* Four ways a published return misleads without anyone lying. Straight from
+   * the chapter, because a reader who knows these cannot be sold with them. */
+  function trapsCard(years) {
+    return '<details class="explain card"><summary>Four traps in any published return</summary>' +
+      '<div class="body"><dl>' +
+      '<dt>The ' + years + '-year number changes while the fund does not</dt>' +
+      '<dd>Both ends of the window move forward together. Most days that changes nothing, but when the ' +
+      '<em>starting</em> day crosses a crash, the figure swings hard while the fund does nothing at all. ' +
+      'In March 2020 the Sensex fell to about 26,000; five years later it stood near 78,000, so the ' +
+      'five-year return read about 24% a year &mdash; measured from the bottom of a crash. Seventeen ' +
+      'months on, the index was still near 78,000, but the starting day had moved to a market that had ' +
+      'already recovered to about 55,500, and the same five-year return read about 7%. The market went ' +
+      'nowhere. The starting line moved. When a fund you hold shows a sudden drop, check where the new ' +
+      'number sits in the range above: inside it, what you saw was a good year leaving, not a bad year ' +
+      'arriving. A sudden jump deserves the same suspicion.</dd>' +
+      '<dt>Since launch depends on the launch date</dt>' +
+      '<dd>Every other window slides forward daily. This one is pinned to the fund&rsquo;s first day ' +
+      'forever. A fund born at the bottom of a crash spends its first years riding the recovery and ' +
+      'looks brilliant for life; one born near a peak drags a poor figure for years. Put the ' +
+      'since-launch figure beside the five- and ten-year figures. If it sits far from them, it is a ' +
+      'fact about the fund&rsquo;s birthday, not about the fund.</dd>' +
+      '<dt>The record stays when the manager leaves</dt>' +
+      '<dd>A ten-year record can be the work of someone who left two years ago. The factsheet prints ' +
+      'the date each manager took over, usually as <em>managing since</em>. If that date is recent, ' +
+      'everything before it was somebody else&rsquo;s work.</dd>' +
+      '<dt>The list you choose from has been cleaned</dt>' +
+      '<dd>Funds that do badly for years are usually merged into better ones from the same house, and ' +
+      'their record vanishes from every list and every average. So a category average is the average ' +
+      'of the survivors, and every &ldquo;most funds beat the index&rdquo; claim counts only the funds ' +
+      'that lived. Nothing brings them back and no page will footnote them, so carry the correction ' +
+      'yourself: the true figure was a little worse.</dd>' +
+      '</dl></div></details>';
   }
 
   /* Same holding period, same market, different starting day. This is the

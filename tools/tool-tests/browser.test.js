@@ -157,12 +157,27 @@ fs.mkdirSync(TMP + '/shots', { recursive: true });
   const external = requests.filter(u => !u.startsWith(new URL(BASE_URL).origin + '/'));
   ok('the page makes no request to any other host', external.length === 0, external.join(', '));
 
-  /* ------------------------------------------------------------ dark mode */
+  /* --------------------------------------------------------- the one world
+   * The tool commits to a single dark palette rather than shipping a light
+   * theme with a dark variant, so the check is that the ground is painted
+   * explicitly and is the same under either OS setting. A page that borrows
+   * its background from the host is the bug this guards against. */
+  const obsidian = 'rgb(10, 14, 23)';
   const dark = await browser.newContext({ viewport: { width: 390, height: 844 }, colorScheme: 'dark', deviceScaleFactor: 2 });
   const dpage = await dark.newPage();
   await dpage.goto(BASE, { waitUntil: 'networkidle' });
   const bg = await dpage.evaluate(() => getComputedStyle(document.body).backgroundColor);
-  ok('dark mode paints its own background', bg === 'rgb(22, 24, 28)', 'got ' + bg);
+  ok('the page paints its own ground under a dark OS', bg === obsidian, 'got ' + bg);
+
+  const lightCtx = await browser.newContext({ viewport: { width: 390, height: 844 }, colorScheme: 'light' });
+  const lpage = await lightCtx.newPage();
+  await lpage.goto(BASE, { waitUntil: 'networkidle' });
+  const lbg = await lpage.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  ok('and the identical ground under a light OS', lbg === obsidian, 'got ' + lbg);
+  const lightInk = await lpage.evaluate(() => getComputedStyle(document.body).color);
+  ok('with light ink on it, never the host\'s dark text', lightInk === 'rgb(255, 255, 255)', 'got ' + lightInk);
+  await lightCtx.close();
+
   await dpage.screenshot({ path: path.join(SHOTS, '06-dark.png'), fullPage: true });
 
   /* ----------------------------------------------------------- no overflow */
