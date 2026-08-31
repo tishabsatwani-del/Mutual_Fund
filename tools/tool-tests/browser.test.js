@@ -296,15 +296,20 @@ fs.mkdirSync(TMP + '/shots', { recursive: true });
     '2024-06-01,25000,Zenith Flexi\n');
   await page.setInputFiles('#pf-file', sparseCsv);
   await page.waitForTimeout(700);
-  await page.selectOption('#pf-group', 'on');
-  await page.fill('#pf-worth', '200000');
+  /* Acme is valued and Zenith deliberately is not, so one holding on the same
+     screen can be measured and the other cannot -- which is the point: the
+     reason has to be that holding's own. */
+  await page.fill('#pf-val-0', '200000');
   await page.click('#pf-calc');
   await page.waitForTimeout(600);
   const perFund = await page.locator('#pf-out').innerText();
   ok('a holding that cannot be measured says what it is missing, not "not enough entries"',
      !/not enough entries/.test(perFund) &&
      /no valuation and no withdrawal|needs 2 dated rows|only a valuation/.test(perFund),
-     (perFund.match(/.{0,120}(Zenith Flexi).{0,120}/) || [''])[0]);
+     (perFund.match(/.{0,140}(Zenith Flexi).{0,140}/) || [''])[0].replace(/\n/g, ' | '));
+  ok('while the one that was valued is measured beside it',
+     /Acme Bluechip[\s\S]{0,60}%/.test(perFund),
+     (perFund.match(/Acme Bluechip[\s\S]{0,80}/) || [''])[0].replace(/\n/g, ' | '));
 
   /* ------------------------------------------ a statement of several tabs
    *
@@ -332,6 +337,68 @@ fs.mkdirSync(TMP + '/shots', { recursive: true });
   ok('and a switch out is called out by name, because it is the one that misleads',
      /switch out.*money leaving one fund and entering another/i
        .test((await page.locator('#pf-door-out').innerText()).replace(/\s+/g, ' ')));
+
+  /* ----------------------------------- a valuation per scheme, then two XIRRs
+   *
+   * A portfolio XIRR can be had from one total. A fund's OWN XIRR needs that
+   * fund's own ending, and there is no way to split one total back out across
+   * schemes -- so the ask is one row per fund, and answering it produces both
+   * levels at once.
+   */
+  await page.click('#pf-reset');
+  await page.waitForTimeout(200);
+  const schemeCsv = path.join(TMP, 'pf-schemes.csv');
+  fs.writeFileSync(schemeCsv,
+    'Date,Transaction Type,Amount,Units,Fund\n' +
+    '2021-04-05,Purchase,50000,1234.567,Acme Bluechip\n' +
+    '2022-04-05,Purchase,50000,987.654,Acme Bluechip\n' +
+    '2024-01-09,Redemption,30000,500.000,Acme Bluechip\n' +
+    '2021-06-01,Purchase,25000,800.000,Zenith Flexi\n' +
+    '2025-02-01,Redemption,40000,800.000,Zenith Flexi\n');
+  await page.setInputFiles('#pf-file', schemeCsv);
+  await page.waitForTimeout(700);
+  await page.click('#pf-dir-go');            /* Purchase in, Redemption out */
+  await page.waitForTimeout(500);
+
+  ok('a named statement is asked for a value per fund, not one total',
+     !(await page.locator('#pf-values-card').isHidden()) &&
+     (await page.locator('#pf-worth-card').isHidden()) === true);
+  /* Zenith's units net to zero: the reader sold out, the flows already contain
+     their own ending, and asking about it would be asking about money they no
+     longer have. */
+  ok('a fund still held is asked about, and one sold out of is not',
+     (await page.locator('#pf-values .valrow').count()) === 1 &&
+     /Acme Bluechip/.test(await page.locator('#pf-values .valrow').innerText()),
+     await page.locator('#pf-values .valrow').innerText());
+  ok('and the one sold out of is explained rather than dropped',
+     /Nothing to value in Zenith Flexi[\s\S]*units net to zero/
+       .test((await page.locator('#pf-values').innerText()).replace(/\s+/g, ' ')),
+     (await page.locator('#pf-values').innerText()).replace(/\n/g, ' | '));
+  ok('the units still held are added up and shown',
+     /1,722\.221 units left/.test(await page.locator('#pf-values .valrow').innerText()),
+     await page.locator('#pf-values .valrow').innerText());
+
+  /* Either way in, because which one a reader can lay hands on depends on
+     their app: some show a NAV per unit and some show a rupee value. */
+  await page.fill('#pf-nav-0', '65.5');
+  await page.waitForTimeout(300);
+  ok('a NAV fills the value from the units left',
+     (await page.inputValue('#pf-val-0')) === '112805.48',
+     await page.inputValue('#pf-val-0'));
+
+  await page.click('#pf-calc');
+  await page.waitForTimeout(700);
+  const both = await page.locator('#pf-out').innerText();
+  /* Checked against the same flows run through the engine directly, and
+     against 1.6^(1/3.674)-1 = 13.65% by hand for the closed fund. */
+  ok('the portfolio XIRR is 9.6%', /Your portfolio XIRR[\s\S]*?9\.6%/i.test(both),
+     both.slice(0, 120));
+  ok('and both schemes are measured beside it, without switching anything on',
+     /Acme Bluechip[\s\S]{0,60}8\.6%/.test(both) &&
+     /Zenith Flexi[\s\S]{0,60}13\.6%/.test(both),
+     (both.match(/Each holding[\s\S]{0,240}/) || [''])[0].replace(/\n/g, ' | '));
+  ok('the fund sold out of is measured with no figure from the reader',
+     /Zenith Flexi[\s\S]{0,60}13\.6%/.test(both));
 
   /* ------------------------------------- the right file on the wrong screen */
   await page.click('#pf-reset');

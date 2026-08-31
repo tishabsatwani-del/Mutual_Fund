@@ -584,5 +584,67 @@ section('The broker dictionary suggests, and never decides');
   });
 }
 
+
+/* -------------------------------------------------------------------------
+ * What is left, per scheme.
+ *
+ * A statement of buys and sells has no terminal value in it, and an XIRR needs
+ * one. Before a reader can be asked for it they have to be told what they are
+ * valuing -- so each scheme's own money and its own units are added up first.
+ */
+section('Units are read, and totalled per scheme');
+{
+  var txt = 'Date,Transaction Type,Amount,Units,Fund\n' +
+            '2021-04-05,Purchase,50000,1234.567,Acme Bluechip\n' +
+            '2022-04-05,Purchase,50000,987.654,Acme Bluechip\n' +
+            '2024-01-09,Redemption,30000,500.000,Acme Bluechip\n' +
+            '2021-06-01,Purchase,25000,800.000,Zenith Flexi\n' +
+            '2025-02-01,Redemption,40000,800.000,Zenith Flexi\n';
+  var r = U.ledgerRows(txt, { direction: { Purchase: 'in', Redemption: 'out' } });
+  ok('a units column is found by its heading', r.unitsCol === 3, String(r.unitsCol));
+  eq('and every row carries its own units', r.rows[0].units, 1234.567);
+
+  var g = U.schemeTotals(r.rows);
+  eq('one group per scheme', g.length, 2);
+  eq('units left are what went in less what came out',
+     Number(g[0].units.toFixed(3)), 1722.221);
+  eq('money in is totalled per scheme', g[0].paidIn, 100000);
+  eq('and money out with it', g[0].tookOut, 30000);
+
+  /* A scheme whose units net to nothing is CLOSED: the reader sold out, the
+     flows already contain their own ending, and asking for today's value would
+     be asking about money they no longer have. */
+  ok('a scheme sold out of is closed, and needs no valuation',
+     g[1].closed === true && g[1].units === 0, JSON.stringify(g[1].units));
+  ok('while one still held is not', g[0].closed === false);
+
+  /* Statements carry units to three or four places; a millionth of a unit left
+     over is the arithmetic, not the reader's money. */
+  var dust = U.schemeTotals([
+    { t: 1, amount: 1000, dir: 'in', units: 100.0001, fund: 'Dust' },
+    { t: 2, amount: 1200, dir: 'out', units: 100.0003, fund: 'Dust' }
+  ]);
+  ok('a rounding tail of a unit is not a holding', dust[0].closed === true,
+     String(dust[0].units));
+}
+
+section('A statement with no units column still groups by scheme');
+{
+  var noUnits = U.ledgerRows('Date,Amount,Fund\n' +
+                             '2024-01-01,100000,Acme\n2025-01-01,50000,Zenith\n');
+  eq('there is simply no units column', noUnits.unitsCol, -1);
+  var g = U.schemeTotals(noUnits.rows);
+  eq('the schemes are still separated', g.length, 2);
+  ok('and neither claims to know its units',
+     g[0].units === null && g[0].hasUnits === false, JSON.stringify(g[0].units));
+  /* Without units, money out exceeding money in is a HINT and not a fact -- a
+     fund can be up and partly sold -- so nothing is called closed. */
+  var sold = U.schemeTotals([
+    { t: 1, amount: 1000, dir: 'in', units: null, fund: 'Acme' },
+    { t: 2, amount: 5000, dir: 'out', units: null, fund: 'Acme' }
+  ]);
+  ok('and no scheme is called closed on the money alone', sold[0].closed === false);
+}
+
 console.log('\n' + passed + ' passed, ' + failed.length + ' failed');
 if (failed.length) { console.log('\nFAILED:\n  ' + failed.join('\n  ')); process.exit(1); }

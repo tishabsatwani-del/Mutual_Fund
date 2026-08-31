@@ -385,8 +385,17 @@
     });
 
     /* A statement of payments records what was paid, never what it grew to.
-       That is the one figure no such file contains, so it is the one field. */
-    $('#pf-worth-card').hidden = r.kind !== 'ledger';
+     * That is the one figure no such file contains.
+     *
+     * Where the statement NAMES its funds, one figure is not enough: a
+     * portfolio XIRR can be had from a single total, but a fund's own XIRR
+     * needs that fund's own ending, and there is no way to split one total
+     * back out across schemes. So the ask becomes one row per scheme. */
+    var named = r.kind === 'ledger' && PF.imported.some(function (f) { return f.fund; });
+    PF.schemes = named ? window.SimUpload.schemeTotals(PF.imported) : null;
+    $('#pf-worth-card').hidden = r.kind !== 'ledger' || named;
+    $('#pf-values-card').hidden = !named;
+    if (named) drawValues();
     /* A holdings file already shows every fund separately; the choice only
        means something for dated payments, and only when they carry a name. */
     $('#pf-group-card').hidden = r.kind !== 'ledger' ||
@@ -412,11 +421,103 @@
       }).join('') + '</div></li>';
   }
 
+  /* Units left times today's NAV, or the value itself. Both are offered
+   * because which one a reader can lay hands on depends entirely on their app:
+   * some show a NAV per unit and some show a rupee value, and asking for the
+   * one they do not have in front of them is asking them to do arithmetic the
+   * page can do for them. */
+  /* Units carry three or four decimals on a real statement and the tail is not
+     decoration -- it is the difference between a valuation that reconciles with
+     the reader's app and one that does not. */
+  function units3(n) {
+    return Number(n).toLocaleString('en-IN', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+  }
+
+  function drawValues() {
+    var host = $('#pf-values');
+    if (!host) return;
+    var open = PF.schemes.filter(function (g) { return !g.closed; });
+    var closed = PF.schemes.filter(function (g) { return g.closed; });
+
+    host.innerHTML = open.map(function (g, i) {
+      var known = g.hasUnits && g.units > 0;
+      return '<div class="valrow" data-scheme="' + esc(g.name) + '">' +
+        '<div class="val-name">' + esc(g.name) +
+          '<span class="qsub">' + (known
+            ? units3(g.units) + ' units left \u00b7 ' + money(g.paidIn - g.tookOut) + ' net in'
+            : money(g.paidIn - g.tookOut) + ' net in \u00b7 no units in this file') +
+          '</span></div>' +
+        '<div class="val-fields">' +
+          (known
+            ? '<label class="field"><span class="label">NAV today</span>' +
+              '<input type="number" class="val-nav" id="pf-nav-' + i + '" ' +
+              'inputmode="decimal" min="0" step="any" placeholder="per unit"></label>'
+            : '') +
+          '<label class="field"><span class="label">Value today (\u20b9)</span>' +
+          '<input type="number" class="val-amt" id="pf-val-' + i + '" ' +
+          'inputmode="decimal" min="0" step="any"></label>' +
+        '</div></div>';
+    }).join('');
+
+    if (closed.length) {
+      host.innerHTML += '<p class="hint" style="margin:.8rem 0 0">' +
+        '<strong>Nothing to value in ' +
+        closed.map(function (g) { return esc(g.name); }).join(', ') + '.</strong> ' +
+        (closed.length === 1 ? 'Its units' : 'Their units') + ' net to zero, so you are out of ' +
+        (closed.length === 1 ? 'it' : 'them') + ' \u2014 the statement already contains ' +
+        (closed.length === 1 ? 'its' : 'their') + ' ending, and ' +
+        (closed.length === 1 ? 'it is' : 'they are') + ' measured without a figure from you.</p>';
+    }
+
+    A.$$('.valrow', host).forEach(function (row) {
+      var nav = row.querySelector('.val-nav'), amt = row.querySelector('.val-amt');
+      var g = PF.schemes.filter(function (x) { return x.name === row.dataset.scheme; })[0];
+      if (nav) nav.addEventListener('input', function () {
+        var n = parseFloat(nav.value);
+        /* The NAV fills the value; the value is still the reader's to overrule,
+           because a statement's unit count can be stale and theirs is not. */
+        amt.value = (isFinite(n) && n >= 0 && g) ? (n * g.units).toFixed(2) : '';
+        valuesChanged();
+      });
+      amt.addEventListener('input', function () {
+        if (nav && document.activeElement === amt) nav.value = '';
+        valuesChanged();
+      });
+    });
+    valuesChanged();
+  }
+
+  function valuesChanged() {
+    var open = (PF.schemes || []).filter(function (g) { return !g.closed; });
+    var given = readValues();
+    var n = Object.keys(given).length;
+    var note = $('#pf-values-note');
+    if (note) {
+      note.textContent = n === 0
+        ? 'None valued yet. A fund left blank is measured on its payments alone, which needs a full exit to work.'
+        : n + ' of ' + open.length + ' valued' +
+          (n < open.length ? '. The rest are measured on their payments alone.' : '.');
+    }
+    if ($('#pf-out').innerHTML) calcPortfolio();
+  }
+
+  function readValues() {
+    var out = {};
+    A.$$('#pf-values .valrow').forEach(function (row) {
+      var v = parseFloat(row.querySelector('.val-amt').value);
+      if (isFinite(v) && v > 0) out[row.dataset.scheme] = v;
+    });
+    return out;
+  }
+
   function resetPortfolio() {
     PF.kind = null; PF.holdings = null; PF.imported = null; PF.source = '';
     PF.answers = {}; PF.last = null;
     $('#pf-read').hidden = true;
     $('#pf-worth-card').hidden = true;
+    $('#pf-values-card').hidden = true;
+    $('#pf-values').innerHTML = '';
+    PF.schemes = null;
     $('#pf-group-card').hidden = true;
     $('#pf-manual-card').hidden = true;
     $('#pf-manual-line').hidden = false;
@@ -539,11 +640,24 @@
         flows.push({ t: f.t, amount: f.dir === 'out' ? f.amount : -f.amount,
                      kind: kind, label: f.fund || '' });
       });
-      var worth = parseFloat($('#pf-worth').value);
-      if (isFinite(worth) && worth > 0) {
-        current = worth;
-        currentDate = todayTs();
-        flows.push({ t: currentDate, amount: worth, kind: 'Worth today', label: '' });
+      if (PF.schemes) {
+        /* One ending per scheme, each labelled with its own fund. byLabel
+         * groups on that label, so the same push that gives the portfolio its
+         * terminal value gives every scheme its own -- which is the whole
+         * reason the ask is per scheme rather than one total. */
+        var given = readValues();
+        Object.keys(given).forEach(function (name) {
+          current += given[name];
+          currentDate = todayTs();
+          flows.push({ t: currentDate, amount: given[name], kind: 'Worth today', label: name });
+        });
+      } else {
+        var worth = parseFloat($('#pf-worth').value);
+        if (isFinite(worth) && worth > 0) {
+          current = worth;
+          currentDate = todayTs();
+          flows.push({ t: currentDate, amount: worth, kind: 'Worth today', label: '' });
+        }
       }
       rows = [];
     }
@@ -666,7 +780,10 @@
 
     html += '</div>';
 
-    if ($('#pf-group').value === 'on') html += byLabel(flows, rate);
+    /* Asked per scheme, so answered per scheme: the breakdown is not something
+       the reader has to go and switch on after doing the work of valuing each
+       fund. The control stays, and turning it off still turns it off. */
+    if ($('#pf-group').value === 'on' || PF.schemes) html += byLabel(flows, rate);
     out.innerHTML = html;
     wireRealReturn(rate);
   }

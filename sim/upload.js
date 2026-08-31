@@ -161,6 +161,7 @@
     if (amountCol < 0) return ledgerFail('NO-AMOUNT', MESSAGES.ledgerNoAmount);
 
     var fundCol = fundColumn(header, width, dateCol, amountCol);
+    var unitsCol = unitsColumn(header, width, dateCol, amountCol, fundCol);
 
     /* ------------------------------------------------------- which way it went
      * A minus sign or a bracket is the reader saying it themselves, and it wins
@@ -188,7 +189,7 @@
       if (!o.direction) {
         return {
           ok: false, ask: 'direction', rows: [], skipped: 0, header: header,
-          dateCol: dateCol, amountCol: amountCol, fundCol: fundCol, typeCol: typeCol,
+          dateCol: dateCol, amountCol: amountCol, fundCol: fundCol, unitsCol: unitsCol, typeCol: typeCol,
           words: words, dayFirst: dayFirst, dateCertain: dateCertain, example: example,
           code: 'ASK-DIRECTION', message: MESSAGES.whichDirection(words.length)
         };
@@ -213,8 +214,13 @@
         if (!said) { skipped++; continue; }
         dir = said;
       }
+      /* Units, where the statement records them. They are what makes a NAV
+       * usable: units left times today's NAV is what the holding is worth, and
+       * without them the reader can only be asked for the value itself. */
+      var u = unitsCol >= 0 ? ledgerAmount(body[i][unitsCol]) : NaN;
       out.push({
         t: t, amount: Math.abs(n), dir: dir,
+        units: isFinite(u) ? Math.abs(u) : null,
         fund: fundCol >= 0 ? String(body[i][fundCol] == null ? '' : body[i][fundCol]).trim() : '',
         line: i + (header ? 2 : 1)
       });
@@ -222,7 +228,7 @@
 
     return {
       ok: out.length > 0, rows: out, skipped: skipped, header: header,
-      dateCol: dateCol, amountCol: amountCol, fundCol: fundCol, typeCol: typeCol,
+      dateCol: dateCol, amountCol: amountCol, fundCol: fundCol, unitsCol: unitsCol, typeCol: typeCol,
       words: words, dayFirst: dayFirst, dateCertain: dateCertain, example: example,
       code: out.length ? null : 'NO-ROWS',
       message: out.length ? null : MESSAGES.ledgerNoRows
@@ -371,6 +377,71 @@
       if (hits >= need) return c;
     }
     return -1;
+  }
+
+  /* Named only, and for the same reason the fund column is: a units column has
+   * no shape that separates it from any other number on the row. A statement
+   * has an amount, a NAV, a balance and a unit count all sitting side by side,
+   * and picking the wrong one puts a plausible figure into the valuation the
+   * reader is about to base a return on. Only the heading can say. */
+  var UNITS_HEADERS = /^(units?|no\.?\s*of\s*units?|unit\s*(balance|qty|quantity)|quantity|qty|balance\s*units?)$/i;
+
+  function unitsColumn(header, width, dateCol, amountCol, fundCol) {
+    if (!header) return -1;
+    for (var i = 0; i < width; i++) {
+      if (i === dateCol || i === amountCol || i === fundCol) continue;
+      if (UNITS_HEADERS.test(String(header[i] == null ? '' : header[i]).trim())) return i;
+    }
+    return -1;
+  }
+
+  /* ------------------------------------------------- what is left, per scheme
+   *
+   * A statement of buys and sells has no terminal value in it, and an XIRR
+   * needs one. Before the reader can be asked for it they have to be told what
+   * they are valuing, so this adds up each scheme's own money and its own
+   * units and reports what is left standing.
+   *
+   * A scheme whose units net to nothing is CLOSED: the reader sold out of it,
+   * the flows already contain their own ending, and asking for today's value
+   * would be asking about money they no longer have.
+   */
+  function schemeTotals(rows) {
+    var order = [], by = {};
+    (rows || []).forEach(function (r) {
+      var key = (r.fund || '').trim() || '\u2014';
+      if (!by[key]) {
+        by[key] = { name: key, rows: [], paidIn: 0, tookOut: 0,
+                    unitsIn: 0, unitsOut: 0, units: null,
+                    first: r.t, last: r.t, hasUnits: false };
+        order.push(key);
+      }
+      var g = by[key];
+      g.rows.push(r);
+      if (r.dir === 'out') g.tookOut += r.amount; else g.paidIn += r.amount;
+      if (r.units != null) {
+        g.hasUnits = true;
+        if (r.dir === 'out') g.unitsOut += r.units; else g.unitsIn += r.units;
+      }
+      if (r.t < g.first) g.first = r.t;
+      if (r.t > g.last) g.last = r.t;
+    });
+
+    return order.map(function (k) {
+      var g = by[k];
+      if (g.hasUnits) {
+        g.units = g.unitsIn - g.unitsOut;
+        /* A rounding tail of a millionth of a unit is not a holding. Statements
+           carry units to three or four places, so anything under a thousandth
+           is the arithmetic, not the reader's money. */
+        if (Math.abs(g.units) < 0.001) g.units = 0;
+      }
+      /* Closed only where the units SAY so. With no units column, money out
+         exceeding money in is a hint and not a fact -- a fund can be up and
+         partly sold -- so it is not treated as one. */
+      g.closed = g.hasUnits && g.units === 0;
+      return g;
+    });
   }
 
   /* Named only. Inferring a fund from a bank's narration column would be the
@@ -942,7 +1013,8 @@
   var api = {
     read: read, firstMatching: firstMatching,
     ledgerRows: ledgerRows, ledgerAmount: ledgerAmount, typeColumn: typeColumn,
-    holdingsRows: holdingsRows, portfolioFile: portfolioFile, guessDirection: guessDirection, stitch: stitch, gapsIn: gapsIn, groupSchemes: groupSchemes,
+    holdingsRows: holdingsRows, portfolioFile: portfolioFile, guessDirection: guessDirection,
+    schemeTotals: schemeTotals, stitch: stitch, gapsIn: gapsIn, groupSchemes: groupSchemes,
     rowsFrom: rowsFrom, jsonRows: jsonRows, firstAmbiguousDate: firstAmbiguousDate,
     MESSAGES: MESSAGES, GAP_DAYS: GAP_DAYS
   };

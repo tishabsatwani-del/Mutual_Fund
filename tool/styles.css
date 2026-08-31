@@ -649,3 +649,19 @@ table.data.wide td:first-child, table.data.wide th:first-child { min-width: 9rem
 .points { margin: 0; padding-left: 1.1rem; color: var(--ink-2); font-size: .95rem; }
 .points li { margin-bottom: .55rem; }
 .points li:last-child { margin-bottom: 0; }
+
+/* ------------------------------------- one valuation per scheme
+   A portfolio XIRR can be had from a single total; a fund's own XIRR needs
+   that fund's own ending, and no total can be split back out across schemes.
+   So the ask is one row per fund, with both ways in: the NAV per unit, or
+   the value itself, depending on which the reader's app shows them. */
+.valrow { padding: .9rem 0; border-top: 1px solid var(--line); }
+.valrow:first-child { border-top: 0; padding-top: 0; }
+.val-name { font-weight: 600; margin-bottom: .5rem; }
+.val-name .qsub { display: block; font-weight: 400; margin-top: .1rem; }
+.val-fields { display: grid; gap: .6rem; grid-template-columns: 1fr; }
+@media (min-width: 26rem) { .val-fields { grid-template-columns: 1fr 1fr; } }
+.val-fields .field { margin: 0; }
+.val-fields .label {
+  display: block; font-size: .78rem; font-weight: 600; margin-bottom: .25rem; color: var(--ink-2);
+}

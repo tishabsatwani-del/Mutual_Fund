@@ -141,6 +141,16 @@
     </div>
   </div>
 
+  <!-- one row per scheme, once the statement names its funds -->
+  <div class="card" id="pf-values-card" hidden>
+    <h2>What is each fund worth today?</h2>
+    <p class="hint" style="margin:0 0 .2rem">Your statement records what you paid and what you sold,
+    never what the rest grew to. Give each fund either today&rsquo;s NAV or its value &mdash; whichever
+    your app shows you &mdash; and every fund gets its own return alongside the portfolio&rsquo;s.</p>
+    <div id="pf-values"></div>
+    <p class="hint" id="pf-values-note" aria-live="polite"></p>
+  </div>
+
   <!-- Applies to an uploaded statement as much as to typed rows, so it lives
        outside the typing card that used to bury it. -->
   <div class="card" id="pf-group-card" hidden>
