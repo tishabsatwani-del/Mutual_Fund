@@ -73,10 +73,16 @@ const NIGHT = { paper: '#12161E', ink: '#E8E6E1', muted: '#9AA1AE', slate: '#8FA
   Object.entries({ '--paper': DAY.paper, '--ink': DAY.ink, '--muted': DAY.muted,
                    '--slate': DAY.slate, '--rule': DAY.rule, '--rule-edge': DAY.edge })
     .forEach(([k, v]) => ok('theme.css sets ' + k + ' to ' + v, css.includes(k + ':' + ' '.repeat(Math.max(1, 14 - k.length)) + v) || css.includes(k + ': ' + v), 'not found'));
+  /* Declarations only. Scanning comments too meant a comment SAYING "no red and
+     no green" tripped the rule against red and green, which is a lint failing on
+     its own explanation. A comment cannot colour anything. */
+  const declarations = css.replace(/\/\*[\s\S]*?\*\//g, ' ');
   ok('no red and no green anywhere in the palette',
-     !/#(ff|e[0-9a-f])[0-9a-f]{2}[0-3][0-9a-f]{3}|green|crimson|tomato/i.test(css.split('/*')[0] + css));
+     !/#(ff|e[0-9a-f])[0-9a-f]{2}[0-3][0-9a-f]{3}|\bgreen\b|crimson|tomato/i.test(declarations),
+     (declarations.match(/#(ff|e[0-9a-f])[0-9a-f]{2}[0-3][0-9a-f]{3}|\bgreen\b|crimson|tomato/i) || [])[0]);
   ok('nothing glows and nothing is a gradient',
-     !/box-shadow:[^;]*rgba\([^)]*\)\s*;?\s*\}?\s*$/m.test(css) && !/linear-gradient|radial-gradient/.test(css));
+     !/box-shadow:[^;]*rgba\([^)]*\)\s*;?\s*\}?\s*$/m.test(declarations) &&
+     !/linear-gradient|radial-gradient/.test(declarations));
 
   /* ------------------------------------------------------------- the screen */
   const browser = await chromium.launch({ executablePath: CHROME });
@@ -308,9 +314,13 @@ const NIGHT = { paper: '#12161E', ink: '#E8E6E1', muted: '#9AA1AE', slate: '#8FA
     ok('typing a deposit adds the second count',
        /of [\d,]+/.test(await page.locator('#r-dep-row').innerText()));
 
-    ok('the histogram is one tap away, not on the screen',
-       (await page.locator('#r-out details').count()) === 1 &&
-       (await page.evaluate(() => document.querySelector('#r-out details').open)) === false);
+    /* Two distributions, each one tap away and each closed: how often, and in
+       what order. Neither disturbs the reading above them. */
+    ok('both distributions are one tap away, not on the screen',
+       (await page.locator('#r-out > details').count()) === 2 &&
+       (await page.evaluate(() => [...document.querySelectorAll('#r-out > details')]
+          .every(d => !d.open))) === true,
+       String(await page.locator('#r-out > details').count()));
 
     /* A short history must be refused as a reading, with the arithmetic shown
        and the author's sentence named. */
@@ -1261,6 +1271,120 @@ const NIGHT = { paper: '#12161E', ink: '#E8E6E1', muted: '#9AA1AE', slate: '#8FA
                                   document.documentElement.clientWidth)) <= 0);
     ok('no script errors building the sheet', errors.length === 0, errors.join(' | '));
     await page.screenshot({ path: path.join(TMP, 'v3-tokens.png'), fullPage: true });
+    await ctx.close();
+  }
+
+  /* ===================================== every window, in the order it happened
+   *
+   * The reading gives worst, typical and best; "How often" gives their spread.
+   * Neither shows ORDER, and order is the difference between a fund whose poor
+   * windows are one cluster around a crash and a fund whose poor windows turn
+   * up in every decade. Those two produce identical figures and identical
+   * histograms. This is the only view that separates them.
+   */
+  section('The rolling record, in the order it happened');
+  {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 900 } });
+    const page = await ctx.newPage();
+    const errors = [];
+    page.on('pageerror', e => errors.push(e.message));
+    await page.goto(BASE + '#record', { waitUntil: 'networkidle' });
+    await page.setInputFiles('#r-file', navFile);
+    await page.waitForTimeout(900);
+    await page.click('#r-years .chip[data-y="5"]');
+    await page.waitForTimeout(900);
+
+    ok('it is offered, closed, beside How often',
+       (await page.locator('#r-order').count()) === 1 &&
+       (await page.evaluate(() => document.querySelector('#r-order').open)) === false);
+
+    await page.click('#r-order summary');
+    await page.waitForTimeout(400);
+
+    ok('the line is drawn', (await page.locator('#r-order .spread .sp-line').count()) === 1);
+    ok('with the typical window named on its own hairline',
+       /typical/.test(await page.locator('#r-order .sp-labels').innerText()),
+       await page.locator('#r-order .sp-labels').innerText());
+    ok('and both ends dated',
+       (await page.locator('#r-order .sp-ends span').count()) === 2 &&
+       /\d\d-[A-Z][a-z]{2}-\d{4}/.test(await page.locator('#r-order .sp-ends').innerText()),
+       await page.locator('#r-order .sp-ends').innerText());
+
+    /* The marker means "you". On this screen there is no "you" -- it is the
+       fund's record -- so the marker must appear nowhere on it. */
+    const paints = await page.evaluate(() => {
+      const el = document.querySelector('#r-order .spread');
+      return [...el.querySelectorAll('*')].map(n => getComputedStyle(n).stroke + '|' + getComputedStyle(n).fill);
+    });
+    const marker = await page.evaluate(() =>
+      getComputedStyle(document.documentElement).getPropertyValue('--marker-line').trim());
+    ok('the marker appears nowhere on this chart',
+       !paints.some(p => marker && p.toLowerCase().includes(marker.toLowerCase())),
+       paints.join(' / ').slice(0, 160));
+
+    /* Reading it: by pointer and by keyboard, both saying the same thing. */
+    const before = await page.locator('#r-order .sp-readout').innerText();
+    await page.locator('#r-order .sp-wrap').focus();
+    await page.keyboard.press('Home');
+    await page.waitForTimeout(200);
+    const first = await page.locator('#r-order .sp-readout').innerText();
+    ok('an arrow key reads a window off the line',
+       first !== before &&
+       /A window beginning \d\d-[A-Z][a-z]{2}-\d{4} earned −?[\d.]+% a year, to \d\d-[A-Z][a-z]{2}-\d{4}\./.test(first),
+       first);
+    await page.keyboard.press('End');
+    await page.waitForTimeout(200);
+    const last = await page.locator('#r-order .sp-readout').innerText();
+    ok('and End reaches a different, later window', last !== first, last);
+    ok('the readout is announced, not just shown',
+       (await page.getAttribute('#r-order .sp-readout', 'aria-live')) === 'polite');
+
+    ok('a dot marks what is being read',
+       (await page.evaluate(() =>
+          +document.querySelector('#r-order .sp-dot').getAttribute('opacity'))) === 1);
+
+    /* A label belongs to its own hairline. It must stay inside the drawing and
+       must never land on the dates or on the readout beneath. */
+    const placed = await page.evaluate(() => {
+      const hit = (a, b) => !(a.right < b.left || b.right < a.left ||
+                              a.bottom < b.top || b.bottom < a.top);
+      const labels = [...document.querySelectorAll('#r-order .sp-label')];
+      const others = [...document.querySelectorAll('#r-order .sp-ends span, #r-order .sp-readout')]
+        .map(e => e.getBoundingClientRect());
+      const svg = document.querySelector('#r-order .spread').getBoundingClientRect();
+      return {
+        count: labels.length,
+        clash: labels.some(l => others.some(o => hit(l.getBoundingClientRect(), o))),
+        inside: labels.every(l => {
+          const r = l.getBoundingClientRect();
+          return r.top >= svg.top - 2 && r.bottom <= svg.bottom + 2;
+        }),
+      };
+    });
+    ok('every hairline label sits inside the drawing', placed.inside, JSON.stringify(placed));
+    ok('and none lands on the dates or the readout', placed.clash === false, JSON.stringify(placed));
+
+    /* The zero rule answers "did any window end below zero". On a history where
+       none did, a rule pinned to the floor says nothing the count above it has
+       not already said -- and it was only there because the axis padding
+       straddled zero, not because the fund did. */
+    const zero = await page.evaluate(() => ({
+      rule: document.querySelectorAll('#r-order .sp-zero').length,
+      below: document.body.innerText.match(/Windows that ended below\s+zero\s+([\d,]+) of/),
+    }));
+    ok('the zero rule is drawn only when a window actually reached it',
+       (zero.below && zero.below[1] !== '0') === (zero.rule === 1),
+       JSON.stringify(zero));
+
+    /* A line nobody can see is not a reading. */
+    await page.click('#r-order details summary');
+    await page.waitForTimeout(300);
+    const rows = await page.locator('#r-order details .ledger').innerText();
+    ok('and the same record is readable as dates',
+       /The worst began/.test(rows) && /The best began/.test(rows), rows.slice(0, 200));
+
+    ok('no script errors across the order chart', errors.length === 0, errors.join(' | '));
+    await page.screenshot({ path: path.join(TMP, 'v3-order.png'), fullPage: true });
     await ctx.close();
   }
 

@@ -434,3 +434,37 @@ summary.linkish { list-style: revert; cursor: pointer; }
 .scheme:hover { color: var(--marker-ink); }
 .scheme .gloss { display: block; }
 .scheme-list .label { margin-top: 1rem; }
+
+/* ---- every window, in the order it happened ------------------------------
+   The fund's record over time. No marker anywhere: the marker means "you", and
+   on this screen there is no "you". A window that ended below zero is not a
+   colour -- there is no red and no green in this product -- it is a position
+   below the zero rule. */
+.sp-wrap { position: relative; margin-top: .5rem; }
+/* the focus ring belongs to the reading area, not around the whole block */
+.sp-wrap:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; border-radius: 4px; }
+.spread { display: block; width: 100%; height: 200px; overflow: visible; }
+.sp-line { stroke: var(--ink); stroke-width: 1.25; stroke-linejoin: round; fill: none; }
+.sp-zero { stroke: var(--rule-edge); stroke-width: 1; }
+.sp-median { stroke: var(--rule); stroke-width: 1; stroke-dasharray: 4 4; }
+.sp-dot { fill: var(--ink); }
+/* the hairlines name themselves in the page's own type, never inside a
+   viewBox that is stretched horizontally */
+/* the labels box matches the drawing exactly, so a percentage lands on the
+   hairline it belongs to */
+.sp-labels { position: absolute; inset: 0; pointer-events: none; }
+.sp-label {
+  position: absolute; right: 0; transform: translateY(-115%);
+  font-family: var(--sans); font-size: .75rem; color: var(--muted);
+  background: var(--paper); padding: 0 .25rem;
+}
+/* a rule near the floor takes its label underneath, into the plot's own
+   bottom padding, rather than up into the line */
+.sp-label.sp-below { transform: translateY(15%); }
+.sp-ends {
+  display: flex; justify-content: space-between; margin-top: .35rem;
+  font-family: var(--sans); font-size: .75rem; color: var(--muted); margin-top: .1rem;
+}
+.sp-readout {
+  font-size: .9375rem; color: var(--ink); margin: .6rem 0 0; min-height: 2.6em;
+}

@@ -15,7 +15,7 @@
 (function (root) {
   'use strict';
 
-  var W = root.WYS, E = root.SimEngines, St = root.SimStates, LL = root.LifeLine;
+  var W = root.WYS, E = root.SimEngines, St = root.SimStates, LL = root.LifeLine, Sp = root.Spread;
   var $ = W.$, $$ = W.$$;
 
   var YEARS = [1, 3, 5, 7, 10, 15];
@@ -124,12 +124,44 @@
         'so its worst window above has never been measured through one.');
     }
 
-    /* The histogram is secondary now: one tap away, under How often. */
+    /* Both distributions are secondary, one tap away each.
+     *
+     * "How often" answers how the windows are spread. "In the order they
+     * happened" answers something the spread cannot: WHERE they sit in time. A
+     * fund whose poor windows are one cluster around a single crash and a fund
+     * whose poor windows are scattered through every decade produce the same
+     * three figures and the same histogram, and they are not the same fund to
+     * hold. Only order shows that. */
     html += '<details class="section"><summary class="linkish">How often</summary>' +
       histogram(s.values) + '</details>';
 
+    html += '<details class="section" id="r-order"><summary class="linkish">' +
+      'In the order they happened</summary>' +
+      Sp.render({
+        points: pts,
+        median: s.median,
+        fmt: { pct: W.pct, date: W.date, count: W.count },
+        describe: 'Every ' + R.years + '-year window of ' + R.name +
+          ', each plotted at the day it began, from ' + W.date(pts[0].startT) + ' to ' +
+          W.date(pts[pts.length - 1].startT) + '. The worst was ' + W.pct(s.worst.r) +
+          ' and the best ' + W.pct(s.best.r) + '.'
+      }) +
+      '<details style="margin-top:.75rem"><summary class="linkish" style="padding:.4rem 0">' +
+      'Read it as dates</summary><div class="scroller"><table class="ledger"><tbody>' +
+      Sp.tableRows(pts, { pct: W.pct, date: W.date, count: W.count }).map(function (r) {
+        return '<tr><td>' + W.esc(r[0]) + '</td><td class="n">' + W.esc(r[1]) + '</td></tr>';
+      }).join('') +
+      '</tbody></table></div></details></details>';
+
     out.innerHTML = html;
     wireDeposit(s);
+    /* Reading the line by touch or arrow key, and what it says is a date and a
+       figure -- never a tooltip that floats away. */
+    Sp.wire($('#r-order .sp-wrap'), pts, { pct: W.pct, date: W.date },
+      function (p) {
+        return 'A window beginning ' + W.date(p.startT) + ' earned ' + W.pct(p.r) +
+               ' a year, to ' + W.date(p.endT) + '.';
+      });
     /* The index-fund door is drawn inside the reading, so it is wired each
        time the reading is. §5's conversation applies to the second file too. */
     if ($('#r-index-open')) {

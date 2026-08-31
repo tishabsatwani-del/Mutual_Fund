@@ -34,6 +34,7 @@ var SHELL = [
   'deck.js',
   'shared.js',
   'lifeline.js',
+  'spread.js',
   'record.js',
   'stand.js',
   'mine.js',
