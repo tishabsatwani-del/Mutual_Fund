@@ -217,6 +217,39 @@ fs.mkdirSync(TMP + '/shots', { recursive: true });
    * heading sitting behind it. Both are measured here, at the four widths the
    * review names.
    */
+  /* ============================ the About page tells the truth about itself
+   *
+   * This page carried a TRANSCRIPT of the author's About paragraph, and the
+   * transcript went stale the moment the paragraph was corrected -- which is
+   * how a tool that fetches nothing came to have an About page saying it
+   * fetched the fund's public NAV history. It reads the deck now, and these
+   * checks fail if it ever goes back to carrying its own copy.
+   */
+  console.log('\nAbout tells the truth about the build');
+  {
+    await page.goto(BASE_URL + '#about', { waitUntil: 'networkidle' });
+    await page.waitForTimeout(300);
+    const about = await page.locator('#about-main').innerText();
+    const deck = await page.evaluate(() => window.SIM_COPY.slots['ABOUT-MAIN'].text);
+
+    ok('the About paragraph is the deck’s, character for character',
+       about.trim() === deck.trim(), about.slice(0, 120));
+    ok('it does not claim the tool fetches anything',
+       !/it fetches|fetches the fund|public NAV history/i.test(about), about.slice(0, 200));
+    ok('it says plainly that nothing is fetched',
+       /nothing is fetched/.test(about) && /no request leaves this page/.test(about));
+
+    const facts = await page.locator('#view-about .data').first().innerText();
+    ok('and the build states what it actually does, in checkable rows',
+       /Requests to any other site\s*\n?\s*none/.test(facts) &&
+       /Third-party code, fonts or analytics\s*\n?\s*none/.test(facts) &&
+       /What is sent anywhere\s*\n?\s*nothing/.test(facts), facts);
+
+    /* the claim, verified rather than asserted: nothing left the origin at all */
+    ok('no request left this origin while the whole page ran',
+       external.length === 0, external.join(', '));
+  }
+
   console.log('\nThe phone layout, measured at 320, 360, 390 and 430');
   for (const width of [320, 360, 390, 430]) {
     const ctx2 = await browser.newContext({ viewport: { width, height: 900 } });

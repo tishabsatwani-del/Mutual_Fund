@@ -1317,6 +1317,20 @@
     }
   }
 
+  /* The About paragraph is the author's, and it lives in one place: slot
+   * ABOUT-MAIN in sim/copy.json, generated into v3/deck.js. This page used to
+   * carry a transcript of it, and the transcript went stale the moment the
+   * paragraph was corrected -- which is how a tool that fetches nothing came to
+   * have an About page saying it fetched. Read, never copied. */
+  function fillAbout() {
+    var host = $('#about-main');
+    if (!host) return;
+    var deck = window.SIM_COPY;
+    var slot = deck && deck.slots && deck.slots['ABOUT-MAIN'];
+    host.textContent = (slot && slot.text) ||
+      'The About paragraph has not been written into the copy deck yet.';
+  }
+
   /* -------------------------------------------------------------- the run */
 
   function runRolling() {
@@ -1547,6 +1561,7 @@
   function init() {
     A.initRouter();
     wireRateChecks();
+    fillAbout();
     $('#ver').textContent = A.VERSION;
     if ($('#sheetver')) $('#sheetver').textContent = A.SHEET_VERSION;
 

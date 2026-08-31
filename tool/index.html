@@ -478,20 +478,26 @@
     <p style="margin:0 0 .6rem">Everything you type or load is worked out inside your browser. Nothing you
     enter is uploaded, stored on a server, or written to this device. Close the tab and it is gone,
     which is also why there is a button to save your own entries as a file.</p>
-    <p style="margin:0">There is no account, no sign-up, no email, and nothing that asks who you are.</p>
+    <p style="margin:0 0 .8rem">There is no account, no sign-up, no email, and nothing that asks who you are.</p>
+    <!-- Not prose about investing: a statement of what this build actually does,
+         which is the one thing a privacy note has to be checkable against. -->
+    <div class="scroll"><table class="data"><tbody>
+      <tr><td>Where the arithmetic runs</td><td>in this page, on your device</td></tr>
+      <tr><td>A fund&rsquo;s prices</td><td>a file you download and choose yourself</td></tr>
+      <tr><td>Requests to any other site</td><td>none, at any point</td></tr>
+      <tr><td>Third-party code, fonts or analytics</td><td>none</td></tr>
+      <tr><td>What is sent anywhere</td><td>nothing</td></tr>
+      <tr><td>What the figures leave out</td><td>tax and exit load</td></tr>
+    </tbody></table></div>
   </div>
   <div class="card">
     <h2>About and privacy</h2>
-    <!-- The author's own paragraph, slot ABOUT-MAIN in sim/copy.json. Kept
-         word for word; nothing here is the developer's wording. -->
-    <p style="margin:0" id="about-main">This page runs the book&rsquo;s five questions on your own money.
-    You enter what you paid in and took out; it fetches the fund&rsquo;s public NAV history, for any fund,
-    including ones launched after this book was printed, and works everything out on your phone. Nothing
-    you type leaves it. It does not rate funds, rank them, or tell you what to buy, sell or switch. It
-    tells you where you stand and what to check next. Every sentence it shows is tied to a number it has
-    just calculated, so the same figures will get the same sentence in ten years. It compares your fund
-    with an index fund you could actually have bought, not with the index itself. Figures are before tax
-    and exit load. It describes what has already happened and predicts nothing.</p>
+    <!-- The author's own paragraph, slot ABOUT-MAIN in sim/copy.json, read from
+         the generated deck at boot rather than transcribed here. A transcript is
+         how this page came to describe live fetching months after the tool
+         stopped fetching: the deck was corrected and the copy was not. One
+         source of truth now, so it cannot drift again. -->
+    <p style="margin:0" id="about-main"></p>
   </div>
   <!-- Review v4 §12.11: "The fifth question: who kept it?" printed the
        2003-2022 study in full. Cut; the tool computes the reader's own version
@@ -517,6 +523,7 @@
 
 </main>
 
+<script src="v3/deck.js"></script>
 <script src="../sim/format.js"></script>
 <script src="../sim/workbook.js"></script>
 <script src="engine.js"></script>
