@@ -365,6 +365,25 @@ const NIGHT = { paper: '#12161E', ink: '#E8E6E1', muted: '#9AA1AE', slate: '#8FA
 
     ok('an empty ledger says so rather than showing a blank table',
        /Nothing written yet/.test(await page.locator('#m-rows').innerText()));
+    /* A disabled button that does not say why is the worst control on a screen.
+       This one is disabled on exactly the condition the engine reports as
+       XIRR-NEED-IN, so that refusal used to be unreachable through the
+       interface and the reader got silence in its place. */
+    ok('an empty ledger says what is missing, rather than a dead button',
+       (await page.locator('#m-run').isDisabled()) === true &&
+       /at least one line of money going in/.test(await page.locator('#m-needs').innerText()),
+       await page.locator('#m-needs').innerText());
+    ok('and the button points at that sentence for a screen reader',
+       (await page.getAttribute('#m-run', 'aria-describedby')) === 'm-needs');
+    ok('it names the author’s slot rather than inventing her sentence',
+       /XIRR-NEED-IN/.test(await page.locator('#m-needs').innerText()));
+    ok('it is a line of gloss, not a coloured badge',
+       (await page.evaluate(() => {
+         const n = document.querySelector('#m-needs');
+         const bg = getComputedStyle(n).backgroundColor;
+         return bg === 'rgba(0, 0, 0, 0)' || bg === 'transparent';
+       })) === true);
+
     ok('the four links the review asks for are all here',
        (await page.locator('#m-ledger > .actions .linkish').allInnerTexts()).join(' | ') ===
        'Add a line | Monthly instalments | Paste from a spreadsheet | Try an example | ' +
@@ -416,6 +435,12 @@ const NIGHT = { paper: '#12161E', ink: '#E8E6E1', muted: '#9AA1AE', slate: '#8FA
     ok('and the paste says how many lines it read',
        /2 lines read, 1 skipped/.test(await page.locator('#m-paste-note').innerText()),
        await page.locator('#m-paste-note').innerText());
+
+    /* Once money is going in, the question moves on to what it is worth. */
+    ok('with money in but no value, it asks for the value next',
+       /no figure yet for what it is all worth/.test(await page.locator('#m-needs').innerText()) &&
+       /XIRR-NEED-VALUE/.test(await page.locator('#m-needs').innerText()),
+       await page.locator('#m-needs').innerText());
 
     /* Worth today is one fixed field, not a row type. */
     ok('worth today is a field at the foot of the ledger, not a line in it',
@@ -695,7 +720,13 @@ const NIGHT = { paper: '#12161E', ink: '#E8E6E1', muted: '#9AA1AE', slate: '#8FA
 
     await page.evaluate(() => { location.hash = 'mine'; });
     await page.waitForTimeout(200);
-    screens.mineLedger = await read('#m-ledger');
+    /* §4 budgets these separately: "Ledger screen 40 in labels" and "Refusals
+       35 each". The standing note saying what is still needed is a refusal —
+       it is why the tool will not compute yet — so it is counted as one, not
+       against the ledger's labels. */
+    screens.mineLedger = (await read('#m-ledger'))
+      .replace(await read('#m-needs'), '');
+    screens.mineNeeds = await read('#m-needs');
     await page.click('#m-example');
     await page.waitForTimeout(200);
     await page.click('#m-run');
@@ -738,6 +769,8 @@ const NIGHT = { paper: '#12161E', ink: '#E8E6E1', muted: '#9AA1AE', slate: '#8FA
     /* The two budgets review §4 states for Tool 1, in words. */
     ok('Tool 1’s ledger keeps inside its forty words of labels',
        words(screens.mineLedger) <= 40, words(screens.mineLedger) + ' words');
+    ok('and the refusal under its button inside the thirty-five for a refusal',
+       words(screens.mineNeeds) <= 35, words(screens.mineNeeds) + ' words: ' + screens.mineNeeds);
     ok('and its reading inside its hundred and thirty',
        words(screens.mineResult) <= 130, words(screens.mineResult) + ' words');
 

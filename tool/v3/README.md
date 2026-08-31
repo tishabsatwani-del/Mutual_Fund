@@ -7,6 +7,7 @@ screens are still live at `../`; these replace them.
 |---|---|
 | `theme.css` | The materials of review §6: paper, ink, ruling, marker |
 | `lifeline.js` | The signature — the fund's whole life with the reader's stretch marked |
+| `spread.js` | Every window, in the order it happened |
 | `shared.js` | Formatting, the copy-slot reader, the data door, the router |
 | `mine.js` | Tool 1, *My return* |
 | `record.js` | Tool 2, *This fund's record* |
@@ -23,7 +24,7 @@ screens are still live at `../`; these replace them.
 
 ```
 python3 tools/v3/build_deck.py     # after editing sim/copy.json or sim/states.json
-node tools/tool-tests/v3.test.js   # 281 checks, needs a server on 8781
+node tools/tool-tests/v3.test.js   # 308 checks, needs a server on 8781
 node sim/tests/upload.test.js      # 41 checks on the door, headless
 node tools/v3/shoot.js             # the twelve screenshots, same server
 ```
@@ -385,6 +386,16 @@ best and latest windows marked — and no marker band, because on this screen th
 stretch shown is not the reader's own. Then which window is which, and where the
 latest one places out of a hundred, which is the question a fund's own page can
 never answer.
+
+**Two distributions, each one tap away.** "How often" answers how the windows
+are spread. "In the order they happened" answers what the spread cannot: where
+they sit in time. A fund whose poor windows are one cluster around a single
+crash and a fund whose poor windows turn up in every decade produce the same
+three figures and the same histogram, and they are not the same fund to hold.
+One ink line, no marker — the marker means "you", and on this screen there is
+no "you" — read by drag or arrow key into a live region, with the same record
+as a table underneath. It is one step beyond what §4 fixes for this screen, so
+it sits closed, behind its own disclosure.
 
 The deposit rate ships empty. Below-zero windows are a **count**, not a share: a
 share reads as a property of the fund when it is a property of the dates the

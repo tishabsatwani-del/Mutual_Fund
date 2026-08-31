@@ -473,3 +473,11 @@ summary.linkish { list-style: revert; cursor: pointer; }
 .ledger.cols th:not(:first-child), .ledger.cols td:not(:first-child) { width: 3.5rem; text-align: center; }
 .ledger.cols input[type="radio"] { width: 22px; height: 22px; accent-color: var(--ink); }
 .ledger.cols td .gloss { font-family: ui-monospace, Menlo, monospace; font-size: .8125rem; }
+
+/* What is still needed, said as the ledger is written. A line of gloss, never a
+   coloured badge: there is no red and no green here, and a refusal is set like
+   a reading. */
+#m-needs { margin-top: 1rem; }
+#m-needs:empty { display: none; }
+#m-needs .needs { display: block; color: var(--ink); font-family: var(--serif); font-size: 1.0625rem; }
+#m-needs .slot-empty { margin-top: .5rem; }

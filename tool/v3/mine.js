@@ -117,6 +117,47 @@
         date(rows[0].t) + ' to ' + date(rows[rows.length - 1].t)
       : '';
     $('#m-run').disabled = !rows.some(function (r) { return r.type === 'in'; });
+    sayWhatIsNeeded(rows);
+  }
+
+  /* A disabled button that does not say why is the worst control on any screen:
+   * the reader can see the thing they want and cannot tell what is between them
+   * and it. This button is disabled on exactly the condition the engine reports
+   * as XIRR-NEED-IN — so that refusal was unreachable through the interface,
+   * and the reader got silence instead of it.
+   *
+   * What is still needed is said as the ledger is written, not after a press.
+   * It is a line of gloss, not a coloured badge: there is no red and no green
+   * in this product, and a refusal is set like a reading.
+   *
+   * The arithmetic is mine and the explanation is the author's. Where her slot
+   * is written this defers to it entirely; where it is not, the reader still
+   * learns what is missing rather than nothing. */
+  function sayWhatIsNeeded(rows) {
+    var note = $('#m-needs');
+    if (!note) return;
+    var hasIn = rows.some(function (r) { return r.type === 'in'; });
+    var worth = parseFloat($('#m-worth').value);
+    var on = S.parseDate($('#m-worth-on').value);
+    var hasValue = isFinite(worth) && worth >= 0 && isFinite(on);
+
+    var slotId = null, arithmetic = '';
+    if (!hasIn) {
+      slotId = 'XIRR-NEED-IN';
+      arithmetic = rows.length
+        ? 'Every line here is money out. A return needs at least one line of money going in.'
+        : 'Nothing is written yet. A return needs at least one line of money going in, and what it is all worth.';
+    } else if (!hasValue) {
+      slotId = 'XIRR-NEED-VALUE';
+      arithmetic = W.count(rows.length) + (rows.length === 1 ? ' payment' : ' payments') +
+        ', and no figure yet for what it is all worth.';
+    }
+
+    if (!slotId) { note.innerHTML = ''; note.hidden = true; return; }
+    note.hidden = false;
+    note.innerHTML = W.written(slotId)
+      ? W.slot(slotId)
+      : '<span class="needs">' + esc(arithmetic) + '</span>' + W.slot(slotId);
   }
 
   /* ------------------------------------------------------------- the editor
@@ -463,6 +504,10 @@
       $('#m-worth-on').value = '';
       $('#m-store-note').textContent = '';
       drawLedger();
+    });
+    ['#m-worth', '#m-worth-on'].forEach(function (sel) {
+      var el = $(sel);
+      if (el) el.addEventListener('input', function () { sayWhatIsNeeded(expand(M.entries)); });
     });
     $('#m-run').addEventListener('click', show);
 
