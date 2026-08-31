@@ -266,6 +266,48 @@ function longFile(file) {
      hexLum('#C9D4E3') > hexLum(greys.ink3) && hexLum(greys.ink3) > hexLum(greys.muted),
      ['#F2F6FC', '#C9D4E3', greys.ink3, greys.muted].join(' > '));
 
+  /* The two grades of ruling, lifted with the greys. Composited, because they
+     are alphas -- each rule takes its tint from whichever of the three grounds
+     it lies on, so the value in the token says nothing on its own. */
+  const rules = await page.evaluate(() => {
+    const root = getComputedStyle(document.documentElement);
+    const paint = (rgba, groundHex) => {
+      const a = parseFloat(rgba.match(/[\d.]+\)$/)[0]);
+      const fg = rgba.match(/\d+/g).slice(0, 3).map(Number);
+      const bg = groundHex.replace('#', '').match(/../g).map(x => parseInt(x, 16));
+      return fg.map((f, i) => Math.round(f * a + bg[i] * (1 - a)));
+    };
+    const lum = v => {
+      const c = v.map(x => x / 255).map(x => x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4));
+      return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+    };
+    const on = (rgba, hex) => {
+      const a = lum(paint(rgba, hex));
+      const b = lum(hex.replace('#', '').match(/../g).map(x => parseInt(x, 16)));
+      const [hi, lo] = [a, b].sort((p, q) => q - p);
+      return (hi + 0.05) / (lo + 0.05);
+    };
+    const line = root.getPropertyValue('--line').trim();
+    const strong = root.getPropertyValue('--line-strong').trim();
+    return { lineCard: on(line, '#161F30'), lineGround: on(line, '#0A0E17'),
+             strongCard: on(strong, '#161F30'), strongGround: on(strong, '#0A0E17'),
+             strongInput: on(strong, '#1E2942') };
+  });
+  /* --line-strong draws the edge of every input, chip, card and drop zone --
+     the boundaries WCAG holds to a 3:1 floor for non-text components. At its
+     old .34 alpha it composited to 2.53:1, under the floor everywhere. */
+  ok('a tappable edge clears the 3:1 floor on every ground it is drawn on',
+     rules.strongCard >= 3 && rules.strongGround >= 3 && rules.strongInput >= 3,
+     [rules.strongCard, rules.strongGround, rules.strongInput]
+       .map(x => x.toFixed(2)).join(' / '));
+  /* A divider may be quiet, but 1.42:1 is a line you have to look for. */
+  ok('and a divider is plainly there without competing with its own row',
+     rules.lineCard >= 1.9 && rules.lineCard <= 2.6,
+     rules.lineCard.toFixed(2) + ':1 on a card, ' + rules.lineGround.toFixed(2) + ':1 on the ground');
+  ok('with the edge still clearly the stronger of the two',
+     rules.strongCard > rules.lineCard * 1.4,
+     rules.strongCard.toFixed(2) + ' vs ' + rules.lineCard.toFixed(2));
+
   /* "All tools" is the only way back to the four screens, and it was set in the
      caption grey with no ground under it -- the quietest thing in the header
      doing the most important job in it. It is a control, so it looks like one. */
