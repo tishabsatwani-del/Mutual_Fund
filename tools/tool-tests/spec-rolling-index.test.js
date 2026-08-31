@@ -1,0 +1,451 @@
+/* The Rolling Returns redesign specification, driven through the real screen.
+ *
+ * Section 7 of the specification is a five-item QA checklist. It is written
+ * here as five sections of real clicks rather than as unit tests on the pure
+ * functions, because every one of the five is a claim about what a READER
+ * sees: a file being refused is only refused if the refusal reaches the
+ * screen, and a horizon only "computes correctly" if the chip can be pressed.
+ *
+ * Scope, deliberately: the market-index source path and nothing else. The
+ * fund path is covered by rolling.test.js and must be unchanged by any of
+ * this, which the last section checks explicitly.
+ */
+const { chromium } = require('playwright');
+const fs = require('fs');
+const TMP = process.env.PRC_TMP || '/tmp/prc';
+const CHROME = process.env.PRC_CHROME || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+const BASE_URL = process.env.PRC_URL || 'http://127.0.0.1:8781/tool/';
+
+let pass = 0; const fails = [];
+function ok(n, c, d) {
+  if (c) { pass++; console.log('  pass  ' + n); }
+  else { fails.push(n); console.log('  FAIL  ' + n + (d ? '  -- ' + d : '')); }
+}
+function section(t) { console.log('\n' + t); }
+function flat(s) { return String(s).replace(/\s+/g, ' ').trim(); }
+
+/* A clean daily price series growing at a known rate, so every figure the
+   screen prints is checkable by hand rather than against the engine. */
+function navFile(file, rate, fromY, toY, start = 100, head = 'Date,NAV') {
+  const out = [head];
+  let v = start, t = Date.UTC(fromY, 0, 1);
+  while (t <= Date.UTC(toY, 0, 1)) {
+    out.push(new Date(t).toISOString().slice(0, 10) + ',' + v.toFixed(4));
+    v *= Math.pow(1 + rate, 1 / 365.2425); t += 86400000;
+  }
+  fs.writeFileSync(file, out.join('\n'));
+  return file;
+}
+
+/* What a broker actually hands you. It has a date column and it has numeric
+   columns, so every reader that goes by SHAPE accepts it. */
+function tradebookFile(file) {
+  const out = ['Symbol,ISIN,Trade Date,Exchange,Segment,Series,Trade Type,Auction,Quantity,Price,Trade ID,Order ID,Order Execution Time'];
+  for (let i = 0; i < 60; i++) {
+    const d = new Date(Date.UTC(2023, 0, 2 + i));
+    out.push(['INFY', 'INE009A01021', d.toISOString().slice(0, 10), 'NSE', 'EQ', 'EQ',
+              i % 2 ? 'sell' : 'buy', 'false', 10 + i, (1400 + i).toFixed(2),
+              '10000' + i, '2300000' + i, d.toISOString()].join(','));
+  }
+  fs.writeFileSync(file, out.join('\n'));
+  return file;
+}
+
+/* A file with the right headings and the wrong contents. */
+function textValueFile(file) {
+  const out = ['Date,NAV'];
+  for (let i = 0; i < 60; i++) {
+    out.push(new Date(Date.UTC(2020, 0, 1 + i)).toISOString().slice(0, 10) + ',not available');
+  }
+  fs.writeFileSync(file, out.join('\n'));
+  return file;
+}
+
+(async () => {
+  fs.mkdirSync(TMP + '/shots', { recursive: true });
+  const browser = await chromium.launch({ executablePath: CHROME });
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on('pageerror', e => errors.push(e.message));
+  page.on('console', m => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
+
+  const primary   = navFile(TMP + '/spec-primary.csv', 0.14, 2015, 2025, 100);
+  const bench     = navFile(TMP + '/spec-bench.csv',   0.10, 2018, 2025, 1000, 'Date,Index Value');
+  const benchLong = navFile(TMP + '/spec-bench-long.csv', 0.10, 2015, 2025, 1000, 'Date,Index Value');
+  const long20    = navFile(TMP + '/spec-long20.csv',  0.12, 2005, 2025, 100);
+  const trades    = tradebookFile(TMP + '/spec-tradebook.csv');
+  const textNav   = textValueFile(TMP + '/spec-textnav.csv');
+
+  /* A real reload every time. goto() to a URL that differs only in its hash is
+     a same-document navigation: the page does not re-execute and the module's
+     state survives, so one test's uploaded files leak into the next. */
+  async function openIndexPath() {
+    await page.goto(BASE_URL + '#rolling', { waitUntil: 'networkidle' });
+    await page.reload({ waitUntil: 'networkidle' });
+    await page.click('#r-source .chip[data-source="index"]');
+    await page.waitForTimeout(250);
+  }
+
+  /* ================================================== SECTION 2, THE CARDS */
+  section('Section 2 — two named data doors, not one word used twice');
+  await openIndexPath();
+
+  const cardA = flat(await page.locator('#up-primary').innerText());
+  ok('Card A carries the approved header',
+     /^1\. Primary Investment Data \(NAV\)/.test(cardA), cardA.slice(0, 80));
+  ok('Card A says what may go in it',
+     /Upload Mutual Fund Daily NAV history, Consolidated Account Statement \(CAS\), or your Broker.s historical Portfolio Value series\./.test(cardA),
+     cardA.slice(0, 260));
+  ok('Card A names its accepted columns',
+     /Accepted columns: Date · NAV \/ Value/.test(cardA), cardA);
+  ok('Card A carries the rule, in the words the specification uses',
+     /Rule: Do NOT upload Tradebooks, Order Histories, or Buy\/Sell Transaction Logs\./.test(cardA),
+     cardA);
+  ok('and its file picker is labelled for the file it wants',
+     /Primary Investment Data file/.test(cardA), cardA);
+
+  const cardB = flat(await page.locator('#up-benchmark-head').innerText());
+  ok('Card B carries the approved header',
+     /^2\. Benchmark Index Data \(TRI\)/.test(cardB), cardB.slice(0, 80));
+  ok('Card B says what may go in it',
+     /Upload historical daily values for a Total Return Index \(e\.g\., Nifty 50 TRI, Nifty Midcap 150 TRI, Sensex TRI\)\./.test(cardB),
+     cardB);
+  ok('Card B names its accepted columns',
+     /Accepted columns: Date · Index Value/.test(cardB), cardB);
+  ok('Card B carries the TRI rule',
+     /Rule: Always use Total Return Index \(TRI\) data rather than Price Return Index \(PRI\)\./.test(cardB),
+     cardB);
+
+  /* ================================== SECTION 7.1, TRADEBOOK REJECTION TEST */
+  section('Section 7 · Tradebook Rejection Test');
+  await page.setInputFiles('#bm-file', trades);
+  await page.waitForTimeout(1200);
+  const refusal = flat(await page.locator('#r-loaded').innerText());
+  ok('a tradebook at Card A is refused',
+     /trade logs or transaction records instead of historical NAV\/Index values/.test(refusal),
+     refusal.slice(0, 200));
+  ok('and the refusal states both schemas, as the specification words it',
+     /Expected Schema: Date and NAV \/ Value\./.test(refusal) &&
+     /Detected Schema: Transaction fields \(Buy\/Sell, Order Type\)\./.test(refusal) &&
+     /Please re-upload a valid daily NAV or Index CSV file\./.test(refusal), refusal);
+  ok('and it names the columns it actually found, so the reader can act on it',
+     /Trade Type/.test(refusal) && /Quantity/.test(refusal) && /Order ID/.test(refusal),
+     refusal);
+  ok('the refusal is drawn in the refusing colour, not as information',
+     (await page.locator('#r-loaded .notice.bad').count()) === 1);
+  ok('nothing was loaded, so the configurator stays shut',
+     await page.locator('#r-run').isDisabled() &&
+     await page.locator('#r-start').isDisabled() &&
+     (await page.locator('#step-period').getAttribute('data-locked')) === 'yes');
+
+  /* the same file at the OTHER door */
+  await openIndexPath();
+  await page.setInputFiles('#bm-file', primary);
+  await page.waitForTimeout(1500);
+  await page.setInputFiles('#cmp-file', trades);
+  await page.waitForTimeout(1200);
+  const refusalB = flat(await page.locator('#cmp-note').innerText());
+  ok('a tradebook at Card B is refused too',
+     /trade logs or transaction records/.test(refusalB), refusalB.slice(0, 160));
+  ok('and no benchmark was adopted from it',
+     (await page.locator('#r-compare').inputValue()) === 'none',
+     await page.locator('#r-compare').inputValue());
+
+  /* ==================================== SECTION 7.2, FORMAT MISMATCH TEST */
+  section('Section 7 · Format Mismatch Test');
+  await openIndexPath();
+  await page.setInputFiles('#bm-file', textNav);
+  await page.waitForTimeout(1200);
+  const mismatch = flat(await page.locator('#r-loaded').innerText());
+  ok('text under a NAV heading halts processing',
+     /does not hold numbers/.test(mismatch), mismatch.slice(0, 200));
+  ok('and it is not called a trade log, because it is not one',
+     !/trade logs/.test(mismatch), mismatch.slice(0, 200));
+  ok('the configurator stays shut', await page.locator('#r-run').isDisabled());
+
+  /* ====================================== SECTION 7.3, DATE ALIGNMENT TEST */
+  section('Section 7 · Date Alignment Test');
+  await openIndexPath();
+  await page.setInputFiles('#bm-file', primary);
+  await page.waitForTimeout(1600);
+  await page.setInputFiles('#cmp-file', bench);
+  await page.waitForTimeout(1600);
+  const amber = flat(await page.locator('#r-overlap-note').innerText());
+  ok('two files that only partly overlap raise the amber warning',
+     (await page.locator('#r-overlap-note .notice.warn').count()) === 1, amber.slice(0, 200));
+  ok('it states both ranges, primary first',
+     /Primary Investment: 01-Jan-2015 to 01-Jan-2025 \| Benchmark Index: 01-Jan-2018 to 01-Jan-2025\./.test(amber),
+     amber);
+  ok('and says the comparison will be restricted to what they share',
+     /Note: Rolling return comparisons will automatically be restricted to the overlapping period \(01-Jan-2018 to 01-Jan-2025, 7\.0 years\)\./.test(amber),
+     amber);
+  ok('and says which file lost history, and how much',
+     /Outside that period, 3\.0 years of the Primary Investment data is not used\./.test(amber),
+     amber);
+
+  await page.click('#r-run');
+  await page.waitForTimeout(1200);
+  const summary = flat(await page.locator('#r-out .summary3').innerText());
+  ok('the comparison is computed over the shared stretch only',
+     /same 1,\d\d\d windows/.test(flat(await page.locator('#r-out').innerText())) ||
+     /the ones whose start dates appear in both files/.test(flat(await page.locator('#r-out').innerText())),
+     flat(await page.locator('#r-out').innerText()).slice(0, 400));
+  /* Seven shared years, three-year windows: about four years of start dates,
+     which is ~1,460 daily windows on a file with a value every day. It is the
+     BOUND that matters -- the primary file alone would give ~2,560. */
+  const windows = Number((summary.match(/Total Rolling Windows Analysed ([\d,]+) Observations/) || [])[1]
+                          ?.replace(/,/g, ''));
+  ok('so the window count is bounded by the overlap, not by the longer file',
+     windows > 1300 && windows < 1600, String(windows));
+
+  /* two files that share nothing at all */
+  await openIndexPath();
+  await page.setInputFiles('#bm-file', navFile(TMP + '/spec-early.csv', 0.1, 1998, 2006, 100));
+  await page.waitForTimeout(1500);
+  await page.setInputFiles('#cmp-file', bench);
+  await page.waitForTimeout(1500);
+  ok('and files that share no dates at all are refused, not warned',
+     (await page.locator('#r-overlap-note .notice.bad').count()) === 1 &&
+     /share no dates/.test(flat(await page.locator('#r-overlap-note').innerText())),
+     flat(await page.locator('#r-overlap-note').innerText()).slice(0, 200));
+
+  /* ==================================== SECTION 7.4, EXTENDED HORIZON TEST */
+  section('Section 7 · Extended Horizon Test');
+  await openIndexPath();
+  await page.setInputFiles('#bm-file', long20);
+  await page.waitForTimeout(1800);
+  const chips = await page.locator('#r-years .chip').allInnerTexts();
+  ok('the five fixed horizons are all offered and none is disabled on 20 years',
+     chips.slice(0, 5).join('|') === '1 year|3 years|5 years|7 years|10 years', chips.join('|'));
+  ok('and a Max History horizon is offered beyond them',
+     /^Max History — 20 years$/.test(chips[5] || ''), chips.join('|'));
+
+  for (const [label, years] of [['7 years', 7], ['10 years', 10], ['Max History — 20 years', 20]]) {
+    await page.locator('#r-years .chip', { hasText: label }).first().click();
+    await page.waitForTimeout(300);
+    await page.click('#r-run');
+    await page.waitForTimeout(1400);
+    const out = flat(await page.locator('#r-out').innerText());
+    ok(years + '-year windows compute on a 20-year file',
+       new RegExp('Each holding period ' + years + ' years').test(out), out.slice(0, 300));
+    /* 12% a year, compounded daily, over any window: the answer is 12.0%. */
+    ok('and a 12% series returns 12% over ' + years + ' years, whatever the horizon',
+       /Median 12\.0%/.test(out) || /Median Rolling Return 12\.0%/.test(out),
+       (out.match(/Median[^|]{0,30}/) || [''])[0]);
+  }
+
+  /* ---------------------------------------------------- section 4, frequency */
+  section('Section 4 · rolling frequency thins start dates and nothing else');
+  const freq = await page.locator('#r-freq .chip').allInnerTexts();
+  ok('all three frequencies are offered, in the specification’s order',
+     freq.join('|') === 'Daily — Recommended (shifts by 1 trading day)|Weekly (7 days)|Monthly (1 calendar month)',
+     freq.join('|'));
+  ok('and daily is the one chosen to begin with',
+     (await page.locator('#r-freq .chip[aria-checked="true"]').innerText())
+       .indexOf('Daily') === 0);
+
+  await page.locator('#r-years .chip', { hasText: '5 years' }).first().click();
+  await page.waitForTimeout(250);
+  await page.click('#r-run');
+  await page.waitForTimeout(1400);
+  function windowsFrom(text) {
+    return Number((text.match(/Total Rolling Windows Analysed ([\d,]+) Observations/) || [])[1]
+                  ?.replace(/,/g, ''));
+  }
+  const daily = windowsFrom(flat(await page.locator('#r-out').innerText()));
+  await page.locator('#r-freq .chip', { hasText: 'Weekly' }).click();
+  await page.waitForTimeout(1400);
+  const weekly = windowsFrom(flat(await page.locator('#r-out').innerText()));
+  await page.locator('#r-freq .chip', { hasText: 'Monthly' }).click();
+  await page.waitForTimeout(1400);
+  const monthlyText = flat(await page.locator('#r-out').innerText());
+  const monthly = windowsFrom(monthlyText);
+  ok('weekly takes about a seventh of the daily start dates',
+     Math.abs(weekly - daily / 7) < daily * 0.02, daily + ' -> ' + weekly);
+  ok('monthly takes about a thirtieth',
+     Math.abs(monthly - daily / 30.44) < daily * 0.02, daily + ' -> ' + monthly);
+  ok('and every one of the three still measures a 12% series at 12% a year',
+     /Median Rolling Return 12\.0%/.test(monthlyText),
+     (monthlyText.match(/Median Rolling Return [^ ]+/) || [''])[0]);
+  ok('the table says which start dates it used',
+     /monthly start dates/.test(monthlyText), (monthlyText.match(/start dates[^.]{0,40}/) || [''])[0]);
+
+  /* ============================================ SECTION 5, THE TABLE AND FIVE */
+  section('Section 5 · the statistical summary and the five insights');
+  await openIndexPath();
+  await page.setInputFiles('#bm-file', primary);
+  await page.waitForTimeout(1600);
+  await page.setInputFiles('#cmp-file', benchLong);
+  await page.waitForTimeout(1600);
+  await page.locator('#r-years .chip', { hasText: '3 years' }).first().click();
+  await page.waitForTimeout(250);
+  await page.click('#r-run');
+  await page.waitForTimeout(1600);
+  const out = flat(await page.locator('#r-out').innerText());
+
+  /* Compared case-insensitively: the stylesheet renders table headings in
+     capitals, and allInnerTexts reports what is rendered. The words are what
+     the specification names, not their casing. */
+  const heads = await page.locator('#r-out .summary3 thead th').allInnerTexts();
+  ok('the table has the three columns the specification names',
+     heads.join('|').toLowerCase() === 'performance metric|primary investment|benchmark index',
+     heads.join('|'));
+  const metrics = await page.locator('#r-out .summary3 tbody td:first-child').allInnerTexts();
+  ok('and the eight rows, in the specification’s order',
+     metrics.join('|') === [
+       'Total Rolling Windows Analysed', 'Average Rolling Return (Mean)', 'Median Rolling Return',
+       'Maximum Return (Best Window)', 'Minimum Return (Worst Window)',
+       'Return Volatility (Std Deviation)', 'Negative Return Probability',
+       'Outperformance Rate vs Benchmark'].join('|'),
+     metrics.join('|'));
+  ok('windows are counted as Observations',
+     /Total Rolling Windows Analysed [\d,]+ Observations [\d,]+ Observations/.test(out), out.slice(0, 400));
+  /* 14% and 10%, compounded daily, over every window. Both columns are known. */
+  ok('the primary column reads 14.0% and the benchmark 10.0%',
+     /Average Rolling Return \(Mean\) 14\.0% 10\.0%/.test(out),
+     (out.match(/Average Rolling Return \(Mean\)[^A-Z]{0,30}/) || [''])[0]);
+  ok('a constant-growth series has no spread between its windows',
+     /Return Volatility \(Std Deviation\) 0\.0% 0\.0%/.test(out),
+     (out.match(/Return Volatility[^A-Z]{0,40}/) || [''])[0]);
+  ok('nothing ended below zero, and it is counted in windows',
+     /Negative Return Probability 0\.0% \(0 Windows\) 0\.0% \(0 Windows\)/.test(out),
+     (out.match(/Negative Return Probability[^A-Z]{0,50}/) || [''])[0]);
+  ok('14% beats 10% in every single window',
+     /Outperformance Rate vs Benchmark 100\.0% of total windows N\/A/.test(out),
+     (out.match(/Outperformance Rate vs Benchmark[^A-Z]{0,50}/) || [''])[0]);
+
+  const insights = await page.locator('#r-out ol.insights > li').allInnerTexts();
+  ok('there are exactly five insights', insights.length === 5, String(insights.length));
+  ok('1 · Outperformance Consistency, in the specification’s sentence',
+     /^Outperformance Consistency/.test(flat(insights[0])) &&
+     /Over the selected 3-Year rolling windows, the investment outperformed the benchmark in 100\.0% of all instances \([\d,]+ out of [\d,]+ rolling periods\)\./.test(flat(insights[0])),
+     flat(insights[0]));
+  ok('2 · Excess Return Profile, with the spread signed',
+     /^Excess Return Profile \(Alpha Spread\)/.test(flat(insights[1])) &&
+     /The investment generated an average annual return spread of \+4\.0% relative to the benchmark over 3-Year horizons\./.test(flat(insights[1])),
+     flat(insights[1]));
+  ok('3 · Downside Resilience, both weakest windows',
+     /^Downside Resilience/.test(flat(insights[2])) &&
+     /During the weakest 3-Year market window, the investment recorded a return of 14\.0%, compared to 10\.0% for the benchmark\./.test(flat(insights[2])),
+     flat(insights[2]));
+  ok('4 · Return Range & Distribution, with the spread',
+     /^Return Range & Distribution/.test(flat(insights[3])) &&
+     /Historical 3-Year rolling returns ranged from 14\.0% to 14\.0%, indicating an overall return variance spread of 0\.0%\./.test(flat(insights[3])),
+     flat(insights[3]));
+  ok('5 · Capital Loss Probability, as a count and a share',
+     /^Capital Loss Probability/.test(flat(insights[4])) &&
+     /In 0 out of [\d,]+ rolling periods \(0\.0%\), the investment recorded a negative return over a 3-Year holding period\./.test(flat(insights[4])),
+     flat(insights[4]));
+
+  /* and with no benchmark at all, the table still stands and says why */
+  await openIndexPath();
+  await page.setInputFiles('#bm-file', primary);
+  await page.waitForTimeout(1600);
+  await page.click('#r-run');
+  await page.waitForTimeout(1400);
+  const alone = flat(await page.locator('#r-out').innerText());
+  ok('with no benchmark the table still reports the primary investment',
+     /Average Rolling Return \(Mean\) 14\.0%/.test(alone), alone.slice(0, 300));
+  ok('and says plainly that the second column cannot be filled in',
+     /No benchmark index data loaded/.test(alone), alone.slice(0, 400));
+  ok('the outperformance row does not invent a rate',
+     /Outperformance Rate vs Benchmark Not measurable without a benchmark/.test(alone),
+     (alone.match(/Outperformance Rate vs Benchmark[^A-Z]{0,60}/) || [''])[0]);
+  ok('and the three benchmark insights say so rather than going missing',
+     (await page.locator('#r-out ol.insights > li').count()) === 5 &&
+     /Not measurable without benchmark index data/.test(alone),
+     String(await page.locator('#r-out ol.insights > li').count()));
+
+  /* ============================== SECTION 7.5, NEUTRALITY VERIFICATION */
+  section('Section 7 · Neutrality Verification');
+  await openIndexPath();
+  await page.setInputFiles('#bm-file', primary);
+  await page.waitForTimeout(1600);
+  await page.setInputFiles('#cmp-file', benchLong);
+  await page.waitForTimeout(1600);
+  await page.click('#r-run');
+  await page.waitForTimeout(1600);
+  const screen = flat(await page.locator('#view-rolling').innerText());
+
+  /* Section 6's prohibited column, and the advisory phrases section 7 names. */
+  const banned = [
+    'Success Rate', 'Winning Percentage', 'Max Loss', 'Danger Level',
+    'Investment Advice', 'Find Best Funds', 'Evaluate Portfolio',
+    'Must Buy', 'Underperforming Asset', 'ZeroDha File'
+  ];
+  banned.forEach(phrase => {
+    ok('the screen never says “' + phrase + '”',
+       !new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i').test(screen),
+       (screen.match(new RegExp('.{0,50}' + phrase + '.{0,50}', 'i')) || [''])[0]);
+  });
+  /* Not a ban on the WORD. The screen says "Nothing on this card is a
+     recommendation to buy, hold, sell or switch", which is the disclaimer
+     itself, and it labels daily rolling as Recommended, which is a statement
+     about method and not about money. What section 7 forbids is the screen
+     telling a reader what to do with an investment, so that is what is
+     tested: an advisory sentence, not a substring. */
+  const advisory = [
+    /\byou should (buy|sell|hold|switch|invest|avoid)\b/i,
+    /\bwe recommend\b/i,
+    /\brecommended (fund|scheme|investment|holding|allocation)\b/i,
+    /\b(best|top|worst) (fund|scheme)s?\b/i,
+    /\b(consider|try) (buying|selling|switching|adding)\b/i,
+    /\b(strong|weak) (buy|sell)\b/i,
+    /\bthis fund is (good|bad|safe|risky)\b/i
+  ];
+  advisory.forEach(re => {
+    ok('the screen never advises: ' + re.source, !re.test(screen),
+       (screen.match(new RegExp('.{0,60}' + re.source + '.{0,60}', 'i')) || [''])[0]);
+  });
+  ok('and it says outright that it recommends nothing',
+     /Nothing on this card is a recommendation to buy, hold, sell or switch/.test(screen),
+     'the disclaimer is missing');
+
+  /* Section 6's approved column, each one actually on the screen. */
+  [['Primary Investment Data (NAV)', 'Card A header'],
+   ['Benchmark Index Data (TRI)',    'Card B header'],
+   ['Outperformance Frequency (%)',  'the outperformance metric'],
+   ['Minimum Rolling Return',        'the downside metric'],
+   ['Factual Data Insights',         'the insights header'],
+   ['Calculate Rolling Returns',     'the call to action']
+  ].forEach(([phrase, what]) => {
+    ok(what + ' uses the approved wording', screen.indexOf(phrase) !== -1,
+       phrase + ' not found');
+  });
+
+  /* ================================= THE FUND PATH IS NOT IN SCOPE AND IS NOT TOUCHED */
+  section('The other source path is left exactly as it was');
+  await page.goto(BASE_URL + '#rolling', { waitUntil: 'networkidle' });
+  await page.click('#r-source .chip[data-source="fund"]');
+  await page.waitForTimeout(300);
+  ok('no Card B header appears on the fund path',
+     await page.locator('#up-benchmark-head').isHidden());
+  ok('no rolling frequency appears on the fund path',
+     await page.locator('#r-freq-wrap').isHidden());
+  await page.setInputFiles('#f-file', navFile(TMP + '/spec-fund.csv', 0.14, 2015, 2025, 100));
+  await page.waitForTimeout(1600);
+  const fundChips = await page.locator('#r-years .chip').allInnerTexts();
+  ok('and the fund path still offers exactly the five fixed horizons',
+     fundChips.join('|') === '1 year|3 years|5 years|7 years|10 years', fundChips.join('|'));
+  await page.click('#r-run');
+  await page.waitForTimeout(1500);
+  const fundOut = flat(await page.locator('#r-out').innerText());
+  ok('the fund path gets no statistical summary table',
+     (await page.locator('#r-out .summary3').count()) === 0);
+  ok('nor the five insights',
+     (await page.locator('#r-out ol.insights').count()) === 0);
+  ok('and it keeps the wording it had',
+     /Historical success rate/.test(fundOut), fundOut.slice(0, 400));
+
+  ok('no script errors in the whole run', errors.length === 0, errors.slice(0, 3).join(' | '));
+
+  await page.goto(BASE_URL + '#rolling', { waitUntil: 'networkidle' });
+  await page.click('#r-source .chip[data-source="index"]');
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: TMP + '/shots/40-spec-cards.png', fullPage: true });
+
+  await browser.close();
+  console.log('\n' + pass + ' passed, ' + fails.length + ' failed');
+  if (fails.length) { console.log('FAILED:\n  ' + fails.join('\n  ')); process.exit(1); }
+})();

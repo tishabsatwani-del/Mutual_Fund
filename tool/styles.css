@@ -86,6 +86,11 @@
   --series-3:    #A78BFA;
   --good:        #05FFC4;
   --critical:    #FF7A6B;
+  /* Amber, for the one state that is neither. A range warning is not a
+     refusal: the two files DO line up, just not over the whole of either, and
+     the analysis runs on the part they share. Coral would read as "rejected".
+     Measured 9.4:1 on the card ground and 8.2:1 on the notice ground. */
+  --warn:        #FFB454;
 
   --glow:        0 0 24px -6px rgba(0, 242, 254, .55);
   --shadow:      0 1px 2px rgba(0, 0, 0, .55), 0 10px 30px rgba(0, 0, 0, .45);
@@ -490,12 +495,92 @@ button.link {
   padding: 16px 20px;
   font-size: .9rem; color: var(--ink-2); background: var(--surface-2); margin: .8rem 0;
 }
+/* The two named data doors on the market-index path. A file goes in one of
+   two places and the consequences of confusing them are silent and total, so
+   each door carries its own number, its own sentence and its own rule rather
+   than a shared paragraph above both. */
+.upcard {
+  border: 1px solid var(--line-strong); border-radius: var(--radius);
+  background: var(--surface); padding: 1rem 1.1rem 1.1rem; margin: 1rem 0;
+}
+.upcard > h3 {
+  margin: 0 0 .35rem; font-size: 1.02rem; font-weight: 700; color: var(--ink);
+  letter-spacing: .01em;
+}
+.upcard-desc { margin: 0 0 .55rem; font-size: .93rem; color: var(--ink-2); }
+.upcard-cols { margin: 0 0 .55rem; font-size: .88rem; color: var(--ink-3); }
+.upcard-cols code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: .86em; padding: .12rem .4rem; border-radius: 5px;
+  background: var(--surface-2); border: 1px solid var(--line); color: var(--ink);
+}
+.upcard-rule {
+  margin: 0; font-size: .9rem; color: var(--ink-2);
+  border-left: 3px solid var(--warn); padding: .35rem 0 .35rem .7rem;
+}
+.upcard-rule strong { color: var(--warn); }
+
 .notice.bad { border-color: var(--critical); }
+.notice.warn { border-color: var(--warn); }
 .notice .ic { flex: none; font-weight: 700; }
 .notice.bad .ic { color: var(--critical); }
+.notice.warn .ic { color: var(--warn); }
 .notice.ok .ic { color: var(--good); }
 
 table.data { width: 100%; border-collapse: collapse; font-size: .9rem; font-variant-numeric: tabular-nums; }
+/* Section 5's three-column table. The metric names are long and the figures
+   are short, so the first column takes what it needs and the two number
+   columns share what is left evenly -- otherwise "Return Volatility (Std
+   Deviation)" wraps to three lines while two 6-character cells sit in acres
+   of space beside it. */
+table.data.summary3 th:not(:first-child),
+table.data.summary3 td:not(:first-child) { width: 27%; }
+table.data.summary3 td:first-child { color: var(--ink-2); }
+table.data.summary3 td:not(:first-child) { color: var(--ink); font-weight: 600; }
+.nodata { color: var(--muted); font-weight: 400; font-size: .88em; }
+/* This table must NOT stack on a phone.
+ *
+ * The stacking rule above was written for two-column tables, where the
+ * second cell is a gloss on the first and reads fine underneath it. Three
+ * columns stacked produce "14.0%" above "10.0%" with nothing saying which is
+ * the investment and which the benchmark -- and telling those two apart is
+ * the entire reason the table has three columns.
+ *
+ * Unlike the five-column tables that genuinely have no room, this one fits:
+ * a metric name and two short percentages come to about 19rem, inside a
+ * 390px phone with room to spare. So it stays a table, headings attached. */
+@media (max-width: 30rem) {
+  table.data.summary3 { display: table; }
+  table.data.summary3 thead { display: table-header-group; }
+  table.data.summary3 tbody { display: table-row-group; }
+  table.data.summary3 tr,
+  table.data.summary3 thead tr { display: table-row; padding: 0; border-bottom: 0; }
+  table.data.summary3 td, table.data.summary3 th {
+    display: table-cell; margin: 0; padding: .5rem .3rem;
+    border-bottom: 1px solid var(--line);
+  }
+  table.data.summary3 { font-size: .84rem; }
+  table.data.summary3 th { font-size: .68rem; letter-spacing: .03em; }
+  table.data.summary3 td:first-child, table.data.summary3 th:first-child { min-width: 8.2rem; }
+  table.data.summary3 th:not(:first-child),
+  table.data.summary3 td:not(:first-child) { width: 26%; }
+  /* A cell narrow enough to need a break must break BETWEEN words. The page
+     sets overflow-wrap: anywhere for long scheme names, and inherited here it
+     split "Observations" into "Observation" and a lone "s". */
+  table.data.summary3 td, table.data.summary3 th {
+    overflow-wrap: normal; word-break: normal;
+  }
+}
+
+/* The five numbered statements. Numbered by the list itself, so the numbers
+   cannot drift out of step with the items the way hand-typed ones do. */
+ol.insights { margin: 0; padding: 0 0 0 1.4rem; }
+ol.insights li { margin: 0 0 .9rem; padding-left: .25rem; }
+ol.insights li:last-child { margin-bottom: 0; }
+ol.insights li::marker { color: var(--accent); font-weight: 700; }
+.ins-h { display: block; font-weight: 700; color: var(--ink); font-size: .93rem; margin-bottom: .15rem; }
+.ins-b { display: block; color: var(--ink-2); font-size: .93rem; line-height: 1.55; }
+
 table.data th, table.data td { text-align: right; padding: .45rem .4rem; border-bottom: 1px solid var(--line); }
 table.data th:first-child, table.data td:first-child { text-align: left; }
 table.data.spread th, table.data.spread td { text-align: center; white-space: nowrap; }

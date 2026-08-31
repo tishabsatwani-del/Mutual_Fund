@@ -223,6 +223,141 @@
    * practical at the scale of thousands of schemes without anyone maintaining
    * a database of them.
    */
+  /* ================================================ the schema gatekeeper
+   *
+   * A file is checked BEFORE anything is computed from it, because the failure
+   * this catches is not a crash -- it is a plausible wrong answer.
+   *
+   * A tradebook has a date column and a numeric column, so the ordinary reader
+   * takes it without complaint: order quantities become "prices", and a rolling
+   * return comes out of them. It is confident and it is meaningless. The names
+   * of the columns are the only thing that says which kind of file this is,
+   * which is why this checks headings and the ordinary reader checks shape.
+   */
+  /* Headings that only a transaction record has.
+   *
+   * Every entry here has to earn its place by being ABSENT from the files
+   * this tool exists to read, and two of them did not:
+   *
+   *   ISIN -- removed. AMFI's bulk NAV download, which is the single most
+   *   common legitimate file this tool receives, ships "ISIN Div Payout" and
+   *   "ISIN Div Reinvestment" columns. The gate refused it as a trade log. An
+   *   ISIN names an instrument; it says nothing about whether the rows are
+   *   prices or orders, so it discriminates nothing and cost everything.
+   *
+   *   "broker" -- narrowed to "brokerage". A brokerage column is a fee and
+   *   only a tradebook has one. A broker column is an intermediary's name and
+   *   a consolidated account statement carries one, and section 2 says a CAS
+   *   is a file this door must accept.
+   *
+   * What is left is genuinely transaction-only: an order, a trade, a
+   * quantity, an exchange, a segment. */
+  var TRADE_HEADERS = [
+    /\border\s*(id|no|number|type)\b/i,
+    /\b(buy|sell)\s*\/?\s*(sell|buy)?\b/i,
+    /\btrade\s*(id|no|type|date)\b/i,
+    /\bquantity\b|\bqty\b/i,
+    /\bbrokerage\b/i,
+    /\btransaction\s*(id|type)\b/i,
+    /\bexchange\b/i,
+    /\bsegment\b/i
+  ];
+  /* Words that make a column a transaction record rather than a price series.
+     "Amount" alone is not here: a NAV file can carry one. */
+  var TRADE_VALUES = /^(buy|sell|b|s|purchase|redemption|credit|debit|cr|dr)$/i;
+
+  function checkSchema(rows) {
+    if (!rows || !rows.length) {
+      return fail('EMPTY', 'That file has no rows in it that could be read.');
+    }
+    var header = looksLikeHeader(rows[0]) ? rows[0] : null;
+    var body = header ? rows.slice(1) : rows;
+    if (!body.length) {
+      return fail('EMPTY', 'That file has no rows in it that could be read.');
+    }
+
+    /* 1. Transaction columns, by heading. */
+    var hits = [];
+    if (header) {
+      header.forEach(function (h) {
+        var name = String(h == null ? '' : h).trim();
+        if (!name) return;
+        TRADE_HEADERS.forEach(function (re) {
+          if (re.test(name) && hits.indexOf(name) === -1) hits.push(name);
+        });
+      });
+    }
+
+    /* 2. Transaction columns, by content: a column of BUY/SELL in most of its
+          rows is a tradebook whatever its heading says, and AMFI-style files
+          with no header at all would otherwise slip straight past step 1. */
+    var probe = body.slice(0, 40);
+    var width = Math.max.apply(null, probe.map(function (r) { return r.length; }).concat([0]));
+    for (var c = 0; c < width; c++) {
+      var n = 0, seen = 0;
+      for (var r = 0; r < probe.length; r++) {
+        var cell = String(probe[r][c] == null ? '' : probe[r][c]).trim();
+        if (!cell) continue;
+        seen++;
+        if (TRADE_VALUES.test(cell)) n++;
+      }
+      if (seen >= 2 && n >= Math.ceil(seen * 0.6)) {
+        var label = header && header[c] ? String(header[c]).trim() : 'column ' + (c + 1);
+        if (hits.indexOf(label) === -1) hits.push(label);
+      }
+    }
+
+    if (hits.length) {
+      return { ok: false, code: 'TRADEBOOK', detected: hits, message: TRADEBOOK_COPY };
+    }
+
+    /* 3. A date column and a numeric value column, or there is nothing to read. */
+    var cols = pickColumns(body, header);
+    if (cols.dateCol === -1 || cols.valueCol === -1) {
+      return { ok: false, code: 'NO_SCHEMA',
+               detected: header ? header.filter(Boolean).map(String) : [],
+               message: TRADEBOOK_COPY };
+    }
+
+    /* 4. And the value column has to hold NUMBERS.
+     *
+     * pickColumns finds it by heading first, so a column called "NAV" is taken
+     * as the values whatever is actually in it -- and a file of text under that
+     * heading went all the way through to a reading. The heading says what the
+     * column is FOR; only the cells say what is in it. */
+    var numbers = 0, filled = 0;
+    for (var v = 0; v < probe.length; v++) {
+      var raw = String(probe[v][cols.valueCol] == null ? '' : probe[v][cols.valueCol]).trim();
+      if (!raw) continue;
+      filled++;
+      if (parseNumber(raw) > 0) numbers++;
+    }
+    if (!filled || numbers < Math.ceil(filled * 0.6)) {
+      return { ok: false, code: 'NOT_NUMERIC',
+               detected: header && header[cols.valueCol]
+                 ? [String(header[cols.valueCol]).trim()] : ['column ' + (cols.valueCol + 1)],
+               message: NOT_NUMERIC_COPY };
+    }
+
+    return { ok: true, header: header, dateCol: cols.dateCol, valueCol: cols.valueCol };
+  }
+
+  /* Section 3 of the specification, transcribed. */
+  var TRADEBOOK_COPY =
+    'The uploaded file contains trade logs or transaction records instead of historical ' +
+    'NAV/Index values. Expected Schema: Date and NAV / Value. Detected Schema: Transaction ' +
+    'fields (Buy/Sell, Order Type). Please re-upload a valid daily NAV or Index CSV file.';
+
+  /* Section 3's red banner is written for a tradebook. A column of text under a
+     NAV heading is a different fault and gets its own sentence, because "this
+     is a trade log" would be a wrong description of it. */
+  var NOT_NUMERIC_COPY =
+    'The column this file uses for values does not hold numbers. Expected Schema: Date and ' +
+    'NAV / Value, where every value is a price. Please re-upload a valid daily NAV or Index ' +
+    'CSV file.';
+
+  function fail(code, message) { return { ok: false, code: code, message: message, detected: [] }; }
+
   function pickSchemeColumn(header, rows) {
     if (!header) return -1;
     var lower = header.map(function (h) { return String(h).toLowerCase().trim(); });
@@ -432,6 +567,7 @@
   var api = {
     detectDelimiter: detectDelimiter,
     parseDelimited: parseDelimited,
+    checkSchema: checkSchema, TRADEBOOK_COPY: TRADEBOOK_COPY, NOT_NUMERIC_COPY: NOT_NUMERIC_COPY,
     parseNumber: parseNumber,
     parseDateParts: parseDateParts,
     toTimestamp: toTimestamp,

@@ -24,6 +24,13 @@ function close(name, actual, expected, tol) {
 }
 function section(title) { console.log('\n' + title); }
 
+/* Exact equality, for the values that are counts, codes and names rather than
+   arithmetic -- close() would quietly pass a wrong string. */
+function eq(name, actual, expected) {
+  ok(name, actual === expected,
+     'got ' + JSON.stringify(actual) + ', expected ' + JSON.stringify(expected));
+}
+
 var d = E.utc;
 
 /* ===================================================================== XIRR */
@@ -623,6 +630,198 @@ section('Several schemes combined into one series');
   ok('and so are two that never overlap',
      E.combineEqualWeighted([a, grow(10, 0.1, 5).map(p => ({ t: p.t + 4e11, v: p.v }))]).code
        === 'NO_OVERLAP');
+}
+
+
+/* -------------------------------------------------------------------------
+ * The rolling-returns redesign specification, sections 3 and 4.
+ *
+ * Every expected value below is worked out somewhere other than the engine.
+ */
+section('Volatility: the standard deviation of the windows');
+{
+  /* Sample standard deviation, n-1. Two values differ by 0.10, so the sample
+     standard deviation is 0.10 / sqrt(2) = 0.0707107, by hand. */
+  close('two windows: 0.10 apart gives 0.10/sqrt(2)',
+        E.describe([0.10, 0.20]).stdev, 0.1 / Math.SQRT2, 1e-9);
+
+  /* One window has no spread to measure. Null, not zero: zero would read as
+     "this never moved", which is a much stronger claim than "unknown". */
+  eq('one window has no standard deviation', E.describe([0.10]).stdev, null);
+
+  /* A wholly flat series: every window returns the same, so the spread is
+     genuinely zero and zero is the honest answer. */
+  var flat = E.describe([0.12, 0.12, 0.12, 0.12]);
+  close('a flat set really is zero', flat.stdev, 0, 1e-12);
+
+  /* Worked independently against the textbook definition on a set with real
+     spread: mean 0.10, deviations -0.06/-0.02/0.02/0.06, sum of squares
+     0.0080, divided by n-1 = 3, square root = 0.05163978. */
+  close('and matches the definition on a set with spread',
+        E.describe([0.04, 0.08, 0.12, 0.16]).stdev, Math.sqrt(0.0080 / 3), 1e-12);
+}
+
+section('Rolling frequency: how far the window moves each time');
+{
+  /* Weekdays only, so five observations a week -- which is what makes the
+     expected counts below arithmetic rather than guesswork. */
+  var s = [], t = Date.UTC(2006, 0, 1), v = 100;
+  while (t <= Date.UTC(2026, 0, 1)) {
+    var d = new Date(t);
+    if (d.getUTCDay() % 6) s.push({ t: t, v: v });
+    v *= Math.pow(1.12, 1 / 365.2425);
+    t += 86400000;
+  }
+
+  var daily = E.rollingReturns(s, 5, { frequency: 'daily' });
+  var weekly = E.rollingReturns(s, 5, { frequency: 'weekly' });
+  var monthly = E.rollingReturns(s, 5, { frequency: 'monthly' });
+
+  ok('daily takes every observation', daily.stats.count > 3800, String(daily.stats.count));
+  /* Five trading days to the week, so weekly is a fifth of daily. */
+  ok('weekly takes about one in five of them',
+     Math.abs(weekly.stats.count - daily.stats.count / 5) / (daily.stats.count / 5) < 0.05,
+     weekly.stats.count + ' vs ' + Math.round(daily.stats.count / 5));
+  /* Roughly 21.7 trading days to the month. */
+  ok('and monthly about one in twenty-two',
+     Math.abs(monthly.stats.count - daily.stats.count / 21.7) / (daily.stats.count / 21.7) < 0.08,
+     monthly.stats.count + ' vs ' + Math.round(daily.stats.count / 21.7));
+
+  /* Thinning changes HOW MANY windows are taken, never how any one of them is
+     measured -- so on a series growing at a constant rate every frequency must
+     return the same rate. */
+  [daily, weekly, monthly].forEach(function (r, i) {
+    close(['daily', 'weekly', 'monthly'][i] + ' measures each window identically',
+          r.stats.mean, 0.12, 0.0005);
+  });
+
+  /* Consecutive starts must actually be a week and a month apart. */
+  var wGaps = [];
+  for (var i = 1; i < weekly.pairs.length; i++) {
+    wGaps.push((weekly.pairs[i].t - weekly.pairs[i - 1].t) / 86400000);
+  }
+  ok('no two weekly windows start less than seven days apart',
+     Math.min.apply(null, wGaps) >= 7, String(Math.min.apply(null, wGaps)));
+  var mGaps = [];
+  for (var j = 1; j < monthly.pairs.length; j++) {
+    mGaps.push((monthly.pairs[j].t - monthly.pairs[j - 1].t) / 86400000);
+  }
+  ok('nor two monthly ones less than twenty-eight',
+     Math.min.apply(null, mGaps) >= 28, String(Math.min.apply(null, mGaps)));
+
+  eq('an unknown frequency falls back to daily',
+     E.rollingReturns(s, 5, { frequency: 'fortnightly' }).stats.count, daily.stats.count);
+  eq('and the frequency used is reported back', monthly.frequency, 'monthly');
+
+  /* Computed from the series that actually exists, not from the dates the loop
+     was given: 1 January 2006 is a Sunday, so the first weekday in it is the
+     2nd and the span is 19.997 years -- which holds nineteen whole years and
+     not twenty. Asserting 20 here would have been asserting my own arithmetic
+     about a calendar rather than the engine's about the data. */
+  var span = (s[s.length - 1].t - s[0].t) / (365.25 * 86400000);
+  eq('max history is the longest whole-year horizon in the data',
+     E.maxHorizon(s), Math.floor(span));
+  ok('which is one short of the nominal twenty, because the file starts on a Monday',
+     Math.floor(span) === 19 && span > 19.9, span.toFixed(4) + ' years');
+  eq('and nothing at all when there is no history', E.maxHorizon([{ t: 1, v: 1 }]), null);
+}
+
+section('Whether two files line up, asked before anything is computed');
+{
+  var mk = function (y1, y2) {
+    var out = [], t = Date.UTC(y1, 0, 1);
+    while (t <= Date.UTC(y2, 11, 31)) { out.push({ t: t, v: 100 }); t += 86400000 * 7; }
+    return out;
+  };
+  /* The specification's own example: 2015-2025 against 2018-2025. */
+  var o = E.rangeOverlap(mk(2015, 2025), mk(2018, 2025));
+  ok('an incomplete overlap is reported as one', o.ok && o.full === false);
+  eq('the shared stretch starts at the later start',
+     new Date(o.from).toISOString().slice(0, 10), '2018-01-01');
+  close('and three years of the primary fall outside it', o.lostA, 3, 0.05);
+  close('while none of the benchmark does', o.lostB, 0, 0.05);
+
+  var same = E.rangeOverlap(mk(2015, 2025), mk(2015, 2025));
+  ok('identical ranges are a full overlap, with nothing dropped',
+     same.full === true && same.lostA === 0 && same.lostB === 0);
+
+  eq('and ranges that never meet are refused',
+     E.rangeOverlap(mk(2000, 2005), mk(2018, 2025)).code, 'NO_OVERLAP');
+}
+
+section('The schema gatekeeper: a tradebook is not a price series');
+{
+  var check = function (text) { return P.checkSchema(P.parseDelimited(text)); };
+
+  ok('a clean NAV file passes',
+     check('Date,NAV\n2021-01-01,10.5\n2021-01-04,10.6\n2021-01-05,10.7\n').ok);
+  ok('and an index file passes',
+     check('Date,Index Value\n2021-01-01,1000\n2021-01-04,1010\n').ok);
+  ok('and so does a NAV file carrying a scheme column',
+     check('Scheme Name,Date,NAV\nAcme,2021-01-01,10.5\nAcme,2021-01-04,10.6\n').ok);
+
+  /* A tradebook has a date column and a numeric column, so the ordinary reader
+     takes it: order quantities become "prices" and a rolling return comes out
+     of them, confident and meaningless. Only the headings say which it is. */
+  var trade = check('Symbol,ISIN,Trade Date,Exchange,Segment,Trade Type,Quantity,Price,Order ID\n' +
+                    'INFY,INE009A01021,2021-01-01,NSE,EQ,buy,10,1500,O1\n' +
+                    'TCS,INE467B01029,2021-01-04,NSE,EQ,sell,5,3200,O2\n');
+  eq('a broker tradebook is refused', trade.code, 'TRADEBOOK');
+  ok('and the columns that gave it away are named',
+     trade.detected.indexOf('Order ID') !== -1 && trade.detected.indexOf('Quantity') !== -1,
+     JSON.stringify(trade.detected));
+  ok('with the specification’s own sentence',
+     /trade logs or transaction records instead of historical NAV\/Index values/
+       .test(trade.message) &&
+     /Expected Schema: Date and NAV \/ Value/.test(trade.message), trade.message);
+
+  /* AMFI-style files carry no header at all, so headings cannot be the only
+     test: a column of BUY/SELL is a tradebook whatever it is called. */
+  eq('a headerless file with a buy/sell column is caught by its content',
+     check('2021-01-01,buy,10,1500\n2021-01-04,sell,5,3200\n2021-01-05,buy,8,1490\n').code,
+     'TRADEBOOK');
+
+  /* pickColumns finds the value column by HEADING first, so a column called
+     NAV was taken as the values whatever was in it. */
+  var text = check('Date,NAV\n2021-01-01,not a number\n2021-01-04,also text\n');
+  eq('a value column holding text halts processing', text.code, 'NOT_NUMERIC');
+  ok('and it is not called a trade log, because it is not one',
+     !/trade logs/.test(text.message), text.message);
+  ok('while one stray unreadable row is tolerated',
+     check('Date,NAV\n2021-01-01,10.5\n2021-01-04,n/a\n2021-01-05,10.7\n2021-01-06,10.8\n').ok);
+
+  eq('a file with no date column at all is refused',
+     check('Fund,Rating\nAcme,Five\nZenith,Four\n').code, 'NO_SCHEMA');
+
+  /* The gate has to be wrong in only one direction. Refusing a tradebook
+   * costs a reader one confusing minute; refusing the file the tool exists to
+   * read costs it the reader. These are the legitimate shapes, and every one
+   * of them was found by feeding the gate a real file rather than by
+   * imagining what one looks like. */
+  var amfiBulk = ['Scheme Code;Scheme Name;ISIN Div Payout;ISIN Div Reinvestment;Net Asset Value;Date'];
+  for (var ab = 0; ab < 40; ab++) {
+    amfiBulk.push('120503;Alpha Fund - Direct Plan - Growth;INF204K01XI3;-;' +
+                  (10 + ab).toFixed(4) + ';0' + (1 + ab % 9) + '-Jan-2020');
+  }
+  ok('AMFI\u2019s own bulk NAV download passes the gate',
+     P.checkSchema(P.parseDelimited(amfiBulk.join('\n'))).ok,
+     JSON.stringify(P.checkSchema(P.parseDelimited(amfiBulk.join('\n')))));
+
+  ok('and so does a statement carrying a broker column',
+     check('Date,Broker,NAV\n2021-01-01,ARN-0001,10.5\n2021-01-02,ARN-0001,10.6\n' +
+           '2021-01-03,ARN-0001,10.7\n2021-01-04,ARN-0001,10.8\n').ok);
+
+  ok('while a Zerodha tradebook is still caught by six other columns',
+     (function () {
+       var t = ['Symbol,ISIN,Trade Date,Exchange,Segment,Series,Trade Type,Quantity,Price,Order ID'];
+       for (var i = 0; i < 40; i++) {
+         t.push('INFY,INE009A01021,2023-01-0' + (1 + i % 9) + ',NSE,EQ,EQ,' +
+                (i % 2 ? 'sell' : 'buy') + ',' + (10 + i) + ',1400.50,23000' + i);
+       }
+       var r = P.checkSchema(P.parseDelimited(t.join('\n')));
+       return r.code === 'TRADEBOOK' && r.detected.length >= 6 &&
+              r.detected.indexOf('ISIN') === -1;
+     })());
 }
 
 

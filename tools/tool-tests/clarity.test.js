@@ -111,10 +111,14 @@ function longFile(file) {
 
   section('The index panel names what file to look for');
   await page.click('#r-source .chip[data-source="index"]');
-  /* the guidance lives in a <details>; a reader opens it, so the test does too */
-  await page.locator('#src-index details summary').click();
+  /* The guidance moved with its subject. It is entirely about obtaining a
+     Total Return Index file, and it used to sit under the card that now says
+     "1. Primary Investment Data (NAV)" -- help about the OTHER door. It is
+     now inside Card B, which is the door it describes.
+     It lives in a <details>; a reader opens it, so the test does too. */
+  await page.locator('#up-benchmark-head details summary').click();
   await page.waitForTimeout(200);
-  const idx = await page.locator('#src-index details .body').innerText();
+  const idx = await page.locator('#up-benchmark-head details .body').innerText();
   ok('it says where index data comes from', /index provider/i.test(idx));
   ok('it names the two columns needed', /a date/i.test(idx) && /index value on that date/i.test(idx));
   ok('it explains TRI versus a price index', /Total Return Index/.test(idx) && /dividends/.test(idx));

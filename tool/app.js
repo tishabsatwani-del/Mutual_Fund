@@ -63,7 +63,7 @@
     });
   }
   function notice(kind, text) {
-    var mark = kind === 'bad' ? '!' : kind === 'ok' ? '✓' : 'i';
+    var mark = kind === 'bad' ? '!' : kind === 'ok' ? '✓' : kind === 'warn' ? '!' : 'i';
     return '<div class="notice ' + kind + '"><span class="ic" aria-hidden="true">' + mark +
            '</span><span>' + text + '</span></div>';
   }
@@ -287,7 +287,13 @@
           var listed = P.listSchemes(rows);
           if (listed) { onError(res.message, { rows: rows, schemes: listed.schemes }); return; }
         }
-        onError(res.message);
+        /* The rows go out with EVERY refusal, not only that one.
+         *
+         * A file of text under a NAV heading fails here first, with "0 usable
+         * rows" -- true, and useless: it describes the symptom and not the
+         * fault. The caller can only say what is actually wrong with the file
+         * if it is handed the file. */
+        onError(res.message, { rows: rows || null });
         return;
       }
       res.rows = rows;

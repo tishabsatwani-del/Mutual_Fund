@@ -293,25 +293,24 @@
     unlocks once you do.</p>
 
     <div id="src-index" hidden>
-      <div class="field" style="margin-top:1rem">
-        <label for="r-index">Index</label>
-        <select id="r-index"><option value="">Loading…</option></select>
-        <p class="hint" id="r-index-hint"></p>
-      </div>
-      <div id="r-index-upload"></div>
-      <details class="explain">
-        <summary>Where do I get an index file?</summary>
-        <div class="body">
-          <p>Download the historical values of the index from the index provider’s own site — for
-          Indian equity indices that is NSE Indices. Ask for the longest period they offer.</p>
-          <p>The file needs two columns and nothing else matters: <strong>a date</strong>, and
-          <strong>the index value on that date</strong>. Any of 05-08-2026, 05-Aug-2026 or
-          2026-08-05 will be read. Extra columns are ignored.</p>
-          <p>Prefer a <strong>Total Return Index</strong> (TRI) file where one is offered. A TRI
-          counts dividends; a price index does not, and will read several percent a year lower
-          than what an investor actually received.</p>
+      <!-- Card A. The two doors this path needs, named and numbered, so nobody
+           has to work out which file goes where from a label that says
+           "Index" twice. Copy is the specification's, verbatim. -->
+      <div class="upcard" id="up-primary">
+        <h3>1. Primary Investment Data (NAV)</h3>
+        <p class="upcard-desc">Upload Mutual Fund Daily NAV history, Consolidated Account
+        Statement (CAS), or your Broker&rsquo;s historical Portfolio Value series.</p>
+        <p class="upcard-cols">Accepted columns: <code>Date</code> &middot; <code>NAV / Value</code></p>
+        <p class="upcard-rule"><strong>Rule:</strong> Do NOT upload Tradebooks, Order Histories,
+        or Buy/Sell Transaction Logs.</p>
+        <div class="field" style="margin-top:1rem">
+          <label for="r-index">Bundled history</label>
+          <select id="r-index"><option value="">Loading&hellip;</option></select>
+          <p class="hint" id="r-index-hint"></p>
         </div>
-      </details>
+        <div id="r-index-upload"></div>
+        <div id="up-primary-note" aria-live="polite"></div>
+      </div>
     </div>
 
     <div id="src-fund" hidden>
@@ -393,22 +392,57 @@
     <p class="steperror" id="r-hold-error" role="alert" hidden></p>
     <p class="spanwarn" id="r-span-warn" aria-live="polite" hidden></p>
     <p class="hint">Every possible start date within the stretch above is measured over this length.</p>
+    <!-- Section 4's rolling frequency. Market-index path only. -->
+    <div id="r-freq-wrap" hidden style="margin-top:1.2rem">
+      <span class="fieldlabel" id="r-freq-label">Rolling frequency</span>
+      <div class="chips" id="r-freq" role="radiogroup" aria-labelledby="r-freq-label"></div>
+      <p class="hint">This thins the start dates only. Every window is still measured over the
+      full holding period above, first value to last.</p>
+    </div>
   </div>
 
   <!-- 4 ------------------------------------------------------------------ -->
   <div class="card step" id="step-compare">
     <h2><span class="stepno">4</span> Compare against <span class="optional">optional</span></h2>
+    <!-- Card B. Shown only on the market-index path, where the specification
+         names this door and says what belongs behind it. The fund path keeps
+         the plain benchmark field it has always had. -->
+    <div class="upcard" id="up-benchmark-head" hidden>
+      <h3>2. Benchmark Index Data (TRI)</h3>
+      <p class="upcard-desc">Upload historical daily values for a Total Return Index
+      (e.g., Nifty 50 TRI, Nifty Midcap 150 TRI, Sensex TRI).</p>
+      <p class="upcard-cols">Accepted columns: <code>Date</code> &middot; <code>Index Value</code></p>
+      <p class="upcard-rule"><strong>Rule:</strong> Always use Total Return Index (TRI) data rather
+      than Price Return Index (PRI).</p>
+      <!-- Moved here from Card A, whose subject it is not. Every word of it is
+           about where a TRI file comes from, and it was sitting under the door
+           that says do not put an index file in this one. -->
+        <details class="explain">
+          <summary>Where do I get an index file?</summary>
+          <div class="body">
+            <p>Download the historical values of the index from the index provider’s own site — for
+            Indian equity indices that is NSE Indices. Ask for the longest period they offer.</p>
+            <p>The file needs two columns and nothing else matters: <strong>a date</strong>, and
+            <strong>the index value on that date</strong>. Any of 05-08-2026, 05-Aug-2026 or
+            2026-08-05 will be read. Extra columns are ignored.</p>
+            <p>Prefer a <strong>Total Return Index</strong> (TRI) file where one is offered. A TRI
+            counts dividends; a price index does not, and will read several percent a year lower
+            than what an investor actually received.</p>
+          </div>
+        </details>
+    </div>
     <div class="field">
       <label for="r-compare">Benchmark</label>
-      <select id="r-compare"><option value="none">Nothing — just what I chose above</option></select>
+      <select id="r-compare"><option value="none">Nothing &mdash; just what I chose above</option></select>
       <p class="hint" id="r-compare-hint">A benchmark is a reference point, not a verdict. Only dates
       both sets of data cover are compared.</p>
     </div>
     <div id="r-compare-upload"></div>
+    <div id="r-overlap-note" aria-live="polite"></div>
   </div>
 
   <div class="btnrow" style="margin-bottom:1.2rem">
-    <button class="primary" type="button" id="r-run" disabled>Show rolling returns</button>
+    <button class="primary" type="button" id="r-run" disabled>Calculate Rolling Returns</button>
     <button class="secondary" type="button" id="r-reset">Start again</button>
   </div>
 

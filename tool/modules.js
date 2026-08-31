@@ -1430,8 +1430,13 @@
    * about the file, and they are deliberately not the same threshold. */
   function recommendedYears(years) { return years + 2; }
 
-  function renderRolling(series, years, meta, compareSeries, compareName, prefix, compareMeta) {
-    var r = E.rollingReturns(series, years);
+  function renderRolling(series, years, meta, compareSeries, compareName, prefix, compareMeta, opts) {
+    var o = opts || {};
+    /* Section 4: the frequency thins the START DATES and nothing else. Every
+       window below is still measured first value to last over the full holding
+       period, so a monthly-stepped 5-year window is still a 5-year window. */
+    var calc = { frequency: o.frequency || 'daily' };
+    var r = E.rollingReturns(series, years, calc);
     if (!r.ok) return notice('bad', esc(r.message));
     var s = r.stats;
     var below = r.values.filter(function (v) { return v < 0; }).length;
@@ -1493,6 +1498,18 @@
       stat('Independent periods', String(independent)) +
       '</div>';
 
+    /* Sections 5's two blocks, in the order the specification lists them, and
+       only on the path the specification covers. */
+    var paired = null;
+    if (o.indexPath) {
+      if (compareSeries) {
+        var cmp = E.compareRolling(series, compareSeries, years, calc);
+        if (cmp.ok) paired = cmp;
+      }
+      html += statisticalSummary(r, years, paired, compareName, calc);
+      html += factualInsights(r, years, paired, compareName);
+    }
+
     /* Worst to best across the quartiles, in that order. An average put at the
      * top of a screen becomes the number people remember, and it hides the
      * spread that actually decided what any one investor got. */
@@ -1523,7 +1540,7 @@
         caption: 'Each bar counts the ' + years + '-year periods that ended in that range'
       }) + '</div>';
 
-    html += summaryCard(r, s, series, years, below, compareSeries, compareName);
+    html += summaryCard(r, s, series, years, below, compareSeries, compareName, calc, o.indexPath);
 
     html += worstIsNotWorstCard(series, s, years);
     html += startDateCard(r, years);
@@ -1567,6 +1584,158 @@
     return html;
   }
 
+  /* ===================================== SECTION 5, THE STATISTICAL SUMMARY
+   *
+   * Eight rows, three columns, in the order the specification sets out. It
+   * exists because a single average return says nothing about what had to be
+   * lived through to earn it, and because a fund figure with no benchmark
+   * beside it cannot be read at all.
+   *
+   * Both columns come from the SAME windows whenever a benchmark is loaded --
+   * compareRolling pairs them by start date -- so every row compares like with
+   * like. Reading a fund's best window against a benchmark's best window when
+   * the two were measured over different stretches of history is the exact
+   * mistake this table is meant to stop, so it is not offered as an option.
+   */
+  function statisticalSummary(r, years, paired, compareName, calc) {
+    var have = !!paired;
+    var f = have ? paired.fund : r.stats;
+    var b = have ? paired.bench : null;
+    var fVals = have ? paired.fundValues : r.values;
+
+    /* Strictly below zero, the same test the rest of the page uses. describe()
+       counts anything not above zero, which folds an exactly-flat window in
+       with the losses; on this table that would be a different number from the
+       one printed six inches further down the same screen. */
+    var fNeg = countBelow(fVals);
+    var bNeg = have ? countBelow(paired.benchValues) : 0;
+
+    function cell(v) { return v == null ? '&mdash;' : v; }
+    function row(label, a, c) {
+      return '<tr><td>' + esc(label) + '</td><td>' + cell(a) + '</td><td>' + cell(c) + '</td></tr>';
+    }
+    function obs(n) { return n.toLocaleString() + ' Observations'; }
+    function negCell(count, total) {
+      if (!total) return null;
+      return pct(count / total, 1) + ' (' + count.toLocaleString() +
+             (count === 1 ? ' Window)' : ' Windows)');
+    }
+
+    var none = have ? null : '<span class="nodata">No benchmark index data loaded</span>';
+
+    var html = '<div class="card"><h2>Statistical summary</h2>' +
+      '<p class="hint" style="margin:0 0 .8rem">' +
+      (have
+        ? 'Both columns are measured over the same ' + f.count.toLocaleString() +
+          ' windows &mdash; the ones whose start dates appear in both files &mdash; so every row ' +
+          'compares like with like. Windows outside that shared stretch are not counted on either ' +
+          'side.'
+        : 'Only the Primary Investment column can be filled in. Load a benchmark index file in ' +
+          'step 4 and the second column, and the outperformance row, become measurable.') +
+      '</p><div class="scroll"><table class="data summary3">' +
+      '<caption>Annualised ' + years + '-year rolling returns, ' +
+      esc((E.FREQUENCY[calc.frequency] || E.FREQUENCY.daily).label.toLowerCase()) +
+      ' start dates</caption>' +
+      '<thead><tr><th>Performance Metric</th><th>Primary Investment</th>' +
+      '<th>Benchmark Index</th></tr></thead><tbody>' +
+      row('Total Rolling Windows Analysed', obs(f.count), have ? obs(b.count) : none) +
+      row('Average Rolling Return (Mean)', pct(f.mean), have ? pct(b.mean) : none) +
+      row('Median Rolling Return', pct(f.median), have ? pct(b.median) : none) +
+      row('Maximum Return (Best Window)', pct(f.max), have ? pct(b.max) : none) +
+      row('Minimum Return (Worst Window)', pct(f.min), have ? pct(b.min) : none) +
+      /* Volatility of the RETURNS, not of the prices: the spread of the
+         window figures around their own mean. With one window there is no
+         spread to measure and describe() returns null rather than zero. */
+      row('Return Volatility (Std Deviation)',
+          f.stdev == null ? 'not measurable on one window' : pct(f.stdev),
+          have ? (b.stdev == null ? 'not measurable on one window' : pct(b.stdev)) : none) +
+      row('Negative Return Probability', negCell(fNeg, f.count),
+          have ? negCell(bNeg, b.count) : none) +
+      row('Outperformance Rate vs Benchmark',
+          have ? pct(paired.fundAheadShare, 1) + ' of total windows'
+               : '<span class="nodata">Not measurable without a benchmark</span>',
+          have ? 'N/A' : none) +
+      '</tbody></table></div>' +
+      '<div class="meaning"><h3>How to read this table</h3>' +
+      '<p>Every figure is a description of the dates in these files. None of them is a ' +
+      'probability, a forecast, or a statement about any fund outside this data. The windows ' +
+      'overlap, so they are not independent observations however many of them there are.</p>' +
+      '</div></div>';
+    return html;
+  }
+
+  function countBelow(values) {
+    var n = 0;
+    for (var i = 0; i < values.length; i++) if (values[i] < 0) n++;
+    return n;
+  }
+
+  /* ==================================== SECTION 5, THE FACTUAL DATA INSIGHTS
+   *
+   * Five numbered statements, each one a sentence the reader could have
+   * written themselves from the table above. That is the whole test: if a
+   * sentence here cannot be checked against a number on this screen, it does
+   * not belong. Nothing here says whether any of it is good.
+   */
+  function factualInsights(r, years, paired, compareName) {
+    var have = !!paired;
+    var f = have ? paired.fund : r.stats;
+    var fVals = have ? paired.fundValues : r.values;
+    var loss = countBelow(fVals);
+    var total = f.count;
+    var items = [];
+
+    if (have) {
+      items.push(['Outperformance Consistency',
+        'Over the selected ' + years + '-Year rolling windows, the investment outperformed the ' +
+        'benchmark in ' + pct(paired.fundAheadShare, 1) + ' of all instances (' +
+        paired.fundAhead.toLocaleString() + ' out of ' + paired.pairs.toLocaleString() +
+        ' rolling periods).']);
+
+      var alpha = f.mean - paired.bench.mean;
+      items.push(['Excess Return Profile (Alpha Spread)',
+        'The investment generated an average annual return spread of ' +
+        A.signedPct(alpha) + ' relative to the benchmark over ' + years + '-Year horizons.']);
+
+      items.push(['Downside Resilience',
+        'During the weakest ' + years + '-Year market window, the investment recorded a return ' +
+        'of ' + pct(f.min) + ', compared to ' + pct(paired.bench.min) + ' for the benchmark.']);
+    } else {
+      items.push(['Outperformance Consistency',
+        'Not measurable. No benchmark index data is loaded, so there is nothing to have ' +
+        'outperformed. Load a Total Return Index file in step 4.']);
+      items.push(['Excess Return Profile (Alpha Spread)',
+        'Not measurable without benchmark index data.']);
+      items.push(['Downside Resilience',
+        'The weakest ' + years + '-Year window in this data returned ' + pct(f.min) +
+        '. Without a benchmark there is nothing to set that against.']);
+    }
+
+    items.push(['Return Range &amp; Distribution',
+      'Historical ' + years + '-Year rolling returns ranged from ' + pct(f.min) + ' to ' +
+      pct(f.max) + ', indicating an overall return variance spread of ' +
+      pct(f.max - f.min) + '.']);
+
+    items.push(['Capital Loss Probability',
+      'In ' + loss.toLocaleString() + ' out of ' + total.toLocaleString() + ' rolling periods (' +
+      pct(total ? loss / total : 0, 1) + '), the investment recorded a negative return over a ' +
+      years + '-Year holding period.']);
+
+    return '<div class="card"><h2>Factual Data Insights</h2>' +
+      '<p class="hint" style="margin:0 0 .8rem">Five statements, each one checkable against the ' +
+      'table above. None of them says whether any of it is good.</p>' +
+      '<ol class="insights">' +
+      items.map(function (it) {
+        return '<li><span class="ins-h">' + it[0] + '</span><span class="ins-b">' + it[1] +
+               '</span></li>';
+      }).join('') +
+      '</ol>' +
+      '<div class="meaning"><h3>What these are not</h3>' +
+      '<p>These are descriptions of what this data did, not advice about what to do. Whether any ' +
+      'of it suits you depends on your goal, your horizon, what else you own and what you can sit ' +
+      'through &mdash; none of which this tool knows.</p></div></div>';
+  }
+
   /* ------------------------------------------------------------- the summary
    *
    * Three measured rates and nothing else. Every figure here is a count over
@@ -1580,7 +1749,7 @@
    * else they own or what they can sit through. So the card reports rates and
    * stops, and the note under it says the one thing a run of good windows most
    * tempts a reader to forget. */
-  function summaryCard(r, s, series, years, below, compareSeries, compareName) {
+  function summaryCard(r, s, series, years, below, compareSeries, compareName, calc, indexPath) {
     var n = s.count;
     var success = n ? (n - below) / n : 0;
 
@@ -1590,25 +1759,37 @@
      * which is what had to be sat through rather than what was earned. */
     var dd = E.maxDrawdown(series);
 
+    /* Section 6's copy guide governs the market-index path. "Success rate" and
+       "downside risk" are both named prohibited there, and the objection is a
+       fair one: a rate of windows that ended above zero is not success, and the
+       worst window is not the risk. The replacements say what is counted. */
+    var SAY = indexPath
+      ? { above: 'Windows ending above zero',
+          out:   'Outperformance Frequency (%)',
+          worst: 'Minimum Rolling Return' }
+      : { above: 'Historical success rate',
+          out:   'Benchmark outperformance rate',
+          worst: 'Historical downside risk' };
+
     var rows = [
-      ['Historical success rate', pct(success, 0),
+      [SAY.above, pct(success, 0),
        (n - below).toLocaleString() + ' of ' + n.toLocaleString() + ' ' + years +
        '-year windows ended above zero.']
     ];
 
     if (compareSeries) {
-      var c = E.compareRolling(series, compareSeries, years);
+      var c = E.compareRolling(series, compareSeries, years, calc || {});
       rows.push(c.ok
-        ? ['Benchmark outperformance rate', pct(c.fundAheadShare, 0),
+        ? [SAY.out, pct(c.fundAheadShare, 0),
            'Ahead of ' + esc(compareName) + ' in ' + c.fundAhead.toLocaleString() + ' of ' +
            c.pairs.toLocaleString() + ' windows both sets of data cover.']
-        : ['Benchmark outperformance rate', 'not measured', esc(c.message)]);
+        : [SAY.out, 'not measured', esc(c.message)]);
     } else {
-      rows.push(['Benchmark outperformance rate', 'not measured',
+      rows.push([SAY.out, 'not measured',
                  'No benchmark is loaded. Choose one in step 4 and this becomes a rate.']);
     }
 
-    rows.push(['Historical downside risk', pct(s.min),
+    rows.push([SAY.worst, pct(s.min),
                'The worst of these windows returned ' + pct(s.min) + ' a year. ' +
                below.toLocaleString() + ' of ' + n.toLocaleString() + ' ended below zero' +
                (dd.ok ? ', and the deepest fall along the way was ' + pct(dd.depth) + '.' : '.')]);
@@ -1626,9 +1807,9 @@
       '</tbody></table></div>' +
       '<div class="meaning"><h3>What these three rates are not</h3>' +
       '<p><strong>Past historical consistency does not guarantee future results.</strong> A high ' +
-      'success rate is a description of the dates in this file and no others. It is not a ' +
-      'probability, because the future is not drawn from this file, and the windows counted here ' +
-      'overlap, so they are not independent samples of anything.</p>' +
+      'figure on any of these rows is a description of the dates in this file and no others. It ' +
+      'is not a probability, because the future is not drawn from this file, and the windows ' +
+      'counted here overlap, so they are not independent samples of anything.</p>' +
       '<p>Nothing on this card is a recommendation to buy, hold, sell or switch. Whether any of it ' +
       'suits you depends on your goal, your horizon, what else you own and what you can sit ' +
       'through &mdash; none of which this tool knows.</p></div></div>';
@@ -1865,6 +2046,11 @@
      * selection to null rather than sliding the reader onto a shorter length
      * they did not choose, and the run then refuses in words. */
     years: DEFAULT_YEARS,
+    /* Section 4 of the specification. Daily is the default and is labelled
+     * Recommended: it uses every start date the file offers, and weekly and
+     * monthly exist to THIN those start dates on a very long file, never to
+     * change how any one window is measured. */
+    frequency: 'daily',
     blockMessage: null,    /* set when a length no longer fits the history */
     datesTouched: false,
     bundled: {},           /* name -> series, for the comparison list */
@@ -1880,7 +2066,20 @@
     });
     $('#src-index').hidden = source !== 'index';
     $('#src-fund').hidden = source !== 'fund';
+    /* The specification covers the market-index path and nothing else, so
+     * everything it adds appears only there. The fund path keeps exactly the
+     * screen it had. */
+    var onIndex = source === 'index';
+    var head = $('#up-benchmark-head');
+    if (head) head.hidden = !onIndex;
+    var freq = $('#r-freq-wrap');
+    if (freq) freq.hidden = !onIndex;
+    if (!onIndex) {
+      var ov = $('#r-overlap-note');
+      if (ov) ov.innerHTML = '';
+    }
     $('#step-source').dataset.done = source ? 'yes' : 'no';
+    yearChips();
     gateSteps();
     var prompt = $('#r-source-prompt');
     if (prompt) {
@@ -1921,6 +2120,9 @@
     $('#r-range').textContent = 'Data available: ' + fmtDate(first) + ' to ' + fmtDate(last) +
       ' \u2014 ' + spanYears.toFixed(1) + ' years, ' + series.length.toLocaleString() +
       ' observations.';
+    /* Rebuilt, not just re-measured: the Max History chip is worth a different
+       number of years for every file, so it cannot be drawn once at start-up. */
+    yearChips();
     limitYears(selectedSpanYears());
     updateWindowNote();
     $('#step-period').dataset.done = 'yes';
@@ -1936,6 +2138,7 @@
       (reset ? ' Your dates fell outside this data, so they have been set to its full range.' : '') +
       (o.note ? ' ' + o.note : ''));
     refreshCompare();
+    overlapNote();
     if (R.ran) runRolling();
   }
 
@@ -2002,16 +2205,20 @@
           /* Review v4 §12.16: this was said three times on one screen -- in the
              dropdown, in an information notice and in a help panel. Once, as a
              line under the file chooser. */
-          sel.innerHTML = '<option value="">Load an index file below</option>';
+          sel.innerHTML = '<option value="">Nothing bundled &mdash; upload a file below</option>';
           sel.disabled = true;
           $('#r-index-hint').textContent = '';
           $('#r-index-upload').innerHTML =
-            '<label class="fieldlabel" for="bm-pick">Index data file</label>' +
-            '<div class="filebox" id="bm-drop" tabindex="0" role="button" aria-label="Choose an index file">' +
+            /* This slot is Card A. It used to be labelled "Index data file",
+               which is the OTHER card's file, and the whole of section 1's
+               root-cause analysis is about readers putting the wrong file in
+               the wrong door because the doors were named alike. */
+            '<label class="fieldlabel" for="bm-pick">Primary Investment Data file</label>' +
+            '<div class="filebox" id="bm-drop" tabindex="0" role="button" aria-label="Choose a NAV or value history file">' +
             '<button class="secondary" type="button" id="bm-pick">Choose a file</button>' +
-            '<p>A date column and the index value on that date</p></div>' +
+            '<p>A date column and the NAV or value on that date</p></div>' +
             '<input type="file" id="bm-file" accept=".csv,.txt,.xlsx">' +
-            '<p class="hint">No index is bundled with this version, and nothing has been ' +
+            '<p class="hint">No history is bundled with this version, and nothing has been ' +
             'invented to fill the gap.</p>';
           A.wireDrop('bm-drop', 'bm-file', 'bm-pick', function (file) { loadIndexFile(file); });
           return;
@@ -2054,8 +2261,85 @@
       .sort(function (x, y) { return x.t - y.t; });
   }
 
+  /* ------------------------------------------- the specification's gatekeeper
+   *
+   * Section 3, and it exists because shape is not schema. A tradebook has a
+   * date column and a numeric column, so every reader that goes by shape
+   * accepts one and computes a confident rolling return out of order
+   * quantities -- a number that is wrong in a way nothing downstream can
+   * detect. Only the HEADINGS tell the two files apart, so they are read
+   * before the file is allowed to become a series.
+   *
+   * Returns the refusal to print, or null when the file may pass. The
+   * detected columns are named: "this is a trade log" is a diagnosis, and a
+   * diagnosis without the evidence leaves the reader nothing to act on. */
+  function schemaRefusal(rows) {
+    if (!rows || !P.checkSchema) return null;
+    var v = P.checkSchema(rows);
+    if (v.ok) return null;
+    /* All of them, not a handful. The cap exists only so a pathological file
+       cannot print a paragraph of column names, and at six it was cutting off
+       "Order ID" -- the one column a reader would recognise instantly as
+       belonging to a trade log rather than to a price history. */
+    var all = (v.detected || []).filter(Boolean);
+    var found = all.slice(0, 10);
+    var more = all.length - found.length;
+    return notice('bad', esc(v.message) +
+      (found.length
+        ? ' <br>The columns found in this file: <strong>' +
+          found.map(function (n) { return esc(String(n)); }).join('</strong>, <strong>') +
+          '</strong>' + (more ? ', and ' + more + ' more' : '') + '.'
+        : ''));
+  }
+
+  /* Section 3's amber banner.
+   *
+   * Two files that overlap only in part are not a refusal: the comparison is
+   * real over the stretch they share, and that is what gets measured. But a
+   * reader has to be told BEFORE reading a rate that three years of one file
+   * were dropped to make the comparison possible -- afterwards it is a
+   * correction, and corrections arrive too late to change what was believed. */
+  function overlapNote() {
+    var slot = $('#r-overlap-note');
+    if (!slot) return;
+    if (R.source !== 'index' || !R.series || !E.rangeOverlap) { slot.innerHTML = ''; return; }
+    var against = compareSeries();
+    if (!against || !against.series || !against.series.length) { slot.innerHTML = ''; return; }
+    var o = E.rangeOverlap(R.series, against.series);
+    var lines = 'Primary Investment: ' + fmtDate(o.aFrom) + ' to ' + fmtDate(o.aTo) +
+                ' | Benchmark Index: ' + fmtDate(o.bFrom) + ' to ' + fmtDate(o.bTo) + '.';
+    if (!o.ok) {
+      slot.innerHTML = notice('bad', '<strong>These two files share no dates.</strong> ' + lines +
+        ' There is not one day both of them cover, so no rolling return comparison can be made ' +
+        'from them.');
+      return;
+    }
+    if (o.full) { slot.innerHTML = ''; return; }
+    slot.innerHTML = notice('warn', lines +
+      ' <br>Note: Rolling return comparisons will automatically be restricted to the overlapping ' +
+      'period (' + fmtDate(o.from) + ' to ' + fmtDate(o.to) + ', ' + o.years.toFixed(1) +
+      ' years). ' + droppedPhrase(o));
+  }
+
+  /* Which file lost history, and how much of it. A reader who uploaded ten
+   * years and is being measured over seven should be told which of the two
+   * files cost them the other three. */
+  function droppedPhrase(o) {
+    var bits = [];
+    if (o.lostA >= 0.05) bits.push(o.lostA.toFixed(1) + ' years of the Primary Investment data');
+    if (o.lostB >= 0.05) bits.push(o.lostB.toFixed(1) + ' years of the Benchmark Index data');
+    if (!bits.length) return '';
+    return 'Outside that period, ' + bits.join(' and ') +
+      ' ' + (bits.length > 1 ? 'are' : 'is') + ' not used.';
+  }
+
   function loadIndexFile(file) {
     A.readFile(file, function (res) {
+      /* The gate runs on the raw rows, before the file becomes a series: by
+         the time there is a series the tradebook has already been read as
+         prices and nothing downstream can tell. */
+      var refused = schemaRefusal(res.rows);
+      if (refused) { $('#r-scheme-wrap').hidden = true; clearLoaded(refused); return; }
       var name = res.report.scheme || file.name.replace(/\.[^.]+$/, '');
       R.bundled[name] = res.series;
       R.rows = res.rows || null;
@@ -2066,6 +2350,10 @@
       /* This slot used to refuse a many-scheme file outright: the tool named
          the problem -- "that file holds 3 schemes" -- and then offered nothing
          to click. The picker is the same one the fund slot has always had. */
+      /* Before the parser's own words, the gate's. "Only 0 usable rows could
+         be read" is a true description of a tradebook and a useless one. */
+      var bad = extra && extra.rows ? schemaRefusal(extra.rows) : null;
+      if (bad) { $('#r-scheme-wrap').hidden = true; clearLoaded(bad); return; }
       if (extra && extra.schemes && extra.rows) {
         R.rows = extra.rows;
         R.schemes = extra.schemes;
@@ -2245,7 +2533,11 @@
      * can move from one scheme to the next without loading the file again.
      * It used to be wiped the moment a benchmark existed -- which meant
      * choosing scheme 1 destroyed the only way to reach schemes 2 and 3. */
-    if (!names.length || R.cmpSchemes) {
+    /* Card B is a permanent door on the market-index path, where section 2
+     * names it and says what belongs behind it. It used to be wiped the
+     * moment a benchmark existed, which left a reader who had loaded the
+     * wrong TRI with no way to load another short of Start again. */
+    if (!names.length || R.cmpSchemes || R.source === 'index') {
       hint.textContent = names.length
         ? 'A benchmark is a reference point, not a verdict. Only dates both sets of data cover ' +
           'are compared. Pick another below at any time.'
@@ -2281,14 +2573,24 @@
           refreshCompare();
           $('#r-compare').value = nm;
           $('#step-compare').dataset.done = 'yes';
+          overlapNote();
           if (R.ran) runRolling();
         }
 
         A.wireDrop('cmp-drop', 'cmp-file', 'cmp-pick', function (file) {
           A.readFile(file, function (res) {
+            /* Section 3 gates BOTH doors. A tradebook dropped on the benchmark
+               slot is exactly as wrong as one dropped on the primary slot, and
+               would be harder to spot: it would arrive as a comparison line
+               rather than as the headline figure. Market-index path only. */
+            var refused = R.source === 'index' ? schemaRefusal(res.rows) : null;
+            if (refused) { $('#cmp-note').innerHTML = refused; return; }
             var nm = res.report.scheme || file.name.replace(/\.[^.]+$/, '');
             useAsBenchmark(res.series, nm);
           }, function (msg, extra) {
+            var gated = (R.source === 'index' && extra && extra.rows)
+              ? schemaRefusal(extra.rows) : null;
+            if (gated) { $('#cmp-note').innerHTML = gated; return; }
             if (extra && extra.schemes && extra.rows) {
               R.cmpSchemes = extra.schemes;
               R.cmpRows = extra.rows;
@@ -2335,6 +2637,7 @@
       refreshCompare();
       $('#r-compare').value = nm;
       $('#step-compare').dataset.done = 'yes';
+      overlapNote();
       if (R.ran) runRolling();
     }
     showSchemePicker(schemes, {
@@ -2429,11 +2732,30 @@
     var box = $('#r-years');
     box.innerHTML = '';
     $('#step-hold').dataset.done = R.years === null ? 'no' : 'yes';
-    A.HORIZONS.forEach(function (h) {
+    /* Section 4 asks for a Max History choice beyond the fixed five.
+     *
+     * It is a real number of years, not a keyword: the whole screen -- the
+     * window note, the feasibility check on every chip, the refusal when a
+     * length will not fit -- is arithmetic on R.years, and a chip holding the
+     * string "max" would have poisoned all of it with NaN. So the longest
+     * whole number of years this history can measure is computed once and the
+     * chip carries that, with the label saying what it came from.
+     *
+     * It is offered only when it adds something: on a four-year file the
+     * longest whole horizon is 3, which is already on the row. */
+    var horizons = A.HORIZONS.slice();
+    var extra = null;
+    if (R.source === 'index' && R.series && E.maxHorizon) {
+      var m = E.maxHorizon(R.series);
+      if (m !== null && horizons.indexOf(m) === -1) { horizons.push(m); extra = m; }
+    }
+    horizons.sort(function (a, b) { return a - b; });
+    horizons.forEach(function (h) {
       var b = A.el('button', { class: 'chip', type: 'button', role: 'radio',
                                'aria-checked': String(h === R.years) });
       b.dataset.years = h;
-      b.textContent = h + (h === 1 ? ' year' : ' years');
+      if (h === extra) b.dataset.label = 'Max History \u2014 ' + h + ' years';
+      b.textContent = chipLabel(b, h);
       b.addEventListener('click', function () {
         if (b.disabled) return;
         R.years = h;
@@ -2451,6 +2773,47 @@
     });
   }
 
+  /* A chip's own name, where it has one, so limitYears redrawing the row does
+     not rub "Max History" off it. */
+  function chipLabel(chip, h) {
+    return chip.dataset.label || (h + (h === 1 ? ' year' : ' years'));
+  }
+
+  /* Section 4's rolling frequency, on the market-index path.
+   *
+   * What this changes is HOW MANY start dates are taken, and nothing else. A
+   * five-year window measured from a monthly start date is still measured
+   * over five years, first value to last. Daily is the default and says so:
+   * it uses every start date the file offers, which is the honest one, and
+   * the other two exist because a twenty-year daily file yields ~4,000
+   * overlapping windows whose neighbours share 1,824 of 1,825 days. */
+  function freqChips() {
+    var box = $('#r-freq');
+    if (!box || !E.FREQUENCY) return;
+    box.innerHTML = '';
+    var order = ['daily', 'weekly', 'monthly'];
+    var says = {
+      daily:   'Daily \u2014 Recommended (shifts by 1 trading day)',
+      weekly:  'Weekly (7 days)',
+      monthly: 'Monthly (1 calendar month)'
+    };
+    order.forEach(function (key) {
+      var b = A.el('button', { class: 'chip', type: 'button', role: 'radio',
+                               'aria-checked': String(key === R.frequency) });
+      b.dataset.frequency = key;
+      b.textContent = says[key];
+      b.addEventListener('click', function () {
+        if (b.disabled) return;
+        R.frequency = key;
+        $$('#r-freq .chip').forEach(function (c) {
+          c.setAttribute('aria-checked', String(c === b));
+        });
+        if (R.ran) runRolling();
+      });
+      box.appendChild(b);
+    });
+  }
+
   /* Offering "10 years" on a three-year file invites a reader to choose it and
    * only then be told no. Say it on the chip instead. */
   function limitYears(spanYears) {
@@ -2461,7 +2824,7 @@
       var possible = spanYears == null || h <= spanYears;
       c.dataset.infeasible = possible ? 'no' : 'yes';
       c.disabled = !possible;
-      c.textContent = h + (h === 1 ? ' year' : ' years') +
+      c.textContent = chipLabel(c, h) +
         (possible ? '' : ' \u2014 needs ' + h + ' years of data');
       if (possible) best = h;
     });
@@ -2583,7 +2946,8 @@
       (R.report ? importReport(R.report, R.name) : '') +
       renderRolling(series, R.years, { name: R.name },
                     cmpSeries, against ? against.name : '', 'rolling',
-                    against ? against.meta : null);
+                    against ? against.meta : null,
+                    { frequency: R.frequency, indexPath: R.source === 'index' });
     out.scrollIntoView({ block: 'start', behavior: 'smooth' });
   }
 
@@ -2815,6 +3179,7 @@
 
     /* rolling returns: one module, four steps, nothing hidden */
     yearChips();
+    freqChips();
     gateSteps();
     loadIndexList();
     $$('#r-source .chip').forEach(function (c) {
@@ -2824,6 +3189,7 @@
     try { wireFundSearch(); } catch (e) { /* optional; never fatal */ }
     $('#r-compare').addEventListener('change', function () {
       $('#step-compare').dataset.done = this.value !== 'none' ? 'yes' : 'no';
+      overlapNote();
       if (R.ran) runRolling();
     });
     ['r-start', 'r-end'].forEach(function (id) {
@@ -2853,8 +3219,10 @@
          reader's own choice, and it is restored because they pressed the
          button that says so. */
       R.years = DEFAULT_YEARS;
+      R.frequency = 'daily';
       R.cmpSchemes = null; R.cmpRows = null;
       yearChips();
+      freqChips();
       $('#r-scheme-wrap').hidden = true;
       $('#r-compare').value = 'none';
       $('#step-compare').dataset.done = 'no';
@@ -2862,6 +3230,10 @@
       clearLoaded('');
       $('#r-loaded').innerHTML = '';
       $('#r-index').value = '';
+      var ov = $('#r-overlap-note');
+      if (ov) ov.innerHTML = '';
+      var cn = $('#cmp-note');
+      if (cn) cn.innerHTML = '';
       refreshCompare();
     });
   }

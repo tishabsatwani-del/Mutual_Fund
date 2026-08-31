@@ -143,9 +143,28 @@
    *     averaged from yearly figures. An arithmetic mean of yearly returns is a
    *     different statistic and is not reported here.
    */
+  /* How far the window moves between one measurement and the next.
+   *
+   * Daily is every observation the file holds, which on a NAV file is every
+   * trading day. Weekly and monthly thin the START dates -- they do not change
+   * how any single window is measured, only how many of them are taken.
+   *
+   * This matters more than it looks. Daily windows on twenty years of data are
+   * five thousand overlapping measurements of the same market, and every
+   * summary statistic drawn from them is correspondingly overconfident. Monthly
+   * gives roughly two hundred and forty, which is still overlapping but far
+   * closer to the number of genuinely different stretches in there.
+   */
+  var FREQUENCY = {
+    daily:   { label: 'Daily', step: null },
+    weekly:  { label: 'Weekly', days: 7 },
+    monthly: { label: 'Monthly', months: 1 }
+  };
+
   function rollingReturns(series, years, options) {
     var opts = options || {};
     var tol = opts.toleranceDays == null ? 7 : opts.toleranceDays;
+    var freq = FREQUENCY[opts.frequency] ? opts.frequency : 'daily';
     if (!(years > 0)) return fail('BAD_HORIZON', 'Choose a holding period of at least one year.');
     if (!series || series.length < 2) return fail('TOO_SHORT', 'This file does not hold enough history to measure.');
 
@@ -158,7 +177,10 @@
 
     var pairs = [];
     var j = 0;
+    var nextStart = null;      /* the earliest date the next window may begin */
     for (var i = 0; i < series.length; i++) {
+      /* Thin the starts before doing any work on them. */
+      if (nextStart != null && series[i].t < nextStart) continue;
       var target = addYears(series[i].t, years);
       if (target > series[series.length - 1].t) break;
       /* advance to the last observation on or before the target date */
@@ -179,6 +201,8 @@
         t: series[i].t, endT: end.t, days: days,
         r: Math.pow(end.v / series[i].v, 365 / days) - 1
       });
+      if (freq === 'weekly') nextStart = series[i].t + FREQUENCY.weekly.days * MS_PER_DAY;
+      else if (freq === 'monthly') nextStart = addMonths(series[i].t, FREQUENCY.monthly.months);
     }
 
     if (!pairs.length) {
@@ -192,9 +216,56 @@
     }
     return {
       ok: true, years: years, values: values, pairs: pairs,
-      stats: describe(values), toleranceDays: tol,
+      stats: describe(values), toleranceDays: tol, frequency: freq,
       best: best, worst: worst
     };
+  }
+
+  /* ------------------------------------------- do the two files line up?
+   *
+   * Asked at UPLOAD time, not at run time. compareRolling already restricts
+   * itself to the overlap, so the arithmetic was never wrong -- but it did so
+   * silently, and a reader who loaded twenty years of fund against seven years
+   * of index had no way to know that thirteen of those years were not in the
+   * answer. Reported before anything is computed, so the restriction is a fact
+   * they were told rather than one they might later infer.
+   */
+  function rangeOverlap(a, b) {
+    if (!a || a.length < 1 || !b || b.length < 1) return { ok: false, code: 'EMPTY' };
+    var aFrom = a[0].t, aTo = a[a.length - 1].t;
+    var bFrom = b[0].t, bTo = b[b.length - 1].t;
+    var from = Math.max(aFrom, bFrom), to = Math.min(aTo, bTo);
+    if (to <= from) {
+      return { ok: false, code: 'NO_OVERLAP',
+               aFrom: aFrom, aTo: aTo, bFrom: bFrom, bTo: bTo };
+    }
+    return {
+      ok: true,
+      aFrom: aFrom, aTo: aTo, bFrom: bFrom, bTo: bTo,
+      from: from, to: to,
+      /* Same start AND same end, to the day: only then is nothing dropped. */
+      full: aFrom === bFrom && aTo === bTo,
+      years: (to - from) / (365.25 * MS_PER_DAY),
+      /* How much of each file falls outside the shared stretch, in years --
+         which is the figure that says whether the restriction matters. */
+      lostA: ((from - aFrom) + (aTo - to)) / (365.25 * MS_PER_DAY),
+      lostB: ((from - bFrom) + (bTo - to)) / (365.25 * MS_PER_DAY)
+    };
+  }
+
+  /* The longest whole-year horizon this data can measure at all.
+   *
+   * Whole years because every horizon the screen offers is a whole number and a
+   * "max" of 17.4 years would be the only one that is not. It is the largest
+   * horizon for which at least one full window exists, which is exactly what
+   * "max history" can honestly mean -- and at that length there is only one
+   * such window, so the screen has to say how thin that is rather than let a
+   * single measurement read like a distribution. */
+  function maxHorizon(series) {
+    if (!series || series.length < 2) return null;
+    var span = (series[series.length - 1].t - series[0].t) / (365.25 * MS_PER_DAY);
+    var whole = Math.floor(span);
+    return whole >= 1 ? whole : null;
   }
 
   function describe(values) {
@@ -211,8 +282,24 @@
       p25: quantile(sorted, 0.25),
       p75: quantile(sorted, 0.75),
       positiveShare: pos / n,
-      negativeShare: (n - pos) / n
+      negativeShare: (n - pos) / n,
+      /* Sample standard deviation, n-1, which is what "volatility" means
+       * everywhere else these figures get compared to. With one window there is
+       * no spread to measure and it is null rather than zero -- zero would read
+       * as "this never moved", which is a different and much stronger claim. */
+      stdev: stdevOf(sorted, sum / n)
     };
+  }
+
+  function stdevOf(values, mean) {
+    var n = values.length;
+    if (n < 2) return null;
+    var acc = 0;
+    for (var i = 0; i < n; i++) {
+      var d = values[i] - mean;
+      acc += d * d;
+    }
+    return Math.sqrt(acc / (n - 1));
   }
 
   function median(sorted) {
@@ -407,6 +494,12 @@
       fundAheadShare: ahead / pairs.length,
       fund: describe(pairs.map(function (p) { return p.fund; })),
       bench: describe(pairs.map(function (p) { return p.bench; })),
+      /* The paired values themselves, so a caller can count them its own way.
+         describe() folds an exactly-flat window in with the losses; a screen
+         that also prints a strictly-below-zero count elsewhere needs the raw
+         numbers or the two figures disagree by one and neither is wrong. */
+      fundValues: pairs.map(function (p) { return p.fund; }),
+      benchValues: pairs.map(function (p) { return p.bench; }),
       from: window.from,
       to: window.to
     };
@@ -593,6 +686,7 @@
     sipGrowthFactor: sipGrowthFactor,
     projectGoal: projectGoal,
     maxDrawdown: maxDrawdown, combineEqualWeighted: combineEqualWeighted,
+    maxHorizon: maxHorizon, FREQUENCY: FREQUENCY, rangeOverlap: rangeOverlap,
     compareRolling: compareRolling,
     requiredAcrossRates: requiredAcrossRates,
     costOfWaiting: costOfWaiting,

@@ -1,10 +1,9 @@
 # Checking The Portfolio Reality Check
 
-Three suites. The first needs nothing installed; the other two drive a real
-browser.
+The first suite needs nothing installed; the rest drive a real browser.
 
 ```
-node  tools/tool-tests/engine.test.js      # 82 checks, no dependencies
+node  tools/tool-tests/engine.test.js      # 202 checks, no dependencies
 
 npm install playwright                     # once
 python3 -m http.server 8781                # from the repository root
@@ -13,6 +12,10 @@ node  tools/tool-tests/grouped.test.js       # fund versus portfolio XIRR
 node  tools/tool-tests/intelligence.test.js  # spread, start dates, drawdown, consistency
 node  tools/tool-tests/bundled.test.js       # the bundled-benchmark path
 node  tools/tool-tests/provider.test.js      # the fund-lookup seam, against a stub
+node  tools/tool-tests/rolling.test.js       # the rolling screen, click by click
+node  tools/tool-tests/spec-rolling-index.test.js  # the redesign specification's own QA list
+node  tools/tool-tests/clarity.test.js       # wording, contrast, and what fits on a phone
+node  tools/tool-tests/v3.test.js            # the four v3 screens
 
 python3 tools/benchmarks/test_prepare.py     # the benchmark checker's refusals
 ```
@@ -66,8 +69,15 @@ invented data.
 **`provider.test.js`** injects a stub provider and drives the search journey
 end to end, including the failure paths. Nothing touches the network.
 
+**`spec-rolling-index.test.js`** is the Rolling Returns redesign
+specification's section 7 checklist, written as clicks rather than as unit
+tests, because every item on it is a claim about what a reader SEES. A
+tradebook is only refused if the refusal reaches the screen. It also holds the
+scope line: the last section loads the same files down the "My own fund" path
+and asserts that none of the new screen appears there.
+
 ## Before publishing a change
 
-Run all three. The browser suite writes screenshots to `$PRC_TMP/shots` — look
+Run all of them. The browser suites write screenshots to `$PRC_TMP/shots` — look
 at them, because the tests check behaviour and colour contrast, not whether two
 labels have collided.
