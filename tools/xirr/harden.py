@@ -45,7 +45,7 @@ parts["xl/styles.xml"] = styles.encode("utf-8")
 # as 27.75 and the 38 that holds a 28-point result figure came back as 33.85,
 # where the figure it exists to protect is clipped. The heights are the build's
 # decision, so they are put straight back, the same way the number formats are.
-ROW_HEIGHTS = {1: 28, 2: 28, 3: 28, 4: 38, 5: 28, 6: 32}
+ROW_HEIGHTS = {1: 28, 2: 28, 3: 28, 4: 38, 5: 28, 6: 20}
 INV_SHEET = "xl/worksheets/sheet2.xml"      # My investments, in workbook order
 
 sheet = parts[INV_SHEET].decode("utf-8")

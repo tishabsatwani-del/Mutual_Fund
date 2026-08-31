@@ -172,6 +172,28 @@ check("row 4 is taller still, so the 28-point result is not clipped",
 check("the header block is aligned to the middle of its own row height",
       all(inv[f"{c}{r}"].alignment.vertical == "center" for c in "AB" for r in (1, 2, 3, 4, 5)))
 
+# A label spills into the cell to its right only while that cell is EMPTY, so a
+# label column too narrow for its own text reads correctly on an untouched sheet
+# and clips the moment the sheet has anything in it. That is how "Your XIRR"
+# shipped as "Yo": correct in every empty-sheet check, wrong for every reader.
+LABELS = [inv[f"A{r}"].value for r in (2, 4) if inv[f"A{r}"].value]
+longest = max((len(str(v)) for v in LABELS), default=0)
+check("the label column is wider than its own longest label",
+      inv.column_dimensions["A"].width is not None and
+      inv.column_dimensions["A"].width >= longest + 1,
+      f"width {inv.column_dimensions['A'].width} for {longest} characters: {LABELS}")
+
+# The instruction runs to about two hundred characters and column B is 13.5 of
+# them. Wrapping confined it to that width and the sheet showed its first four
+# words; merging would give it room, but this workbook forbids merged cells. It
+# spills, which needs the cells beside it to stay empty.
+check("the instruction is not wrapped inside a column too narrow for it",
+      not inv["B6"].alignment.wrap_text,
+      f"wrap_text={inv['B6'].alignment.wrap_text}, column B is {inv.column_dimensions['B'].width}")
+check("and nothing blocks it from spilling across the row",
+      all(inv[f"{c}6"].value in (None, "") for c in "CDEF"),
+      str([inv[f"{c}6"].value for c in "CDEF"]))
+
 # Editable cells are the ONLY yellow ones, and the yellow has to survive a bad
 # screen: the previous FFFFFDF0 was indistinguishable from white at an angle,
 # which made "type in the coloured cells only" an instruction the sheet did not

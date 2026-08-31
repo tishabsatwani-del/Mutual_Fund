@@ -16,7 +16,7 @@ from openpyxl.workbook.defined_name import DefinedName
 
 OUT = sys.argv[1]
 
-VERSION = "1.4"
+VERSION = "1.5"
 BUILT = "31-Aug-2026"
 
 FIRST_ROW, LAST_ROW = 8, 507
@@ -94,7 +94,12 @@ def flow_formula(row):
 
 
 def widths(ws):
-    ws.column_dimensions["A"].width = 2.5
+    # A holds the two labels of the header block -- "Fund name" and "Your XIRR"
+    # -- and was 2.5 characters wide, a gutter. A label spills into the cell to
+    # its right only while that cell is EMPTY, so both read correctly on an
+    # untouched sheet and then clipped to "Fu" and "Yo" the moment the sheet had
+    # anything in it. A label column has to be as wide as its longest label.
+    ws.column_dimensions["A"].width = 11
     ws.column_dimensions["B"].width = 13.5
     ws.column_dimensions["C"].width = 17
     ws.column_dimensions["D"].width = 14
@@ -119,10 +124,19 @@ def header_block(ws, fund_name=None):
 
     ws["B5"].font = STATUS_FONT
 
+    # NOT wrapped, deliberately, and C6:F6 are left empty so it can spill.
+    #
+    # Wrapping was added to this cell with the wrapping asked for on the two
+    # instruction tabs, where column B is 92 characters wide. Here B is 13.5,
+    # so the same setting confined two hundred characters to that width and the
+    # sheet showed "Type in the cream cells only" and hid the rest. Merging
+    # B6:F6 would give it the room, but this workbook forbids merged cells --
+    # they break sorting and copy-paste for the reader -- so it spills across
+    # the empty cells beside it, which is what it did before and read fine.
     ws["B6"] = INSTRUCTION
     ws["B6"].font = BODY
-    ws["B6"].alignment = Alignment(wrap_text=True, vertical="top")
-    ws.row_dimensions[6].height = 32
+    ws["B6"].alignment = Alignment(vertical="center")
+    ws.row_dimensions[6].height = 20
 
     # Rows 1-5 at 28 points, aligned to the top and centred across the row's own
     # height, so a label and its figure sit on one line instead of the label
