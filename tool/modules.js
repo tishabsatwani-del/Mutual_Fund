@@ -2223,6 +2223,7 @@
     var overlap = $('#r-overlap-note');
     if (!head || !upload) return;
 
+    var step = $('#step-compare');
     if (onIndex) {
       var cards = $('#up-cards');
       var after = $('#up-after-cards');
@@ -2232,13 +2233,55 @@
          both of them rather than under one. */
       if (after && overlap && overlap.parentNode !== after) after.appendChild(overlap);
       head.hidden = false;
+      /* Step 4 asked the question card 2 has already answered.
+       *
+       * "Compare against — optional — Benchmark: [Nifty 50 TRI]" three steps
+       * below a card headed "2. Benchmark Index Data (TRI)" holding that very
+       * file is the same choice offered twice, and the second offer is the one
+       * with nothing to add: on this path there is one benchmark, it is the
+       * file the reader loaded, and it is already selected. So the step goes,
+       * and the chooser appears inside card 2 only if a SECOND benchmark is
+       * ever loaded and there is a choice to make. */
+      if (step) step.hidden = true;
+      sayHowMany(3);
     } else {
-      var step = $('#step-compare');
       head.hidden = true;
       if (step) {
+        step.hidden = false;
         if (upload.parentNode !== step) step.appendChild(upload);
         if (overlap && overlap.parentNode !== step) step.appendChild(overlap);
       }
+      sayHowMany(4);
+    }
+    placeCompareField(onIndex);
+  }
+
+  /* The page opens by saying how many things there are to set. On the index
+     path there are now three, because the fourth asked a question card 2 had
+     already answered. A lede that miscounts the steps below it is a small
+     thing that makes a reader distrust the rest. */
+  function sayHowMany(n) {
+    var lede = $('#r-lede');
+    if (!lede) return;
+    lede.textContent = 'Every holding period of the length you choose, not one flattering ' +
+      'stretch. Set the ' + (n === 3 ? 'three' : 'four') + ' things below, then read the answer.';
+  }
+
+  /* The "which benchmark" chooser follows the upload, and shows itself only
+     when it has a choice to offer. */
+  function placeCompareField(onIndex) {
+    var field = $('#r-compare-field');
+    var head = $('#up-benchmark-head');
+    var step = $('#step-compare');
+    if (!field) return;
+    if (onIndex) {
+      if (head && field.parentNode !== head) head.appendChild(field);
+      var names = Object.keys(R.bundled).filter(function (n) { return n !== R.name; });
+      /* One loaded file is not a choice. */
+      field.hidden = names.length < 2;
+    } else {
+      if (step && field.parentNode !== step) step.insertBefore(field, step.firstChild.nextSibling);
+      field.hidden = false;
     }
   }
 
@@ -2874,6 +2917,7 @@
     if (names.indexOf(keep) !== -1) sel.value = keep;
     sel.disabled = !names.length;
     $('#step-compare').dataset.done = sel.value !== 'none' ? 'yes' : 'no';
+    placeCompareField(R.source === 'index');
 
     var hint = $('#r-compare-hint'), box = $('#r-compare-upload');
     /* The upload stays while a many-scheme file is loaded here, so the reader

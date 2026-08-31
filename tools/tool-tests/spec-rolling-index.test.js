@@ -449,6 +449,16 @@ function textValueFile(file) {
      !(await page.locator('#r-run').isDisabled()) &&
      (await page.locator('#r-compare').inputValue()) !== 'none');
 
+  /* A second benchmark IS a choice, so the chooser appears then and only then. */
+  await page.setInputFiles('#cmp-file', benchTRI);
+  await page.waitForTimeout(2000);
+  ok('loading a second benchmark brings the chooser out',
+     !(await page.locator('#r-compare-field').isHidden()) &&
+     (await page.locator('#r-compare option').count()) === 3,
+     String(await page.locator('#r-compare option').count()));
+  ok('and it is inside card 2, not three steps below it',
+     await page.evaluate(() => !!document.querySelector('#up-benchmark-head #r-compare-field')));
+
   section('A refused file does not leave step 1 wearing a tick');
   await openIndexPath();
   await page.setInputFiles('#bm-file', trades);
@@ -615,9 +625,19 @@ function textValueFile(file) {
      !!document.querySelector('#up-benchmark-head #cmp-file')));
   ok('so step 4 no longer holds an upload at all', await page.evaluate(() =>
      !document.querySelector('#step-compare #cmp-file')));
-  ok('and step 4 points at step 1 rather than at a box it no longer has',
-     /Load a benchmark index file in step 1/.test(await page.locator('#r-compare-hint').innerText()),
-     await page.locator('#r-compare-hint').innerText());
+  /* Step 4 asked the question card 2 has already answered. "Compare against —
+     optional — Benchmark: [Nifty 50 TRI]" three steps below a card headed
+     "2. Benchmark Index Data (TRI)" holding that very file is the same choice
+     offered twice, and the second offer has nothing to add. */
+  ok('and step 4 is gone entirely, rather than repeating card 2',
+     await page.locator('#step-compare').isHidden());
+  ok('the lede counts the steps that are actually there',
+     /Set the three things below/.test(await page.locator('#r-lede').innerText()),
+     await page.locator('#r-lede').innerText());
+  ok('the chooser moved into card 2 with its upload',
+     await page.evaluate(() => !!document.querySelector('#up-benchmark-head #r-compare-field')));
+  ok('and stays out of sight while there is nothing to choose between',
+     await page.locator('#r-compare-field').isHidden());
   ok('the range warning sits under both files, not under one of them',
      await page.evaluate(() => !!document.querySelector('#step-source #r-overlap-note')));
 
@@ -669,8 +689,14 @@ function textValueFile(file) {
   await page.waitForTimeout(300);
   ok('on the fund path Card B is hidden',
      await page.locator('#up-benchmark-head').isHidden());
-  ok('and the benchmark upload is back in step 4 where that path expects it',
-     await page.evaluate(() => !!document.querySelector('#step-compare #cmp-file')));
+  ok('step 4 comes back, because that path still needs it',
+     await page.locator('#step-compare').isVisible());
+  ok('and the benchmark upload is back inside it, where that path expects it',
+     await page.evaluate(() => !!document.querySelector('#step-compare #cmp-file')) &&
+     await page.evaluate(() => !!document.querySelector('#step-compare #r-compare-field')));
+  ok('with the lede counting four again',
+     /Set the four things below/.test(await page.locator('#r-lede').innerText()),
+     await page.locator('#r-lede').innerText());
   ok('with exactly one of it, not a copy left behind',
      (await page.locator('#cmp-file').count()) === 1 &&
      (await page.locator('#cmp-drop').count()) === 1);
