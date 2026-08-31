@@ -90,6 +90,18 @@ function textValueFile(file) {
     await page.waitForTimeout(250);
   }
 
+  /* Below 34rem the two cards live behind compact doors, and a card folds
+     itself away once its file is read. Anything inspecting a card has to open
+     its door first; above 34rem the doors are not drawn and this is a no-op. */
+  async function openCard(which) {
+    if (await page.locator('#up-doors').isHidden()) return;
+    const btn = page.locator('#door-' + which);
+    if ((await btn.getAttribute('aria-expanded')) !== 'true') {
+      await btn.click();
+      await page.waitForTimeout(220);
+    }
+  }
+
   /* ================================================== SECTION 2, THE CARDS */
   section('Section 2 — two named data doors, not one word used twice');
   await openIndexPath();
@@ -379,7 +391,13 @@ function textValueFile(file) {
   await page.waitForTimeout(1600);
   await page.click('#r-run');
   await page.waitForTimeout(1600);
-  const screen = flat(await page.locator('#view-rolling').innerText());
+  /* Read with both cards opened as well as shut: the approved wording has to
+     survive being reached the long way round. */
+  const shut = flat(await page.locator('#view-rolling').innerText());
+  await openCard('a');
+  const withA = flat(await page.locator('#view-rolling').innerText());
+  await openCard('b');
+  const screen = shut + ' ' + withA + ' ' + flat(await page.locator('#view-rolling').innerText());
 
   /* Section 6's prohibited column, and the advisory phrases section 7 names. */
   const banned = [
@@ -452,6 +470,7 @@ function textValueFile(file) {
   /* A second benchmark IS a choice, so the chooser appears then and only then. */
   await page.setInputFiles('#cmp-file', benchTRI);
   await page.waitForTimeout(2000);
+  await openCard('b');
   ok('loading a second benchmark brings the chooser out',
      !(await page.locator('#r-compare-field').isHidden()) &&
      (await page.locator('#r-compare option').count()) === 3,
@@ -531,6 +550,7 @@ function textValueFile(file) {
   await page.waitForTimeout(2000);
   await page.setInputFiles('#cmp-file', benchLong);
   await page.waitForTimeout(2000);
+  await openCard('b');
   ok('the screen asks which kind of index was loaded',
      await page.locator('#cmp-kind-chips').isVisible());
   const kinds = await page.locator('#cmp-kind-chips .chip').allInnerTexts();
@@ -550,7 +570,7 @@ function textValueFile(file) {
   ok('the results do not claim it counts dividends',
      !/a total return index — dividends included/i.test(k), k.slice(0, 200));
   ok('they say it is not established',
-     /not established — say which in step 4/i.test(k),
+     /not established — open card 2 and say which/i.test(k),
      (k.match(/.{0,60}not established.{0,60}/i) || [''])[0]);
   ok('and the summary table warns the outperformance row may be inflated',
      /It has not been established whether the benchmark counts dividends/i.test(k),
@@ -657,15 +677,8 @@ function textValueFile(file) {
   ok('on a wide screen they share a row',
      Math.abs(boxes.aTop - boxes.bTop) < 2 && boxes.bLeft >= boxes.aRight - 1,
      JSON.stringify(boxes));
-  await wide.setViewportSize({ width: 390, height: 900 });
-  await wide.waitForTimeout(300);
-  const stacked = await wide.evaluate(() => {
-    const a = document.querySelector('#up-primary').getBoundingClientRect();
-    const b = document.querySelector('#up-benchmark-head').getBoundingClientRect();
-    return { aBottom: a.bottom, bTop: b.top };
-  });
-  ok('and on a phone they stack, still both in step 1',
-     stacked.bTop >= stacked.aBottom - 1, JSON.stringify(stacked));
+  ok('and the compact doors are not drawn where there is room for the cards',
+     await wide.locator('#up-doors').isHidden());
   await wide.close();
 
   section('Either file first, from the same step');
@@ -718,6 +731,154 @@ function textValueFile(file) {
   ok('and the comparison runs',
      /Outperformance Rate vs Benchmark/.test(flat(await page.locator('#r-out').innerText())),
      flat(await page.locator('#r-out').innerText()).slice(0, 160));
+
+  /* ================================== THE TWO DOORS, ON A PHONE (390px) */
+  section('On a phone the pair is what sits side by side');
+  await openIndexPath();
+  ok('two compact doors are drawn instead of two cards',
+     await page.locator('#up-doors').isVisible() &&
+     (await page.locator('.door').count()) === 2);
+  const doorBox = await page.evaluate(() => {
+    const a = document.querySelector('#door-a').getBoundingClientRect();
+    const b = document.querySelector('#door-b').getBoundingClientRect();
+    return { aTop: a.top, bTop: b.top, aRight: a.right, bLeft: b.left, w: a.width };
+  });
+  ok('side by side on a 390px screen, which the cards themselves could not be',
+     Math.abs(doorBox.aTop - doorBox.bTop) < 2 && doorBox.bLeft >= doorBox.aRight - 1,
+     JSON.stringify(doorBox));
+  ok('each door names its file and what to do about it',
+     /Primary Investment Data/.test(await page.locator('#door-a').innerText()) &&
+     /Upload File/.test(await page.locator('#door-a').innerText()) &&
+     /Benchmark Index Data \(TRI\)/.test(await page.locator('#door-b').innerText()) &&
+     /Choose a File/.test(await page.locator('#door-b').innerText()),
+     flat(await page.locator('#up-doors').innerText()));
+  ok('and neither card is taking up the screen until it is asked for',
+     await page.locator('#up-primary').isHidden() &&
+     await page.locator('#up-benchmark-head').isHidden());
+
+  section('Tapping a door opens its card, whole');
+  await page.click('#door-a');
+  await page.waitForTimeout(300);
+  ok('card 1 opens', await page.locator('#up-primary').isVisible());
+  ok('and card 2 stays shut, so one box is on screen and not two',
+     await page.locator('#up-benchmark-head').isHidden());
+  ok('the door says it is open', (await page.locator('#door-a').getAttribute('aria-expanded')) === 'true' &&
+     (await page.locator('#door-b').getAttribute('aria-expanded')) === 'false');
+  const openA = flat(await page.locator('#up-primary').innerText());
+  ok('with every word of the card, not a summary of it',
+     /Upload Mutual Fund Daily NAV history/.test(openA) &&
+     /Accepted columns/.test(openA) &&
+     /Rule: Do NOT upload Tradebooks/.test(openA) &&
+     /Choose a file/.test(openA), openA.slice(0, 220));
+  ok('and the card does not repeat the heading the door already carries',
+     !/1\. Primary Investment Data \(NAV\)/.test(openA), openA.slice(0, 120));
+
+  await page.click('#door-b');
+  await page.waitForTimeout(300);
+  ok('tapping the other door swaps which card is open',
+     await page.locator('#up-benchmark-head').isVisible() &&
+     await page.locator('#up-primary').isHidden());
+  ok('and card 2 is whole too',
+     /Upload historical daily values for a Total Return Index/
+       .test(flat(await page.locator('#up-benchmark-head').innerText())),
+     flat(await page.locator('#up-benchmark-head').innerText()).slice(0, 200));
+
+  await page.click('#door-b');
+  await page.waitForTimeout(300);
+  ok('tapping the open door shuts it again, so a wrong tap is not a trap',
+     await page.locator('#up-benchmark-head').isHidden() &&
+     (await page.locator('#door-b').getAttribute('aria-expanded')) === 'false');
+
+  section('The doors carry the answer, so both can be read at a glance');
+  await page.click('#door-a');
+  await page.waitForTimeout(250);
+  await page.setInputFiles('#bm-file', primary);
+  await page.waitForTimeout(2200);
+  ok('a loaded door shows the file it holds',
+     (await page.locator('#door-a').getAttribute('data-state')) === 'loaded' &&
+     /spec-primary\.csv/.test(await page.locator('#door-a-status').innerText()),
+     await page.locator('#door-a-status').innerText());
+  ok('while the other still says what it wants',
+     (await page.locator('#door-b').getAttribute('data-state')) === null &&
+     /Choose a File/.test(await page.locator('#door-b-status').innerText()));
+
+  await page.click('#door-b');
+  await page.waitForTimeout(250);
+  await page.setInputFiles('#cmp-file', trades);
+  await page.waitForTimeout(2000);
+  ok('a door whose file was turned away says so',
+     (await page.locator('#door-b').getAttribute('data-state')) === 'refused' &&
+     /Not added/.test(await page.locator('#door-b-status').innerText()),
+     await page.locator('#door-b-status').innerText());
+  ok('and the reason is still in the open card, where it was refused',
+     /trade logs or transaction records/.test(flat(await page.locator('#cmp-status').innerText())),
+     flat(await page.locator('#cmp-status').innerText()).slice(0, 120));
+
+  await page.setInputFiles('#cmp-file', benchTRI);
+  await page.waitForTimeout(2200);
+  ok('a good file after it clears the mark',
+     (await page.locator('#door-b').getAttribute('data-state')) === 'loaded' &&
+     /nifty-50-tri\.csv/.test(await page.locator('#door-b-status').innerText()),
+     await page.locator('#door-b-status').innerText());
+
+  section('A read file folds its card away and rests as a summary');
+  /* A card is a working surface. It is open while a file is being chosen and
+     has no business staying open afterwards -- a full-height box holding a job
+     already done is the largest thing on the screen and the least useful. */
+  ok('both cards closed themselves once their files were read',
+     await page.locator('#up-primary').isHidden() &&
+     await page.locator('#up-benchmark-head').isHidden() &&
+     await page.locator('#up-doors').isVisible());
+  /* NOT a list of what was uploaded. The tiles already carry that -- each one
+     shows its own file name and reopens its card when tapped -- so a row
+     repeating it underneath is a second copy of an answer already on screen.
+     What is left to say is that there is enough here to run, and where to go
+     next: on a phone step 2 is below the fold. */
+  ok('one go-ahead, and no list repeating what the tiles already say',
+     (await page.locator('#up-ready').count()) === 1 &&
+     (await page.locator('#up-loaded .loaded-line').count()) === 0);
+  const ready = flat(await page.locator('#up-ready').innerText());
+  ok('it says the analysis can run', /Ready to analyse/.test(ready), ready);
+  ok('and that both files are in', /Both files are in/.test(ready), ready);
+  ok('the plain “Ready to analyse” notice is retired, its job done better here',
+     !/Ready to analyse/.test(flat(await page.locator('#r-loaded').innerText())),
+     flat(await page.locator('#r-loaded').innerText()));
+
+  const beforeScroll = await page.evaluate(() => window.scrollY);
+  await page.click('#up-ready');
+  await page.waitForTimeout(900);
+  const moved = await page.evaluate(() => ({
+    y: window.scrollY,
+    stepTop: document.querySelector('#step-period').getBoundingClientRect().top
+  }));
+  ok('tapping it carries the reader to step 2 instead of making them hunt for it',
+     moved.y > beforeScroll && Math.abs(moved.stepTop) < 90,
+     JSON.stringify({ from: beforeScroll, to: moved.y, stepTop: Math.round(moved.stepTop) }));
+  ok('and puts them in the first field there',
+     await page.evaluate(() => document.activeElement &&
+       document.activeElement.id === 'r-start'),
+     await page.evaluate(() => document.activeElement && document.activeElement.id));
+
+  section('And the whole analysis runs from the doors');
+  await page.click('#r-run');
+  await page.waitForTimeout(2200);
+  const fromDoors = flat(await page.locator('#r-out').innerText());
+  ok('a 14% fund against a 10% index, loaded entirely through the doors',
+     /Average Rolling Return \(Mean\) 14\.0% 10\.0%/.test(fromDoors),
+     (fromDoors.match(/Average Rolling Return \(Mean\)[^A-Z]{0,26}/) || [''])[0]);
+
+  section('Start again puts the doors back');
+  await page.click('#r-reset');
+  await page.waitForTimeout(400);
+  await page.click('#r-source .chip[data-source="index"]');
+  await page.waitForTimeout(300);
+  ok('both doors are empty again',
+     (await page.locator('#door-a').getAttribute('data-state')) === null &&
+     (await page.locator('#door-b').getAttribute('data-state')) === null &&
+     /Upload File/.test(await page.locator('#door-a-status').innerText()));
+  ok('and neither card is open',
+     await page.locator('#up-primary').isHidden() &&
+     await page.locator('#up-benchmark-head').isHidden());
 
   /* ================================= THE FUND PATH IS NOT IN SCOPE AND IS NOT TOUCHED */
   section('The other source path is left exactly as it was');

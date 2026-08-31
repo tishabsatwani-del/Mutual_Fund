@@ -116,6 +116,12 @@ function longFile(file) {
      "1. Primary Investment Data (NAV)" -- help about the OTHER door. It is
      now inside Card B, which is the door it describes.
      It lives in a <details>; a reader opens it, so the test does too. */
+  /* Below 34rem card 2 sits behind a compact door, so it has to be opened
+     before anything inside it can be read. */
+  if (await page.locator('#up-doors').isVisible()) {
+    await page.click('#door-b');
+    await page.waitForTimeout(250);
+  }
   await page.locator('#up-benchmark-head details summary').click();
   await page.waitForTimeout(200);
   const idx = await page.locator('#up-benchmark-head details .body').innerText();

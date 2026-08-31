@@ -55,6 +55,19 @@ function plainFile(file, rate, fromY, toY, start = 100) {
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
 
+  /* Below 34rem the index path's two cards live behind compact doors, and a
+     card folds itself away once its file is read. Anything that inspects a
+     card has to open its door first. On the fund path, and above 34rem, the
+     doors are not drawn and this does nothing. */
+  async function openCard(which) {
+    if (await page.locator('#up-doors').isHidden()) return;
+    const btn = page.locator('#door-' + which);
+    if ((await btn.getAttribute('aria-expanded')) !== 'true') {
+      await btn.click();
+      await page.waitForTimeout(220);
+    }
+  }
+
   const bulk = bulkFile(TMP + '/r-bulk.csv',
     [['Alpha Fund - Direct Growth', 0.14], ['Alpha Fund - Regular Growth', 0.11],
      ['Beta Fund - Direct Growth', 0.08]], 2010, 2025);
@@ -250,7 +263,14 @@ function plainFile(file, rate, fromY, toY, start = 100) {
      (await page.locator('#r-out').innerText()).trim() === '');
   await page.setInputFiles('#bm-file', index);
   await page.waitForTimeout(1200);
-  ok('an index file loads', /Ready to analyse/.test(await page.locator('#r-loaded').innerText()));
+  /* The index path says this with the go-ahead now: "Ready to analyse" as a
+     control that carries the reader to step 2, rather than as a line of text
+     under the card. */
+  ok('an index file loads',
+     /Ready to analyse/.test(await page.locator('#up-ready').innerText()),
+     (await page.locator('#up-ready').innerText()).replace(/\s+/g, ' '));
+  ok('and the door it came through shows the file it holds',
+     (await page.locator('#door-a').getAttribute('data-state')) === 'loaded');
 
   await page.click('#r-source .chip[data-source="fund"]');
   await page.setInputFiles('#f-file', bulk);
@@ -508,6 +528,9 @@ function plainFile(file, rate, fromY, toY, start = 100) {
   await page.waitForTimeout(1400);
   await page.setInputFiles('#cmp-file', threeFile);
   await page.waitForTimeout(1600);
+  /* The picker lives inside card 2, and a many-scheme file is the one case
+     that does NOT fold the card away -- there is still a question on it. */
+  await openCard('b');
 
   ok('a many-scheme file in the benchmark slot offers a picker, not just a refusal',
      !(await page.locator('#cmp-scheme-wrap').isHidden()) &&
@@ -526,6 +549,10 @@ function plainFile(file, rate, fromY, toY, start = 100) {
      that arithmetic and nothing else -- and each is reached WITHOUT loading the
      file again, which is the whole point of keeping the picker alive. */
   async function gapAgainst(i) {
+    /* Picking a scheme completes the upload, so the card folds away as it does
+       for any other file. Reopening it is one tap and the picker is still
+       populated -- which is the claim being tested: no SECOND UPLOAD. */
+    await openCard('b');
     await page.locator('#cmp-scheme-list .hit').nth(i).click();
     await page.waitForTimeout(900);
     await page.click('#r-run');
@@ -537,8 +564,11 @@ function plainFile(file, rate, fromY, toY, start = 100) {
   ok('the index against Alpha at 14% is 3.0 points behind', (await gapAgainst(1)) === '-3.0');
   ok('against Beta at 8% it is 3.0 points ahead', (await gapAgainst(2)) === '+3.0');
   ok('against Gamma at 20% it is 9.0 points behind', (await gapAgainst(3)) === '-9.0');
+  await openCard('b');
   ok('and switching between them needed no second upload',
-     !(await page.locator('#cmp-scheme-wrap').isHidden()));
+     !(await page.locator('#cmp-scheme-wrap').isHidden()) &&
+     (await page.locator('#cmp-scheme-list .hit').count()) === 4,
+     String(await page.locator('#cmp-scheme-list .hit').count()));
 
   const combined = await gapAgainst(0);
   ok('all three together are a benchmark of their own',
@@ -547,6 +577,7 @@ function plainFile(file, rate, fromY, toY, start = 100) {
      re-struck at each window start would give. The label says which it is. */
   ok('and the composite lands where a basket bought once actually would',
      parseFloat(combined) < -3.2 && parseFloat(combined) > -4.5, combined + ' points');
+  await openCard('b');
   ok('with the assumption it rests on stated, not implied',
      /never rebalanced/.test(await page.locator('#cmp-note').innerText()),
      (await page.locator('#cmp-note').innerText()).replace(/\n/g, ' ').slice(0, 160));
@@ -563,9 +594,20 @@ function plainFile(file, rate, fromY, toY, start = 100) {
      String(await page.locator('#r-scheme-list .hit').count()));
   await page.locator('#r-scheme-list .hit').nth(2).click();
   await page.waitForTimeout(1000);
+  /* The scheme's name is on the door and in what gets measured, rather than in
+     a notice below: the door names what it holds, and the run names what it
+     analysed. Proving the second is the stronger claim, so that is the one
+     made here. */
+  ok('the door names the scheme rather than the bulk file it came out of',
+     (await page.locator('#door-a').getAttribute('data-state')) === 'loaded' &&
+     /Beta Fund/.test(await page.locator('#door-a-status').innerText()),
+     await page.locator('#door-a-status').innerText());
+  await page.click('#r-run');
+  await page.waitForTimeout(1500);
   ok('and choosing one there analyses that scheme',
-     /Beta Fund - Direct Growth/.test(await page.locator('#r-loaded').innerText()),
-     await page.locator('#r-loaded').innerText());
+     /Fund or index\s*Beta Fund - Direct Growth/
+       .test((await page.locator('#r-out').innerText()).replace(/\s+/g, ' ')),
+     (await page.locator('#r-out').innerText()).replace(/\s+/g, ' ').slice(0, 120));
 
   section('Old links still land somewhere sensible');
   for (const hash of ['#fund', '#history']) {

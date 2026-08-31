@@ -1695,7 +1695,7 @@
           'compares like with like. Windows outside that shared stretch are not counted on either ' +
           'side.'
         : 'Only the Primary Investment column can be filled in. Load a benchmark index file in ' +
-          'step 4 and the second column, and the outperformance row, become measurable.') +
+          'card 2 and the second column, and the outperformance row, become measurable.') +
       '</p><div class="scroll"><table class="data summary3">' +
       '<caption>Annualised ' + years + '-year rolling returns, ' +
       esc((E.FREQUENCY[calc.frequency] || E.FREQUENCY.daily).label.toLowerCase()) +
@@ -1734,7 +1734,7 @@
       (have && compareMeta && compareMeta.kind == null
         ? '<p><strong>It has not been established whether the benchmark counts dividends.</strong> ' +
           'If it does not, the outperformance row overstates the gap by roughly the market\u2019s ' +
-          'dividend yield. Say which it is in step 4.</p>' : '') +
+          'dividend yield. Say which it is on card 2, Benchmark Index Data.</p>' : '') +
       '</div></div>';
     return html;
   }
@@ -1778,7 +1778,7 @@
     } else {
       items.push(['Outperformance Consistency',
         'Not measurable. No benchmark index data is loaded, so there is nothing to have ' +
-        'outperformed. Load a Total Return Index file in step 4.']);
+        'outperformed. Load a Total Return Index file into card 2, Benchmark Index Data.']);
       items.push(['Excess Return Profile (Alpha Spread)',
         'Not measurable without benchmark index data.']);
       items.push(['Downside Resilience',
@@ -1861,7 +1861,9 @@
         : [SAY.out, 'not measured', esc(c.message)]);
     } else {
       rows.push([SAY.out, 'not measured',
-                 'No benchmark is loaded. Choose one in step 4 and this becomes a rate.']);
+                 'No benchmark is loaded. Load one into ' +
+                 (indexPath ? 'card 2, Benchmark Index Data,' : 'step 4') +
+                 ' and this becomes a rate.']);
     }
 
     rows.push([SAY.worst, pct(s.min),
@@ -2034,7 +2036,10 @@
             /* Never guessed. The old code had two branches and no third, so an
                index nobody had established anything about was described as a
                total return index -- the reassuring answer, asserted. */
-            : 'not established — say which in step 4') +
+            /* Step 4 is gone on this path and the control is on card 2, so
+               pointing at a step that is not there would send the reader
+               looking for something that does not exist. */
+            : 'not established — open card 2 and say which') +
         '</td></tr>' +
         (compareMeta.firstDate ? '<tr><td>Its own data covers</td><td>' + esc(compareMeta.firstDate) +
           ' to ' + esc(compareMeta.lastDate) + '</td></tr>' : '') +
@@ -2049,7 +2054,8 @@
       (compareMeta && compareMeta.kind == null
         ? '<p><strong>Whether this index counts dividends has not been established.</strong> If it ' +
           'is a price index, every figure above overstates the gap by roughly the market\u2019s ' +
-          'dividend yield. Say which it is in step 4 and this line will say what follows from it.</p>'
+          'dividend yield. Open card 2, Benchmark Index Data, and say which it is — this line ' +
+          'will then say what follows from it.</p>'
         : '') +
       '<p>A benchmark carries no costs, holds no cash and makes no decisions; a fund does all three. ' +
       'A benchmark comparison is a reference point, not proof that a fund is good or bad, and it says ' +
@@ -2203,6 +2209,139 @@
     }
   }
 
+  /* ================================================ THE TWO DOORS, ON A PHONE
+   *
+   * Below 34rem the pair of cards becomes a pair of compact doors that fit
+   * side by side honestly, and the card opens under whichever was tapped.
+   * Above it none of this runs: the doors are not drawn, both cards show.
+   *
+   * The doors are the only place a reader can see BOTH answers at once, so
+   * they carry the state -- empty, loaded with a name, or turned away -- and
+   * every path that changes a drop box tells them so.
+   */
+  var DOOR_OF = { bm: 'a', cmp: 'b' };
+  var DOOR_IDLE = { a: 'Upload File', b: 'Choose a File' };
+  /* What each door is holding, once it holds something. */
+  var LOADED = { a: null, b: null };
+
+  function openDoor(which) {
+    var cards = $('#up-cards');
+    if (!cards) return;
+    cards.setAttribute('data-open', which || '');
+    ['a', 'b'].forEach(function (d) {
+      var btn = $('#door-' + d);
+      if (btn) btn.setAttribute('aria-expanded', String(d === which));
+    });
+  }
+
+  /* ================================ WHAT HAS BEEN LOADED, AT REST
+   *
+   * A card is a working surface. It is open while a file is being chosen and
+   * it has no business staying open afterwards -- a full-height box holding a
+   * job already done is the largest thing on the screen and the least useful.
+   *
+   * So on a successful read the card folds away and the file appears here
+   * instead: what it is, what it is called, how much of it was read, over what
+   * dates. Two of them stacked is the whole of step 1 in six lines.
+   */
+  function recordLoaded(prefix, name, report) {
+    var d = DOOR_OF[prefix];
+    if (!d) return;
+    LOADED[d] = report ? { name: name, report: report } : null;
+    renderLoadedList();
+  }
+
+  function clearLoadedList() {
+    LOADED.a = null; LOADED.b = null;
+    renderLoadedList();
+  }
+
+  function renderLoadedList() {
+    var host = $('#up-loaded');
+    if (!host) return;
+
+    /* NOT a list of what was uploaded.
+     *
+     * The tiles already carry that: each one shows its own file name and
+     * reopens its card when tapped, so a row repeating it underneath is a
+     * second copy of an answer already on screen. What is NOT on screen is
+     * the only thing left to say once both doors are shut -- that there is
+     * enough here to run, and where to go next.
+     *
+     * So this area holds one thing: the go-ahead, and the scroll that saves
+     * the reader hunting for step 2 on a phone. */
+    if (!LOADED.a) { host.innerHTML = ''; return; }
+
+    var both = !!(LOADED.a && LOADED.b);
+    host.innerHTML =
+      '<button class="readybar" type="button" id="up-ready">' +
+        '<span class="rb-ic" aria-hidden="true">✓</span>' +
+        '<span class="rb-t">' +
+          '<span class="rb-h">Ready to analyse</span>' +
+          '<span class="rb-s">' + esc(readySub(both)) + '</span>' +
+        '</span>' +
+        '<span class="rb-go" aria-hidden="true">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"' +
+          ' stroke-linecap="round" stroke-linejoin="round">' +
+          '<path d="M12 5v14"/><path d="M19 12l-7 7-7-7"/></svg>' +
+        '</span>' +
+      '</button>';
+
+    var btn = $('#up-ready');
+    if (btn) {
+      btn.addEventListener('click', function () {
+        var target = $('#step-period');
+        if (!target) return;
+        var still = window.matchMedia &&
+                    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        target.scrollIntoView({ block: 'start', behavior: still ? 'auto' : 'smooth' });
+        /* Moved to as well as scrolled to, so a reader on a keyboard or a
+           screen reader arrives where the page just went. */
+        var first = A.$$('input:not([disabled])', target)[0];
+        if (first) setTimeout(function () { first.focus({ preventScroll: true }); }, still ? 0 : 420);
+      });
+    }
+  }
+
+  function readySub(both) {
+    if (both) return 'Both files are in. Choose the dates and the holding period.';
+    return 'Your investment data is in. Add a benchmark above, or carry on without one.';
+  }
+
+
+  function wireDoors() {
+    ['a', 'b'].forEach(function (d) {
+      var btn = $('#door-' + d);
+      if (!btn) return;
+      btn.addEventListener('click', function () {
+        var cards = $('#up-cards');
+        var already = cards && cards.getAttribute('data-open') === d;
+        /* Tapping the open door shuts it, so a reader who opened the wrong one
+           is not stuck with a card they did not want. */
+        openDoor(already ? '' : d);
+      });
+    });
+  }
+
+  /* The door says what its card holds, in the fewest words that are true. */
+  function doorSays(prefix, state, text) {
+    var d = DOOR_OF[prefix];
+    if (!d) return;
+    var btn = $('#door-' + d), slot = $('#door-' + d + '-status');
+    if (!btn || !slot) return;
+    if (state) btn.setAttribute('data-state', state);
+    else btn.removeAttribute('data-state');
+    slot.textContent = text || DOOR_IDLE[d];
+  }
+
+  /* A name long enough to fill the door twice over tells the reader nothing.
+     The end matters more than the middle: it carries the extension. */
+  function shortName(name) {
+    var n = String(name || '');
+    if (n.length <= 22) return n;
+    return n.slice(0, 11) + '…' + n.slice(-10);
+  }
+
   /* Section 2 puts both datasets in step 1, side by side.
    *
    * The benchmark door was in step 4, which meant the reader met one of the
@@ -2334,9 +2473,17 @@
     if (srcStep) { srcStep.dataset.done = 'yes'; srcStep.dataset.error = 'no'; }
     gateSteps();
 
-    $('#r-loaded').innerHTML = notice('ok', 'Ready to analyse <strong>' + esc(name) + '</strong>.' +
-      (reset ? ' Your dates fell outside this data, so they have been set to its full range.' : '') +
-      (o.note ? ' ' + o.note : ''));
+    /* "Ready to analyse X" is what the summary row says, better, on the path
+       that has one. Kept for anything the row does NOT say -- a date range
+       that had to be reset, an aging note on bundled data -- and kept whole on
+       the fund path, which has no summary row. */
+    var extraWord = (reset ? 'Your dates fell outside this data, so they have been set to its ' +
+                             'full range.' : '') + (o.note ? (reset ? ' ' : '') + o.note : '');
+    var quiet = R.source === 'index' && (LOADED.a || LOADED.b);
+    $('#r-loaded').innerHTML = quiet
+      ? (extraWord ? notice('', extraWord) : '')
+      : notice('ok', 'Ready to analyse <strong>' + esc(name) + '</strong>.' +
+               (extraWord ? ' ' + extraWord : ''));
     refreshCompare();
     overlapNote();
     if (R.ran) runRolling();
@@ -2547,6 +2694,7 @@
 
   function dropReading(prefix, name) {
     dropState(prefix, 'working', '<span class="spin"></span>', name, 'Reading the file…', '');
+    doorSays(prefix, '', 'Reading…');
   }
 
   /* The one the reader was missing. Named, counted and dated, so "it worked"
@@ -2561,12 +2709,20 @@
               '<strong class="ok-word">File added successfully</strong>' +
               (sub ? ' — ' + sub : ''),
               'Choose a different file');
+    doorSays(prefix, 'loaded', shortName(name));
+    recordLoaded(prefix, name, report || null);
+    /* Folded away only when the file actually became a series. A many-scheme
+       file has left a question on the card -- which one? -- and closing the
+       card over it would hide the only control that answers it. */
+    if (report) openDoor('');
   }
 
   function dropRejected(prefix, name) {
     dropState(prefix, 'refused', '!', name,
               '<strong class="bad-word">Not added</strong> — see below',
               'Choose another file');
+    doorSays(prefix, 'refused', 'Not added');
+    recordLoaded(prefix, name, null);
   }
 
   function clearDropStatus(prefix) {
@@ -2574,6 +2730,8 @@
     if (box) { box.className = 'filebox'; box.innerHTML = dropIdleHtml(prefix); }
     var st = $('#' + prefix + '-status');
     if (st) st.innerHTML = '';
+    doorSays(prefix, '', null);
+    recordLoaded(prefix, null, null);
   }
 
   function dropSay(prefix, html) {
@@ -2746,6 +2904,10 @@
             var res = P.rowsToSeries(extra.rows, { scheme: sc.name });
             if (!res.ok) { clearLoaded(notice('bad', esc(res.message))); return; }
             R.bundled[sc.name] = res.series;
+            /* The door and the summary name the SCHEME, not the file it came
+               out of: a bulk download called 120503.txt says nothing, and the
+               scheme is what is being measured. */
+            dropAdded('bm', sc.name, res.report);
             setLoaded(res.series, sc.name, { report: res.report });
           },
           onCombine: function () {
@@ -3009,6 +3171,7 @@
                 onPick: function (sc) {
                   var r2 = P.rowsToSeries(extra.rows, { scheme: sc.name });
                   if (!r2.ok) { $('#cmp-note').innerHTML = notice('bad', esc(r2.message)); return; }
+                  dropAdded('cmp', sc.name, r2.report);
                   useAsBenchmark(r2.series, sc.name);
                 },
                 onCombine: function () {
@@ -3058,6 +3221,7 @@
       onPick: function (sc) {
         var r2 = P.rowsToSeries(rows, { scheme: sc.name });
         if (!r2.ok) { $('#cmp-note').innerHTML = notice('bad', esc(r2.message)); return; }
+        dropAdded('cmp', sc.name, r2.report);
         useAsBenchmark(r2.series, sc.name);
       },
       onCombine: function () {
@@ -3135,10 +3299,12 @@
           c.setAttribute('aria-checked', String(c === b));
         });
         sayIndexKind(name);
+        renderLoadedList();
         if (R.ran) runRolling();
       });
     });
     sayIndexKind(name);
+    renderLoadedList();
   }
 
   function kindChip(kind, label, chosen) {
@@ -3693,6 +3859,7 @@
     $('#g-calc').addEventListener('click', calcGoal);
 
     /* rolling returns: one module, four steps, nothing hidden */
+    wireDoors();
     yearChips();
     freqChips();
     gateSteps();
@@ -3753,6 +3920,8 @@
       var isel = $('#r-index');
       if (isel) isel.value = '';
       ['bm', 'cmp', 'f'].forEach(clearDropStatus);
+      clearLoadedList();
+      openDoor('');
       var ov = $('#r-overlap-note');
       if (ov) ov.innerHTML = '';
       var cn = $('#cmp-note');

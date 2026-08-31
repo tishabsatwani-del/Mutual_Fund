@@ -299,6 +299,46 @@
            has to reach before they can see the other. Card B is moved in here
            by setSource, because on the fund path it belongs where it has
            always been. Copy is the specification's, verbatim. -->
+      <!-- Bundled history, when there is any, is not a file door and does not
+           belong behind one: on a phone it would have been unreachable inside
+           a card the reader has to open. Nothing ships bundled, so this stays
+           empty, but the dormant path has to work. -->
+      <div id="r-index-field"></div>
+      <!-- On a phone the two cards cannot sit beside each other and stay
+           readable: at 390px two columns leave about 116px of text apiece,
+           which is sixteen characters a line. So below 34rem the pair becomes
+           two compact doors that DO fit side by side, and tapping one opens
+           its full card underneath. Above 34rem the doors are not drawn at all
+           and both cards show, exactly as they did. -->
+      <div class="doors" id="up-doors" role="group" aria-label="Choose which file to load">
+        <button class="door" type="button" id="door-a" aria-expanded="false"
+                aria-controls="up-primary" data-door="a">
+          <span class="door-ic" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+                 stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/>
+              <path d="M14 3v5h5"/><path d="M8.5 13.5l2.2 2.2 4.8-4.8"/>
+            </svg>
+          </span>
+          <span class="door-n">1</span>
+          <span class="door-t">Primary Investment Data (NAV)</span>
+          <span class="door-s" id="door-a-status">Upload File</span>
+        </button>
+        <button class="door" type="button" id="door-b" aria-expanded="false"
+                aria-controls="up-benchmark-head" data-door="b">
+          <span class="door-ic" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+                 stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 19h16"/><path d="M4 19V5"/>
+              <path d="M7 15.5l3.6-4.4 3 2.6L20 7"/>
+              <path d="M20 7h-3.6"/><path d="M20 7v3.6"/>
+            </svg>
+          </span>
+          <span class="door-n">2</span>
+          <span class="door-t">Benchmark Index Data (TRI)</span>
+          <span class="door-s" id="door-b-status">Choose a File</span>
+        </button>
+      </div>
       <div class="grid2 upcards" id="up-cards">
       <div class="upcard" id="up-primary">
         <h3>1. Primary Investment Data (NAV)</h3>
@@ -312,11 +352,14 @@
              reader used to meet here was a labelled dropdown holding one
              option that said there was nothing in it: a control that occupied
              a full row to announce its own emptiness. -->
-        <div id="r-index-field"></div>
         <div id="r-index-upload"></div>
         <div id="up-primary-note" aria-live="polite"></div>
       </div>
       </div><!-- /up-cards -->
+      <!-- What has actually been loaded. A card is a working surface: it is
+           open while you are doing something with it and it should not stay
+           open afterwards. This is where the answer rests. -->
+      <div class="loadedlist" id="up-loaded"></div>
       <div id="up-after-cards"></div>
     </div>
 

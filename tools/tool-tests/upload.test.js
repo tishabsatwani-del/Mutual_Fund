@@ -50,7 +50,26 @@ execFileSync('python3', [path.join(__dirname, 'fixtures', 'make_upload_fixtures.
     await page.click(`#r-source .chip[data-source="${source}"]`);
     await page.waitForTimeout(250);
   }
-  const boxText = id => page.locator('#' + id).innerText().then(flat);
+  /* Below 34rem the index path's two cards live behind compact doors, and a
+     card folds itself away once its file has been read -- the reader is
+     returned to the pair of tiles rather than left facing a box whose job is
+     done. So anything here that inspects a card opens its door first. On the
+     fund path, and above 34rem, the doors are not drawn and this does
+     nothing. */
+  const DOOR = { 'bm-drop': 'a', 'cmp-drop': 'b' };
+  async function openCard(which) {
+    if (!which) return;
+    if (await page.locator('#up-doors').isHidden()) return;
+    const btn = page.locator('#door-' + which);
+    if ((await btn.getAttribute('aria-expanded')) !== 'true') {
+      await btn.click();
+      await page.waitForTimeout(220);
+    }
+  }
+  async function boxText(id) {
+    await openCard(DOOR[id]);
+    return flat(await page.locator('#' + id).innerText());
+  }
 
   /* ============================================================ the states */
   section('The box the reader clicked is the box that answers');
@@ -63,6 +82,7 @@ execFileSync('python3', [path.join(__dirname, 'fixtures', 'make_upload_fixtures.
 
   /* ------------------------------------------------ the confirmation itself */
   section('A valid index file is confirmed where it was chosen');
+  await openCard('a');
   await page.locator('#bm-drop').scrollIntoViewIfNeeded();
   const beforeScroll = await page.evaluate(() => window.scrollY);
   await page.setInputFiles('#bm-file', f('nse-nifty50-tri.csv'));
@@ -79,14 +99,26 @@ execFileSync('python3', [path.join(__dirname, 'fixtures', 'make_upload_fixtures.
   ok('it offers the next move without hunting for it',
      /Choose a different file/.test(added), added);
 
-  /* The complaint this was built for: having to scroll to find out. */
+  /* The complaint this was built for: having to scroll to find out.
+   *
+   * On a phone the card folds itself away once the file is read and the
+   * reader is returned to the pair of tiles, so it is the TILE that has to
+   * carry the answer into view. That is the stronger claim: not that a box
+   * somewhere below says it worked, but that the thing the reader was looking
+   * at when they tapped now says so. */
   const inView = await page.evaluate(() => {
-    const b = document.querySelector('#bm-drop.loaded');
+    const doors = document.querySelector('#up-doors');
+    const onPhone = doors && doors.getBoundingClientRect().height > 0;
+    const b = document.querySelector(onPhone ? '#door-a[data-state="loaded"]'
+                                             : '#bm-drop.loaded');
     if (!b) return false;
     const r = b.getBoundingClientRect();
     return r.top >= 0 && r.bottom <= window.innerHeight;
   });
   ok('the confirmation is on screen without scrolling anywhere', inView);
+  ok('and it names the file there',
+     /nse-nifty50-tri\.csv/.test(await page.locator('#door-a-status').innerText()),
+     await page.locator('#door-a-status').innerText());
   ok('and the page did not scroll out from under the reader',
      Math.abs((await page.evaluate(() => window.scrollY)) - beforeScroll) < 40);
 
@@ -132,12 +164,17 @@ execFileSync('python3', [path.join(__dirname, 'fixtures', 'make_upload_fixtures.
      (await page.locator('#bm-drop.loaded').count()) === 1, many);
   ok('and the box says what the question is',
      /3 schemes found/.test(many), many);
+  await openCard('a');
   ok('the picker is offered', !(await page.locator('#r-scheme-wrap').isHidden()));
   await page.locator('#r-scheme-list .hit:not(.combined)').first().click();
   await page.waitForTimeout(1500);
+  /* The chosen SCHEME is what the door names, not the workbook it came out
+     of: "amc-three-schemes.xlsx" tells a reader nothing about what is being
+     measured. */
   ok('choosing one loads it',
-     /Alpha Fund - Direct Growth/.test(flat(await page.locator('#r-loaded').innerText())),
-     flat(await page.locator('#r-loaded').innerText()));
+     (await page.locator('#door-a').getAttribute('data-state')) === 'loaded' &&
+     /Alpha Fund/.test(await page.locator('#door-a-status').innerText()),
+     await page.locator('#door-a-status').innerText());
 
   /* ======================================================= AMFI semicolons */
   section('AMFI’s own semicolon file');
@@ -169,6 +206,7 @@ execFileSync('python3', [path.join(__dirname, 'fixtures', 'make_upload_fixtures.
      !/trade logs|transaction records/i.test(pdfWhy), pdfWhy);
   ok('it says what to do instead, in steps that exist',
      /CSV or Excel/.test(pdfWhy) && /paste/.test(pdfWhy), pdfWhy);
+  await openCard('a');
   ok('the reason is under the box, not somewhere down the page',
      await page.evaluate(() => {
        const b = document.querySelector('#bm-drop'), s = document.querySelector('#bm-status');
@@ -233,6 +271,7 @@ execFileSync('python3', [path.join(__dirname, 'fixtures', 'make_upload_fixtures.
   /* ================================================================ paste */
   section('Pasting two columns out of a spreadsheet');
   await open('index');
+  await openCard('a');
   ok('the option is offered', await page.locator('#bm-paste-open').isVisible());
   await page.click('#bm-paste-open');
   await page.waitForTimeout(200);
@@ -281,6 +320,7 @@ execFileSync('python3', [path.join(__dirname, 'fixtures', 'make_upload_fixtures.
   await open('index');
   await page.setInputFiles('#bm-file', f('amfi-alpha-nav.csv'));
   await page.waitForTimeout(2500);
+  await openCard('b');
   await page.locator('#cmp-drop').scrollIntoViewIfNeeded();
   await page.setInputFiles('#cmp-file', f('nse-nifty50-tri.csv'));
   await page.waitForTimeout(2500);
@@ -290,7 +330,10 @@ execFileSync('python3', [path.join(__dirname, 'fixtures', 'make_upload_fixtures.
      /File added successfully/.test(cmp), cmp);
   ok('and it too is on screen without scrolling',
      await page.evaluate(() => {
-       const b = document.querySelector('#cmp-drop.loaded');
+       const doors = document.querySelector('#up-doors');
+       const onPhone = doors && doors.getBoundingClientRect().height > 0;
+       const b = document.querySelector(onPhone ? '#door-b[data-state="loaded"]'
+                                                : '#cmp-drop.loaded');
        const r = b && b.getBoundingClientRect();
        return !!r && r.top >= 0 && r.bottom <= window.innerHeight;
      }));
