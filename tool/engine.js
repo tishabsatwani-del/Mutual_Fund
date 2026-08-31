@@ -161,20 +161,20 @@
     monthly: { label: 'Monthly', months: 1 }
   };
 
-  function rollingReturns(series, years, options) {
-    var opts = options || {};
-    var tol = opts.toleranceDays == null ? 7 : opts.toleranceDays;
-    var freq = FREQUENCY[opts.frequency] ? opts.frequency : 'daily';
-    if (!(years > 0)) return fail('BAD_HORIZON', 'Choose a holding period of at least one year.');
-    if (!series || series.length < 2) return fail('TOO_SHORT', 'This file does not hold enough history to measure.');
-
-    var spanYears = (series[series.length - 1].t - series[0].t) / (365.25 * MS_PER_DAY);
-    if (spanYears < years) {
-      return fail('NOT_ENOUGH_HISTORY',
-        'This data covers about ' + spanYears.toFixed(1) + ' years, which is not enough for a ' +
-        years + '-year holding period. Choose a shorter period, or use a file with more history.');
-    }
-
+  /* Every window in a series, measured once, in one place.
+   *
+   * This used to be written out twice -- once here for the headline figures
+   * and once inside windowed() for the benchmark comparison -- and the two
+   * copies did not agree. rollingReturns annualised over the days that
+   * actually elapsed; windowed() annualised over the nominal window length,
+   * and ignored the rolling frequency altogether. So the median printed at the
+   * top of the screen and the median printed in the statistical summary were
+   * the same statistic computed two different ways, and switching to Monthly
+   * changed one of them and not the other.
+   *
+   * Two copies of an algorithm are two algorithms. There is now one.
+   */
+  function measureWindows(series, years, tol, freq) {
     var pairs = [];
     var j = 0;
     var nextStart = null;      /* the earliest date the next window may begin */
@@ -204,6 +204,24 @@
       if (freq === 'weekly') nextStart = series[i].t + FREQUENCY.weekly.days * MS_PER_DAY;
       else if (freq === 'monthly') nextStart = addMonths(series[i].t, FREQUENCY.monthly.months);
     }
+    return pairs;
+  }
+
+  function rollingReturns(series, years, options) {
+    var opts = options || {};
+    var tol = opts.toleranceDays == null ? 7 : opts.toleranceDays;
+    var freq = FREQUENCY[opts.frequency] ? opts.frequency : 'daily';
+    if (!(years > 0)) return fail('BAD_HORIZON', 'Choose a holding period of at least one year.');
+    if (!series || series.length < 2) return fail('TOO_SHORT', 'This file does not hold enough history to measure.');
+
+    var spanYears = (series[series.length - 1].t - series[0].t) / (365.25 * MS_PER_DAY);
+    if (spanYears < years) {
+      return fail('NOT_ENOUGH_HISTORY',
+        'This data covers about ' + spanYears.toFixed(1) + ' years, which is not enough for a ' +
+        years + '-year holding period. Choose a shorter period, or use a file with more history.');
+    }
+
+    var pairs = measureWindows(series, years, tol, freq);
 
     if (!pairs.length) {
       return fail('NO_WINDOWS', 'No complete ' + years + '-year periods could be measured from this data.');
@@ -507,20 +525,13 @@
 
   /* rolling returns restricted to a shared date window, keeping start dates */
   function windowed(series, window, years, options) {
+    var opts = options || {};
     var slice = series.filter(function (p) { return p.t >= window.from && p.t <= window.to; });
     if (slice.length < 2) return fail('TOO_SHORT', 'Not enough overlapping history.');
-    var tol = (options && options.toleranceDays != null) ? options.toleranceDays : 7;
-    var pairs = [], j = 0;
-    for (var i = 0; i < slice.length; i++) {
-      var target = addYears(slice[i].t, years);
-      if (target > slice[slice.length - 1].t) break;
-      if (j < i) j = i;
-      while (j + 1 < slice.length && slice[j + 1].t <= target) j++;
-      var end = slice[j];
-      if (end.t <= slice[i].t || dayCount(end.t, target) > tol) continue;
-      if (!(slice[i].v > 0) || !(end.v > 0)) continue;
-      pairs.push({ t: slice[i].t, r: Math.pow(end.v / slice[i].v, 1 / years) - 1 });
-    }
+    var tol = opts.toleranceDays == null ? 7 : opts.toleranceDays;
+    var freq = FREQUENCY[opts.frequency] ? opts.frequency : 'daily';
+    /* The same measurement the headline uses. See measureWindows. */
+    var pairs = measureWindows(slice, years, tol, freq);
     if (!pairs.length) return fail('NO_WINDOWS', 'No complete period inside the shared dates.');
     return { ok: true, pairs: pairs };
   }

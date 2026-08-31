@@ -287,7 +287,17 @@ function plainFile(file, rate, fromY, toY, start = 100) {
      !/\b(you should|we recommend|consider (buying|selling|switching)|time to (buy|sell|exit))\b/i.test(out),
      (out.match(/.{0,60}(you should|we recommend|consider buying|time to buy).{0,60}/i) || [''])[0]);
   ok('a 14% fund beats a 10% index in every period', /100%/.test(out));
-  ok('the reality check appears', /reality check/i.test(out));
+  /* The card that used to be the Reality check. It graded -- Strong, Mixed,
+     Weak, Moderate, Limited -- by comparing each measured figure against a
+     threshold this tool invented, which is a judgement about what counts as
+     good and belongs to the reader. It now reports the figures. */
+  ok('the comparison card reports four measurements',
+     /The comparison, as four measurements/i.test(out), out.slice(0, 200));
+  ok('and none of them is a grade',
+     !/\b(Strong|Weak|Mixed|Moderate|Limited)\b/.test(out),
+     (out.match(/.{0,50}\b(Strong|Weak|Mixed|Moderate|Limited)\b.{0,50}/) || [''])[0]);
+  ok('the outperformance figure is a share of matched periods',
+     /Outperformance Frequency \(%\)/.test(out) && /matched periods/.test(out), out.slice(0, 200));
   ok('only shared dates are compared', /both sets of data cover/.test(out));
 
   /* ------------------------------------------------------------ refusals */
@@ -384,14 +394,34 @@ function plainFile(file, rate, fromY, toY, start = 100) {
      daily file, today's window and yesterday's share all but one of their days.
      The number that means something is how many could stand side by side
      without touching -- the span divided by the window length. */
-  ok('the badge counts independent periods, not the thousands of overlapping ones',
+  /* Three years of file for three-year windows leaves exactly ONE window, and
+     a screen written about a range then has nothing to describe. The badge
+     used to say "These 1 windows overlap ... read the range below as the shape
+     of that much market", which is advice about a shape with one point in it.
+     At this length the screen states the measurement instead. */
+  await page.click('#r-run');
+  await page.waitForTimeout(900);
+  const thinOut = (await page.locator('#r-out').innerText()).replace(/\s+/g, ' ');
+  ok('one window is stated as a measurement, not summarised as a range',
+     /The only 3-year period in this data/i.test(thinOut) &&
+     /This is a measurement, not a range/i.test(thinOut), thinOut.slice(0, 240));
+  ok('and no badge invites the reader to read a range that is not there',
+     !/Low data density/i.test(thinOut) && !/Read the range below/i.test(thinOut),
+     (thinOut.match(/.{0,50}(data density|range below).{0,50}/i) || [''])[0]);
+
+  /* Shorten the window on the same file and a real distribution appears, so
+     the badge has something to count. Three years of history holds three
+     independent one-year periods, against the ~750 overlapping ones measured. */
+  await page.locator('#r-years .chip[data-years="1"]').click();
+  await page.waitForTimeout(1200);
+  ok('the badge counts independent periods, not the hundreds of overlapping ones',
      await (async () => {
-       await page.click('#r-run');
-       await page.waitForTimeout(900);
        const t = await page.locator('#r-out').innerText();
-       return /Low data density/i.test(t) && /1 independent 3-year period\b/.test(t);
+       return /Low data density/i.test(t) && /3 independent 1-year periods\b/.test(t);
      })(),
-     (await page.locator('#r-out').innerText()).slice(0, 220));
+     (await page.locator('#r-out').innerText()).replace(/\s+/g, ' ').slice(0, 240));
+  await page.locator('#r-years .chip[data-years="3"]').click();
+  await page.waitForTimeout(800);
 
   ok('a file thinner than the recommendation warns rather than refusing',
      !(await page.locator('#r-span-warn').isHidden()) &&
@@ -401,8 +431,8 @@ function plainFile(file, rate, fromY, toY, start = 100) {
   await page.click('#r-run');
   await page.waitForTimeout(900);
   ok('and the run still happens',
-     /Median/i.test(await page.locator('#r-out').innerText()),
-     (await page.locator('#r-out').innerText()).slice(0, 100));
+     /The only 3-year period in this data/i.test(await page.locator('#r-out').innerText()),
+     (await page.locator('#r-out').innerText()).slice(0, 140));
 
   /* Narrow the dates until no three-year period fits. The reader gets the two
      numbers that did not fit, where the answer would have been -- not a screen

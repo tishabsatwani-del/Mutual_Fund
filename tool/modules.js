@@ -1451,7 +1451,19 @@
      * prints then comes from one period of history, and many periods is the
      * entire point of the page. */
     var spanYears = (series[series.length - 1].t - series[0].t) / (365.2425 * 86400000);
-    if (spanYears < years + 3) {
+
+    /* ONE WINDOW IS A MEASUREMENT, NOT A DISTRIBUTION.
+     *
+     * The Max History horizon makes this reachable in one click: twenty-year
+     * windows on a twenty-year file leave exactly one. Everything below has to
+     * know it, because three separate blocks on this screen are written about
+     * a range -- the suspicion notice, the density badge and the hero -- and
+     * all three said things about a range that did not exist. "These 1 windows
+     * overlap ... read the range below as the shape of that much market" is
+     * advice about a shape there is no second point to make. */
+    var thin = s.count < 3;
+
+    if (!thin && spanYears < years + 3) {
       html += notice('bad',
         '<strong>Read this range with suspicion.</strong> This data covers ' + spanYears.toFixed(1) +
         ' years and you have asked for ' + years + '-year windows, so every window here begins inside a ' +
@@ -1475,7 +1487,7 @@
      * is computed from the independent figure and never from s.count.
      */
     var independent = Math.floor(spanYears / years);
-    if (independent < 12) {
+    if (!thin && independent < 12) {
       html += '<p class="density"><span class="density-badge">Low data density</span> ' +
         'These ' + s.count.toLocaleString() + ' windows overlap. Laid side by side without ' +
         'touching, this history holds <strong>' + independent +
@@ -1485,18 +1497,45 @@
         'of that much market and no more.</p>';
     }
 
-    html += '<div class="result"><div class="label">Median ' + years + '-year return, % a year</div>' +
-      '<div class="value">' + pct(s.median) + '</div>' +
-      '<div class="sub">' + esc(meta.name) + ' \u00b7 the middle of ' + s.count.toLocaleString() +
-      ' overlapping holding periods, ' + fmtDate(series[0].t) + ' to ' +
-      fmtDate(series[series.length - 1].t) + '. Half did better, half did worse.</div></div>';
+    /* The hero, at that length. The old one read "Median 15-year return ...
+     * the middle of 1 overlapping holding periods. Half did better, half did
+     * worse." Half of one did neither. The quartile
+     * table beneath it printed the same number five times across Worst,
+     * Bottom quarter, Median, Top quarter and Best, which is a spread of
+     * nothing dressed as a range -- and a range is the entire claim this
+     * screen makes.
+     *
+     * So at this length the screen states the one measurement it has, and
+     * says outright that there is no distribution to read. */
+    if (thin) {
+      html += '<div class="result"><div class="label">' +
+        (s.count === 1 ? 'The only ' : 'Each of the only ' + s.count + ' ') + years +
+        '-year period in this data, % a year</div>' +
+        '<div class="value">' + (s.count === 1 ? pct(r.values[0]) : pct(s.min) + ' to ' + pct(s.max)) +
+        '</div>' +
+        '<div class="sub">' + esc(meta.name) + ' \u00b7 ' + fmtDate(r.worst.t) + ' to ' +
+        fmtDate(r.best.endT) + '. <strong>This is a measurement, not a range.</strong> A ' + years +
+        '-year window needs ' + years + ' years of history behind it, and this file holds ' +
+        spanYears.toFixed(1) + ' \u2014 so ' + (s.count === 1 ? 'only one such period exists'
+          : 'only ' + s.count + ' such periods exist') + ' in it. There is no median, no worst ' +
+        'case and no best case here, because there is nothing to be in the middle of. Choose a ' +
+        'shorter holding period to see a distribution.</div></div>';
+    } else {
+      html += '<div class="result"><div class="label">Median ' + years + '-year return, % a year</div>' +
+        '<div class="value">' + pct(s.median) + '</div>' +
+        '<div class="sub">' + esc(meta.name) + ' \u00b7 the middle of ' + s.count.toLocaleString() +
+        ' overlapping holding periods, ' + fmtDate(series[0].t) + ' to ' +
+        fmtDate(series[series.length - 1].t) + '. Half did better, half did worse.</div></div>';
+    }
 
-    html += '<div class="stats topline">' +
-      stat('Worst', pct(s.min)) +
-      stat('Median', pct(s.median)) +
-      stat('Best', pct(s.max)) +
-      stat('Independent periods', String(independent)) +
-      '</div>';
+    if (!thin) {
+      html += '<div class="stats topline">' +
+        stat('Worst', pct(s.min)) +
+        stat('Median', pct(s.median)) +
+        stat('Best', pct(s.max)) +
+        stat('Independent periods', String(independent)) +
+        '</div>';
+    }
 
     /* Sections 5's two blocks, in the order the specification lists them, and
        only on the path the specification covers. */
@@ -1513,6 +1552,25 @@
     /* Worst to best across the quartiles, in that order. An average put at the
      * top of a screen becomes the number people remember, and it hides the
      * spread that actually decided what any one investor got. */
+    if (thin) {
+      /* Five columns of the same number is not a range. */
+      html += '<div class="card"><h2>There is no range at this length</h2>' +
+        '<p class="hint" style="margin:0 0 .8rem">A quartile, a worst case and a best case all ' +
+        'describe a set of measurements. This history holds ' + s.count +
+        (s.count === 1 ? ' measurement' : ' measurements') + ' at ' + years +
+        ' years, so there is nothing for them to describe.</p>' +
+        '<div class="scroll"><table class="data"><tbody>' +
+        r.pairs.map(function (pr, ix) {
+          return '<tr><td>Period ' + (ix + 1) + '</td><td>' + fmtDate(pr.t) + ' to ' +
+                 fmtDate(pr.endT) + '</td><td><strong>' + pct(pr.r) + ' a year</strong></td></tr>';
+        }).join('') +
+        '</tbody></table></div>' +
+        '<div class="meaning"><h3>What to do about it</h3>' +
+        '<p>Choose a shorter holding period in step 3, or load a longer history. Every extra year ' +
+        'of history adds a year of start dates at this length; the file needs roughly ' +
+        (years + 3) + ' years before ' + years + '-year windows begin in genuinely different ' +
+        'markets, and it has ' + spanYears.toFixed(1) + '.</p></div></div>';
+    } else {
     html += '<div class="card"><h2>The range, not the average</h2>' +
       '<p class="hint" style="margin:0 0 .8rem"><strong>Read the worst figure first.</strong> It is what ' +
       'this market did over your holding period at its most unkind, and nobody tells you in advance ' +
@@ -1539,11 +1597,15 @@
         years: years,
         caption: 'Each bar counts the ' + years + '-year periods that ended in that range'
       }) + '</div>';
+    }
 
     html += summaryCard(r, s, series, years, below, compareSeries, compareName, calc, o.indexPath);
 
     html += worstIsNotWorstCard(series, s, years);
-    html += startDateCard(r, years);
+    /* "The only difference between them was the day they started" needs two
+       of them. With one window the best start and the worst start are the
+       same day, and the card printed that spread as 0.0%. */
+    if (s.count > 1) html += startDateCard(r, years);
     html += drawdownCard(series);
     html += rateCheckCard(key, years, r.values);
 
@@ -1975,22 +2037,39 @@
     var ddGap = (fundDD.ok && benchDD.ok) ? fundDD.depth - benchDD.depth : null;
     var overlapYears = (c.to - c.from) / (365.2425 * 86400000);
 
+    /* THE MEASUREMENT, NOT A GRADE OF IT.
+     *
+     * This column used to hold Strong, Mixed, Weak, Moderate, Limited --
+     * words that are a verdict on a fund's record, arrived at by comparing a
+     * measured number to a threshold this tool invented. Section 6 of the
+     * specification names verdict language as prohibited and section 7 asks
+     * for facts without it, and the panel two cards above this one carries
+     * the subtitle "Neutral & Unbiased" while this one graded.
+     *
+     * A threshold is a judgement about what counts as good, and a reader with
+     * a different horizon or a different alternative would draw it somewhere
+     * else. So the figure stands where the grade stood, and the reader does
+     * the grading. Nothing measured is lost: every one of these numbers was
+     * already in the third column, which is how the grades could be checked
+     * at all. */
     var rows = [
-      ['Return', grade(medianGap >= 0.01 ? 'Ahead' : medianGap <= -0.01 ? 'Behind' : 'Similar'),
-       'Median ' + c.years + '-year return against ' + esc(compareName) + ', ' +
-       (medianGap >= 0 ? '+' : '') + (medianGap * 100).toFixed(1) + ' points a year.'],
-      ['Consistency', grade(c.fundAheadShare >= 0.66 ? 'Strong' : c.fundAheadShare >= 0.34 ? 'Mixed' : 'Weak'),
-       'Came out ahead in ' + pct(c.fundAheadShare, 0) + ' of matched periods.'],
-      ['Falls along the way', grade(ddGap === null ? 'Not measured' : ddGap >= 0.02 ? 'Shallower' :
-        ddGap <= -0.02 ? 'Deeper' : 'Similar'),
-       ddGap === null ? 'Not enough data to measure.' :
-        'Worst fall ' + pct(fundDD.depth) + ' against ' + pct(benchDD.depth) + '.'],
-      ['Weight of evidence', grade(overlapYears >= 10 ? 'Strong' : overlapYears >= 5 ? 'Moderate' : 'Limited'),
-       overlapYears.toFixed(1) + ' years of overlapping history, ' +
-       c.pairs.toLocaleString() + ' periods compared.']
+      ['Return against the benchmark',
+       (medianGap >= 0 ? '+' : '') + (medianGap * 100).toFixed(1) + ' points a year',
+       'Median ' + c.years + '-year return of this data against ' + esc(compareName) + '.'],
+      ['Outperformance Frequency (%)', pct(c.fundAheadShare, 0),
+       'Came out ahead in ' + c.fundAhead.toLocaleString() + ' of ' +
+       c.pairs.toLocaleString() + ' matched periods.'],
+      ['Deepest fall along the way',
+       fundDD.ok ? pct(fundDD.depth) : 'not measured',
+       ddGap === null ? 'Not enough data to measure the benchmark\u2019s.' :
+        'Against ' + pct(benchDD.depth) + ' for ' + esc(compareName) + ' \u2014 a gap of ' +
+        (ddGap >= 0 ? '+' : '') + (ddGap * 100).toFixed(1) + ' points.'],
+      ['History behind these figures', overlapYears.toFixed(1) + ' years',
+       c.pairs.toLocaleString() + ' periods compared, over the dates both files cover. ' +
+       'The windows overlap, so they are not independent observations.']
     ];
 
-    return '<div class="card"><h2>Reality check</h2><div class="scroll">' +
+    return '<div class="card"><h2>The comparison, as four measurements</h2><div class="scroll">' +
       '<table class="data"><tbody>' +
       rows.map(function (r) {
         return '<tr><td>' + esc(r[0]) + '</td><td><strong>' + esc(r[1]) + '</strong></td><td>' +
@@ -2000,14 +2079,12 @@
       '<div class="meaning"><h3>Before you read anything into this</h3>' +
       '<p>Every line above is a description of what already happened over these dates, against this ' +
       'benchmark. None of it establishes that the fund is suitable for you, and none of it is a ' +
-      'forecast.</p>' +
+      'forecast. Whether any of these figures is good is a judgement about your own goal and ' +
+      'horizon, which is why this card reports them rather than grading them.</p>' +
       '<p>Nothing here is a recommendation to buy, hold, sell or switch. Suitability depends on your ' +
       'goal, your horizon, what else you own and what you can sit through — none of which this tool ' +
       'knows.</p></div></div>';
   }
-
-  /* the word carries the meaning, never a colour on its own */
-  function grade(word) { return word; }
 
   function cmp(label, a, b) {
     return '<tr><td>' + esc(label) + '</td><td>' + pct(a) + '</td><td>' + pct(b) + '</td></tr>';
@@ -2132,6 +2209,9 @@
      * the whole session: every control below step 1 was live and usable while
      * rendering at 50%, which is precisely the "faded, looks disabled" the
      * chips were being blamed for. */
+    /* A file that loads clears whatever the last refusal left behind. */
+    var srcStep = $('#step-source');
+    if (srcStep) { srcStep.dataset.done = 'yes'; srcStep.dataset.error = 'no'; }
     gateSteps();
 
     $('#r-loaded').innerHTML = notice('ok', 'Ready to analyse <strong>' + esc(name) + '</strong>.' +
@@ -2169,7 +2249,7 @@
         ' to ' + fmtDate(lastStart) + ' are measured.';
   }
 
-  function clearLoaded(message) {
+  function clearLoaded(message, opts) {
     R.series = null; R.name = ''; R.meta = null; R.report = null;
     ['r-start', 'r-end'].forEach(function (id) { $('#' + id).disabled = true; $('#' + id).value = ''; });
     $('#r-all').disabled = true;
@@ -2186,6 +2266,19 @@
     var note = $('#r-window-note');
     if (note) note.textContent = '';
     $('#r-out').innerHTML = '';
+    /* A refused file must not leave step 1 wearing a tick.
+     *
+     * setSource marks the step done the moment a SOURCE is chosen, so after a
+     * tradebook was turned away the screen still showed a green 1 and a green
+     * heading: the step said it was finished while holding nothing. */
+    var step = $('#step-source');
+    if (step && opts && opts.rejected) {
+      step.dataset.done = 'no';
+      step.dataset.error = 'yes';
+    } else if (step && R.source) {
+      step.dataset.done = R.series ? 'yes' : 'no';
+      step.dataset.error = 'no';
+    }
     gateSteps();
     if (message) $('#r-loaded').innerHTML = message;
   }
@@ -2289,13 +2382,25 @@
 
   function dropZone(prefix, aria, hint) {
     DROP_HINT[prefix] = hint;
+    /* data-always-on exempts these from gateSteps.
+     *
+     * Section 2 puts both datasets in step 1: the reader loads the two files
+     * and then configures. But Card B lives inside step 4, which gateSteps
+     * disables until a primary series exists -- so a reader holding both
+     * files could not load the benchmark first, and clicking it did nothing
+     * and said nothing. Loading a benchmark needs no primary series; only
+     * RUNNING the comparison does, and the run button is gated separately. */
+    var alwaysOn = prefix === 'cmp' ? ' data-always-on="yes"' : '';
     return '<div class="filebox" id="' + prefix + '-drop" tabindex="0" role="button" ' +
-             'aria-label="' + esc(aria) + '">' + dropIdleHtml(prefix) + '</div>' +
-           '<input type="file" id="' + prefix + '-file" accept=".csv,.txt,.tsv,.xlsx">';
+             'aria-label="' + esc(aria) + '">' + dropIdleHtml(prefix, alwaysOn) + '</div>' +
+           '<input type="file" id="' + prefix + '-file"' + alwaysOn +
+             ' accept=".csv,.txt,.tsv,.xlsx">';
   }
 
-  function dropIdleHtml(prefix) {
-    return '<button class="secondary" type="button" id="' + prefix + '-pick">Choose a file</button>' +
+  function dropIdleHtml(prefix, alwaysOn) {
+    var on = alwaysOn != null ? alwaysOn : (prefix === 'cmp' ? ' data-always-on="yes"' : '');
+    return '<button class="secondary" type="button" id="' + prefix + '-pick"' + on +
+             '>Choose a file</button>' +
            '<p>' + (DROP_HINT[prefix] || 'CSV or Excel') + '</p>';
   }
 
@@ -2315,7 +2420,8 @@
         '<span class="fileok-sub">' + sub + '</span></span>' +
       '</div>' +
       (action
-        ? '<button class="secondary" type="button" id="' + prefix + '-pick">' + action + '</button>'
+        ? '<button class="secondary" type="button" id="' + prefix + '-pick"' +
+          (prefix === 'cmp' ? ' data-always-on="yes"' : '') + '>' + action + '</button>'
         : '');
   }
 
@@ -2363,7 +2469,8 @@
    * again. Pasted rows arrive as {name, pastedText} and go down exactly the
    * path a file does, so there is no second reader to keep honest. */
   function pasteHtml(prefix) {
-    return '<button class="link" type="button" id="' + prefix + '-paste-open">' +
+    var on = prefix === 'cmp' ? ' data-always-on="yes"' : '';
+    return '<button class="link" type="button" id="' + prefix + '-paste-open"' + on + '>' +
            'Or paste the two columns from a spreadsheet</button>' +
            '<div class="pastebox" id="' + prefix + '-paste-box" hidden>' +
              '<label class="fieldlabel" for="' + prefix + '-paste-text">' +
@@ -2371,7 +2478,7 @@
              '<textarea id="' + prefix + '-paste-text" rows="6" spellcheck="false" ' +
                'placeholder="01-Jan-2020\t20000&#10;02-Jan-2020\t20015"></textarea>' +
              '<div class="btnrow"><button class="secondary" type="button" ' +
-               'id="' + prefix + '-paste-read">Read these rows</button></div>' +
+               'id="' + prefix + '-paste-read"' + on + '>Read these rows</button></div>' +
            '</div>';
   }
 
@@ -2482,7 +2589,7 @@
         $('#r-scheme-wrap').hidden = true;
         dropRejected('bm', file.name);
         dropSay('bm', refused);
-        clearLoaded('');
+        clearLoaded('', { rejected: true });
         return;
       }
       var name = res.report.scheme || file.name.replace(/\.[^.]+$/, '');
@@ -2503,7 +2610,7 @@
         $('#r-scheme-wrap').hidden = true;
         dropRejected('bm', file.name);
         dropSay('bm', bad);
-        clearLoaded('');
+        clearLoaded('', { rejected: true });
         return;
       }
       if (extra && extra.schemes && extra.rows) {
@@ -2535,7 +2642,7 @@
       $('#r-scheme-wrap').hidden = true;
       dropRejected('bm', file.name);
       dropSay('bm', notice('bad', esc(msg)));
-      clearLoaded('');
+      clearLoaded('', { rejected: true });
     },
     function () { /* the box already says it is reading */ });
   }
@@ -2567,7 +2674,7 @@
       $('#r-scheme-wrap').hidden = true;
       dropRejected('f', file.name);
       dropSay('f', notice('bad', esc(msg)));
-      clearLoaded('');
+      clearLoaded('', { rejected: true });
     }, function () { /* the box already says it is reading */ });
   }
 

@@ -825,6 +825,58 @@ section('The schema gatekeeper: a tradebook is not a price series');
 }
 
 
+section('The headline and the comparison are the same measurement');
+/* They were not. rollingReturns annualised over the days that actually
+ * elapsed; windowed(), which produces every figure in the statistical summary
+ * and the outperformance rate, annualised over the nominal window length and
+ * ignored the rolling frequency entirely. So the median at the top of the
+ * screen and the median in the table below it were the same statistic
+ * computed two different ways, and switching to Monthly rolling changed one of
+ * them and not the other -- 141 windows in the headline against 3,131 in the
+ * comparison, on the same file, at the same time.
+ *
+ * A weekday-only series is what makes the two visible: a three-year target
+ * landing on a Saturday ends on the Friday, so elapsed days and nominal years
+ * differ on a large share of windows. */
+function weekdaySeries(rate, fromY, toY, start) {
+  var out = [], v = start, t = Date.UTC(fromY, 0, 1);
+  while (t <= Date.UTC(toY, 0, 1)) {
+    var d = new Date(t).getUTCDay();
+    if (d !== 0 && d !== 6) out.push({ t: t, v: v });
+    v *= Math.pow(1 + rate, 1 / 365.2425);
+    t += 86400000;
+  }
+  return out;
+}
+var wFund = weekdaySeries(0.14, 2010, 2025, 100);
+var wIdx = weekdaySeries(0.11, 2010, 2025, 1000);
+
+['daily', 'weekly', 'monthly'].forEach(function (freq) {
+  var head = E.rollingReturns(wFund, 3, { frequency: freq });
+  var cmp = E.compareRolling(wFund, wIdx, 3, { frequency: freq });
+  eq(freq + ': the two count the same windows', cmp.pairs, head.stats.count);
+  close(freq + ': and report the same median', cmp.fund.median, head.stats.median, 1e-12);
+  close(freq + ': and the same worst window', cmp.fund.min, head.stats.min, 1e-12);
+});
+
+/* The frequency has to reach the comparison, not just the headline. */
+var dailyPairs = E.compareRolling(wFund, wIdx, 3, { frequency: 'daily' }).pairs;
+var monthlyPairs = E.compareRolling(wFund, wIdx, 3, { frequency: 'monthly' }).pairs;
+ok('monthly thins the comparison as well as the headline',
+   monthlyPairs < dailyPairs / 15 && monthlyPairs > dailyPairs / 30,
+   dailyPairs + ' -> ' + monthlyPairs);
+
+section('A horizon as long as the history leaves one window');
+/* Which is reachable in one click now that Max History is offered, so the
+ * screen has to know it is holding a measurement and not a distribution. */
+var full = E.rollingReturns(weekdaySeries(0.12, 2010, 2025, 100), 15);
+eq('fifteen-year windows on a fifteen-year file: exactly one', full.stats.count, 1);
+close('and its rate is the growth rate of the series', full.stats.median, 0.12, 0.002);
+ok('a single window has no spread to report', full.stats.stdev === null,
+   String(full.stats.stdev));
+eq('and its worst and best are the same window', full.worst.t, full.best.t);
+
+
 console.log('\n' + passed + ' passed, ' + failed.length + ' failed');
 if (failed.length) {
   console.log('\nFAILED:\n  ' + failed.join('\n  '));

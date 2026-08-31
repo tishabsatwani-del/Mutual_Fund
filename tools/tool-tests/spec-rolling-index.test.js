@@ -424,6 +424,94 @@ function textValueFile(file) {
        phrase + ' not found');
   });
 
+  /* ============================ WHAT THE SPEC MAPPING FOUND AFTERWARDS */
+  section('Both datasets load in step 1, in either order');
+  await openIndexPath();
+  /* Section 2 puts both files in step 1. Card B sits inside step 4, which is
+     gated on a primary series -- so a reader holding both files could not
+     load the benchmark first, and clicking it did nothing and said nothing. */
+  ok('the benchmark file chooser is usable before any primary file',
+     !(await page.locator('#cmp-pick').isDisabled()) &&
+     !(await page.locator('#cmp-file').isDisabled()));
+  await page.setInputFiles('#cmp-file', benchLong);
+  await page.waitForTimeout(2000);
+  ok('and loading it first works',
+     (await page.locator('#cmp-drop.loaded').count()) === 1,
+     flat(await page.locator('#cmp-drop').innerText()));
+  ok('while the run button stays shut until there is something to compare',
+     await page.locator('#r-run').isDisabled());
+  await page.setInputFiles('#bm-file', primary);
+  await page.waitForTimeout(2000);
+  ok('the primary file arriving second completes the pair',
+     !(await page.locator('#r-run').isDisabled()) &&
+     (await page.locator('#r-compare').inputValue()) !== 'none');
+
+  section('A refused file does not leave step 1 wearing a tick');
+  await openIndexPath();
+  await page.setInputFiles('#bm-file', trades);
+  await page.waitForTimeout(1500);
+  ok('step 1 is not marked done',
+     (await page.locator('#step-source').getAttribute('data-done')) === 'no',
+     await page.locator('#step-source').getAttribute('data-done'));
+  ok('and is marked as holding an error',
+     (await page.locator('#step-source').getAttribute('data-error')) === 'yes');
+  await page.setInputFiles('#bm-file', primary);
+  await page.waitForTimeout(2000);
+  ok('a good file afterwards clears both marks',
+     (await page.locator('#step-source').getAttribute('data-done')) === 'yes' &&
+     (await page.locator('#step-source').getAttribute('data-error')) === 'no');
+
+  section('One window is a measurement, not a distribution');
+  await openIndexPath();
+  await page.setInputFiles('#bm-file', long20);
+  await page.waitForTimeout(2200);
+  await page.locator('#r-years .chip', { hasText: 'Max History' }).first().click();
+  await page.waitForTimeout(300);
+  await page.click('#r-run');
+  await page.waitForTimeout(1800);
+  const one = flat(await page.locator('#r-out').innerText());
+  /* Case-insensitive: the hero's label is uppercased by the stylesheet. */
+  ok('the hero does not call one window a median',
+     !/Median 20-year return/i.test(one) && /The only 20-year period in this data/i.test(one),
+     one.slice(0, 260));
+  ok('and nothing else on the screen speaks of a range either',
+     !/Read this range with suspicion/i.test(one) &&
+     !/These 1 windows overlap/i.test(one) &&
+     !/Read the range below/i.test(one),
+     (one.match(/.{0,60}(this range|1 windows|range below).{0,60}/i) || [''])[0]);
+  ok('and says outright that it is not a range',
+     /This is a measurement, not a range/.test(one), one.slice(0, 400));
+  ok('the quartile table is replaced rather than filled with one number five times',
+     (await page.locator('#r-out table.spread').count()) === 0 &&
+     /There is no range at this length/.test(one), one.slice(0, 400));
+  ok('the one period is listed with its own dates',
+     /Period 1 01-Jan-2005 to 01-Jan-2025/.test(one),
+     (one.match(/Period 1[^|]{0,60}/) || [''])[0]);
+  ok('and best-start against worst-start is not offered, being the same day',
+     !/Would it still look this way if you had started elsewhere/.test(one));
+  ok('while the volatility row says it cannot be measured on one window',
+     /Return Volatility \(Std Deviation\) not measurable on one window/.test(one),
+     (one.match(/Return Volatility[^A-Z]{0,50}/) || [''])[0]);
+
+  section('The comparison card reports, it does not grade');
+  await openIndexPath();
+  await page.setInputFiles('#bm-file', primary);
+  await page.waitForTimeout(2000);
+  await page.setInputFiles('#cmp-file', benchLong);
+  await page.waitForTimeout(2000);
+  await page.click('#r-run');
+  await page.waitForTimeout(2000);
+  const graded = flat(await page.locator('#r-out').innerText());
+  ok('no row is graded Strong, Weak, Mixed, Moderate or Limited',
+     !/\b(Strong|Weak|Mixed|Moderate|Limited)\b/.test(graded),
+     (graded.match(/.{0,50}\b(Strong|Weak|Mixed|Moderate|Limited)\b.{0,50}/) || [''])[0]);
+  ok('the return line carries the gap in points instead',
+     /Return against the benchmark \+4\.0 points a year/.test(graded),
+     (graded.match(/Return against the benchmark[^A-Z]{0,40}/) || [''])[0]);
+  ok('and the evidence line carries the years instead of a word',
+     /History behind these figures [\d.]+ years/.test(graded),
+     (graded.match(/History behind these figures[^A-Z]{0,30}/) || [''])[0]);
+
   /* ================================= THE FUND PATH IS NOT IN SCOPE AND IS NOT TOUCHED */
   section('The other source path is left exactly as it was');
   await page.goto(BASE_URL + '#rolling', { waitUntil: 'networkidle' });
