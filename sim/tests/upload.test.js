@@ -425,5 +425,120 @@ section('The ledger reader takes rows as well as text');
      U.ledgerRows([]).ok === false, 'read something');
 }
 
+
+/* -------------------------------------------------------------------------
+ * The other file a reader can download.
+ *
+ * A holdings snapshot is what most people will find first, because it is the
+ * button on the screen they are already looking at. It holds no dates, so no
+ * yearly rate can come out of it -- but invested against current value is a
+ * real answer, and refusing the file outright would be refusing that answer.
+ */
+section('A holdings snapshot is read for what it does hold');
+{
+  var snap = 'Scheme Name,Units,Invested Amount,Current Value\n' +
+             'Acme Bluechip Direct Growth,1234.567,50000,62300\n' +
+             'Zenith Flexi Cap Direct Growth,890.123,75000,71200\n';
+  var r = U.portfolioFile(snap);
+  eq('it is recognised as holdings, not payments', r.kind, 'holdings');
+  ok('both funds are read', r.ok && r.rows.length === 2, String(r.rows.length));
+  ok('with what went in and what it is worth',
+     r.rows[0].invested === 50000 && r.rows[0].current === 62300, JSON.stringify(r.rows[0]));
+  eq('and the units beside them', r.rows[0].units, 1234.567);
+
+  /* Two money columns side by side, and nothing in their SHAPE tells them
+     apart: 50,000 and 62,300 are both just numbers. Only the words above them
+     say which is cost and which is worth, and the pair backwards turns a gain
+     into a loss with nothing shown anywhere. */
+  var costFirst = U.portfolioFile('Fund,Cost Value,Market Value\nAcme,50000,62300\n');
+  var valueFirst = U.portfolioFile('Fund,Market Value,Cost Value\nAcme,62300,50000\n');
+  ok('"Cost Value" is read as cost even though it says value',
+     costFirst.rows[0].invested === 50000 && costFirst.rows[0].current === 62300,
+     JSON.stringify(costFirst.rows[0]));
+  ok('and the columns can arrive in either order',
+     valueFirst.rows[0].invested === 50000 && valueFirst.rows[0].current === 62300,
+     JSON.stringify(valueFirst.rows[0]));
+
+  /* A snapshot almost always ends in a totals row. Counted as a holding it
+     doubles every figure, and the doubling looks entirely plausible. */
+  var withTotals = U.portfolioFile(snap + 'Grand Total,,125000,133500\nOverall,,1,2\n');
+  eq('a totals row is not counted as a holding', withTotals.rows.length, 2);
+  eq('and is reported as dropped, not silently ignored', withTotals.totalsDropped, 2);
+
+  var noHeader = U.portfolioFile('Acme,50000,62300\nZenith,75000,71200\n');
+  ok('a snapshot with no column names is refused rather than guessed at',
+     noHeader.kind !== 'holdings' || !noHeader.ok, String(noHeader.kind));
+}
+
+section('The reader chooses no file type, and is asked about none');
+{
+  var ledger = U.portfolioFile('Date,Amount\n05-04-2021,5000\n14-08-2023,-50000\n');
+  eq('a transaction statement is read as payments', ledger.kind, 'ledger');
+  ok('and keeps every rule the ledger reader already had',
+     ledger.ok && ledger.rows[1].dir === 'out', JSON.stringify(ledger.rows));
+
+  /* Holdings are tested FIRST. A snapshot can carry an "as on" date column
+     that the ledger reader would latch onto, turning one row per fund into one
+     payment per fund, all dated the same day. */
+  var dated = U.portfolioFile('As on,Scheme,Invested,Current Value\n' +
+                              '01-08-2026,Acme,50000,62300\n01-08-2026,Zenith,75000,71200\n');
+  eq('a snapshot carrying a date column is still a snapshot', dated.kind, 'holdings');
+  eq('and its two funds are not read as two payments', dated.rows.length, 2);
+
+  /* A snapshot is ONE point in time, so an "as on" column holds the same date
+     on every row. Rows carrying DIFFERENT dates are events, not a position --
+     and reading a statement with a fund column beside the amount as holdings
+     throws the dates away, and with them the yearly rate, silently. */
+  var named = U.portfolioFile('Date,Amount,Fund\n' +
+                              '2024-01-01,100000,Acme Bluechip\n' +
+                              '2025-01-01,100000,Zenith Flexi\n');
+  eq('a statement with a fund column stays a statement', named.kind, 'ledger');
+  ok('and keeps the fund each payment belongs to',
+     named.rows[0].fund === 'Acme Bluechip' && named.rows[1].fund === 'Zenith Flexi',
+     JSON.stringify(named.rows.map(function (r) { return r.fund; })));
+
+  /* "Amount" alone is what a statement calls a payment; a snapshot names its
+     valuation column. A snapshot may still use it beside an explicit cost. */
+  var bareAmount = U.portfolioFile('Scheme,Invested,Amount\nAcme,50000,62300\nZenith,75000,71200\n');
+  eq('a dateless file with two money columns is still holdings', bareAmount.kind, 'holdings');
+
+  var neither = U.portfolioFile('Fund,Rating\nAcme,Five stars\nZenith,Four stars\n');
+  ok('a file that is neither shape names both downloads',
+     /holdings or portfolio statement/.test(neither.message) &&
+     /transaction statement/.test(neither.message), neither.message);
+}
+
+section('The right file on the wrong screen is said to be exactly that');
+{
+  /* A NAV history is a date column beside a money column, which is what a
+     transaction statement is. The ledger reader takes it without complaint:
+     4,000 daily prices become 4,000 payments of about ten rupees, and a return
+     comes out. It is confident and it is nonsense. */
+  var lines = ['Date,NAV'], t = d(2021, 0, 1), v = 10;
+  for (var i = 0; i < 400; i++) {
+    var day = new Date(t);
+    if (day.getUTCDay() % 6) lines.push(iso(t) + ',' + v.toFixed(4));
+    v *= 1.0003; t += 86400000;
+  }
+  var headed = U.portfolioFile(lines.join('\n'));
+  eq('a NAV file is refused rather than read as payments', headed.kind, 'prices');
+  ok('and is told which screen it belongs to',
+     /Rolling returns/.test(headed.message), headed.message);
+
+  /* AMFI's own download has no useful header, so the shape has to settle it:
+     one row per trading day is not what anybody's payments look like. */
+  var bare = U.portfolioFile(lines.slice(1).join('\n'));
+  eq('a NAV file with no header at all is caught by its shape', bare.kind, 'prices');
+
+  /* And the guard must not catch a real one. Four years of monthly
+     instalments is 48 rows a month apart, which no price file resembles. */
+  var sip = ['Date,Amount'];
+  for (var m = 0; m < 48; m++) sip.push(iso(d(2021, m, 5)) + ',5000');
+  var real = U.portfolioFile(sip.join('\n'));
+  ok('while 48 monthly instalments are still payments',
+     real.kind === 'ledger' && real.ok && real.rows.length === 48,
+     real.kind + ' ' + real.rows.length);
+}
+
 console.log('\n' + passed + ' passed, ' + failed.length + ' failed');
 if (failed.length) { console.log('\nFAILED:\n  ' + failed.join('\n  ')); process.exit(1); }

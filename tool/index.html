@@ -96,9 +96,67 @@
 <!-- ============================================================ PORTFOLIO -->
 <section class="view" id="view-portfolio" aria-labelledby="pf-h">
   <h1 id="pf-h">Check my portfolio</h1>
-  <p class="lede">One row for every payment you made, every rupee you took out, and what the holding is worth today.</p>
+  <p class="lede">Give it the file your platform already gives you. It reads what is in there and
+  tells you what that file can answer.</p>
 
-  <div class="card">
+  <!-- ==================================================== the only door -->
+  <div class="card" id="pf-door">
+    <h2>Your file</h2>
+    <p class="hint" style="margin:0 0 .8rem">Either download works, and you do not have to know
+    which you have: your <strong>holdings</strong> or portfolio statement, which lists each fund
+    with what you put in and what it is worth; or your <strong>transaction statement</strong>,
+    which lists each payment with its date. CSV or Excel.</p>
+    <div class="filebox" id="pf-drop" tabindex="0" role="button" aria-label="Choose your portfolio file">
+      <button class="secondary" type="button" id="pf-pick">Choose a file</button>
+      <p>or drop it here</p>
+    </div>
+    <input type="file" id="pf-file" accept=".csv,.txt,.tsv,.xls,.xlsx">
+    <button class="link" type="button" id="pf-paste-open">Paste the columns instead</button>
+    <div class="card" id="pf-paste-box" hidden style="margin:.8rem 0 0;background:var(--surface-2)">
+      <label class="fieldlabel" for="pf-paste-text">Copy the rows out of your spreadsheet</label>
+      <textarea id="pf-paste-text" rows="6" spellcheck="false"
+                aria-label="Paste the rows from your portfolio file"></textarea>
+      <div class="btnrow"><button class="primary" type="button" id="pf-paste-read">Read these</button></div>
+    </div>
+    <div id="pf-door-out" aria-live="polite"></div>
+  </div>
+
+  <!-- ============================================ what was actually read -->
+  <div class="card" id="pf-read" hidden>
+    <h2 id="pf-read-h">What I read</h2>
+    <p class="hint" id="pf-read-note" style="margin:0 0 .8rem"></p>
+    <ul class="readlist" id="pf-read-list"></ul>
+    <p class="hint" style="margin:.7rem 0 0">Check these against your own statement. Anything read
+    wrongly can be dropped from the list; nothing here is typed in.</p>
+  </div>
+
+  <!-- one field, and only when the file cannot supply it -->
+  <div class="card" id="pf-worth-card" hidden>
+    <h2>What it is worth today</h2>
+    <p class="hint" style="margin:0 0 .6rem">A transaction statement records what you paid, not what
+    it grew to. This is the one figure no file of payments contains.</p>
+    <div class="field" style="max-width:18rem">
+      <label for="pf-worth">The whole holding, today (&#8377;)</label>
+      <input type="number" id="pf-worth" inputmode="decimal" min="0" step="any">
+    </div>
+  </div>
+
+  <!-- Applies to an uploaded statement as much as to typed rows, so it lives
+       outside the typing card that used to bury it. -->
+  <div class="card" id="pf-group-card" hidden>
+    <h2>Each fund on its own</h2>
+    <div class="field">
+      <label for="pf-group">Break the result down by fund as well</label>
+      <select id="pf-group">
+        <option value="off">No — one portfolio total is enough</option>
+        <option value="on">Yes — measure each fund on its own</option>
+      </select>
+      <p class="hint">Your portfolio number weighs each holding by how much money you had in it and
+      for how long. Each fund on its own does not, which is why they differ.</p>
+    </div>
+  </div>
+
+  <div class="card" id="pf-manual-card" hidden>
     <h2>Your money in and out</h2>
     <div class="rows">
       <div class="row-head" aria-hidden="true">
@@ -140,21 +198,17 @@
       <div id="sip-msg" aria-live="polite"></div>
     </div>
 
-    <div class="field" style="margin-top:1rem">
-      <label for="pf-group">Break the result down by fund as well</label>
-      <select id="pf-group">
-        <option value="off">No — one portfolio total is enough</option>
-        <option value="on">Yes — measure each fund on its own</option>
-      </select>
-      <p class="hint">Name the funds in the rows above, then turn this on to see the difference
-      between how each holding did and how your money as a whole did.</p>
-    </div>
-
     <div class="btnrow" style="margin-top:.4rem">
-      <button class="primary" type="button" id="pf-calc">Calculate my return</button>
       <button class="secondary" type="button" id="pf-export">Save my entries as a file</button>
     </div>
   </div>
+
+  <div class="btnrow" style="margin-bottom:1.2rem">
+    <button class="primary" type="button" id="pf-calc" disabled>Show me my portfolio</button>
+    <button class="secondary" type="button" id="pf-reset">Start again</button>
+  </div>
+  <p class="hint" id="pf-manual-line" style="margin:-.6rem 0 1.2rem">No file to hand?
+  <button class="link" type="button" id="pf-manual">Type it in instead</button></p>
 
   <div id="pf-out" aria-live="polite"></div>
 </section>
@@ -538,6 +592,10 @@
 <script src="../sim/workbook.js"></script>
 <script src="engine.js"></script>
 <script src="parse.js"></script>
+<!-- The one door reader, shared with the v3 screens. It needs parse.js and
+     schemes.js before it, and format.js is already above. -->
+<script src="../sim/schemes.js"></script>
+<script src="../sim/upload.js"></script>
 <script src="provider.js"></script>
 <script src="app.js"></script>
 <script src="modules.js"></script>

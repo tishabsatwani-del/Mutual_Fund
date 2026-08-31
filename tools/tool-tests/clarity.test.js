@@ -121,6 +121,9 @@ function longFile(file) {
 
   section('Money that has not moved yet cannot be measured');
   await page.goto(BASE_URL + '#portfolio', { waitUntil: 'networkidle' });
+  /* The screen is a door now; typing is behind "No file to hand?". */
+  await page.click('#pf-manual');
+  await page.waitForTimeout(200);
   const rows = page.locator('#pf-rows .entry');
   await rows.nth(0).locator('.in-date').fill('2035-01-01');
   await rows.nth(0).locator('.in-kind').selectOption('Money in');
@@ -191,6 +194,9 @@ function longFile(file) {
   section('Two small things a reader meets on a phone');
 
   await page.goto(BASE_URL + '#portfolio', { waitUntil: 'networkidle' });
+  /* Navigating by hash does not reload, so the typing card opened earlier in
+     this session is still open. Opened only if it is not. */
+  if (await page.locator('#pf-manual').isVisible()) await page.click('#pf-manual');
   await page.waitForTimeout(300);
   const opts = await page.locator('#pf-group option').allInnerTexts();
   ok('the per-fund option reads as a whole sentence',

@@ -342,6 +342,217 @@
     return -1;
   }
 
+  /* ============================================ a holdings snapshot
+   *
+   * The OTHER file a reader can download, and the one most of them will find
+   * first, because it is the button on the screen they are already looking at.
+   * It holds what they own right now: scheme, units, what they put in, what it
+   * is worth. It holds NO DATES, so no yearly rate can ever come out of it --
+   * not with a better parser, not ever. The information is not in the file.
+   *
+   * That is not a reason to refuse it. Invested against current value is a real
+   * answer, and often the one the reader wanted. So this reads the snapshot for
+   * what it does hold, and the screen says plainly which question it cannot
+   * answer from it and where the file that can is kept.
+   *
+   * Columns are found BY HEADER here, unlike everywhere else in this file,
+   * and that is deliberate. Two money columns sit side by side and nothing in
+   * their shape tells them apart: 50,000 and 62,300 are both just numbers. Only
+   * the words above them say which is cost and which is worth, and getting that
+   * pair backwards turns a gain into a loss silently. Where the headers do not
+   * say, this asks rather than guesses.
+   */
+  var HOLD_NAME = /scheme|fund|security|instrument|stock|holding|particular|name/i;
+  /* Checked FIRST, and the more specific of the two: "Cost Value" would match
+     the current-value pattern too, on the word "value" alone. */
+  var HOLD_INVESTED = /invest|cost|purchase|acquisition|buy|paid/i;
+  /* "Amount" is deliberately NOT here. A snapshot names its valuation column --
+     Current Value, Market Value -- and a bare "Amount" is what a transaction
+     statement calls a payment. Matching it read a statement of two dated
+     payments as two holdings and threw the dates away. */
+  var HOLD_CURRENT = /current|market|present|latest|closing|valuation|worth|\bvalue\b/i;
+  var HOLD_UNITS = /unit|quantit|\bqty\b|balance|share/i;
+  /* A snapshot almost always ends in a totals row. Counted as a holding it
+     doubles every figure on the screen, and the doubling looks entirely
+     plausible -- which is the sort of wrong number that never gets caught. */
+  var HOLD_TOTAL = /^\s*(grand\s+)?total\b|^\s*sum\b|^\s*overall\b/i;
+
+  function holdingsRows(input, options) {
+    var o = options || {};
+    var rows = Array.isArray(input)
+      ? input
+      : P.parseDelimited(String(input == null ? '' : input));
+    if (!rows.length) return holdFail('NO-ROWS', MESSAGES.holdNoRows);
+
+    /* A header is required, for the reason above. It is the first row in which
+       at least two cells are words rather than numbers or dates. */
+    var header = null, body = null;
+    for (var h = 0; h < Math.min(rows.length, 8); h++) {
+      if (wordCells(rows[h]) >= 2 && !rows[h].some(function (c) {
+        return isFinite(ledgerAmount(c));
+      })) { header = rows[h]; body = rows.slice(h + 1); break; }
+    }
+    if (!header || !body || !body.length) return holdFail('NO-HEADER', MESSAGES.holdNoHeader);
+
+    var width = Math.max.apply(null, [header.length].concat(
+      body.map(function (r) { return r.length; })));
+
+    var used = {};
+    function pick(pattern, skipIfMatches) {
+      for (var i = 0; i < width; i++) {
+        if (used[i]) continue;
+        var name = String(header[i] == null ? '' : header[i]).trim();
+        if (!name || !pattern.test(name)) continue;
+        if (skipIfMatches && skipIfMatches.test(name)) continue;
+        used[i] = true;
+        return i;
+      }
+      return -1;
+    }
+
+    var nameCol = pick(HOLD_NAME);
+    /* Invested before current, and a current-column match is refused the words
+       that mean cost, so "Cost Value" cannot land on the wrong side. */
+    var investedCol = pick(HOLD_INVESTED);
+    var currentCol = pick(HOLD_CURRENT, HOLD_INVESTED);
+    var unitsCol = pick(HOLD_UNITS);
+
+    if (nameCol < 0) return holdFail('NO-NAMES', MESSAGES.holdNoNames);
+    if (investedCol < 0 && currentCol < 0) return holdFail('NO-MONEY', MESSAGES.holdNoMoney);
+
+    /* A snapshot is ONE point in time. It may carry an "as on" date column, and
+     * every row will hold the same date. Rows carrying DIFFERENT dates are
+     * events, not a position -- a transaction statement with a fund column
+     * beside the amount -- and reading those as holdings throws the dates away
+     * and with them the yearly rate, silently. */
+    if (manyDates(body, width)) return holdFail('DATED', MESSAGES.holdIsDated);
+
+    var out = [], skipped = 0, totals = 0;
+    for (var r = 0; r < body.length; r++) {
+      var name = String(body[r][nameCol] == null ? '' : body[r][nameCol]).trim();
+      var invested = investedCol >= 0 ? ledgerAmount(body[r][investedCol]) : NaN;
+      var current = currentCol >= 0 ? ledgerAmount(body[r][currentCol]) : NaN;
+      var units = unitsCol >= 0 ? ledgerAmount(body[r][unitsCol]) : NaN;
+
+      if (HOLD_TOTAL.test(name)) { totals++; continue; }
+      if (!name) { skipped++; continue; }
+      if (!isFinite(invested) && !isFinite(current)) { skipped++; continue; }
+
+      out.push({
+        name: name,
+        invested: isFinite(invested) ? Math.abs(invested) : null,
+        current: isFinite(current) ? Math.abs(current) : null,
+        units: isFinite(units) ? units : null,
+        line: r + 2
+      });
+    }
+
+    return {
+      ok: out.length > 0, kind: 'holdings', rows: out, skipped: skipped, totalsDropped: totals,
+      header: header, nameCol: nameCol, investedCol: investedCol,
+      currentCol: currentCol, unitsCol: unitsCol,
+      code: out.length ? null : 'NO-ROWS',
+      message: out.length ? null : MESSAGES.holdNoRows
+    };
+  }
+
+  /* Two tests, either of which settles it.
+   *
+   * The header, when there is one: nothing called NAV or a price is a payment.
+   *
+   * The shape, when there is not -- and AMFI's own download has no useful
+   * header at all. A payments file is a few dozen rows at most, spread over
+   * years, with gaps of weeks or months. A price file is one row per trading
+   * day: hundreds of them, nearly all one to four days apart. No statement of
+   * anybody's own payments looks like that. */
+  var PRICE_HEADERS = /\bnav\b|net\s*asset|\bprice\b|\bclose\b|\bclosing\b|repurchase/i;
+
+  function looksLikePrices(ledger) {
+    if (ledger.header && ledger.amountCol >= 0) {
+      var name = String(ledger.header[ledger.amountCol] == null
+        ? '' : ledger.header[ledger.amountCol]).trim();
+      if (name && PRICE_HEADERS.test(name)) return true;
+    }
+    var rows = ledger.rows;
+    if (rows.length < 30) return false;
+    var times = rows.map(function (r) { return r.t; }).sort(function (a, b) { return a - b; });
+    var gaps = [];
+    for (var i = 1; i < times.length; i++) gaps.push((times[i] - times[i - 1]) / MS_DAY);
+    gaps.sort(function (a, b) { return a - b; });
+    return gaps[Math.floor(gaps.length / 2)] <= 4;
+  }
+
+  function manyDates(body, width) {
+    for (var c = 0; c < width; c++) {
+      var seen = {}, n = 0, distinct = 0;
+      for (var r = 0; r < body.length; r++) {
+        var t = dateOf(body[r][c], true);
+        if (!isFinite(t)) continue;
+        n++;
+        if (!seen[t]) { seen[t] = true; distinct++; }
+      }
+      /* Most of the column has to read as dates before it counts as one at all,
+         so a stray year in a fund's name cannot trip this. */
+      if (n >= Math.max(2, Math.ceil(body.length * 0.8)) && distinct > 1) return true;
+    }
+    return false;
+  }
+
+  function wordCells(row) {
+    var n = 0;
+    for (var i = 0; i < row.length; i++) {
+      var v = String(row[i] == null ? '' : row[i]).trim();
+      if (v && !isFinite(ledgerAmount(v)) && !isFinite(dateOf(v, true))) n++;
+    }
+    return n;
+  }
+
+  function holdFail(code, message) {
+    return { ok: false, kind: 'holdings', rows: [], skipped: 0, totalsDropped: 0, header: null,
+             nameCol: -1, investedCol: -1, currentCol: -1, unitsCol: -1,
+             code: code, message: message };
+  }
+
+  /* ------------------------------------------------ which file is this?
+   *
+   * The reader chooses no file type and is asked no question about one. They
+   * hand over what they have and this decides what it is.
+   *
+   * Holdings are tested first, because a snapshot can carry an "as on" date
+   * column that the ledger reader would happily latch onto -- and reading a
+   * snapshot as a ledger turns one row per fund into one payment per fund,
+   * dated the same day, which produces a confident and completely wrong
+   * return. A ledger cannot be mistaken for a snapshot the same way, because
+   * a snapshot must be NAMED as one by its own headers.
+   */
+  function portfolioFile(input, options) {
+    var holdings = holdingsRows(input, options);
+    if (holdings.ok) return holdings;
+
+    var ledger = ledgerRows(input, options);
+    if (ledger.ok || ledger.ask) {
+      /* A NAV history is a date column beside a money column, which is exactly
+       * what a transaction statement is, and the ledger reader will take it
+       * without complaint: 4,000 daily prices become 4,000 payments of about
+       * ten rupees each, and a return comes out. It is confident and it is
+       * nonsense. This is the same file the OTHER screens on this tool ask for,
+       * so a reader loading it here has not made a mistake -- they have loaded
+       * the right file on the wrong screen, and are told so. */
+      if (ledger.ok && looksLikePrices(ledger)) {
+        return { ok: false, kind: 'prices', rows: [], skipped: 0, code: 'PRICES',
+                 message: MESSAGES.pricesNotPayments };
+      }
+      ledger.kind = 'ledger';
+      return ledger;
+    }
+
+    /* Neither shape. The refusal names both files, because the reader has no
+       way to know there are two and which one they downloaded. */
+    return { ok: false, kind: null, rows: [], skipped: 0, code: 'UNREADABLE',
+             message: MESSAGES.neitherShape,
+             holdingsMessage: holdings.message, ledgerMessage: ledger.message };
+  }
+
   /* ------------------------------------------------- dates that read two ways
    * §5: "where day-first and month-first are both valid for EVERY row, ask
    * once, showing the first row both ways." parse.js detects the ambiguity and
@@ -570,6 +781,42 @@
     ledgerNoAmount: 'I found the dates but no column of amounts beside them. Copy the amount column ' +
                     'too, with a minus or brackets on the money you took out.',
 
+    /* ---- a holdings snapshot ------------------------------------------- */
+    holdNoRows: 'There was nothing to read in that file.',
+    holdNoHeader: 'This file has no row of column names at the top, and a holdings file needs one: ' +
+                  'the words are the only thing that says which figure is what you paid and which ' +
+                  'is what it is worth now.',
+    holdNoNames: 'I could not find a column of fund names in this file.',
+    /* Never shown on its own: portfolioFile falls through to the ledger reader,
+       which is what this file actually is. */
+    holdIsDated: 'The rows in this file carry different dates, so it is a record of payments rather ' +
+                 'than a picture of what is held today.',
+
+    holdNoMoney: 'I found the fund names but no column of amounts beside them \u2014 neither what ' +
+                 'you put in nor what it is worth now.',
+
+    /* Said when a file is neither shape. It names both downloads, because a
+       reader has no reason to know there are two of them. */
+    /* The right file, on the wrong screen. Said as such: this reader has not
+       made a mistake, they are one tap away from the answer they wanted. */
+    pricesNotPayments: 'This looks like a fund\u2019s price history \u2014 one row for each day the ' +
+                       'market was open \u2014 rather than a record of your own payments. Read as ' +
+                       'payments it would produce a confident and completely wrong figure, so it is ' +
+                       'refused here. This screen wants your holdings or your transaction statement. ' +
+                       'To measure the fund itself, use Rolling returns, which is the screen this ' +
+                       'file belongs to.',
+
+    neitherShape: 'I could not read this as either kind of file. Two downloads work here: your ' +
+                  'holdings or portfolio statement, which lists each fund with what you put in and ' +
+                  'what it is worth; or your transaction statement, which lists each payment with ' +
+                  'its date. A screenshot or a PDF will not work \u2014 look for CSV or Excel.',
+
+    /* Not a refusal. The file was read; it simply cannot answer one of the two
+       questions, and the reader is told where the file that can is kept. */
+    noDatesForRate: 'This is a holdings file, so it says what you own today but not when you bought ' +
+                    'it. A yearly rate needs the dates. For that, download your transaction ' +
+                    'statement instead \u2014 the same place, usually under Reports or Statements.',
+
     /* Not a refusal and not a guess: the file has a column saying what each
        line was, and only the reader knows which of those words took money out.
        Asked once, applied to every line. */
@@ -647,7 +894,8 @@
 
   var api = {
     read: read, firstMatching: firstMatching,
-    ledgerRows: ledgerRows, ledgerAmount: ledgerAmount, typeColumn: typeColumn, stitch: stitch, gapsIn: gapsIn, groupSchemes: groupSchemes,
+    ledgerRows: ledgerRows, ledgerAmount: ledgerAmount, typeColumn: typeColumn,
+    holdingsRows: holdingsRows, portfolioFile: portfolioFile, stitch: stitch, gapsIn: gapsIn, groupSchemes: groupSchemes,
     rowsFrom: rowsFrom, jsonRows: jsonRows, firstAmbiguousDate: firstAmbiguousDate,
     MESSAGES: MESSAGES, GAP_DAYS: GAP_DAYS
   };

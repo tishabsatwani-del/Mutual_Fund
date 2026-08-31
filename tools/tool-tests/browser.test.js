@@ -57,6 +57,35 @@ fs.mkdirSync(TMP + '/shots', { recursive: true });
   await page.click('.tile[data-go="portfolio"]');
   await page.waitForSelector('#view-portfolio.on');
 
+  /* ------------------------------------------------------ the file first
+   *
+   * The screen is a door now. Typing is the fallback, reached from "No file to
+   * hand?", and it is still tested below because somebody will always be
+   * without a file. */
+  ok('the screen opens on a door, not on rows to fill in',
+     !(await page.locator('#pf-door').isHidden()) &&
+     (await page.locator('#pf-manual-card').isHidden()) === true);
+  ok('and it will not compute until it has been given something',
+     await page.locator('#pf-calc').isDisabled());
+  /* A primary button that cannot be pressed must not look pressable. The
+     shared disabled rule only drops opacity, and this gradient survived that
+     at full strength -- it read as the live next step while doing nothing. */
+  ok('and while it cannot be pressed it does not look pressable',
+     (await page.evaluate(() => {
+       const s = getComputedStyle(document.querySelector('#pf-calc'));
+       return s.backgroundImage === 'none' && s.boxShadow === 'none';
+     })) === true,
+     await page.evaluate(() => {
+       const s = getComputedStyle(document.querySelector('#pf-calc'));
+       return s.backgroundImage + ' | ' + s.boxShadow;
+     }));
+
+  await page.click('#pf-manual');
+  await page.waitForTimeout(200);
+  ok('typing is still reachable for somebody without a file',
+     !(await page.locator('#pf-manual-card').isHidden()) &&
+     !(await page.locator('#pf-calc').isDisabled()));
+
   /* the spreadsheet-verified case: two lump sums -> 9.1% */
   const rows = page.locator('#pf-rows .entry');
   await rows.nth(0).locator('.in-date').fill('2024-01-01');
@@ -108,6 +137,147 @@ fs.mkdirSync(TMP + '/shots', { recursive: true });
   await page.waitForTimeout(200);
 
   await page.screenshot({ path: path.join(SHOTS, '02-portfolio.png'), fullPage: true });
+
+  /* ==================================================== the portfolio door
+   *
+   * Two entirely different downloads work here, and the reader does not know
+   * which they have. They are never asked. The screen answers from whatever it
+   * is given rather than demanding the file that answers everything.
+   */
+  console.log('\nThe portfolio door');
+  const snapCsv = path.join(TMP, 'pf-holdings.csv');
+  fs.writeFileSync(snapCsv,
+    'Scheme Name,Units,Invested Amount,Current Value\n' +
+    'Acme Bluechip Direct Growth,1234.567,50000,62300\n' +
+    'Zenith Flexi Cap Direct Growth,890.123,75000,71200\n' +
+    'Meridian Small Cap Direct Growth,410.5,25000,38900\n' +
+    'Total,,150000,172400\n');
+  const txnCsv = path.join(TMP, 'pf-txns.csv');
+  fs.writeFileSync(txnCsv, 'Date,Amount\n2024-01-01,100000\n2025-01-01,100000\n');
+
+  await page.goto(BASE_URL + '#portfolio', { waitUntil: 'networkidle' });
+  await page.setInputFiles('#pf-file', snapCsv);
+  await page.waitForTimeout(700);
+
+  ok('a holdings snapshot is read without the reader naming its type',
+     /3 funds read from pf-holdings\.csv/.test(await page.locator('#pf-read-note').innerText()),
+     await page.locator('#pf-read-note').innerText());
+  /* A totals row counted as a holding doubles every figure on the screen, and
+     the doubling looks entirely plausible. */
+  ok('and its totals row is left out, and said to be',
+     /totals row left out so it is not counted twice/
+       .test(await page.locator('#pf-read-note').innerText()));
+  /* This is what makes an upload trustworthy: an import fails SILENTLY, so the
+     file is read back and every line is checkable. */
+  /* Not a table: five columns inside a 390px phone put the figures off the
+     edge, and the figures are the point -- this list exists to be CHECKED. */
+  ok('every line is shown back for checking, with its figures beside it',
+     (await page.locator('#pf-read-list .readline').count()) === 3 &&
+     /Acme Bluechip Direct Growth/.test(await page.locator('#pf-read-list').innerText()) &&
+     /put in\s*₹50,000/.test((await page.locator('#pf-read-list').innerText()).replace(/\s+/g, ' ')),
+     (await page.locator('#pf-read-list').innerText()).slice(0, 160));
+  ok('a snapshot is not asked for a value it already has',
+     await page.locator('#pf-worth-card').isHidden());
+
+  await page.click('#pf-calc');
+  await page.waitForTimeout(500);
+  const snapOut = await page.locator('#pf-out').innerText();
+  ok('it answers: 1,50,000 in, 1,72,400 now, +14.9%',
+     /\+14\.9%/.test(snapOut) && /1,50,000/.test(snapOut) && /1,72,400/.test(snapOut),
+     snapOut.slice(0, 140));
+  ok('with each holding and its share of the whole',
+     /Each holding, and its share/.test(snapOut) && /share of the whole/i.test(snapOut),
+     snapOut.slice(0, 200));
+  /* The one question this file cannot answer, said once, with the file that
+     can answer it named. Not an error: nothing went wrong. */
+  ok('and the one question it cannot answer is named, not raised as an error',
+     /No yearly rate from this file/.test(snapOut) &&
+     /transaction statement/.test(snapOut) &&
+     (await page.locator('#pf-out .notice.bad').count()) === 0,
+     String(await page.locator('#pf-out .notice.bad').count()));
+
+  /* A line read wrongly is dropped, not corrected by typing. Checked, not built. */
+  await page.locator('#pf-read-list [data-drop]').first().click();
+  await page.waitForTimeout(200);
+  ok('a line read wrongly can be dropped from the list',
+     (await page.locator('#pf-read-list .readline').count()) === 2,
+     String(await page.locator('#pf-read-list .readline').count()));
+
+  /* ---------------------------------------------- the other download ---- */
+  await page.click('#pf-reset');
+  await page.waitForTimeout(200);
+  ok('start again clears the file and disables the button',
+     (await page.locator('#pf-read').isHidden()) &&
+     await page.locator('#pf-calc').isDisabled());
+
+  await page.setInputFiles('#pf-file', txnCsv);
+  await page.waitForTimeout(700);
+  ok('a transaction statement is read as payments instead',
+     /2 payments read from pf-txns\.csv/.test(await page.locator('#pf-read-note').innerText()),
+     await page.locator('#pf-read-note').innerText());
+  /* A statement of payments records what was paid, never what it grew to. */
+  ok('and asks for the one figure no such file contains',
+     !(await page.locator('#pf-worth-card').isHidden()));
+
+  await page.click('#pf-calc');
+  await page.waitForTimeout(400);
+  const partial = await page.locator('#pf-out').innerText();
+  /* THE defect: invested, withdrawn and current were computed and then thrown
+     away when XIRR failed, so a reader missing one thing was told nothing. */
+  ok('without that figure it still says what the file does support',
+     /What the figures so far do say/.test(partial) && /2,00,000/.test(partial),
+     partial.slice(0, 160));
+
+  await page.fill('#pf-worth', '228000');
+  await page.waitForTimeout(500);
+  const full = await page.locator('#pf-out').innerText();
+  ok('and with it, the yearly rate appears without anything being clicked',
+     /Your portfolio XIRR/i.test(full) && /% /.test(full), full.slice(0, 120));
+
+  /* The by-fund choice used to live inside the typing card, so an uploaded
+     statement could never reach it. It belongs to the data, not to how the
+     data arrived -- and it is offered only when the file carries fund names. */
+  ok('a statement with no fund names is not offered a by-fund breakdown',
+     await page.locator('#pf-group-card').isHidden());
+
+  const namedCsv = path.join(TMP, 'pf-named.csv');
+  fs.writeFileSync(namedCsv,
+    'Date,Amount,Fund\n2024-01-01,100000,Acme Bluechip\n2025-01-01,100000,Zenith Flexi\n');
+  await page.click('#pf-reset');
+  await page.setInputFiles('#pf-file', namedCsv);
+  await page.waitForTimeout(700);
+  ok('while one that carries them is',
+     !(await page.locator('#pf-group-card').isHidden()));
+
+  /* ------------------------------------- the right file on the wrong screen */
+  await page.click('#pf-reset');
+  await page.waitForTimeout(200);
+  const navLines = ['Date,NAV'];
+  let nv = 10, nt = Date.UTC(2021, 0, 1);
+  for (let i = 0; i < 400; i++) {
+    const dd = new Date(nt);
+    if (dd.getUTCDay() % 6) navLines.push(dd.toISOString().slice(0, 10) + ',' + nv.toFixed(4));
+    nv *= 1.0003; nt += 86400000;
+  }
+  const navCsv = path.join(TMP, 'pf-nav.csv');
+  fs.writeFileSync(navCsv, navLines.join('\n'));
+  await page.setInputFiles('#pf-file', navCsv);
+  await page.waitForTimeout(700);
+  /* Read as payments, 4,000 daily prices become 4,000 payments of about ten
+     rupees and a return comes out. It is confident and it is nonsense. */
+  const wrongScreen = await page.locator('#pf-door-out').innerText();
+  ok('a NAV file is refused rather than read as four hundred payments',
+     /price history/.test(wrongScreen) && /Rolling returns/.test(wrongScreen),
+     wrongScreen.slice(0, 160));
+  ok('and nothing was computed from it',
+     (await page.locator('#pf-read').isHidden()) &&
+     await page.locator('#pf-calc').isDisabled());
+
+  /* Back to the typed rows the earlier section filled in, which the tests
+     below go on to use. resetPortfolio hides that card; it does not empty it. */
+  await page.click('#pf-reset');
+  await page.click('#pf-manual');
+  await page.waitForTimeout(250);
 
   /* error handling: no current value */
   await rows.nth(2).locator('.in-kind').selectOption('Money in');
@@ -331,6 +501,11 @@ fs.mkdirSync(TMP + '/shots', { recursive: true });
     const ctx2 = await browser.newContext({ viewport: { width, height: 900 } });
     const p2 = await ctx2.newPage();
     await p2.goto(BASE_URL + '#portfolio', { waitUntil: 'networkidle' });
+    await p2.waitForTimeout(250);
+    /* The rows live behind "No file to hand?" now. They are still measured at
+       every width, because a reader who reaches them is the reader least able
+       to cope with a crushed field. */
+    await p2.click('#pf-manual');
     await p2.waitForTimeout(250);
     const m = await p2.evaluate(() => {
       const doc = document.documentElement;

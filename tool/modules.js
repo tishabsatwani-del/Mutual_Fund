@@ -102,10 +102,383 @@
     return Date.UTC(n.getFullYear(), n.getMonth(), n.getDate());
   }
 
+  /* ===================================================== the portfolio door
+   *
+   * The reader hands over the file their platform already gives them and is
+   * asked nothing about it. Two entirely different downloads work here and
+   * they do not know which they have:
+   *
+   *   a holdings snapshot     what they own now. No dates, so no yearly rate
+   *                           can ever come out of it -- but what went in
+   *                           against what it is worth is a real answer, and
+   *                           usually the one they wanted.
+   *   a transaction statement every payment with its date. Everything above,
+   *                           plus the yearly rate.
+   *
+   * So the screen answers from whatever it is given rather than demanding the
+   * file that answers everything. It never asks the reader to pick a type, and
+   * a file it cannot use is told what it is, not merely refused.
+   */
+  var PF = {
+    kind: null,        /* 'holdings' | 'ledger' | null when typed by hand */
+    holdings: null,
+    imported: null,    /* dated flows out of a transaction statement */
+    source: '',        /* the filename, or "pasted columns" */
+    answers: {},       /* the door's questions, once answered */
+    last: null         /* what to re-read when one of them is answered */
+  };
+
+  function portfolioDoor() {
+    var pick = $('#pf-pick'), input = $('#pf-file'), drop = $('#pf-drop');
+    if (!pick || !input) return;
+
+    pick.addEventListener('click', function () { input.click(); });
+    if (drop) {
+      drop.addEventListener('click', function (e) { if (e.target === drop) input.click(); });
+      drop.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); }
+      });
+      /* dragenter and dragleave fire again for every child the pointer
+         crosses, so the highlight is counted in and out rather than toggled. */
+      var depth = 0;
+      function allow(e) { e.preventDefault(); if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'; }
+      drop.addEventListener('dragenter', function (e) { allow(e); depth++; drop.classList.add('dropping'); });
+      drop.addEventListener('dragover', allow);
+      drop.addEventListener('dragleave', function () {
+        if (--depth <= 0) { depth = 0; drop.classList.remove('dropping'); }
+      });
+      drop.addEventListener('drop', function (e) {
+        e.preventDefault(); depth = 0; drop.classList.remove('dropping');
+        var files = Array.prototype.slice.call((e.dataTransfer && e.dataTransfer.files) || []);
+        if (files.length) takeFile(files[0]);
+      });
+    }
+    input.addEventListener('change', function (e) {
+      var files = Array.prototype.slice.call(e.target.files || []);
+      if (files.length) takeFile(files[0]);
+    });
+
+    $('#pf-paste-open').addEventListener('click', function () {
+      var box = $('#pf-paste-box');
+      box.hidden = !box.hidden;
+      if (!box.hidden) $('#pf-paste-text').focus();
+    });
+    $('#pf-paste-read').addEventListener('click', function () {
+      var text = $('#pf-paste-text').value;
+      if (!text.trim()) return;
+      PF.answers = {};
+      PF.source = 'pasted columns';
+      readInto(text);
+    });
+
+    $('#pf-manual').addEventListener('click', function () {
+      var card = $('#pf-manual-card');
+      card.hidden = false;
+      $('#pf-group-card').hidden = false;
+      $('#pf-manual-line').hidden = true;
+      PF.kind = null;
+      $('#pf-calc').disabled = false;
+      card.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    });
+
+    $('#pf-reset').addEventListener('click', resetPortfolio);
+  }
+
+  function takeFile(file) {
+    PF.answers = {};
+    PF.source = file.name || 'that file';
+    say('pf-door-out', 'Reading ' + esc(PF.source) + '…');
+    /* A workbook comes back as rows and a CSV as text. The reader takes
+       either, so neither is turned into the other on the way. */
+    W_contentOf(file).then(function (got) {
+      readInto(got.rows ? got.rows : got.text);
+    }).catch(function (err) {
+      say('pf-door-out', '', notice('bad', esc(err.message)));
+    });
+  }
+
+  /* shared.js is a v3 file; this screen predates it, so the same two-shape
+     reader is spelled out here rather than reached across. */
+  function W_contentOf(file) {
+    if (/\.xlsx?$/i.test(file.name || '') && window.SimWorkbook) {
+      return window.SimWorkbook.readWorkbook(file)
+        .then(function (rows) { return { rows: rows }; })
+        .catch(function () {
+          throw new Error('That Excel file could not be read here. Open it and save it as CSV, ' +
+                          'then load that.');
+        });
+    }
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader();
+      reader.onerror = function () { reject(new Error('That file could not be opened.')); };
+      reader.onload = function () { resolve({ text: String(reader.result) }); };
+      reader.readAsText(file);
+    });
+  }
+
+  function readInto(source) {
+    PF.last = source;
+    var r = window.SimUpload.portfolioFile(source, PF.answers);
+
+    if (r.ask === 'direction') return askDirection(r);
+    if (!r.ok) {
+      PF.kind = null;
+      $('#pf-read').hidden = true;
+      $('#pf-worth-card').hidden = true;
+      $('#pf-calc').disabled = true;
+      $('#pf-out').innerHTML = '';
+      say('pf-door-out', '', notice('bad', esc(r.message)));
+      return;
+    }
+
+    PF.kind = r.kind;
+    PF.holdings = r.kind === 'holdings' ? r.rows : null;
+    PF.imported = r.kind === 'ledger' ? r.rows : null;
+    $('#pf-paste-box').hidden = true;
+    $('#pf-manual-card').hidden = true;
+    $('#pf-manual-line').hidden = false;
+    $('#pf-calc').disabled = false;
+    say('pf-door-out', '', notice('ok', 'Read <strong>' + esc(PF.source) + '</strong>.'));
+    drawRead(r);
+  }
+
+  /* The one question this door can raise: a statement whose amounts are all
+     unsigned, where only a type column knows which way the money went. */
+  function askDirection(r) {
+    var words = r.words.map(function (w, i) {
+      return '<label class="tick"><input type="checkbox" data-word="' + esc(w.word) +
+        '" id="pf-dir-' + i + '"><span>' + esc(w.word) + ' <span class="qsub">' +
+        w.count + (w.count === 1 ? ' line' : ' lines') + '</span></span></label>';
+    }).join('');
+    say('pf-door-out', '', '<div class="notice"><span class="ic">?</span><span>' +
+      esc(r.message) + '</span></div><div class="ticks">' + words + '</div>' +
+      '<p class="hint">Anything left unticked is read as money in.</p>' +
+      '<div class="btnrow"><button class="primary" type="button" id="pf-dir-go">' +
+      'Read them this way</button></div>');
+    $('#pf-dir-go').addEventListener('click', function () {
+      var map = {};
+      A.$$('[data-word]', $('#pf-door-out')).forEach(function (b) {
+        map[b.dataset.word] = b.checked ? 'out' : 'in';
+      });
+      PF.answers.direction = map;
+      readInto(PF.last);
+    });
+  }
+
+  /* What was read, shown back as plain lines.
+   *
+   * This is the part that makes an upload trustworthy. Typing is irritating but
+   * its errors are VISIBLE -- a wrong row is on screen and gets fixed. An import
+   * fails silently: one mis-read column and a confident wrong number comes out
+   * with nothing flagged anywhere. So the file is read back to the reader, and
+   * a line read wrongly can be dropped. Checked, not built. */
+  function drawRead(r) {
+    var card = $('#pf-read'), body = $('#pf-read-list');
+    var head = $('#pf-read-h'), note = $('#pf-read-note');
+    card.hidden = false;
+
+    if (r.kind === 'holdings') {
+      head.textContent = 'What you hold';
+      note.innerHTML = String(PF.holdings.length) +
+        (PF.holdings.length === 1 ? ' fund' : ' funds') + ' read from ' + esc(PF.source) +
+        (r.skipped ? ', ' + String(r.skipped) + ' line' + (r.skipped === 1 ? '' : 's') +
+          ' skipped' : '') +
+        (r.totalsDropped ? ', and a totals row left out so it is not counted twice' : '') + '.';
+      body.innerHTML = PF.holdings.map(function (h, i) {
+        return readLine(i, esc(h.name),
+          [['put in', h.invested == null ? '\u2014' : money(h.invested)],
+           ['worth now', h.current == null ? '\u2014' : money(h.current)]]);
+      }).join('');
+    } else {
+      head.textContent = 'What you paid in';
+      var out = PF.imported.filter(function (f) { return f.dir === 'out'; }).length;
+      note.innerHTML = String(PF.imported.length) +
+        (PF.imported.length === 1 ? ' payment' : ' payments') + ' read from ' + esc(PF.source) +
+        (r.skipped ? ', ' + String(r.skipped) + ' line' + (r.skipped === 1 ? '' : 's') +
+          ' skipped' : '') +
+        (out ? '. ' + String(out) + (out === 1 ? ' is money out' : ' are money out') : '') + '.' +
+        (!r.dateCertain && r.example
+          ? ' These dates read two ways; ' + esc(r.example.raw) + ' has been read as ' +
+            esc(r.example.dayFirst) + '. Check the lines below.'
+          : '');
+      body.innerHTML = PF.imported.map(function (f, i) {
+        return readLine(i, fmtDate(f.t),
+          [[f.dir === 'out' ? 'money out' : 'money in', money(f.amount)]]);
+      }).join('');
+    }
+
+    A.$$('[data-drop]', body).forEach(function (b) {
+      b.addEventListener('click', function () {
+        var list = r.kind === 'holdings' ? PF.holdings : PF.imported;
+        list.splice(+b.dataset.drop, 1);
+        if (!list.length) { resetPortfolio(); return; }
+        drawRead(r);
+      });
+    });
+
+    /* A statement of payments records what was paid, never what it grew to.
+       That is the one figure no such file contains, so it is the one field. */
+    $('#pf-worth-card').hidden = r.kind !== 'ledger';
+    /* A holdings file already shows every fund separately; the choice only
+       means something for dated payments, and only when they carry a name. */
+    $('#pf-group-card').hidden = r.kind !== 'ledger' ||
+      !PF.imported.some(function (f) { return f.fund; });
+  }
+
+  /* One block per line rather than a table row.
+   *
+   * Five columns inside a 390px phone have no width to give, and the two ways
+   * out of that are both wrong here. Letting the cells wrap turns one row into
+   * a column of unlabelled figures; scrolling sideways puts the figures off
+   * the edge -- and the figures are the entire point, because this list exists
+   * to be CHECKED against the reader's own statement. So it is not a table at
+   * that width: the line's name reads first, its figures sit under it with
+   * their own labels, and nothing is off screen. */
+  function readLine(i, title, pairs) {
+    return '<li class="readline"><div class="rl-head">' +
+      '<span class="rl-title">' + title + '</span>' +
+      '<button class="link" type="button" data-drop="' + i + '">drop</button></div>' +
+      '<div class="rl-figs">' + pairs.map(function (p) {
+        return '<span class="rl-fig"><span class="qsub">' + esc(p[0]) + '</span> ' +
+          '<b>' + p[1] + '</b></span>';
+      }).join('') + '</div></li>';
+  }
+
+  function resetPortfolio() {
+    PF.kind = null; PF.holdings = null; PF.imported = null; PF.source = '';
+    PF.answers = {}; PF.last = null;
+    $('#pf-read').hidden = true;
+    $('#pf-worth-card').hidden = true;
+    $('#pf-group-card').hidden = true;
+    $('#pf-manual-card').hidden = true;
+    $('#pf-manual-line').hidden = false;
+    $('#pf-calc').disabled = true;
+    $('#pf-out').innerHTML = '';
+    $('#pf-door-out').innerHTML = '';
+    $('#pf-file').value = '';
+    $('#pf-paste-text').value = '';
+    $('#pf-paste-box').hidden = true;
+  }
+
+  function say(id, text, html) {
+    var el = $('#' + id);
+    if (!el) return;
+    if (html) el.innerHTML = html; else el.textContent = text;
+  }
+
+  /* ------------------------------------- what a holdings file can answer
+   *
+   * Everything except the yearly rate, and it says so once rather than
+   * refusing. calcPortfolio used to compute invested, withdrawn and current in
+   * its first pass and then THROW ALL THREE AWAY if XIRR failed, so a reader
+   * whose file was missing one thing was told nothing at all. */
+  function holdingsAnswer() {
+    var rows = PF.holdings;
+    var invested = 0, current = 0, haveIn = 0, haveNow = 0;
+    rows.forEach(function (h) {
+      if (h.invested != null) { invested += h.invested; haveIn++; }
+      if (h.current != null) { current += h.current; haveNow++; }
+    });
+    var net = current - invested;
+    var abs = invested > 0 ? net / invested : null;
+
+    var html = '';
+    html += '<div class="result"><div class="label">' +
+      (abs == null ? 'What it is worth today' : 'Your total return so far') + '</div>' +
+      '<div class="value">' + (abs == null ? money(current) : A.signedPct(abs)) + '</div>' +
+      '<div class="sub">' + (abs == null
+        ? String(rows.length) + (rows.length === 1 ? ' holding' : ' holdings')
+        : money(invested) + ' put in, worth ' + money(current) + ' now') + '</div></div>';
+
+    html += '<div class="card"><h2>The numbers behind it</h2><div class="stats">' +
+      stat('You put in', haveIn ? money(invested) : '—') +
+      stat('Worth now', haveNow ? money(current) : '—') +
+      stat('Gain or loss', haveIn && haveNow ? (net >= 0 ? '+' : '') + money(net) : '—') +
+      stat('Holdings', String(rows.length)) +
+      '</div></div>';
+
+    /* Sorted by size, because what a portfolio is MOSTLY made of is the thing
+       a snapshot answers best and a list in file order hides. */
+    var sorted = rows.slice().sort(function (a, b) {
+      return (b.current || b.invested || 0) - (a.current || a.invested || 0);
+    });
+    html += '<div class="card"><h2>Each holding, and its share</h2>' +
+      '<div class="scroll"><table class="data wide"><thead><tr><th>Fund</th><th>You put in</th>' +
+      '<th>Worth now</th><th>Gain</th><th>Share of the whole</th></tr></thead><tbody>' +
+      sorted.map(function (h) {
+        var g = (h.invested != null && h.current != null) ? h.current - h.invested : null;
+        var size = h.current != null ? h.current : h.invested;
+        return '<tr><td>' + esc(h.name) + '</td><td>' +
+          (h.invested == null ? '—' : money(h.invested)) + '</td><td>' +
+          (h.current == null ? '—' : money(h.current)) + '</td><td>' +
+          (g == null ? '—' : (h.invested > 0 ? A.signedPct(g / h.invested) : '—')) + '</td><td>' +
+          (current > 0 && size != null ? pct(size / current, 0) : '—') + '</td></tr>';
+      }).join('') + '</tbody></table></div>' +
+      '<div class="meaning"><h3>What this means</h3>' +
+      '<p>The last column is what your money is actually made of. A fund can have the best return ' +
+      'on this page and still be too small a share to have moved your total, and the largest share ' +
+      'decides most of what happens to you next.</p></div></div>';
+
+    /* The one question this file cannot answer, said once, with the file that
+       can answer it named. Not an error: nothing went wrong. */
+    html += '<div class="card">' + notice('',
+      '<strong>No yearly rate from this file.</strong> ' +
+      esc(window.SimUpload.MESSAGES.noDatesForRate)) + '</div>';
+
+    html += '<div class="meaning"><h3>What it does not mean</h3>' +
+      '<p>A total return has no clock in it. ' + (abs == null ? 'This' : esc(A.signedPct(abs))) +
+      ' over two years and the same figure over ten are completely different results, and this file ' +
+      'does not say which you are looking at.</p>' +
+      '<p>It is before exit load and before tax, and it compares with nothing — not the fund’s ' +
+      'own return, not another investor’s.</p></div>';
+
+    $('#pf-out').innerHTML = html;
+  }
+
+  /* Whatever the figures already support, when the yearly rate does not come
+   * out. A total with no clock in it is still a total, and a reader who has
+   * given enough for one should be shown it rather than an error alone. */
+  function partialAnswer(invested, withdrawn, current) {
+    if (!invested && !withdrawn && !current) return '';
+    var net = current + withdrawn - invested;
+    var abs = invested > 0 && current > 0 ? net / invested : null;
+    return '<div class="card"><h2>What the figures so far do say</h2><div class="stats">' +
+      stat('You put in', invested ? money(invested) : '\u2014') +
+      stat('You took out', withdrawn ? money(withdrawn) : '\u2014') +
+      stat('Worth now', current ? money(current) : '\u2014') +
+      stat('Gain or loss', abs == null ? '\u2014' : (net >= 0 ? '+' : '') + money(net)) +
+      '</div>' +
+      (abs == null
+        ? '<p class="hint" style="margin:.7rem 0 0">A gain needs both what went in and what it is ' +
+          'worth today. One of the two is still missing.</p>'
+        : '<p class="hint" style="margin:.7rem 0 0">That is ' + esc(A.signedPct(abs)) +
+          ' in total. It has no clock in it: the yearly rate needs the dates.</p>') +
+      '</div>';
+  }
+
   function calcPortfolio() {
+    if (PF.kind === 'holdings') return holdingsAnswer();
     var rows = readRows();
     var out = $('#pf-out');
     var flows = [], problems = [], invested = 0, withdrawn = 0, current = 0, currentDate = null;
+
+    /* Imported payments arrive already dated and already signed, so they skip
+       the row-by-row validation below: there is no typed cell to be wrong. */
+    if (PF.kind === 'ledger') {
+      PF.imported.forEach(function (f) {
+        var kind = f.dir === 'out' ? 'Money out' : 'Money in';
+        if (f.dir === 'out') withdrawn += f.amount; else invested += f.amount;
+        flows.push({ t: f.t, amount: f.dir === 'out' ? f.amount : -f.amount,
+                     kind: kind, label: f.fund || '' });
+      });
+      var worth = parseFloat($('#pf-worth').value);
+      if (isFinite(worth) && worth > 0) {
+        current = worth;
+        currentDate = todayTs();
+        flows.push({ t: currentDate, amount: worth, kind: 'Worth today', label: '' });
+      }
+      rows = [];
+    }
 
     rows.forEach(function (r, i) {
       var blank = !r.date && !isFinite(r.amount);
@@ -134,10 +507,20 @@
     }
     var res = E.xirr(flows);
     if (!res.ok) {
+      /* THE defect on this screen. invested, withdrawn and current were all
+       * worked out in the pass above and then thrown away here, so a reader
+       * missing one thing was told nothing at all -- not even the total they
+       * had already given enough for. Say what is missing, then answer
+       * everything the figures do support. */
       var extra = res.code === 'NO_VALUE'
-        ? ' Add a last row with today\'s date, <strong>Worth today</strong>, and what the holding is worth now.'
+        ? (PF.kind === 'ledger'
+            ? ' Type what the whole holding is worth today in the box above \u2014 a statement of ' +
+              'payments records what you paid, never what it grew to.'
+            : ' Add a last row with today\'s date, <strong>Worth today</strong>, and what the ' +
+              'holding is worth now.')
         : '';
-      out.innerHTML = notice('bad', esc(res.message) + extra);
+      out.innerHTML = notice('bad', esc(res.message) + extra) +
+                      partialAnswer(invested, withdrawn, current);
       return;
     }
 
@@ -1937,6 +2320,11 @@
     $('#pf-group').addEventListener('change', function () { if ($('#pf-out').innerHTML) calcPortfolio(); });
     $('#pf-calc').addEventListener('click', calcPortfolio);
     $('#pf-export').addEventListener('click', exportRows);
+    portfolioDoor();
+    var worth = $('#pf-worth');
+    if (worth) worth.addEventListener('input', function () {
+      if ($('#pf-out').innerHTML) calcPortfolio();
+    });
 
     /* goal */
     ['g-target', 'g-current', 'g-sip'].forEach(function (id) {

@@ -13,6 +13,9 @@ fs.mkdirSync(TMP + '/shots', { recursive: true });
   const p=await c.newPage();
   const errs=[]; p.on('pageerror',e=>errs.push(e.message));
   await p.goto(BASE_URL + '#portfolio',{waitUntil:'networkidle'});
+  /* The screen is a door now; typing is behind "No file to hand?". */
+  await p.click('#pf-manual');
+  await p.waitForTimeout(200);
 
   await p.selectOption('#pf-group','on');
   ok('naming a holding is offered once grouping is on', await p.locator('#pf-rows .in-tag').first().isVisible());

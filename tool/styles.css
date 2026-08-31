@@ -260,7 +260,17 @@ button.primary, .btn {
   box-shadow: var(--glow);
   transition: transform .1s ease, box-shadow .16s ease, filter .12s ease;
 }
-button.primary:hover, .btn:hover { box-shadow: 0 0 30px -4px rgba(0, 242, 254, .7); }
+/* A primary button that cannot be pressed must not look pressable. The shared
+   disabled rule only drops opacity, and this gradient survives that at full
+   strength -- the button still read as the live next step while doing nothing
+   at all, which is the thing this screen was rebuilt to stop. It loses the
+   gradient, the glow and the accent border, and keeps its label readable so it
+   still says what WILL happen once there is something to compute. */
+button.primary:disabled, button.primary:disabled:hover {
+  background: var(--surface-2); color: var(--muted);
+  border-color: var(--line-strong); box-shadow: none; opacity: 1;
+}
+button.primary:hover:not(:disabled), .btn:hover { box-shadow: 0 0 30px -4px rgba(0, 242, 254, .7); }
 button.primary:active, .btn:active { transform: translateY(1px); filter: brightness(.95); }
 button.secondary {
   min-height: 44px; padding: .5rem .9rem;
@@ -563,3 +573,44 @@ footer.foot p { margin: 0 0 .5rem; }
   background: var(--surface-2); color: var(--ink);
   font-size: .88rem; font-weight: 600;
 }
+
+/* ------------------------------------------------- the portfolio door
+   The file is already on the desktop; making them find it through a picker
+   is a step that exists only because the door had one shape. The picker
+   stays: a zone that is only a zone has no keyboard and does not exist on a
+   phone, where most of these readers are. */
+.filebox.dropping { border-color: var(--accent); background: var(--surface-2); }
+.ticks { margin: .7rem 0 .2rem; }
+.tick {
+  display: flex; align-items: baseline; gap: .55rem;
+  padding: .55rem 0; border-top: 1px solid var(--line); cursor: pointer;
+}
+.tick input { width: 1.05rem; height: 1.05rem; flex: none; accent-color: var(--accent); }
+#pf-read-table th { text-align: right; }
+#pf-read-table th:first-child { text-align: left; }
+
+/* A table with five columns of its own inside a 390px phone has no width to
+   give: table-layout hands each cell one word and the row becomes a column,
+   which is what the read-back and the holdings list both did. .scroll is
+   already around them and was doing nothing, because a 100%-wide table never
+   overflows. A floor makes it overflow, so the scroll it is wrapped in works. */
+table.data.wide { min-width: 32rem; }
+table.data.wide td:not(:first-child), table.data.wide th:not(:first-child) { white-space: nowrap; }
+/* Narrow enough that a figure is visible before any scrolling, which is
+   what makes the scroll discoverable at all. */
+table.data.wide td:first-child, table.data.wide th:first-child { min-width: 9rem; }
+
+/* -------------------------------------------------- what was read back
+   Not a table. Five columns inside a 390px phone have no width to give, and
+   both ways out are wrong here: wrapped cells become a column of unlabelled
+   figures, and a sideways scroll puts the figures off the edge — and the
+   figures are the point, because this list exists to be checked against the
+   reader's own statement. */
+.readlist { list-style: none; margin: 0; padding: 0; }
+.readline { padding: .8rem 0; border-top: 1px solid var(--line); }
+.readline:first-child { border-top: 0; }
+.rl-head { display: flex; align-items: baseline; gap: .8rem; }
+.rl-title { flex: 1 1 auto; font-weight: 600; }
+.rl-head .link { flex: none; min-height: 44px; }
+.rl-figs { display: flex; flex-wrap: wrap; gap: .25rem 1.2rem; margin-top: .2rem; }
+.rl-fig b { font-weight: 600; font-variant-numeric: tabular-nums; }
