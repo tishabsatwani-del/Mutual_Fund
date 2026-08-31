@@ -4,7 +4,10 @@ The strip goes BELOW the capture, never across it. Everything above the hairline
 is exactly what the browser rendered; the strip is plainly an annotation and
 could not be mistaken for part of the tool.
 
-Called by tools/v3/shoot.js. Each argument after --caption is "path::title".
+Called by tools/v3/shoot.js. Each argument after --caption is "path::title", or
+"path::title::caption" where that shot needs a caption of its own -- a shot of
+the door holds made-up transactions whether or not the NAV history behind it is
+real, and that is not a thing to leave ambiguous.
 """
 import sys
 from PIL import Image, ImageDraw, ImageFont
@@ -84,8 +87,9 @@ def main():
     i = args.index("--caption")
     caption = args[i + 1]
     for item in args[i + 2:]:
-        path, _, title = item.partition("::")
-        stamp(path, title, caption)
+        path, _, rest = item.partition("::")
+        title, _, own = rest.partition("::")
+        stamp(path, title, own or caption)
         print("  stamped  " + path.rsplit("/", 1)[-1])
     return 0
 

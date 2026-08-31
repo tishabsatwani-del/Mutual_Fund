@@ -19,14 +19,14 @@ screens are still live at `../`; these replace them.
 | `tokens.html`, `tokens.js` | The token sheet, built from the build |
 | *(shared)* `sim/upload.js` | The §5 door: its questions, its stitching, its messages |
 | *(shared)* `sim/workbook.js` | Reads an .xlsx without a library |
-| `shots/` | The twelve screenshots — run `node tools/v3/shoot.js` |
+| `shots/` | The twenty screenshots — run `node tools/v3/shoot.js` |
 | `deck.js` | Generated. Do not edit — run `python3 tools/v3/build_deck.py` |
 
 ```
 python3 tools/v3/build_deck.py     # after editing sim/copy.json or sim/states.json
 node tools/tool-tests/v3.test.js   # 337 checks, needs a server on 8781
 node sim/tests/upload.test.js      # 90 checks on the door, headless
-node tools/v3/shoot.js             # the twelve screenshots, same server
+node tools/v3/shoot.js             # the twenty screenshots, same server
 ```
 
 ## The materials
@@ -368,11 +368,24 @@ first column is a sentence and pushed those clean off the edge of a phone.
 
 ## Step 7 · the screenshot set
 
-`node tools/v3/shoot.js` writes twelve shots into `shots/`: the six screens on
-both sheets, at 390×844 and twice that in pixels, which is a phone. It drives
-each screen to the state worth photographing — the readings, not the empty
-forms — and shoots with reduced motion on, because a still of a mid-animation
-frame is a lie about the design.
+`node tools/v3/shoot.js` writes twenty shots into `shots/`, at 390×844 and twice
+that in pixels, which is a phone. Shots 01–06 are the six screens on both
+sheets, driven to the state worth photographing — the readings, not the empty
+forms. Everything shoots with reduced motion on, because a still of a
+mid-animation frame is a lie about the design, and every shot now starts from a
+freshly loaded page and scrolls back to the top first: two states of the same
+screen would otherwise photograph each other, and a `fullPage` capture of a
+scrolled page composites the sticky header over the title beneath it.
+
+**Shots 07–10 are the ledger door**, on both sheets — the three ways in, the
+question an unsigned file raises, and the ledger once it has been answered.
+Those four are the states a reader is in while they are still working, which is
+most of the time they spend here, and the six above photograph none of them.
+
+They carry **their own caption**. The transactions in them are made up whether
+or not `--fund` pointed at a real NAV history, and a picture of somebody's
+transactions is not a thing to leave ambiguous, so `stamp.py` takes a per-shot
+caption and these four override the set's.
 
 **On real data.** Step 7 asks for the set on real data, and no NAV source is
 reachable from the build environment: every request to AMFI and to the public

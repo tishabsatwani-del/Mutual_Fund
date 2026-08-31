@@ -1,6 +1,7 @@
 /* Where You Stand — the screenshot set, review §9 step 7.
  *
- * Twelve shots: the six screens, each on the day sheet and the night sheet, at
+ * Twenty shots: the six screens showing their readings, and four more showing
+ * the door a ledger comes in through, each on the day sheet and the night, at
  * a real phone's size. Run it, and the whole set is regenerated.
  *
  * THE POINT OF THE --fund FLAG
@@ -74,7 +75,28 @@ function writeFixture() {
   return file;
 }
 
+/* The ledger the door reads in shots 07-10. Unsigned amounts and a type
+ * column, because that is the shape that makes the door ask which way the
+ * money went -- which is the thing these four shots exist to show. The file is
+ * named so that nothing in the shots could be taken for anybody's statement. */
+function writeLedgerFixture() {
+  const file = path.join(TMP, 'not-a-real-ledger.csv');
+  const rows = [
+    ['05-04-2021', 'Purchase', '25000'],
+    ['05-05-2021', 'SIP', '5000'],
+    ['05-06-2021', 'SIP', '5000'],
+    ['05-07-2021', 'SIP', '5000'],
+    ['05-08-2021', 'SIP', '5000'],
+    ['14-08-2023', 'Redemption', '40000']
+  ];
+  fs.mkdirSync(TMP, { recursive: true });
+  fs.writeFileSync(file, 'Date,Transaction Type,Amount\n' +
+    rows.map(r => r.join(',')).join('\n') + '\n');
+  return file;
+}
+
 const FUND = realFund ? path.resolve(realFund) : writeFixture();
+const LEDGER = writeLedgerFixture();
 const SYNTHETIC = !realFund;
 const CAPTION = label || (SYNTHETIC
   ? 'Layout only. The series is generated, not a fund — no figure here describes anything that happened.'
@@ -120,6 +142,58 @@ const SCREENS = [
     } }
 ];
 
+/* ------------------------------------------------- the ledger, in four states
+ *
+ * The six above photograph READINGS. These photograph the door: the three ways
+ * a ledger gets in, the one question an unsigned file raises, and what the
+ * screen says once it has been answered. They are the states a reader is in
+ * while they are still working, which is most of the time they spend here.
+ *
+ * These four carry their own caption. The amounts in them are made up whether
+ * or not --fund pointed at a real NAV history, and a shot of somebody's
+ * transactions is exactly the thing that must never be ambiguous. */
+const LEDGER_CAPTION =
+  'The transactions here are made up, not anybody\'s. This shot is of the door, ' +
+  'not of a result.';
+
+const LEDGERS = [
+  { id: 'mine', title: 'My return · from a spreadsheet', file: 'mine-spreadsheet',
+    caption: LEDGER_CAPTION, drive: async p => {
+      await p.click('#m-paste-open');
+      await p.waitForTimeout(200);
+    } },
+
+  { id: 'mine', title: 'My return · which way the money went', file: 'mine-asking',
+    caption: LEDGER_CAPTION, drive: async p => {
+      await p.click('#m-paste-open');
+      await p.setInputFiles('#m-file', LEDGER);
+      await p.waitForTimeout(600);
+    } },
+
+  { id: 'mine', title: 'My return · answered', file: 'mine-read',
+    caption: LEDGER_CAPTION, drive: async p => {
+      await p.click('#m-paste-open');
+      await p.setInputFiles('#m-file', LEDGER);
+      await p.waitForTimeout(600);
+      /* Redemption is the last word in the file, so it is the last tick. */
+      const boxes = p.locator('#m-paste-ask input[type=checkbox]');
+      await boxes.nth(await boxes.count() - 1).check();
+      await p.click('#m-paste-ask-go');
+      await p.waitForTimeout(500);
+    } },
+
+  { id: 'stand', title: 'My money in this fund · the same question', file: 'stand-asking',
+    caption: LEDGER_CAPTION, drive: async p => {
+      await p.setInputFiles('#file', FUND);
+      await p.waitForTimeout(900);
+      await p.click('#paste-open');
+      await p.setInputFiles('#ledger-file', LEDGER);
+      await p.waitForTimeout(600);
+    } }
+];
+
+const ALL = SCREENS.concat(LEDGERS);
+
 (async () => {
   if (!fs.existsSync(FUND)) { console.error('no such file: ' + FUND); process.exit(1); }
   fs.mkdirSync(OUT, { recursive: true });
@@ -136,15 +210,26 @@ const SCREENS = [
     page.on('pageerror', e => errors.push(e.message));
     await page.goto(BASE, { waitUntil: 'networkidle' });
 
-    for (const s of SCREENS) {
+    for (const s of ALL) {
+      /* Every shot starts from a clean page. Six of these are two states of the
+         same screen, and a screen carried over from the previous shot would
+         photograph the state before it as well as the one asked for. */
+      await page.goto(BASE, { waitUntil: 'networkidle' });
       await page.evaluate(h => { location.hash = h; }, s.id);
       await page.waitForTimeout(300);
       if (s.drive) await s.drive(page);
+      /* Back to the top before the capture. The header is position:sticky, and
+         a fullPage shot of a scrolled page composites it over whatever it was
+         floating above -- which in the ledger shots is the screen's own title,
+         sliced through the middle. */
+      await page.evaluate(() => window.scrollTo(0, 0));
       await page.waitForTimeout(200);
-      const name = `${String(SCREENS.indexOf(s) + 1).padStart(2, '0')}-${s.id}-${scheme === 'light' ? 'day' : 'night'}.png`;
+      const name = `${String(ALL.indexOf(s) + 1).padStart(2, '0')}-${s.file || s.id}-` +
+                   `${scheme === 'light' ? 'day' : 'night'}.png`;
       const file = path.join(OUT, name);
       await page.screenshot({ path: file, fullPage: true });
-      written.push({ file, name, title: s.title, sheet: scheme === 'light' ? 'Day' : 'Night' });
+      written.push({ file, name, title: s.title, sheet: scheme === 'light' ? 'Day' : 'Night',
+                     caption: s.caption || null });
       console.log('  shot  ' + name);
     }
     if (errors.length) { console.error('script errors on the ' + scheme + ' pass:', errors.join(' | ')); process.exit(1); }
@@ -156,13 +241,17 @@ const SCREENS = [
    * strip are exactly what the tool renders, and the strip is plainly not part
    * of it. */
   execFileSync('python3', [path.join(__dirname, 'stamp.py'), '--caption', CAPTION,
-                           ...written.map(w => w.file + '::' + w.title + ' · ' + w.sheet)],
+                           ...written.map(w => w.file + '::' + w.title + ' · ' + w.sheet +
+                                               (w.caption ? '::' + w.caption : ''))],
                { stdio: 'inherit' });
 
   fs.writeFileSync(path.join(OUT, 'INDEX.md'),
     '# The screenshot set\n\n' +
-    'Generated by `node tools/v3/shoot.js`. Twelve shots: six screens on both\n' +
-    'sheets, at 390×844 and twice that in pixels, which is a phone.\n\n' +
+    'Generated by `node tools/v3/shoot.js`. Twenty shots at 390×844 and twice\n' +
+    'that in pixels, which is a phone: six screens showing their readings, and\n' +
+    'four more showing the door a ledger comes in through, each on both sheets.\n\n' +
+    '**Shots 07–10 hold made-up transactions**, whether or not the NAV history\n' +
+    'behind them is real, and are captioned as such.\n\n' +
     (SYNTHETIC
       ? '**The series in these shots is generated, not a fund.** No figure in them\n' +
         'describes anything that happened. Re-run with `--fund <file>` against an\n' +

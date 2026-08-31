@@ -465,6 +465,11 @@
     function askDirection(read) {
       if (!askPanel) return say(read.message, true);
       say('', false);
+      /* The rows were accepted; only their direction is outstanding. Leaving
+         the paste box open pushes the question down the screen behind a
+         textarea that has nothing left to say. A refusal is the opposite case
+         and keeps its box, because the text in it is what needs fixing. */
+      box.hidden = true;
       var rows = read.words.map(function (w, i) {
         return '<label class="tick"><input type="checkbox" data-word="' + esc(w.word) + '"' +
           ' id="' + opts.askId + '-w' + i + '">' +
