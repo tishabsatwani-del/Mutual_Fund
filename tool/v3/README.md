@@ -24,8 +24,8 @@ screens are still live at `../`; these replace them.
 
 ```
 python3 tools/v3/build_deck.py     # after editing sim/copy.json or sim/states.json
-node tools/tool-tests/v3.test.js   # 308 checks, needs a server on 8781
-node sim/tests/upload.test.js      # 41 checks on the door, headless
+node tools/tool-tests/v3.test.js   # 320 checks, needs a server on 8781
+node sim/tests/upload.test.js      # 69 checks on the door, headless
 node tools/v3/shoot.js             # the twelve screenshots, same server
 ```
 
@@ -82,6 +82,36 @@ file. Nothing is fetched and nothing is sent.* — because a reader arriving fro
 a calculator that fetches will read "load a file" as this tool being less
 capable unless the first thing they meet is why. §5's guide sits behind one
 tap so the door itself keeps to its word budget.
+
+### Paste, where the reader already has it
+
+A reader with the NAV column open in a spreadsheet has the data in their hands
+and no file to give. Downloading a sheet in order to upload it back is a step
+that existed only because the door had one shape. Every door takes a paste now,
+and pasted columns go through **exactly the same `read()`** as a file — the
+day-first question, the scheme picker, the IDCW refusal, stitching, the gap
+report and the confirmation all behave identically. The one thing that changes
+is the instruction when it fails: *copy two columns out of the sheet*, not
+*download the table*, because there is no file to download again.
+
+Both ledgers share one reader too, `SimUpload.ledgerRows`. It is deliberately
+**not** a call into `rowsToSeries`: that drops any value at or below zero, and
+in a ledger the negatives are the whole point. It finds columns by content in
+any order, recognises a header by content rather than by name — so the word
+"Date" is no longer counted as a line it could not read — and reads a bracketed
+or true-minus figure as money out, which is how a statement writes it.
+
+Two decisions worth knowing. A `Dr`/`Cr` suffix is deliberately **unread**:
+taking direction from a bank's abbreviation is a guess about the reader's own
+money, and a wrong guess is silent and backwards. Those rows are skipped and
+counted where the reader can see them. And a fund is never inferred from a
+narration column — that would be the tool inventing an attribution.
+
+The paste also closed a real hole. `POS-WITHDRAWALS` is one of the author's
+written sentences, and Tool 3's engine has always handled money out — but no
+control on that screen could **create** a money-out row, so her sentence was
+unreachable through the interface. A paste can write both, which is what a
+statement holds anyway.
 
 ### The door holds a conversation
 

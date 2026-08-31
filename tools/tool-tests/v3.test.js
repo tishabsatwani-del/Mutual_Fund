@@ -1459,6 +1459,97 @@ const NIGHT = { paper: '#12161E', ink: '#E8E6E1', muted: '#9AA1AE', slate: '#8FA
     await ctx.close();
   }
 
+  /* ================================= pasting, where the reader already has it
+   *
+   * A reader with the column open in a spreadsheet has the data in their hands
+   * and no file to give. Downloading a sheet in order to upload it back is a
+   * step that existed only because the door had one shape.
+   */
+  section('Paste, on both doors and both ledgers');
+  {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 900 } });
+    const page = await ctx.newPage();
+    const errors = [];
+    page.on('pageerror', e => errors.push(e.message));
+    await page.goto(BASE + '#record', { waitUntil: 'networkidle' });
+
+    /* --- the NAV door ---------------------------------------------------- */
+    ok('the door offers a paste beside the file', (await page.locator('#r-file-paste-open').count()) === 1);
+    await page.click('#r-file-paste-open');
+    const block = ['Date\tNAV'];
+    for (let i = 0; i < 500; i++) {
+      const t = Date.UTC(2019, 0, 1) + i * 86400000;
+      block.push(new Date(t).toISOString().slice(0, 10) + '\t' + (10 + i * 0.01).toFixed(4));
+    }
+    await page.fill('#r-file-paste', block.join('\n'));
+    await page.click('#r-file-paste-read');
+    await page.waitForTimeout(700);
+    ok('pasted columns are read like a file, and confirmed the same way',
+       /^Found 500 NAVs for pasted columns, 01-Jan-2019 to \d\d-[A-Z][a-z]{2}-\d{4}, no gaps\.$/
+         .test((await page.locator('#r-state').innerText()).trim()),
+       await page.locator('#r-state').innerText());
+    ok('and the whole reading follows from a paste',
+       (await page.locator('#r-years .chip:not([disabled])').count()) >= 1);
+    await page.click('#r-years .chip[data-y="1"]');
+    await page.waitForTimeout(700);
+    ok('the windows are measured off pasted columns',
+       /a year/.test(await page.locator('#r-out').innerText()));
+
+    /* a pasted refusal cannot say "download the table" — there is no file */
+    await page.click('#r-file-paste-open');
+    await page.fill('#r-file-paste', 'Fund,Rating\nAcme,Five stars\nZenith,Four stars\n');
+    await page.click('#r-file-paste-read');
+    await page.waitForTimeout(500);
+    ok('a pasted refusal tells the reader to copy the columns, not download a file',
+       /Copy two columns out of the sheet/.test(await page.locator('#r-fund .door-ask').innerText()) &&
+       !/download the table/.test(await page.locator('#r-fund .door-ask').innerText()),
+       await page.locator('#r-fund .door-ask').innerText());
+
+    /* --- Tool 3's ledger, which could not write money out at all --------- */
+    await page.evaluate(() => { location.hash = 'stand'; });
+    await page.waitForTimeout(250);
+    await page.setInputFiles('#file', navFile);
+    await page.waitForTimeout(900);
+    ok('the ledger offers a paste', (await page.locator('#paste-open').count()) === 1);
+    await page.click('#paste-open');
+    await page.fill('#paste-text',
+      'Date\tAmount\n01-04-2020\t100000\n01-04-2021\t100000\n14-08-2023\t-50000\n');
+    await page.click('#paste-read');
+    await page.waitForTimeout(500);
+    const note = await page.locator('#paste-note').innerText();
+    ok('it says what it read, and how much of it is money out',
+       /3 lines read/.test(note) && /1 is money out/.test(note), note);
+    ok('and the ledger shows a Money out line, which no other control could create',
+       /Money out/.test(await page.locator('#rows').innerText()),
+       await page.locator('#rows').innerText());
+
+    await page.click('#run');
+    await page.waitForTimeout(900);
+    /* POS-WITHDRAWALS is one of the author's written slots and was unreachable
+       through the interface until a paste could write a money-out row. */
+    ok('which finally reaches the author’s withdrawals sentence',
+       /You have taken money out of this fund/.test(await page.locator('#reading').innerText()),
+       (await page.locator('#reading').innerText()).slice(0, 200));
+
+    /* --- Tool 1's ledger, now on the same reader ------------------------- */
+    await page.evaluate(() => { location.hash = 'mine'; });
+    await page.waitForTimeout(250);
+    await page.click('#m-clear');
+    await page.click('#m-paste-open');
+    /* columns the other way round, and a header: the old positional reader
+       produced nothing from this and counted the header as a bad line */
+    await page.fill('#m-paste-text', 'Amount,Date\n5000,01-04-2021\n-2000,01-06-2021\n');
+    await page.click('#m-paste-read');
+    await page.waitForTimeout(400);
+    const mnote = await page.locator('#m-paste-note').innerText();
+    ok('Tool 1 reads columns in either order, and does not count the header as a loss',
+       /2 lines read/.test(mnote) && !/1 skipped/.test(mnote), mnote);
+    ok('and reports the money out it found', /1 is money out/.test(mnote), mnote);
+
+    ok('no script errors across every paste', errors.length === 0, errors.join(' | '));
+    await ctx.close();
+  }
+
   section('Reduced motion');
   {
     const ctx = await browser.newContext({ viewport: { width: 390, height: 900 }, reducedMotion: 'reduce' });

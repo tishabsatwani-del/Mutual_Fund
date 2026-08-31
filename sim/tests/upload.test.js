@@ -234,5 +234,85 @@ section('The rest of section 5’s messages, as written');
      M.directBefore2013);
 }
 
+section('A ledger pasted out of a spreadsheet');
+{
+  /* A NAV column and a ledger column are not the same kind of number, which is
+     why this is its own reader: rowsToSeries drops anything at or below zero
+     and takes the LAST numeric column, and in a ledger the negatives are the
+     whole point. */
+  var block = 'Date\tAmount\n01-04-2021\t5000\n01-05-2021\t5000\n14-08-2023\t-50000\n';
+  var r = U.ledgerRows(block);
+  ok('an Excel block is read', r.ok && r.rows.length === 3, JSON.stringify(r.code));
+  ok('the header is recognised by content, not counted as an unreadable line',
+     r.skipped === 0 && r.header !== null, 'skipped ' + r.skipped);
+  eq('a minus is money out', r.rows[2].dir, 'out');
+  eq('and its amount is carried positive', r.rows[2].amount, 50000);
+  eq('money in stays money in', r.rows[0].dir, 'in');
+
+  /* How a statement actually writes it. */
+  var bank = 'Date,Narration,Withdrawal,Balance\n05-04-2021,SIP ACME,(5000),120000\n' +
+             '05-05-2021,SIP ACME,(5000),115000\n';
+  var b = U.ledgerRows(bank);
+  ok('a bracketed figure is money out', b.ok && b.rows.every(function (x) { return x.dir === 'out'; }),
+     JSON.stringify(b.rows.map(function (x) { return x.dir; })));
+  ok('and the balance column is not mistaken for the amount', b.amountCol === 2,
+     'amountCol ' + b.amountCol);
+
+  ok('columns are found by content, whatever their order',
+     U.ledgerRows('Amount,Date\n5000,01-04-2021\n6000,01-05-2021\n').ok);
+
+  var three = U.ledgerRows('01-04-2021,5000,Acme Fund\n01-05-2021,5000,Acme Fund\n');
+  eq('three columns with no header keep the fund', three.rows[0].fund, 'Acme Fund');
+
+  ok('a fund is never inferred from a narration column',
+     U.ledgerRows(bank).fundCol === -1, String(U.ledgerRows(bank).fundCol));
+
+  /* Refusals, each saying what to do rather than only what went wrong. */
+  var noDates = U.ledgerRows('Fund,Rating\nAcme,Five stars\n');
+  ok('no dates is refused with an instruction',
+     !noDates.ok && /Copy two columns: the date, and the amount\./.test(noDates.message), noDates.message);
+  var noAmt = U.ledgerRows('Date\n01-04-2021\n02-04-2021\n');
+  ok('dates with no amounts beside them is its own refusal',
+     !noAmt.ok && /no column of amounts beside them/.test(noAmt.message), noAmt.message);
+  ok('and it says how money out is written',
+     /minus or brackets/.test(noAmt.message), noAmt.message);
+
+  /* Dates that read two ways get the same treatment as the NAV door's. */
+  var amb = U.ledgerRows('Date\tAmount\n01/02/2020\t100\n02/03/2020\t200\n');
+  ok('an ambiguous date is flagged rather than silently chosen',
+     amb.ok && amb.dateCertain === false && amb.example !== null, JSON.stringify(amb.example));
+  ok('and the reader can settle it',
+     U.ledgerRows('Date\tAmount\n01/02/2020\t100\n', { dayFirst: false }).rows[0].t ===
+     Date.UTC(2020, 0, 2));
+
+  /* Dr/Cr is deliberately unread: taking direction from a bank's abbreviation
+     is a guess about the reader's money, and a wrong guess is silent. */
+  var drcr = U.ledgerRows('Date,Amount\n01-04-2021,5000 Dr\n02-04-2021,6000\n');
+  ok('a Dr/Cr suffix is skipped and counted, not guessed at',
+     drcr.skipped >= 1, 'skipped ' + drcr.skipped);
+}
+
+section('Pasted columns go through the same door as a file');
+{
+  var lines = ['Date,NAV'];
+  for (var i = 0; i < 40; i++) {
+    lines.push(iso(d(2021, 0, 1) + i * 86400000) + ',' + (10 + i * 0.01).toFixed(4));
+  }
+  var r = U.read([{ name: '', pasted: true, text: lines.join('\n') }]);
+  ok('a pasted NAV column is read like a file', r.ok && r.series.length === 40,
+     r.ok ? String(r.series.length) : r.message);
+  ok('and confirms itself honestly, having no filename to use',
+     /^Found 40 NAVs for pasted columns, /.test(r.confirmation), r.confirmation);
+
+  /* The instruction has to change: there is no file to download again. */
+  var bad = U.read([{ name: '', pasted: true, text: 'Fund,Rating\nAcme,Five\nZenith,Four\n' }]);
+  ok('a pasted refusal says copy the columns, not download the table',
+     /Copy two columns out of the sheet/.test(bad.message) &&
+     !/download the table/.test(bad.message), bad.message);
+  var fromFile = U.read([{ name: 'notes.csv', text: 'Fund,Rating\nAcme,Five\nZenith,Four\n' }]);
+  ok('while a file still says download the table',
+     /download the table/.test(fromFile.message), fromFile.message);
+}
+
 console.log('\n' + passed + ' passed, ' + failed.length + ' failed');
 if (failed.length) { console.log('\nFAILED:\n  ' + failed.join('\n  ')); process.exit(1); }

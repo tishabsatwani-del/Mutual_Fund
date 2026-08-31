@@ -437,6 +437,7 @@
     toTimestamp: toTimestamp,
     rowsToSeries: rowsToSeries,
     columnSummary: columnSummary,
+    detectDayFirst: detectDayFirst,
     listSchemes: listSchemes,
     listSchemesText: listSchemesText,
     sliceSeries: sliceSeries,

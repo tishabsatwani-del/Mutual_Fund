@@ -218,25 +218,42 @@
    * what a bank statement and a fund's own transaction export both already
    * look like, so most readers can paste without editing anything. */
   function paste(text) {
-    var lines = String(text || '').split(/\r?\n/), added = 0, skipped = 0;
-    lines.forEach(function (raw) {
-      var line = raw.trim();
-      if (!line) return;
-      var cells = line.split(/\t|,|;|\s{2,}/).map(function (c) { return c.trim(); })
-                      .filter(function (c) { return c !== ''; });
-      if (cells.length < 2) { skipped++; return; }
-      var t = S.parseDate(cells[0]);
-      var n = parseFloat(cells[1].replace(/[₹,\s]/g, '').replace(/^\((.*)\)$/, '-$1'));
-      if (!isFinite(t) || !isFinite(n) || n === 0) { skipped++; return; }
-      M.entries.push({ kind: 'one', t: t, dir: n < 0 ? 'out' : 'in',
-                       amount: Math.abs(n), fund: (cells[2] || '').trim() });
-      added++;
+    /* One ledger reader for the whole product (sim/upload.js). What was here
+     * was positional -- column 0 the date, column 1 the amount -- so a sheet
+     * whose columns sit in another order silently produced nothing, and the
+     * word "Date" in a header counted as a line that could not be read.
+     *
+     * The shared reader finds the columns by content, recognises a header by
+     * content rather than by name, and reads a bracketed or true-minus figure
+     * as money out, which is how a statement writes it. */
+    var read = root.SimUpload.ledgerRows(text);
+    var note = $('#m-paste-note');
+
+    if (!read.ok) {
+      note.textContent = read.message;
+      note.classList.add('refuse');
+      return;
+    }
+    note.classList.remove('refuse');
+
+    read.rows.forEach(function (r) {
+      M.entries.push({ kind: 'one', t: r.t, dir: r.dir, amount: r.amount, fund: r.fund });
     });
-    $('#m-paste-note').textContent = added
-      ? W.count(added) + (added === 1 ? ' line read' : ' lines read') +
-        (skipped ? ', ' + W.count(skipped) + ' skipped' : '') + '.'
-      : 'No line here had a date and an amount on it.';
-    if (added) { $('#m-paste-text').value = ''; $('#m-paste').hidden = true; }
+
+    /* What was read, and what was not. Rows it cannot read are counted and
+     * shown rather than quietly dropped. */
+    var said = W.count(read.rows.length) + (read.rows.length === 1 ? ' line read' : ' lines read');
+    if (read.skipped) said += ', ' + W.count(read.skipped) + ' skipped';
+    var out = read.rows.filter(function (r) { return r.dir === 'out'; }).length;
+    if (out) said += '. ' + W.count(out) + (out === 1 ? ' is money out' : ' are money out');
+    said += '.';
+    if (!read.dateCertain && read.example) {
+      said += ' These dates read two ways; ' + read.example.raw + ' has been read as ' +
+              read.example.dayFirst + '. Check the lines above.';
+    }
+    note.textContent = said;
+    $('#m-paste-text').value = '';
+    $('#m-paste').hidden = true;
     drawLedger();
   }
 

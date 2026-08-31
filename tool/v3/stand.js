@@ -365,6 +365,40 @@
       var ts = S.parseDate(t);
       if (isFinite(ts) && +a > 0) { ST.rows.push({ t: ts, amount: +a, type: 'in' }); drawRows(); }
     });
+    /* Review: the engine has always handled money out -- position.js branches on
+     * type 'out' and reports hasWithdrawals, which selects the author's written
+     * POS-WITHDRAWALS sentence. Only this screen could not CREATE one: "Add a
+     * line" writes type 'in' and nothing else does. So a written copy slot was
+     * unreachable through the interface. A paste can write both, which is what
+     * a statement holds anyway. */
+    $('#paste-open').addEventListener('click', function () {
+      var box = $('#paste-box');
+      box.hidden = !box.hidden;
+      if (!box.hidden) $('#paste-text').focus();
+    });
+    $('#paste-read').addEventListener('click', function () {
+      var read = window.SimUpload.ledgerRows($('#paste-text').value);
+      var note = $('#paste-note');
+      if (!read.ok) { note.textContent = read.message; note.classList.add('refuse'); return; }
+      note.classList.remove('refuse');
+      read.rows.forEach(function (r) {
+        ST.rows.push({ t: r.t, amount: r.amount, type: r.dir });
+      });
+      var out = read.rows.filter(function (r) { return r.dir === 'out'; }).length;
+      var said = W.count(read.rows.length) + (read.rows.length === 1 ? ' line read' : ' lines read');
+      if (read.skipped) said += ', ' + W.count(read.skipped) + ' skipped';
+      if (out) said += '. ' + W.count(out) + (out === 1 ? ' is money out' : ' are money out');
+      said += '.';
+      if (!read.dateCertain && read.example) {
+        said += ' These dates read two ways; ' + read.example.raw + ' has been read as ' +
+                read.example.dayFirst + '. Check the lines above.';
+      }
+      note.textContent = said;
+      $('#paste-text').value = '';
+      $('#paste-box').hidden = true;
+      drawRows();
+    });
+
     $('#sip').addEventListener('click', function () {
       var box = $('#sip-box'); box.hidden = !box.hidden;
     });

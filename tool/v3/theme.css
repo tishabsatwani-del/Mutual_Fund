@@ -481,3 +481,13 @@ summary.linkish { list-style: revert; cursor: pointer; }
 #m-needs:empty { display: none; }
 #m-needs .needs { display: block; color: var(--ink); font-family: var(--serif); font-size: 1.0625rem; }
 #m-needs .slot-empty { margin-top: .5rem; }
+
+/* Pasting two columns straight out of a spreadsheet, where a reader already has
+   them. The same door, a second way in. */
+.paste-box { margin-top: .75rem; }
+.paste-box textarea { margin-top: .35rem; }
+
+/* A refusal note beside a control. Not red — there is no red in this product —
+   but the reader's own ink rather than the muted grey of a plain gloss, so it
+   reads as something to act on. */
+.gloss.refuse { color: var(--ink); }

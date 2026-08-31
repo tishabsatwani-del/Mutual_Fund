@@ -78,6 +78,172 @@
     return rows;
   }
 
+  /* ------------------------------------------------------------- a ledger
+   *
+   * A NAV column and a ledger column are not the same kind of number, and one
+   * parser cannot serve both. rowsToSeries drops any value at or below zero
+   * (a NAV cannot be negative) and its fallback takes the LAST numeric column
+   * (a NAV file's last number is the NAV). In a ledger the negatives are the
+   * whole point -- they are the money going out -- and the last numeric column
+   * of a statement is usually a unit balance. So the ledger gets its own
+   * reader, and both ledger screens share this one.
+   */
+
+  /* An amount as a statement writes it, with its sign preserved: a bracketed
+   * figure and a true minus both mean money out.
+   *
+   * Deliberately NOT read: a Dr/Cr suffix. Taking direction from a bank's
+   * abbreviation is a guess about the reader's own data, and a wrong guess
+   * turns a purchase into a withdrawal silently. Those rows are skipped and
+   * shown in the preview, where the reader can see them. */
+  function ledgerAmount(raw) {
+    var t = String(raw == null ? '' : raw).trim().replace(/^"(.*)"$/, '$1').trim();
+    var neg = false;
+    var wrapped = /^\((.*)\)$/.exec(t);
+    if (wrapped) { neg = true; t = wrapped[1]; }
+    t = t.replace(/[\u20B9$,\s\u00A0]/g, '').replace(/^\u2212/, '-');
+    if (t === '' || t === '-' || /^n\.?a\.?$/i.test(t)) return NaN;
+    /* The WHOLE cell must be a number. parseFloat stops at the first character
+     * it cannot use, so "5000 Dr" came back as 5000 and a debit was read as
+     * money IN -- silently, and in the wrong direction, which is the one
+     * failure this parser must never have. Anything left over means the cell
+     * says something this reader does not understand, and it is skipped and
+     * counted where the reader can see it. */
+    if (!/^-?\d*\.?\d+$/.test(t)) return NaN;
+    var n = parseFloat(t);
+    if (!isFinite(n)) return NaN;
+    return neg ? -Math.abs(n) : n;
+  }
+
+  var AMOUNT_HEADERS = ['amount', 'amt', 'transaction amount', 'net amount', 'amount (rs.)',
+                        'amount in rs.', 'value', 'debit', 'credit', 'withdrawal', 'deposit'];
+
+  /* Two columns out of a spreadsheet, read by content. Returns rows the ledger
+   * screens can use directly, plus everything a preview needs to show what was
+   * read and what was left out. */
+  function ledgerRows(text, options) {
+    var o = options || {};
+    var rows = P.parseDelimited(String(text == null ? '' : text));
+    if (!rows.length) return ledgerFail('NO-ROWS', MESSAGES.ledgerNoRows);
+
+    /* A header is recognised by CONTENT: a first row in which no cell reads as
+       a date. That is what stops the word "Date" being counted as a line the
+       tool could not read. */
+    var header = null, body = rows;
+    if (rows.length >= 2 && !rows[0].some(function (c) { return isFinite(dateOf(c, true)); })) {
+      header = rows[0];
+      body = rows.slice(1);
+    }
+    if (!body.length) return ledgerFail('NO-ROWS', MESSAGES.ledgerNoRows);
+
+    var probe = body.slice(0, 40);
+    var width = Math.max.apply(null, body.map(function (r) { return r.length; }).concat([0]));
+
+    var dateCol = bestColumn(probe, width, function (cell) { return isFinite(dateOf(cell, true)); },
+                             Math.max(1, Math.ceil(probe.length * 0.5)));
+    if (dateCol < 0) return ledgerFail('NO-DATES', MESSAGES.ledgerNoDates);
+
+    var dayFirst = true, dateCertain = true, example = null;
+    if (o.dayFirst !== undefined) {
+      dayFirst = !!o.dayFirst;
+    } else {
+      var seen = P.detectDayFirst(body, dateCol);
+      dayFirst = seen.dayFirst;
+      dateCertain = seen.certain;
+      if (!seen.certain) example = firstAmbiguousDate(body);
+    }
+
+    var amountCol = amountColumn(header, probe, width, dateCol);
+    if (amountCol < 0) return ledgerFail('NO-AMOUNT', MESSAGES.ledgerNoAmount);
+
+    var fundCol = fundColumn(header, width, dateCol, amountCol);
+
+    var out = [], skipped = 0;
+    for (var i = 0; i < body.length; i++) {
+      var t = dateOf(body[i][dateCol], dayFirst);
+      var n = ledgerAmount(body[i][amountCol]);
+      if (!isFinite(t) || !isFinite(n) || n === 0) { skipped++; continue; }
+      out.push({
+        t: t, amount: Math.abs(n), dir: n < 0 ? 'out' : 'in',
+        fund: fundCol >= 0 ? String(body[i][fundCol] == null ? '' : body[i][fundCol]).trim() : '',
+        line: i + (header ? 2 : 1)
+      });
+    }
+
+    return {
+      ok: out.length > 0, rows: out, skipped: skipped, header: header,
+      dateCol: dateCol, amountCol: amountCol, fundCol: fundCol,
+      dayFirst: dayFirst, dateCertain: dateCertain, example: example,
+      code: out.length ? null : 'NO-ROWS',
+      message: out.length ? null : MESSAGES.ledgerNoRows
+    };
+  }
+
+  function ledgerFail(code, message) {
+    return { ok: false, rows: [], skipped: 0, header: null, dateCol: -1, amountCol: -1,
+             fundCol: -1, dayFirst: true, dateCertain: true, example: null,
+             code: code, message: message };
+  }
+
+  function dateOf(cell, dayFirst) { return P.toTimestamp(P.parseDateParts(cell, dayFirst)); }
+
+  function bestColumn(probe, width, test, need) {
+    var bestAt = -1, bestCount = 0;
+    for (var c = 0; c < width; c++) {
+      var hits = 0;
+      for (var r = 0; r < probe.length; r++) {
+        var cell = probe[r][c];
+        if (cell == null || cell === '') continue;
+        if (test(cell)) hits++;
+      }
+      if (hits > bestCount) { bestCount = hits; bestAt = c; }
+    }
+    return bestCount >= need ? bestAt : -1;
+  }
+
+  /* Named first, because a statement that says "Amount" means it; then shape. */
+  function amountColumn(header, probe, width, dateCol) {
+    if (header) {
+      for (var i = 0; i < header.length; i++) {
+        if (i === dateCol) continue;
+        if (AMOUNT_HEADERS.indexOf(String(header[i] || '').toLowerCase().trim()) >= 0) return i;
+      }
+      for (var j = 0; j < header.length; j++) {
+        if (j === dateCol) continue;
+        if (/\bamount\b|\bamt\b/i.test(String(header[j] || ''))) return j;
+      }
+    }
+    var need = Math.max(1, Math.ceil(probe.length * 0.6));
+    var order = [];
+    for (var a = dateCol + 1; a < width; a++) order.push(a);
+    for (var b = 0; b < dateCol; b++) order.push(b);
+    for (var k = 0; k < order.length; k++) {
+      var c = order[k], hits = 0;
+      for (var r2 = 0; r2 < probe.length; r2++) {
+        var v = ledgerAmount(probe[r2][c]);
+        if (isFinite(v) && v !== 0) hits++;
+      }
+      if (hits >= need) return c;
+    }
+    return -1;
+  }
+
+  /* Named only. Inferring a fund from a bank's narration column would be the
+     tool inventing an attribution for the reader's money. */
+  function fundColumn(header, width, dateCol, amountCol) {
+    if (header) {
+      for (var i = 0; i < header.length; i++) {
+        if (i === dateCol || i === amountCol) continue;
+        if (/^(fund|fund name|scheme|scheme name)$/i.test(String(header[i] || '').trim())) return i;
+      }
+      return -1;
+    }
+    if (width === 3) {
+      for (var c = 0; c < 3; c++) if (c !== dateCol && c !== amountCol) return c;
+    }
+    return -1;
+  }
+
   /* ------------------------------------------------- dates that read two ways
    * §5: "where day-first and month-first are both valid for EVERY row, ask
    * once, showing the first row both ways." parse.js detects the ambiguity and
@@ -173,13 +339,20 @@
     var given = answers || {};
     var list = (files || []).filter(Boolean);
     if (!list.length) return refuse('NO-FILE', 'No file was chosen.');
+    /* Pasted columns arrive here exactly as a file does -- {name, text} -- so
+     * the day-first question, the scheme picker, the IDCW refusal, stitching,
+     * the gap report and the confirmation all run on them unchanged. The only
+     * difference the reader should notice is the instruction when it fails:
+     * there is no file to download again. */
+    var pasted = list.every(function (f) { return f.pasted === true; });
+    var noDates = pasted ? MESSAGES.noDatesPasted : MESSAGES.noDates;
 
     var parsedFiles = [], schemeQuestion = null, ambiguous = null;
 
     for (var i = 0; i < list.length; i++) {
       var rows = rowsFrom(list[i]);
       if (!rows || rows.length < 2) {
-        return refuse('NO-DATES', MESSAGES.noDates);
+        return refuse('NO-DATES', noDates);
       }
 
       /* one file, many schemes */
@@ -224,7 +397,7 @@
           }
         }
         return refuse(res.code === 'NO_COLUMNS' ? 'NO-DATES' : res.code,
-                      res.code === 'NO_COLUMNS' ? MESSAGES.noDates : res.message);
+                      res.code === 'NO_COLUMNS' ? noDates : res.message);
       }
 
       /* dates that read two ways, asked once across the whole pile */
@@ -240,7 +413,7 @@
     if (ambiguous) {
       return ask('day-first', MESSAGES.ambiguousDates(ambiguous), { example: ambiguous });
     }
-    if (!parsedFiles.length) return refuse('NO-DATES', MESSAGES.noDates);
+    if (!parsedFiles.length) return refuse('NO-DATES', noDates);
 
     /* the reader picked an IDCW row */
     var chosen = given.scheme || parsedFiles[0].report.scheme || parsedFiles[0].name;
@@ -277,6 +450,7 @@
 
   function nameOf(file, res) {
     if (res.report && res.report.scheme) return res.report.scheme;
+    if (file.pasted) return MESSAGES.pastedName;
     return String(file.name || '').replace(/\.[^.]+$/, '');
   }
 
@@ -285,6 +459,22 @@
   var MESSAGES = {
     noDates: 'I could not find a column of dates in this file. One column should be dates and one ' +
              'NAV. A screenshot or PDF will not work; download the table.',
+
+    /* The same failure, pasted rather than uploaded: the instruction changes,
+       because there is no file to download again. */
+    noDatesPasted: 'I could not find a column of dates in what you pasted. Copy two columns out of ' +
+                   'the sheet: the date, and the NAV on that date.',
+
+    ledgerNoRows: 'There was nothing to read in that. Copy the rows themselves, not a picture of ' +
+                  'them.',
+    ledgerNoDates: 'I could not find a column of dates in what you pasted. Copy two columns: the ' +
+                   'date, and the amount.',
+    ledgerNoAmount: 'I found the dates but no column of amounts beside them. Copy the amount column ' +
+                    'too, with a minus or brackets on the money you took out.',
+
+    /* A name, not a sentence. nameOf() strips a file extension; pasted columns
+       have no file, and the confirmation must still say what it read. */
+    pastedName: 'pasted columns',
 
     /* The same failure, but with something to do about it. Section 5's message
      * is right when there is nothing in the file to point at; when there ARE
@@ -350,7 +540,8 @@
   };
 
   var api = {
-    read: read, firstMatching: firstMatching, stitch: stitch, gapsIn: gapsIn, groupSchemes: groupSchemes,
+    read: read, firstMatching: firstMatching,
+    ledgerRows: ledgerRows, ledgerAmount: ledgerAmount, stitch: stitch, gapsIn: gapsIn, groupSchemes: groupSchemes,
     rowsFrom: rowsFrom, jsonRows: jsonRows, firstAmbiguousDate: firstAmbiguousDate,
     MESSAGES: MESSAGES, GAP_DAYS: GAP_DAYS
   };

@@ -135,8 +135,18 @@
       <div class="actions">
         <button class="linkish" id="add" type="button">Add a line</button>
         <button class="linkish" id="sip" type="button">Monthly instalments</button>
+        <button class="linkish" id="paste-open" type="button">Paste from a spreadsheet</button>
         <button class="linkish" id="example" type="button">Try an example</button>
         <button class="linkish" id="clear" type="button">Clear</button>
+      </div>
+
+      <div class="boxed" id="paste-box" hidden>
+        <p class="label">The date, then the amount</p>
+        <p class="gloss">A minus or brackets on the money you took out.</p>
+        <textarea id="paste-text" rows="6" spellcheck="false"
+                  aria-label="Paste two columns: the date, and the amount"></textarea>
+        <p class="gloss" id="paste-note" aria-live="polite"></p>
+        <button class="primary" id="paste-read" type="button">Read these lines</button>
       </div>
 
       <div class="boxed" id="sip-box" hidden>

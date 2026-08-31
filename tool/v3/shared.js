@@ -143,12 +143,58 @@
     panel.hidden = true;
     state.parentNode.insertBefore(panel, state.nextSibling);
 
+    /* ------------------------------------------------------- paste
+     *
+     * A reader with the NAV column already open in a spreadsheet has the data
+     * in their hands and no file to give. Downloading a sheet in order to
+     * upload it back is a step that exists only because the door had one shape.
+     *
+     * Pasted columns go through exactly the same read() as a file: the
+     * day-first question, the scheme picker, the IDCW refusal, stitching and
+     * the confirmation all behave identically. Excel and Sheets both put a
+     * tab-separated block on the clipboard, which parse.js already scores. */
+    var pasteOpen = document.createElement('button');
+    pasteOpen.type = 'button';
+    pasteOpen.className = 'linkish';
+    pasteOpen.id = opts.fileId + '-paste-open';
+    pasteOpen.textContent = 'Paste two columns instead';
+    open.parentNode.insertBefore(pasteOpen, open.nextSibling);
+
+    var pasteBox = document.createElement('div');
+    pasteBox.className = 'boxed paste-box';
+    pasteBox.hidden = true;
+    pasteBox.innerHTML =
+      '<p class="label">The date, then the NAV</p>' +
+      '<textarea id="' + opts.fileId + '-paste" rows="6" spellcheck="false" ' +
+      'aria-label="Paste two columns: the date, and the NAV on that date"></textarea>' +
+      '<button class="primary" id="' + opts.fileId + '-paste-read" type="button">Read these</button>';
+    pasteOpen.parentNode.insertBefore(pasteBox, pasteOpen.nextSibling);
+
+    pasteOpen.addEventListener('click', function () {
+      pasteBox.hidden = !pasteBox.hidden;
+      if (!pasteBox.hidden) $('#' + opts.fileId + '-paste').focus();
+    });
+    $('#' + opts.fileId + '-paste-read').addEventListener('click', function () {
+      var text = $('#' + opts.fileId + '-paste').value;
+      if (!text.trim()) { state.textContent = ''; return; }
+      answers = {};
+      chosen = [];
+      state.textContent = 'Reading what you pasted…';
+      /* pasted:true so a refusal says "copy the columns", not "download the
+         table" -- there is no file to download again. */
+      render(root.SimUpload.read([{ name: '', pasted: true, text: text }], answers));
+      lastPaste = text;
+    });
+
+    var lastPaste = null;
+
     open.addEventListener('click', function () { input.click(); });
     input.addEventListener('change', function (e) {
       var picked = Array.prototype.slice.call(e.target.files || []);
       if (!picked.length) return;
       answers = {};                       /* a new pile is a new conversation */
       chosen = picked;
+      lastPaste = null;
       state.textContent = picked.length === 1
         ? 'Reading ' + picked[0].name + '…'
         : 'Reading ' + count(picked.length) + ' files…';
@@ -156,6 +202,12 @@
     });
 
     function go() {
+      /* Whatever the reader gave us last -- files or a paste -- is what a
+         question re-reads once they have answered it. */
+      if (!chosen.length && lastPaste != null) {
+        render(root.SimUpload.read([{ name: '', pasted: true, text: lastPaste }], answers));
+        return;
+      }
       Promise.all(chosen.map(contentOf)).then(function (files) {
         render(root.SimUpload.read(files, answers));
       }).catch(function (err) {
@@ -171,6 +223,7 @@
            screen reader can still reach them. */
         panel.hidden = true;
         panel.innerHTML = '';
+        pasteBox.hidden = true;
         state.textContent = v.confirmation;
         /* A gap is not a refusal -- the series is usable -- so it is said
            beside the confirmation rather than instead of it. */
