@@ -1,15 +1,15 @@
 ,Plan my goal,
 ,,
 What is this for?,,
-Amount you are aiming for,"₹ 10,00,000",
+Amount you are aiming for,"₹ 50,00,000",
 What you have already,₹ 0,
-Years left,5,
-Investing each month now,"₹ 1,000",
-Assumed return each year (%),90,An assumption you choose. Nobody can promise it.
-Raise the monthly amount each year by (%),0,
+Years left,15,
+Investing each month now,"₹ 10,000",
+Assumed return each year (%),10,An assumption you choose. Nobody can promise it.
+Raise the monthly amount each year by (%),1000,
 ,,
 "If nothing changes, you reach",Check the line below,
-,"A return has to be between 0% and 30%. A higher assumption does not make a plan, it hides one.",
+,A step-up has to be between 0% and 25%.,
 ,,
 Against your goal,,
 Extra each month to close it,,On top of what you already invest each month.

@@ -96,11 +96,54 @@ check("the sheet says the portfolio is not an average of the holdings",
 
 # the goal tab
 goal = wb["Plan my goal"]
+calc = wb["Calc"]
 check("goal inputs are the only unlocked cells on the goal tab",
       set(c.coordinate for row in goal.iter_rows() for c in row
           if c.protection and c.protection.locked is False)
       == {"B3", "B4", "B5", "B6", "B7", "B8", "B9"})
 check("the projected value is locked", goal["B11"].protection.locked is not False)
+# The one place a typed input could quietly produce a wrong number: a holding
+# name that does not match is silently excluded from that holding's XIRR.
+hold_dv = [dv for dv in inv.data_validations.dataValidation
+           if dv.type == "list" and "F8" in dv.sqref]
+# The SHIPPED file is the hardened one, and the round trip through LibreOffice
+# normalises openpyxl's "=$H$11:$H$15" to the stored form "$H$11:$H$15". Assert
+# the range, not the punctuation, or this check passes on the build and fails on
+# the artifact readers actually download.
+check("the holding column offers the names it must match",
+      len(hold_dv) == 1 and hold_dv[0].formula1.lstrip("=") == "$H$11:$H$15",
+      hold_dv[0].formula1 if hold_dv else "no list validation on F")
+check("and warns rather than blocking, so a blank list is still usable",
+      bool(hold_dv) and hold_dv[0].errorStyle == "warning",
+      hold_dv[0].errorStyle if hold_dv else "")
+check("no example holdings are seeded into the reader's own sheet",
+      all(inv[f"H{r}"].value in (None, "") for r in range(11, 16)),
+      str([inv[f"H{r}"].value for r in range(11, 16)]))
+
+# Review v4 §11's caps, on the sheet as well as on the web. The step-up had
+# neither a validation nor a gate, so an absurd raise printed an enormous figure
+# with nothing flagged -- the workbook's version of the web planner's 68-digit
+# defect.
+def goal_dv_for(cell):
+    for dv in goal.data_validations.dataValidation:
+        if cell in dv.sqref:
+            return dv
+    return None
+
+for cell, lo, hi in (("B8", "0", "30"), ("B9", "0", "25")):
+    dv = goal_dv_for(cell)
+    check(f"goal {cell} is bounded {lo} to {hi}",
+          dv is not None and dv.formula1 == lo and dv.formula2 == hi,
+          f"{cell}: {dv.formula1 if dv else 'no validation'}-{dv.formula2 if dv else ''}")
+    check(f"goal {cell} explains itself when refused",
+          dv is not None and bool(dv.error) and bool(dv.errorTitle))
+
+# and the gate behind them, which a paste cannot bypass
+gate = calc["G10"].value
+for ref, bound in (("$B$8", "30"), ("$B$9", "25")):
+    check(f"the gate tests {ref} against {bound}",
+          f"{ref}>{bound}" in gate.replace("'Plan my goal'!", ""), gate[:120])
+
 check("years are limited to whole numbers",
       any(dv.type == "whole" for dv in goal.data_validations.dataValidation))
 check("the goal tab never shows a bare error",

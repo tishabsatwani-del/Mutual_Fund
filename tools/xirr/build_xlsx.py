@@ -16,8 +16,8 @@ from openpyxl.workbook.defined_name import DefinedName
 
 OUT = sys.argv[1]
 
-VERSION = "1.2"
-BUILT = "22-Aug-2026"
+VERSION = "1.3"
+BUILT = "31-Aug-2026"
 
 FIRST_ROW, LAST_ROW = 8, 507
 HEAD_ROW = 7
@@ -169,6 +169,30 @@ def validations(ws):
         errorTitle="Positive numbers only",
         error="Type the amount as a plain positive number. Never type a minus sign.",
     )
+    # "Which holding" is free text that the Calc tab matches EXACTLY against the
+    # names in H11:H15. A typo drops that row out of the holding's own XIRR and
+    # out of its "You put in" total, with nothing shown anywhere -- the one
+    # place in this workbook where a typed input quietly produces a wrong
+    # number rather than a refusal.
+    #
+    # A list sourced from H11:H15 makes the names pickable, so the two sides
+    # cannot drift apart by a space or a case. errorStyle="warning" rather than
+    # "stop" is deliberate and load-bearing: the source is blank until the
+    # reader names their own holdings, and a "stop" list over an empty source
+    # would lock the column for the single-fund reader who never fills H at all.
+    # Seeding H11:H15 with example names would fix that too, and would put
+    # invented holdings into the reader's own workbook. It is not done.
+    dv_hold = DataValidation(
+        type="list", formula1="=$H$11:$H$15", allow_blank=True,
+        showErrorMessage=True, errorStyle="warning",
+        errorTitle="That name is not in your list",
+        error="Names here must match one of the holdings you typed under "
+              "\u201cEach holding on its own\u201d, exactly. Pick from the list, "
+              "or leave this blank.",
+    )
+    ws.add_data_validation(dv_hold)
+    dv_hold.add(f"F{FIRST_ROW}:F{LAST_ROW}")
+
     for dv, ref in ((dv_date, rng), (dv_kind, f"C{FIRST_ROW}:C{LAST_ROW}"),
                     (dv_amt, f"D{FIRST_ROW}:D{LAST_ROW}")):
         ws.add_data_validation(dv)
@@ -351,15 +375,26 @@ goal["B11"].fill = RESULT_FILL
 goal["B11"].number_format = MONEY_FMT
 goal.row_dimensions[11].height = 38
 
+# The status line says which input stopped the answer. It must move with the
+# gate above it, or the sheet refuses to compute and does not say why.
+#
+# The two sentences about ranges are the ones sim/format.js already puts on the
+# reader's screen on the web (its CAPS messages), reused word for word rather
+# than reworded here, so a reader who meets the same limit in both halves of the
+# product meets the same sentence. The slot mechanism in sim/copy.json does not
+# reach a downloaded .xlsx, so these strings live here; keeping them identical
+# to the web's is the nearest thing to one voice that this artifact allows.
 goal["B12"] = (
     '=IF($B$6="","Enter how many years are left, on the line above.",'
     'IF($B$6<=0,"Years left must be more than zero.",'
     'IF($B$6>40,"Enter 40 years or less.",'
     'IF($B$4="","Enter the amount you are aiming for.",'
     'IF($B$4<=0,"The amount you are aiming for must be more than zero.",'
-    'IF($B$8>50,"Enter a return of 50% a year or less. A higher assumption does '
+    'IF($B$8>30,"A return has to be between 0% and 30%. A higher assumption does '
     'not make a plan, it hides one.",'
-    'IF($B$8<=-100,"Enter a return greater than -100%.","")))))))'
+    'IF($B$8<0,"A return has to be between 0% and 30%.",'
+    'IF($B$9>25,"A step-up has to be between 0% and 25%.",'
+    'IF($B$9<0,"A step-up has to be between 0% and 25%.","")))))))))'
 )
 goal["B12"].font = STATUS_FONT
 goal["B12"].alignment = Alignment(vertical="center")
@@ -460,6 +495,35 @@ goal.add_data_validation(dv_amounts)
 dv_amounts.add("B4")
 dv_amounts.add("B5")
 dv_amounts.add("B7")
+
+# The web tool's goal planner accepted any number at all and printed a 68-digit
+# figure with an exponent in its gloss. Review v4 section 12.1 fixed that on the
+# web with section 11's input caps. This sheet had the same hole and worse: the
+# assumed return had no validation, and the step-up had neither validation nor
+# any status-line guard -- Calc's usability gate tests the target, the years and
+# the return, never the step-up -- so an absurd raise compounded straight into
+# the answer and printed an enormous rupee figure with nothing flagged.
+#
+# The ranges are section 11's, the same numbers sim/format.js enforces on the
+# web, so the two halves of the product refuse the same inputs.
+dv_rate = DataValidation(
+    type="decimal", operator="between", formula1="0", formula2="30",
+    allow_blank=True, showErrorMessage=True,
+    errorTitle="A return between 0 and 30",
+    error="Enter an assumed return of 30% a year or less. Higher assumptions do not "
+          "make a plan, they hide one.",
+)
+goal.add_data_validation(dv_rate)
+dv_rate.add("B8")
+
+dv_step = DataValidation(
+    type="decimal", operator="between", formula1="0", formula2="25",
+    allow_blank=True, showErrorMessage=True,
+    errorTitle="A step-up between 0 and 25",
+    error="A step-up has to be between 0% and 25%.",
+)
+goal.add_data_validation(dv_step)
+dv_step.add("B9")
 
 protect(goal)
 
@@ -570,10 +634,18 @@ calc["F7"] = "geometric sum S";      calc["G7"] = '=IF($G$4<=0,0,IF($G$6=1,$G$4,
 calc["F8"] = "growth of 1/month";    calc["G8"] = '=IF($G$4<=0,0,$G$3*(1+$G$1)^($G$4-1)*$G$7)'
 
 calc["F10"] = "inputs usable?"
+# The usability gate. Data validation is a courtesy -- a paste goes straight
+# past it, and some clients let a reader dismiss it -- so this is the backstop
+# that actually decides whether a figure is printed at all. It tested the years,
+# the target and the return, and never the step-up, which is how an absurd raise
+# compounded into an enormous rupee figure with nothing flagged. The return's
+# bound moves from 50 to section 11's 30, so the sheet and the web refuse the
+# same inputs. A blank cell reads as zero here and stays allowed, as before.
 calc["G10"] = (
     f'=IF({G}$B$6="",0,IF({G}$B$6<=0,0,IF({G}$B$6>40,0,'
     f'IF({G}$B$4="",0,IF({G}$B$4<=0,0,'
-    f'IF({G}$B$8>50,0,IF({G}$B$8<=-100,0,1)))))))'
+    f'IF({G}$B$8>30,0,IF({G}$B$8<0,0,'
+    f'IF({G}$B$9>25,0,IF({G}$B$9<0,0,1)))))))))'
 )
 calc["F11"] = "from what you have";  calc["G11"] = f'=IF({G}$B$5="",0,{G}$B$5)*(1+$G$1)^$G$4'
 calc["F12"] = "from monthly";        calc["G12"] = f'=IF({G}$B$7="",0,{G}$B$7)*$G$8'

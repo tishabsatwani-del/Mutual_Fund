@@ -154,14 +154,25 @@ print("\nBad inputs speak instead of showing an error code")
 for case, values, expect in [
     ("noyears", {"B4": 1000000, "B5": 0, "B6": None, "B7": 0, "B8": 10, "B9": 0}, "how many years"),
     ("notarget", {"B4": None, "B5": 400000, "B6": 5, "B7": 0, "B8": 10, "B9": 0}, "aiming for"),
-    ("fantasy", {"B4": 1000000, "B5": 0, "B6": 5, "B7": 1000, "B8": 90, "B9": 0}, "50%"),
+    ("fantasy", {"B4": 1000000, "B5": 0, "B6": 5, "B7": 1000, "B8": 90, "B9": 0}, "0% and 30%"),
     ("toolong", {"B4": 1000000, "B5": 0, "B6": 60, "B7": 1000, "B8": 10, "B9": 0}, "40 years"),
+    # Review v4 §11's caps. The step-up had no validation AND no gate, so an
+    # absurd raise compounded straight into the answer and printed an enormous
+    # rupee figure with nothing flagged -- the sheet's version of the web
+    # planner's 68-digit defect.
+    ("wildstep", {"B4": 5000000, "B5": 0, "B6": 15, "B7": 10000, "B8": 10, "B9": 1000}, "step-up"),
+    ("negstep", {"B4": 5000000, "B5": 0, "B6": 15, "B7": 10000, "B8": 10, "B9": -5}, "step-up"),
+    ("fantasy2", {"B4": 1000000, "B5": 0, "B6": 5, "B7": 1000, "B8": 45, "B9": 0}, "0% and 30%"),
 ]:
     cell, number = run(case, values)
     line = cell("B12")
     report(f"{case}: the line explains it", expect in line, line)
     report(f"{case}: no error code reaches the reader",
            "#" not in cell("B11") and "#" not in line, cell("B11"))
+    # A regression that kept the sentence but still printed the figure would
+    # otherwise pass. No number may reach B11 while an input is out of range.
+    report(f"{case}: and no figure is printed either",
+           "Check the line below" in cell("B11"), cell("B11"))
 
 print()
 print("FAILURES:", failures if failures else "none")
