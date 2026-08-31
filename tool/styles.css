@@ -17,9 +17,25 @@
   --surface-2:   #1E2942;   /* inputs, insets, table stripes */
   --surface-3:   #0E1522;   /* wells, deeper than the ground */
 
-  --ink:         #FFFFFF;   /* headings and figures — 19.3:1 */
-  --ink-2:       #C9D4E3;   /* body text — 12.6:1 */
-  --muted:       #8593A8;   /* least important text and captions — 5.3:1 on a card.
+  /* FOUR text roles, not three, and the separation between them is carried by
+     typeface, size and weight -- never by dimness alone. Every ratio below is
+     measured on the CARD (#161F30), which is where text actually sits.
+
+     Pure white was the heading colour and is not any more. On a near-black
+     ground it is the maximum possible glare, and simultaneous contrast makes
+     everything within a few degrees of it read as "dimmed" -- which is why the
+     supporting text looked faint at eleven to one, a ratio better than most
+     black-on-white print. Backing the heading off five percent closes the
+     PERCEIVED gap without touching a single supporting colour. */
+  --ink:         #F2F6FC;   /* headings and figures — 15.2:1 */
+  --ink-2:       #C9D4E3;   /* prose the reader reads — 11.0:1 */
+  /* Supporting prose: glosses, hints, the lines under a heading. It used to
+     share --muted with axis ticks and column headings, which is a CAPTION
+     value -- and prose a reader is meant to read has no business at a caption's
+     contrast. Splitting the role is the fix; brightening everything is not. */
+  --ink-3:       #ACB6C4;   /* supporting prose — 8.1:1 */
+  --muted:       #8593A8;   /* captions, units, axis ticks, column headings and
+                               disabled states ONLY — 5.3:1. Never a sentence.
                                The supplied #64748B measured 3.47:1 there, which is
                                under the 4.5 floor, so it is lifted just enough to
                                pass while staying the same slate. */
@@ -141,9 +157,21 @@ body[data-view="home"] .backlink { display: none !important; }
 .tile:hover { border-color: rgba(0, 242, 254, .55); box-shadow: var(--shadow), 0 0 26px -12px rgba(0, 242, 254, .6); }
 .tile:hover::before { opacity: 1; }
 .tile:active { transform: translateY(1px); }
-.tile-step { font-size: .7rem; text-transform: uppercase; letter-spacing: .09em; color: var(--muted); }
-.tile h2 { font-family: var(--serif); font-size: 1.15rem; margin: .3rem 0 .25rem; }
-.tile p { margin: 0; color: var(--ink-2); font-size: .92rem; }
+/* The eyebrow was the faintest, smallest thing on the whole screen: 11.2px,
+   weight 400, at a caption's contrast. Small, uppercase and letterspaced
+   already says "label" three times over -- it does not need to be faint as
+   well. Weight carries it now, not dimness. */
+.tile-step {
+  font-size: .75rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .09em; color: var(--ink-3);
+}
+.tile h2 { font-family: var(--serif); font-size: 1.15rem; margin: .35rem 0 .4rem; }
+/* 14.7px was the problem here, not the colour. The description sits at 11:1 --
+   higher than most black-on-white body text -- and still read as faint because
+   it was small and, light-on-dark, its strokes render thinner than the same
+   weight would dark-on-light. Size is the lever; the hierarchy is safe because
+   the heading is a different TYPEFACE, not merely a brighter one. */
+.tile p { margin: 0; color: var(--ink-2); font-size: 1rem; letter-spacing: .01em; }
 
 .questions { background:
     radial-gradient(50rem 18rem at 100% 0%, rgba(5, 255, 196, .07), transparent 65%),
@@ -226,7 +254,13 @@ input:disabled, select:disabled, button:disabled {
 /* ------------------------------------------------------------------ inputs */
 .field { margin-bottom: .9rem; }
 .field label { display: block; font-size: .87rem; font-weight: 600; margin-bottom: .3rem; color: var(--ink); }
-.field .hint { font-size: .8rem; color: var(--muted); margin-top: .25rem; }
+/* .hint is used twenty-six times across the markup and only ever had a rule
+   INSIDE a field. Everywhere else it inherited body colour and body size --
+   pure white at 16px, indistinguishable from the text it was meant to support.
+   Twenty-six explanatory lines with no hierarchy at all, in a product whose
+   whole problem was said to be too much dimness. */
+.hint { font-size: .9375rem; color: var(--ink-3); letter-spacing: .01em; }
+.field .hint { font-size: .875rem; color: var(--ink-3); margin-top: .25rem; }
 input[type="text"], input[type="number"], input[type="date"], select {
   width: 100%; min-height: 44px; padding: .55rem .7rem;
   /* A well, not another card. On a dark ground an input that shares the card's
@@ -286,7 +320,7 @@ button.link {
 
 /* the spreadsheet download: the one action on its screen, so it takes the width */
 .download { width: 100%; margin: 1.3rem 0 .5rem; font-size: 1.1rem; }
-.filenote { margin: 0 0 .4rem; text-align: center; font-size: .85rem; color: var(--muted); }
+.filenote { margin: 0 0 .4rem; text-align: center; font-size: .875rem; color: var(--ink-3); }
 .appnote { margin: 0; text-align: center; font-size: .95rem; color: var(--ink-2); }
 
 /* ------------------------------------------------------------- entry table */
@@ -321,7 +355,12 @@ button.link {
   font-variant-numeric: lining-nums tabular-nums;
 }
 .date-echo:empty, .amt-echo:empty { display: none; }
-.refuse { color: var(--critical); }
+/* A refusal has to out-rank the class it usually sits beside. `.field .hint`
+   is two selectors and `.refuse` is one, so every field-level refusal in this
+   product has been rendering in the supporting-prose colour instead of the
+   refusal colour -- a message the reader MUST notice, wearing the colour of
+   one they may skip. Older than this pass; found by measuring it. */
+.refuse, .hint.refuse, .field .hint.refuse { color: var(--critical); }
 
 /* The five-column table only where five columns genuinely fit. */
 @media (min-width: 48rem) {
@@ -450,7 +489,7 @@ details.explain dd { margin: .15rem 0 0; }
 
 /* ------------------------------------------------------------------ charts */
 figure.chart { margin: 1rem 0 0; }
-figure.chart figcaption { font-size: .85rem; color: var(--muted); margin-bottom: .5rem; }
+figure.chart figcaption { font-size: .875rem; color: var(--ink-3); margin-bottom: .5rem; }
 .legend { display: flex; flex-wrap: wrap; gap: .9rem; font-size: .85rem; color: var(--ink-2); margin-top: .5rem; }
 .legend .key { display: inline-flex; align-items: center; gap: .35rem; }
 .legend .swatch { width: 12px; height: 12px; border-radius: 3px; flex: none; }
@@ -467,7 +506,7 @@ svg .zero { stroke: var(--line-strong); stroke-width: 2; }
   padding: 1.4rem 1rem; text-align: center; background: var(--surface-2);
 }
 .filebox.over { border-color: var(--accent); background: var(--accent-soft); }
-.filebox p { margin: .5rem 0 0; font-size: .88rem; color: var(--muted); }
+.filebox p { margin: .5rem 0 0; font-size: .9375rem; color: var(--ink-3); }
 input[type="file"] { display: none; }
 
 /* A file can hold thousands of funds. A native dropdown of that length is a
@@ -481,7 +520,7 @@ input[type="file"] { display: none; }
 .picker .hit:hover, .picker .hit:focus-visible { border-color: var(--accent); }
 .picker .hit[aria-selected="true"] { border-color: var(--accent); background: var(--accent-soft); }
 .picker .hit .nm { display: block; font-weight: 600; font-size: .95rem; line-height: 1.3; }
-.picker .hit .sub { display: block; font-size: .8rem; color: var(--muted); margin-top: .15rem; }
+.picker .hit .sub { display: block; font-size: .875rem; color: var(--ink-3); margin-top: .15rem; }
 .picker .more { padding: .5rem .2rem; font-size: .85rem; color: var(--muted); }
 
 .chips { display: flex; flex-wrap: wrap; gap: .4rem; }
@@ -505,7 +544,7 @@ input[type="file"] { display: none; }
 
 footer.foot {
   border-top: 1px solid var(--line); margin-top: 2.5rem; padding-top: 1.2rem;
-  font-size: .85rem; color: var(--muted);
+  font-size: .875rem; color: var(--ink-3);
 }
 footer.foot p { margin: 0 0 .5rem; }
 .foot-links { display: flex; flex-wrap: wrap; gap: .9rem; margin-bottom: .8rem; }

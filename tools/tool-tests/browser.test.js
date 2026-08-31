@@ -602,8 +602,22 @@ fs.mkdirSync(TMP + '/shots', { recursive: true });
   await lpage.goto(BASE, { waitUntil: 'networkidle' });
   const lbg = await lpage.evaluate(() => getComputedStyle(document.body).backgroundColor);
   ok('and the identical ground under a light OS', lbg === obsidian, 'got ' + lbg);
-  const lightInk = await lpage.evaluate(() => getComputedStyle(document.body).color);
-  ok('with light ink on it, never the host\'s dark text', lightInk === 'rgb(255, 255, 255)', 'got ' + lightInk);
+  /* Asserted as "the page's OWN ink, and a light one" rather than as an exact
+     colour. The claim being made here is that nothing is borrowed from the
+     host; pinning it to pure white also pinned a typographic decision that has
+     since changed -- pure white on near-black is the maximum possible glare,
+     and it made everything near it read as dimmed. */
+  const lightInk = await lpage.evaluate(() => ({
+    body: getComputedStyle(document.body).color,
+    token: getComputedStyle(document.documentElement).getPropertyValue('--ink').trim()
+  }));
+  const inkLum = (() => {
+    const v = lightInk.body.match(/\d+/g).map(Number).map(x => x / 255)
+      .map(x => x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4));
+    return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2];
+  })();
+  ok('with the page\'s own light ink on it, never the host\'s dark text',
+     inkLum > 0.7 && lightInk.token !== '', JSON.stringify(lightInk));
   await lightCtx.close();
 
   await dpage.screenshot({ path: path.join(SHOTS, '06-dark.png'), fullPage: true });

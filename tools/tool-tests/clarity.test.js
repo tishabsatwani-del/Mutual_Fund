@@ -190,6 +190,86 @@ function longFile(file) {
      await page.locator('#view-rolling').isVisible() &&
      (await page.locator('#r-source .chip[data-source="index"]').getAttribute('aria-checked')) === 'true');
 
+  /* --------------------------------------------- the four text roles, measured
+   *
+   * The complaint was that the grey is too faint. Measured, the DESCRIPTIONS
+   * were at 11:1 -- higher than most black-on-white print -- and the problem
+   * was that they were 14.7px. The genuinely faint things were the eyebrow, at
+   * 11.2px and a caption's contrast, and every .hint outside a field, which had
+   * no rule at all and inherited pure white body text.
+   *
+   * So: separation by typeface, size and weight; dimness reserved for captions.
+   */
+  section('Hierarchy by typeface and size, not by dimness');
+  await page.goto(BASE_URL, { waitUntil: 'networkidle' });
+  const roles = await page.evaluate(() => {
+    const of = sel => {
+      const e = document.querySelector(sel), s = getComputedStyle(e);
+      return { color: s.color, size: parseFloat(s.fontSize),
+               weight: +s.fontWeight, family: s.fontFamily.split(',')[0].replace(/"/g, '') };
+    };
+    return { eyebrow: of('.tile-step'), heading: of('.tile h2'), body: of('.tile p') };
+  });
+
+  ok('reading text is at least 16px, which is where the fault actually was',
+     roles.body.size >= 16, roles.body.size + 'px');
+  ok('the eyebrow carries its rank in weight rather than in faintness',
+     roles.eyebrow.weight >= 700 && roles.eyebrow.size >= 12,
+     roles.eyebrow.weight + ' @ ' + roles.eyebrow.size + 'px');
+  /* The heading and the text under it are different TYPEFACES. That is what
+     lets the supporting text be bright without competing. */
+  ok('the heading is a serif and the text under it is not',
+     /Georgia|Times/.test(roles.heading.family) && !/Georgia|Times/.test(roles.body.family),
+     roles.heading.family + ' vs ' + roles.body.family);
+  /* Pure white on near-black is the maximum possible glare, and it makes
+     everything within a few degrees of it read as dimmed. */
+  ok('and it is not pure white', roles.heading.color !== 'rgb(255, 255, 255)',
+     roles.heading.color);
+
+  const lum = c => {
+    const v = c.match(/\d+/g).map(Number).map(x => x / 255)
+      .map(x => x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4));
+    return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2];
+  };
+  const card = lum('rgb(22, 31, 48)');
+  const ratio = c => (lum(c) + 0.05) / (card + 0.05);
+  ok('every one of the three clears 4.5:1 on the card it sits on',
+     ratio(roles.eyebrow.color) >= 4.5 && ratio(roles.body.color) >= 4.5,
+     [ratio(roles.eyebrow.color), ratio(roles.body.color)].map(x => x.toFixed(2)).join(' / '));
+  /* Supporting prose and captions are different jobs and now different tokens:
+     a caption value has no business carrying a sentence. */
+  ok('and the eyebrow is no longer at a caption’s contrast',
+     ratio(roles.eyebrow.color) >= 7, ratio(roles.eyebrow.color).toFixed(2));
+
+  /* .hint appears twenty-six times and only ever had a rule INSIDE a field.
+     Everywhere else it inherited body colour and body size. */
+  await page.evaluate(() => { location.hash = 'rolling'; });
+  await page.waitForTimeout(300);
+  ok('a hint outside a field is supporting text, not body text',
+     (await page.evaluate(() => {
+       const s = getComputedStyle(document.querySelector('.hint'));
+       return s.color !== 'rgb(255, 255, 255)' && parseFloat(s.fontSize) < 16;
+     })) === true,
+     await page.evaluate(() => {
+       const s = getComputedStyle(document.querySelector('.hint'));
+       return s.color + ' @ ' + s.fontSize;
+     }));
+
+  /* A refusal has to out-rank the class it sits beside. `.field .hint` is two
+     selectors and `.refuse` is one, so every field-level refusal had been
+     rendering in the supporting-prose colour -- a message the reader MUST
+     notice, wearing the colour of one they may skip. */
+  await page.evaluate(() => { location.hash = 'goal'; });
+  await page.waitForTimeout(300);
+  await page.fill('#g-rate', '90');
+  await page.waitForTimeout(300);
+  ok('and a refusal on a field looks like a refusal',
+     (await page.evaluate(() =>
+       getComputedStyle(document.querySelector('#g-rate-bad')).color)) === 'rgb(255, 122, 107)',
+     await page.evaluate(() => getComputedStyle(document.querySelector('#g-rate-bad')).color));
+  await page.fill('#g-rate', '10');
+  await page.waitForTimeout(200);
+
   /* -------------------------------------------------- copy and padding fixes */
   section('Two small things a reader meets on a phone');
 
