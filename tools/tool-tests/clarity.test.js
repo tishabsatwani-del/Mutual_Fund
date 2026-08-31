@@ -241,6 +241,52 @@ function longFile(file) {
   ok('and the eyebrow is no longer at a caption’s contrast',
      ratio(roles.eyebrow.color) >= 7, ratio(roles.eyebrow.color).toFixed(2));
 
+  /* Both greys were raised at the TOKEN on 31 August 2026, so every grey in the
+     product moves together: axis ticks, column headings, glosses, captions and
+     every hint. Measured on the card they sit on. */
+  const greys = await page.evaluate(() => {
+    const root = getComputedStyle(document.documentElement);
+    return { muted: root.getPropertyValue('--muted').trim(),
+             ink3: root.getPropertyValue('--ink-3').trim() };
+  });
+  const hexLum = h => {
+    const v = h.replace('#', '').match(/../g).map(x => parseInt(x, 16) / 255)
+      .map(x => x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4));
+    return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2];
+  };
+  const onCard = h => (hexLum(h) + 0.05) / (hexLum('#161F30') + 0.05);
+  ok('the caption grey clears 7:1, well past the 4.5 floor',
+     onCard(greys.muted) >= 7, greys.muted + ' = ' + onCard(greys.muted).toFixed(2) + ':1');
+  ok('and the supporting grey clears 9:1',
+     onCard(greys.ink3) >= 9, greys.ink3 + ' = ' + onCard(greys.ink3).toFixed(2) + ':1');
+  /* Raised, but still a ladder: brighter greys must not overtake the prose and
+     the heading above them, or the hierarchy they exist to carry is gone. */
+  ok('while the four roles stay in order, brightest first',
+     hexLum('#F2F6FC') > hexLum('#C9D4E3') &&
+     hexLum('#C9D4E3') > hexLum(greys.ink3) && hexLum(greys.ink3) > hexLum(greys.muted),
+     ['#F2F6FC', '#C9D4E3', greys.ink3, greys.muted].join(' > '));
+
+  /* "All tools" is the only way back to the four screens, and it was set in the
+     caption grey with no ground under it -- the quietest thing in the header
+     doing the most important job in it. It is a control, so it looks like one. */
+  await page.evaluate(() => { location.hash = 'rolling'; });
+  await page.waitForTimeout(300);
+  const back = await page.evaluate(() => {
+    const e = document.querySelector('.backlink'), s = getComputedStyle(e);
+    const r = e.getBoundingClientRect();
+    return { color: s.color, size: parseFloat(s.fontSize), weight: +s.fontWeight,
+             bg: s.backgroundColor, w: Math.round(r.width), h: Math.round(r.height),
+             header: Math.round(document.querySelector('.topbar-inner').getBoundingClientRect().height) };
+  });
+  ok('All tools is set in the page ink, not in a grey',
+     back.color === 'rgb(242, 246, 252)', back.color);
+  ok('at full body size and bolder than the text around it',
+     back.size >= 16 && back.weight >= 600, back.size + 'px / ' + back.weight);
+  ok('with a ground of its own, so it reads as the control it is',
+     back.bg !== 'rgba(0, 0, 0, 0)' && back.bg !== 'transparent', back.bg);
+  ok('and it keeps its 44px target without pushing the header off one line',
+     back.h >= 44 && back.header <= 56, back.h + ' in a ' + back.header + ' header');
+
   /* .hint appears twenty-six times and only ever had a rule INSIDE a field.
      Everywhere else it inherited body colour and body size. */
   await page.evaluate(() => { location.hash = 'rolling'; });

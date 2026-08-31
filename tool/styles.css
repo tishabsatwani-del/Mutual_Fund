@@ -33,12 +33,16 @@
      share --muted with axis ticks and column headings, which is a CAPTION
      value -- and prose a reader is meant to read has no business at a caption's
      contrast. Splitting the role is the fix; brightening everything is not. */
-  --ink-3:       #ACB6C4;   /* supporting prose — 8.1:1 */
-  --muted:       #8593A8;   /* captions, units, axis ticks, column headings and
-                               disabled states ONLY — 5.3:1. Never a sentence.
+  /* Both greys were raised on 31 August 2026 at the author's instruction: the
+     supporting text was taking too much effort to read. Raised at the TOKEN, so
+     every grey in the product moves together and none of them drift apart --
+     axis ticks, column headings, glosses, captions and every hint. The hue is
+     unchanged; only the lightness moves. */
+  --ink-3:       #C1C9D3;   /* supporting prose — 9.9:1, was 8.1:1 */
+  --muted:       #A5B0BF;   /* captions, units, axis ticks, column headings and
+                               disabled states — 7.5:1, was 5.3:1.
                                The supplied #64748B measured 3.47:1 there, which is
-                               under the 4.5 floor, so it is lifted just enough to
-                               pass while staying the same slate. */
+                               under the 4.5 floor, so it is lifted well past it. */
 
   /* Two grades of ruling, per the review's note taken.
      A line that only divides may be quiet. A line that is the EDGE of
@@ -124,13 +128,21 @@ body {
   letter-spacing: -.01em; color: var(--ink); text-decoration: none;
   margin-right: auto; white-space: nowrap;
 }
+/* "All tools" is the only way back to the four screens, and it was set in the
+   caption grey at .9rem with no ground under it -- the quietest thing in the
+   header, doing the most important job in it. It is a control, so it now looks
+   like one: its own ground, its own edge, and the page's ink on it. */
 .backlink {
   display: none; align-items: center; white-space: nowrap;
-  background: none; border: 0; border-radius: 8px;
-  color: var(--muted); font: inherit; font-size: .9rem; padding: 0 .2rem;
+  background: var(--surface); border: 1px solid var(--line-strong); border-radius: 999px;
+  color: var(--ink); font: inherit; font-size: 1rem; font-weight: 600;
+  letter-spacing: .01em; padding: .4rem .9rem;
   min-height: 44px; cursor: pointer;
+  transition: border-color .12s ease, background-color .12s ease;
 }
-.backlink:hover { color: var(--ink); }
+.backlink:hover, .backlink:focus-visible {
+  border-color: var(--accent); background: var(--surface-2);
+}
 body[data-view="home"] .backlink { display: none !important; }
 .backlink.on { display: inline-flex; }
 
