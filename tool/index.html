@@ -303,11 +303,12 @@
         <p class="upcard-cols">Accepted columns: <code>Date</code> &middot; <code>NAV / Value</code></p>
         <p class="upcard-rule"><strong>Rule:</strong> Do NOT upload Tradebooks, Order Histories,
         or Buy/Sell Transaction Logs.</p>
-        <div class="field" style="margin-top:1rem">
-          <label for="r-index">Bundled history</label>
-          <select id="r-index"><option value="">Loading&hellip;</option></select>
-          <p class="hint" id="r-index-hint"></p>
-        </div>
+        <!-- The bundled-history chooser is built into this slot only when there
+             is bundled history to choose. Nothing ships bundled, so what the
+             reader used to meet here was a labelled dropdown holding one
+             option that said there was nothing in it: a control that occupied
+             a full row to announce its own emptiness. -->
+        <div id="r-index-field"></div>
         <div id="r-index-upload"></div>
         <div id="up-primary-note" aria-live="polite"></div>
       </div>
@@ -331,7 +332,15 @@
           <button class="secondary" type="button" id="f-pick">Choose a file</button>
           <p>CSV or Excel &middot; a date column and a NAV column is all it needs</p>
         </div>
-        <input type="file" id="f-file" accept=".csv,.txt,.xlsx">
+        <input type="file" id="f-file" accept=".csv,.txt,.tsv,.xlsx">
+        <button class="link" type="button" id="f-paste-open">Or paste the two columns from a spreadsheet</button>
+        <div class="pastebox" id="f-paste-box" hidden>
+          <label class="fieldlabel" for="f-paste-text">Copy the date column and the NAV column, and paste them here</label>
+          <textarea id="f-paste-text" rows="6" spellcheck="false"
+                    placeholder="01-Jan-2020&#9;45.1234&#10;02-Jan-2020&#9;45.2210"></textarea>
+          <div class="btnrow"><button class="secondary" type="button" id="f-paste-read">Read these rows</button></div>
+        </div>
+        <div id="f-status" aria-live="polite"></div>
         <p class="hint helper-span">&#128161; Upload at least 3+ years of historical data for
         1-Year rolling calculations, 5+ years for 3-Year calculations, and 7+ years for
         comprehensive 5-Year statistical analysis.</p>

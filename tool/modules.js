@@ -2193,7 +2193,6 @@
   /* ---------------------------------------------------------------- index */
 
   function loadIndexList() {
-    var sel = $('#r-index');
     fetch('data/benchmarks.json', { cache: 'no-store' })
       .then(function (r) { return r.ok ? r.json() : null; })
       .catch(function () { return null; })
@@ -2201,44 +2200,51 @@
         var list = (data && data.benchmarks) || [];
         R.indexList = list;
         if (data && data.asOf) $('#asof').textContent = 'through ' + data.asOf;
-        if (!list.length) {
-          /* Review v4 §12.16: this was said three times on one screen -- in the
-             dropdown, in an information notice and in a help panel. Once, as a
-             line under the file chooser. */
-          sel.innerHTML = '<option value="">Nothing bundled &mdash; upload a file below</option>';
-          sel.disabled = true;
-          $('#r-index-hint').textContent = '';
-          $('#r-index-upload').innerHTML =
-            /* This slot is Card A. It used to be labelled "Index data file",
-               which is the OTHER card's file, and the whole of section 1's
-               root-cause analysis is about readers putting the wrong file in
-               the wrong door because the doors were named alike. */
-            '<label class="fieldlabel" for="bm-pick">Primary Investment Data file</label>' +
-            '<div class="filebox" id="bm-drop" tabindex="0" role="button" aria-label="Choose a NAV or value history file">' +
-            '<button class="secondary" type="button" id="bm-pick">Choose a file</button>' +
-            '<p>A date column and the NAV or value on that date</p></div>' +
-            '<input type="file" id="bm-file" accept=".csv,.txt,.xlsx">' +
-            '<p class="hint">No history is bundled with this version, and nothing has been ' +
-            'invented to fill the gap.</p>';
-          A.wireDrop('bm-drop', 'bm-file', 'bm-pick', function (file) { loadIndexFile(file); });
+
+        /* The bundled chooser is built ONLY when there is something to choose.
+         *
+         * It used to be in the markup unconditionally, so with nothing bundled
+         * -- which is every version that has shipped -- the reader met a
+         * labelled dropdown holding one option that said it was empty. A
+         * control taking a full row to announce it has nothing in it is worse
+         * than no control: it reads as a step to be dealt with. */
+        if (list.length) {
+          $('#r-index-field').innerHTML =
+            '<div class="field" style="margin-top:1rem">' +
+            '<label for="r-index">Bundled history</label>' +
+            '<select id="r-index"></select>' +
+            '<p class="hint" id="r-index-hint"></p></div>';
+          var sel = $('#r-index');
+          sel.innerHTML = '<option value="">Choose an index…</option>' +
+            list.map(function (b, i) {
+              return '<option value="' + i + '">' + esc(b.name) + '</option>';
+            }).join('');
+          sel.addEventListener('change', function () {
+            if (sel.value === '') { clearLoaded(''); return; }
+            var b = list[+sel.value];
+            var series = seriesOf(b);
+            R.bundled[b.name] = series;
+            $('#r-index-hint').textContent =
+              (b.kind === 'PRICE' ? 'Price index — dividends are not included.'
+                                  : 'Total Return Index — dividends included.') +
+              ' ' + b.firstDate + ' to ' + b.lastDate + '.';
+            setLoaded(series, b.name, { meta: b, note: agingNote(b.lastDate) });
+          });
           return;
         }
-        sel.disabled = false;
-        sel.innerHTML = '<option value="">Choose an index…</option>' +
-          list.map(function (b, i) {
-            return '<option value="' + i + '">' + esc(b.name) + '</option>';
-          }).join('');
-        sel.addEventListener('change', function () {
-          if (sel.value === '') { clearLoaded(''); return; }
-          var b = list[+sel.value];
-          var series = seriesOf(b);
-          R.bundled[b.name] = series;
-          $('#r-index-hint').textContent =
-            (b.kind === 'PRICE' ? 'Price index — dividends are not included.'
-                                : 'Total Return Index — dividends included.') +
-            ' ' + b.firstDate + ' to ' + b.lastDate + '.';
-          setLoaded(series, b.name, { meta: b, note: agingNote(b.lastDate) });
-        });
+
+        /* Card A's file door. It used to be labelled "Index data file", which
+           is the OTHER card's file, and the whole of the specification's
+           root-cause analysis is about readers putting the wrong file in the
+           wrong door because the doors were named alike. */
+        $('#r-index-upload').innerHTML =
+          '<label class="fieldlabel" for="bm-pick">Primary Investment Data file</label>' +
+          dropZone('bm', 'Choose a NAV or value history file',
+                   'CSV or Excel &middot; a date column and the NAV or value on that date') +
+          pasteHtml('bm') +
+          '<div id="bm-status" aria-live="polite"></div>';
+        A.wireDrop('bm-drop', 'bm-file', 'bm-pick', function (file) { loadIndexFile(file); });
+        wirePaste('bm', function (text, name) { loadIndexFile(pastedFile(text, name)); });
       });
   }
 
@@ -2259,6 +2265,134 @@
     return b.series.map(function (p) { return { t: A.isoToTs(p[0]), v: p[1] }; })
       .filter(function (p) { return !isNaN(p.t) && p.v > 0; })
       .sort(function (x, y) { return x.t - y.t; });
+  }
+
+  /* ================================================ THE UPLOAD CONTROL
+   *
+   * One control, four states, and every one of them shown IN THE BOX the
+   * reader just clicked.
+   *
+   * What was wrong: choosing a file changed nothing where the reader was
+   * looking. The confirmation was a notice further down the page, so the only
+   * way to find out whether a file had been accepted was to scroll and hope.
+   * On a phone, with the file picker taking over the screen and handing it
+   * back scrolled to the top, that is a genuinely ambiguous moment -- and the
+   * natural response to it is to press Choose a file again.
+   *
+   * So the box itself becomes the answer: reading, added, or not added, with
+   * the file's own name in it and the reason immediately underneath.
+   */
+  var DROP_HINT = {};
+
+  function dropZone(prefix, aria, hint) {
+    DROP_HINT[prefix] = hint;
+    return '<div class="filebox" id="' + prefix + '-drop" tabindex="0" role="button" ' +
+             'aria-label="' + esc(aria) + '">' + dropIdleHtml(prefix) + '</div>' +
+           '<input type="file" id="' + prefix + '-file" accept=".csv,.txt,.tsv,.xlsx">';
+  }
+
+  function dropIdleHtml(prefix) {
+    return '<button class="secondary" type="button" id="' + prefix + '-pick">Choose a file</button>' +
+           '<p>' + (DROP_HINT[prefix] || 'CSV or Excel') + '</p>';
+  }
+
+  /* The pick button is rebuilt with the box. It keeps working because
+   * wireDrop also opens the picker from a click anywhere on the box, and that
+   * listener is on the box, which survives every redraw. */
+  function dropBox(prefix) { return $('#' + prefix + '-drop'); }
+
+  function dropState(prefix, cls, icon, name, sub, action) {
+    var box = dropBox(prefix);
+    if (!box) return;
+    box.className = 'filebox ' + cls;
+    box.innerHTML =
+      '<div class="fileok">' +
+        '<span class="fileok-ic" aria-hidden="true">' + icon + '</span>' +
+        '<span class="fileok-t"><strong class="fileok-name">' + esc(name) + '</strong>' +
+        '<span class="fileok-sub">' + sub + '</span></span>' +
+      '</div>' +
+      (action
+        ? '<button class="secondary" type="button" id="' + prefix + '-pick">' + action + '</button>'
+        : '');
+  }
+
+  function dropReading(prefix, name) {
+    dropState(prefix, 'working', '<span class="spin"></span>', name, 'Reading the file…', '');
+  }
+
+  /* The one the reader was missing. Named, counted and dated, so "it worked"
+   * is not something they have to take on trust. */
+  function dropAdded(prefix, name, report, extra) {
+    var sub = extra ? esc(extra) : '';
+    if (!sub && report) {
+      sub = report.used.toLocaleString() + (report.used === 1 ? ' row' : ' rows') + ' read · ' +
+            fmtDate(report.firstDate) + ' to ' + fmtDate(report.lastDate);
+    }
+    dropState(prefix, 'loaded', '✓', name,
+              '<strong class="ok-word">File added successfully</strong>' +
+              (sub ? ' — ' + sub : ''),
+              'Choose a different file');
+  }
+
+  function dropRejected(prefix, name) {
+    dropState(prefix, 'refused', '!', name,
+              '<strong class="bad-word">Not added</strong> — see below',
+              'Choose another file');
+  }
+
+  function clearDropStatus(prefix) {
+    var box = dropBox(prefix);
+    if (box) { box.className = 'filebox'; box.innerHTML = dropIdleHtml(prefix); }
+    var st = $('#' + prefix + '-status');
+    if (st) st.innerHTML = '';
+  }
+
+  function dropSay(prefix, html) {
+    var st = $('#' + prefix + '-status');
+    if (st) st.innerHTML = html || '';
+  }
+
+  /* ------------------------------------------------------------- pasting
+   *
+   * The third way in, and for a good number of readers the only practical
+   * one: the history is already open in a spreadsheet, and copying two
+   * columns is fewer steps than finding Save As and then finding the file
+   * again. Pasted rows arrive as {name, pastedText} and go down exactly the
+   * path a file does, so there is no second reader to keep honest. */
+  function pasteHtml(prefix) {
+    return '<button class="link" type="button" id="' + prefix + '-paste-open">' +
+           'Or paste the two columns from a spreadsheet</button>' +
+           '<div class="pastebox" id="' + prefix + '-paste-box" hidden>' +
+             '<label class="fieldlabel" for="' + prefix + '-paste-text">' +
+             'Copy the date column and the value column, and paste them here</label>' +
+             '<textarea id="' + prefix + '-paste-text" rows="6" spellcheck="false" ' +
+               'placeholder="01-Jan-2020\t20000&#10;02-Jan-2020\t20015"></textarea>' +
+             '<div class="btnrow"><button class="secondary" type="button" ' +
+               'id="' + prefix + '-paste-read">Read these rows</button></div>' +
+           '</div>';
+  }
+
+  function wirePaste(prefix, handler) {
+    var open = $('#' + prefix + '-paste-open');
+    var box = $('#' + prefix + '-paste-box');
+    var read = $('#' + prefix + '-paste-read');
+    if (!open || !box || !read) return;
+    open.addEventListener('click', function () {
+      box.hidden = !box.hidden;
+      open.textContent = box.hidden
+        ? 'Or paste the two columns from a spreadsheet'
+        : 'Use a file instead';
+      if (!box.hidden) $('#' + prefix + '-paste-text').focus();
+    });
+    read.addEventListener('click', function () {
+      var text = $('#' + prefix + '-paste-text').value;
+      if (!text.trim()) { dropSay(prefix, notice('bad', 'Paste some rows first.')); return; }
+      handler(text, 'pasted columns');
+    });
+  }
+
+  function pastedFile(text, name) {
+    return { name: name || 'pasted columns', size: text.length, pastedText: text };
   }
 
   /* ------------------------------------------- the specification's gatekeeper
@@ -2334,17 +2468,26 @@
   }
 
   function loadIndexFile(file) {
+    dropReading('bm', file.name);
+    dropSay('bm', '');
     A.readFile(file, function (res) {
       /* The gate runs on the raw rows, before the file becomes a series: by
          the time there is a series the tradebook has already been read as
          prices and nothing downstream can tell. */
       var refused = schemaRefusal(res.rows);
-      if (refused) { $('#r-scheme-wrap').hidden = true; clearLoaded(refused); return; }
+      if (refused) {
+        $('#r-scheme-wrap').hidden = true;
+        dropRejected('bm', file.name);
+        dropSay('bm', refused);
+        clearLoaded('');
+        return;
+      }
       var name = res.report.scheme || file.name.replace(/\.[^.]+$/, '');
       R.bundled[name] = res.series;
       R.rows = res.rows || null;
       R.schemes = null;
       $('#r-scheme-wrap').hidden = true;
+      dropAdded('bm', file.name, res.report);
       setLoaded(res.series, name, { report: res.report });
     }, function (msg, extra) {
       /* This slot used to refuse a many-scheme file outright: the tool named
@@ -2353,8 +2496,18 @@
       /* Before the parser's own words, the gate's. "Only 0 usable rows could
          be read" is a true description of a tradebook and a useless one. */
       var bad = extra && extra.rows ? schemaRefusal(extra.rows) : null;
-      if (bad) { $('#r-scheme-wrap').hidden = true; clearLoaded(bad); return; }
+      if (bad) {
+        $('#r-scheme-wrap').hidden = true;
+        dropRejected('bm', file.name);
+        dropSay('bm', bad);
+        clearLoaded('');
+        return;
+      }
       if (extra && extra.schemes && extra.rows) {
+        /* Many schemes in one file is not a failure -- the file was read, and
+           read correctly. The box says so, and then asks what is left. */
+        dropAdded('bm', file.name, null,
+                  extra.schemes.length + ' schemes found — choose one below');
         R.rows = extra.rows;
         R.schemes = extra.schemes;
         showSchemePicker(extra.schemes, {
@@ -2377,23 +2530,30 @@
         return;
       }
       $('#r-scheme-wrap').hidden = true;
-      clearLoaded(notice('bad', esc(msg)));
+      dropRejected('bm', file.name);
+      dropSay('bm', notice('bad', esc(msg)));
+      clearLoaded('');
     },
-    function (progress) { $('#r-loaded').innerHTML = notice('', esc(progress)); });
+    function () { /* the box already says it is reading */ });
   }
 
   /* ----------------------------------------------------------------- fund */
 
   function loadFundFile(file) {
+    dropReading('f', file.name);
+    dropSay('f', '');
     A.readFile(file, function (res) {
       R.rows = res.rows || null;
       R.schemes = null;
       $('#r-scheme-wrap').hidden = true;
+      dropAdded('f', file.name, res.report);
       setLoaded(res.series, res.report.scheme || file.name.replace(/\.[^.]+$/, ''),
                 { report: res.report });
     }, function (msg, extra) {
       /* one file, many schemes: let the reader pick theirs out of it */
       if (extra && extra.schemes && extra.rows) {
+        dropAdded('f', file.name, null,
+                  extra.schemes.length + ' funds found — choose one below');
         R.rows = extra.rows;
         R.schemes = extra.schemes;
         showSchemePicker(extra.schemes, { rows: extra.rows });
@@ -2402,10 +2562,10 @@
         return;
       }
       $('#r-scheme-wrap').hidden = true;
-      clearLoaded(notice('bad', esc(msg)));
-    }, function (progress) {
-      $('#r-loaded').innerHTML = notice('', esc(progress));
-    });
+      dropRejected('f', file.name);
+      dropSay('f', notice('bad', esc(msg)));
+      clearLoaded('');
+    }, function () { /* the box already says it is reading */ });
   }
 
   /* Thousands of funds cannot be chosen from a dropdown on a phone. Filter as
@@ -2545,11 +2705,11 @@
           'so load an index file here and it becomes available as a benchmark.';
       if (!$('#cmp-file')) {
         box.innerHTML =
-          '<label class="fieldlabel" for="cmp-pick">Index data file</label>' +
-          '<div class="filebox" id="cmp-drop" tabindex="0" role="button" aria-label="Choose an index file">' +
-          '<button class="secondary" type="button" id="cmp-pick">Choose a file</button>' +
-          '<p>A date column and the index value on that date</p></div>' +
-          '<input type="file" id="cmp-file" accept=".csv,.txt,.xlsx">' +
+          '<label class="fieldlabel" for="cmp-pick">Benchmark index data file</label>' +
+          dropZone('cmp', 'Choose an index history file',
+                   'CSV or Excel &middot; a date column and the index value on that date') +
+          pasteHtml('cmp') +
+          '<div id="cmp-status" aria-live="polite"></div>' +
           '<div id="cmp-note" aria-live="polite"></div>' +
           /* This slot's own picker. It had none: a many-scheme file dropped
              here produced the red line in the screenshot and no control. */
@@ -2577,21 +2737,27 @@
           if (R.ran) runRolling();
         }
 
-        A.wireDrop('cmp-drop', 'cmp-file', 'cmp-pick', function (file) {
+        function readBenchmark(file) {
+          dropReading('cmp', file.name);
+          dropSay('cmp', '');
+          $('#cmp-note').innerHTML = '';
           A.readFile(file, function (res) {
             /* Section 3 gates BOTH doors. A tradebook dropped on the benchmark
                slot is exactly as wrong as one dropped on the primary slot, and
                would be harder to spot: it would arrive as a comparison line
                rather than as the headline figure. Market-index path only. */
             var refused = R.source === 'index' ? schemaRefusal(res.rows) : null;
-            if (refused) { $('#cmp-note').innerHTML = refused; return; }
+            if (refused) { dropRejected('cmp', file.name); dropSay('cmp', refused); return; }
             var nm = res.report.scheme || file.name.replace(/\.[^.]+$/, '');
+            dropAdded('cmp', file.name, res.report);
             useAsBenchmark(res.series, nm);
           }, function (msg, extra) {
             var gated = (R.source === 'index' && extra && extra.rows)
               ? schemaRefusal(extra.rows) : null;
-            if (gated) { $('#cmp-note').innerHTML = gated; return; }
+            if (gated) { dropRejected('cmp', file.name); dropSay('cmp', gated); return; }
             if (extra && extra.schemes && extra.rows) {
+              dropAdded('cmp', file.name, null,
+                        extra.schemes.length + ' schemes found — choose one below');
               R.cmpSchemes = extra.schemes;
               R.cmpRows = extra.rows;
               $('#cmp-note').innerHTML = notice('', 'That file holds <strong>' +
@@ -2614,9 +2780,13 @@
               });
               return;
             }
-            $('#cmp-note').innerHTML = notice('bad', esc(msg));
-          });
-        });
+            dropRejected('cmp', file.name);
+            dropSay('cmp', notice('bad', esc(msg)));
+          }, function () { /* the box already says it is reading */ });
+        }
+
+        A.wireDrop('cmp-drop', 'cmp-file', 'cmp-pick', readBenchmark);
+        wirePaste('cmp', function (text, nm) { readBenchmark(pastedFile(text, nm)); });
       }
       /* Rebuilt box, or a rebuilt list of names: either way the picker has to
          come back, or switching benchmark once removes the ability to switch
@@ -3186,6 +3356,11 @@
       c.addEventListener('click', function () { resetSource(c.dataset.source); });
     });
     A.wireDrop('f-drop', 'f-file', 'f-pick', loadFundFile);
+    /* The fund path's box is written in the markup rather than built, so its
+       idle hint has to be registered before any state can be drawn over it
+       and then restored. */
+    DROP_HINT.f = 'CSV or Excel &middot; a date column and a NAV column is all it needs';
+    wirePaste('f', function (text, nm) { loadFundFile(pastedFile(text, nm)); });
     try { wireFundSearch(); } catch (e) { /* optional; never fatal */ }
     $('#r-compare').addEventListener('change', function () {
       $('#step-compare').dataset.done = this.value !== 'none' ? 'yes' : 'no';
@@ -3229,7 +3404,9 @@
       setSource(null);
       clearLoaded('');
       $('#r-loaded').innerHTML = '';
-      $('#r-index').value = '';
+      var isel = $('#r-index');
+      if (isel) isel.value = '';
+      ['bm', 'cmp', 'f'].forEach(clearDropStatus);
       var ov = $('#r-overlap-note');
       if (ov) ov.innerHTML = '';
       var cn = $('#cmp-note');

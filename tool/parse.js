@@ -143,46 +143,173 @@
 
   /* --------------------------------------------------------------- columns */
 
+  /* Headings that name a NUMBER which is not a price.
+   *
+   * Every one of these was found in a real file. NSE's own index export ships
+   * thirteen columns, nine of them numeric, and only one of the nine is the
+   * index value; a reader that takes "the first numeric column" out of it
+   * produces a rolling return on traded volume. */
+  var NOT_VALUE = [
+    /\bvolumes?\b|\bvol\.?$|\bqty\b|\bquantit(y|ies)\b|\bshares\b|\bcontracts\b/,
+    /\bturnover\b/,
+    /\bchange\b|\bchg\b|\bpoints?\b|\bpct\b|%|\byield\b|\bratio\b/,
+    /\bp\s*\/\s*e\b|\bp\s*\/\s*b\b|\bpe\b|\bpb\b|\bdiv(idend)?\b/,
+    /\bcode\b|\bisin\b|\bfolio\b|\baccount\b/,
+    /\b(id|no|num|number|sr|srno|s\.no)\b/,
+    /\bunits?\b|\bbalance\b/
+  ];
+
+  /* Which numeric column is the price, when a file offers several.
+   *
+   * Earlier is better. The list is ordered by how specifically the heading
+   * commits to being a closing price: "Closing Index Value" beats "Open Index
+   * Value" beats a bare "Value", and a total-return index beats all of them
+   * because it is the one this tool actually asks for. */
+  var VALUE_RANK = [
+    /\bnet asset value\b|\bnav\b/,
+    /\btotal returns? index\b|\btri\b/,
+    /\bclos(e|ing)\b[^,]*\bindex\b|\bindex\b[^,]*\bclos(e|ing)\b/,
+    /\badj(usted)?\.?\s*clos(e|ing)\b/,
+    /\bclos(e|ing)\b/,
+    /\bindex\s*value\b/,
+    /\bprice\b/,
+    /\bvalue\b/,
+    /\bopen\b|\bhigh\b|\blow\b/
+  ];
+
+  function headingRank(list, h) {
+    for (var i = 0; i < list.length; i++) if (list[i].test(h)) return i;
+    return null;
+  }
+
+  /* What is actually IN each column, which is the only thing that settles what
+   * a column is. A heading says what a column is for. */
+  function columnProfile(rows) {
+    var probe = rows.slice(0, 60);
+    var width = 0;
+    probe.forEach(function (r) { if (r && r.length > width) width = r.length; });
+    /* Two filled cells before a column is worth an opinion -- unless there
+       are not two rows. A bulk file filtered down to one scheme's single day
+       is still a readable table; it is just a table with nothing to measure,
+       which is a different refusal and a much more useful one than "no
+       columns found". */
+    var need = Math.min(2, probe.length);
+    var out = [];
+    for (var c = 0; c < width; c++) {
+      var filled = 0, dates = 0, numbers = 0, positive = 0;
+      for (var r = 0; r < probe.length; r++) {
+        var cell = probe[r] ? probe[r][c] : null;
+        if (cell == null || String(cell).trim() === '') continue;
+        filled++;
+        if (!isNaN(toTimestamp(parseDateParts(cell, true)))) { dates++; continue; }
+        var n = parseNumber(cell);
+        if (isFinite(n)) { numbers++; if (n > 0) positive++; }
+      }
+      out.push({
+        index: c, filled: filled, dates: dates, numbers: numbers, positive: positive,
+        isDates: filled >= need && dates >= filled * 0.6,
+        /* Prices are positive. A column of positive numbers is a candidate; a
+           column that is 40% negative is a change or a points move. */
+        isPrices: filled >= need && numbers >= filled * 0.6 && positive >= filled * 0.6
+      });
+    }
+    return out;
+  }
+
+  /* Two columns out of however many the file has.
+   *
+   * The rule, and it is the whole fix: CONTENT DECIDES WHETHER, HEADINGS
+   * DECIDE WHICH. A column is eligible only if its own cells parse as dates,
+   * or as positive numbers; among the eligible ones the heading picks the
+   * best. It used to be the other way round -- the first heading matching
+   * /index/ won outright -- and on NSE's own export that is "Index Name", a
+   * column of the words "Nifty 50 TRI", which the file was then refused for
+   * not containing numbers. The most obvious legitimate file for this screen
+   * could not be uploaded. */
+  function pickColumns(rows, headerRow) {
+    var prof = columnProfile(rows);
+    var lower = headerRow
+      ? headerRow.map(function (h) { return String(h == null ? '' : h).toLowerCase().trim(); })
+      : null;
+
+    function heading(c) { return lower && lower[c] != null ? lower[c] : ''; }
+
+    /* ---- the date column */
+    var dateCol = -1, bestDate = 1e9;
+    prof.forEach(function (col) {
+      if (!col.isDates) return;
+      var h = heading(col.index);
+      var score = DATE_HEADERS.indexOf(h) !== -1 ? 0
+                : /\bdate\b|\bas on\b|\bperiod\b|\bday\b/.test(h) ? 1
+                : /date/.test(h) ? 2
+                : 50 + col.index;      /* no opinion: leftmost date column */
+      if (score < bestDate) { bestDate = score; dateCol = col.index; }
+    });
+
+    /* ---- the value column */
+    var valueCol = -1, bestValue = 1e9;
+    prof.forEach(function (col) {
+      if (col.index === dateCol || !col.isPrices) return;
+      var h = heading(col.index);
+      var score;
+      if (lower && VALUE_HEADERS.indexOf(h) !== -1) score = -1;         /* named exactly */
+      else {
+        var rank = lower ? headingRank(VALUE_RANK, h) : null;
+        if (rank !== null) score = rank;
+        else if (lower && h && headingRank(NOT_VALUE, h) !== null) score = 900 + col.index;
+        else score = 100 + col.index;
+      }
+      /* A heading that names something else loses even to an unnamed column,
+         but is still better than having no value column at all. */
+      if (score < bestValue) { bestValue = score; valueCol = col.index; }
+    });
+
+    return { dateCol: dateCol, valueCol: valueCol };
+  }
+
+  /* Where the headings actually are.
+   *
+   * Downloaded files do not start with their header row. NSE puts a title and
+   * a period above it, fund houses put a logo row, and an .xlsx exported from
+   * a report puts both. Only row 1 was ever examined, so those files fell
+   * through to shape detection and were read by luck or refused.
+   *
+   * A candidate is accepted only if TAKING it as the header produces a date
+   * column and a value column that verify against the rows below it. That
+   * makes the detection self-checking: a data row that happens to contain the
+   * word "value" cannot pass, because the rows under it will not line up. */
+  var HEADER_SEARCH_ROWS = 20;
+
+  function findHeader(rows) {
+    var limit = Math.min(rows.length, HEADER_SEARCH_ROWS);
+    var fallback = null;
+    for (var i = 0; i < limit; i++) {
+      if (!looksLikeHeader(rows[i])) continue;
+      var body = rows.slice(i + 1);
+      if (!body.length) continue;
+      /* Kept even though its columns may not check out. A row that reads as a
+         header IS the header; whether the rows under it hold what it claims is
+         a separate question, and it is the question worth answering. Throwing
+         the header away here left the refusal unable to say "the column you
+         called NAV holds text" -- it could only say it found no columns. */
+      if (fallback === null) fallback = { index: i, header: rows[i], body: body };
+      if (body.length < 2) continue;
+      var cols = pickColumns(body, rows[i]);
+      if (cols.dateCol !== -1 && cols.valueCol !== -1 && cols.dateCol !== cols.valueCol) {
+        return { index: i, header: rows[i], body: body };
+      }
+    }
+    /* No header-shaped row at all. Everything is data and shape decides, which
+       is how AMFI's headerless bulk files have always been read. */
+    return fallback || { index: -1, header: null, body: rows };
+  }
+
   function looksLikeHeader(row) {
     if (!row) return false;
     var text = row.join(' ').toLowerCase();
     var named = DATE_HEADERS.concat(VALUE_HEADERS).some(function (h) { return text.indexOf(h) !== -1; });
     var mostlyText = row.filter(function (c) { return c !== '' && isNaN(parseNumber(c)); }).length >= Math.ceil(row.length / 2);
     return named && mostlyText;
-  }
-
-  function pickColumns(rows, headerRow) {
-    var dateCol = -1, valueCol = -1;
-    if (headerRow) {
-      var lower = headerRow.map(function (h) { return String(h).toLowerCase().trim(); });
-      lower.forEach(function (h, i) {
-        if (dateCol === -1 && DATE_HEADERS.indexOf(h) !== -1) dateCol = i;
-        if (valueCol === -1 && VALUE_HEADERS.indexOf(h) !== -1) valueCol = i;
-      });
-      if (dateCol === -1) lower.forEach(function (h, i) { if (dateCol === -1 && /date/.test(h)) dateCol = i; });
-      if (valueCol === -1) lower.forEach(function (h, i) {
-        if (valueCol === -1 && /(nav|close|value|price|index)/.test(h) && i !== dateCol) valueCol = i;
-      });
-    }
-    if (dateCol === -1 || valueCol === -1) {
-      /* fall back to shape: the column that parses as dates, and the last
-         column that parses as positive numbers */
-      var probe = rows.slice(0, 40);
-      var width = Math.max.apply(null, probe.map(function (r) { return r.length; }));
-      for (var c = 0; c < width; c++) {
-        var dates = 0, nums = 0;
-        for (var r = 0; r < probe.length; r++) {
-          var cell = probe[r][c];
-          if (cell == null || cell === '') continue;
-          if (toTimestamp(parseDateParts(cell, true)) === toTimestamp(parseDateParts(cell, true)) &&
-              !isNaN(toTimestamp(parseDateParts(cell, true)))) dates++;
-          else if (!isNaN(parseNumber(cell))) nums++;
-        }
-        if (dateCol === -1 && dates >= Math.max(2, probe.length * 0.6)) dateCol = c;
-        else if (nums >= Math.max(2, probe.length * 0.6)) valueCol = c;
-      }
-    }
-    return { dateCol: dateCol, valueCol: valueCol };
   }
 
   /* What each column looks like, so a reader can be shown the file rather than
@@ -270,8 +397,9 @@
     if (!rows || !rows.length) {
       return fail('EMPTY', 'That file has no rows in it that could be read.');
     }
-    var header = looksLikeHeader(rows[0]) ? rows[0] : null;
-    var body = header ? rows.slice(1) : rows;
+    var found = findHeader(rows);
+    var header = found.header;
+    var body = found.body;
     if (!body.length) {
       return fail('EMPTY', 'That file has no rows in it that could be read.');
     }
@@ -314,9 +442,47 @@
     /* 3. A date column and a numeric value column, or there is nothing to read. */
     var cols = pickColumns(body, header);
     if (cols.dateCol === -1 || cols.valueCol === -1) {
+      /* This is NOT a tradebook and must not be called one.
+       *
+       * It used to be: this branch returned TRADEBOOK_COPY, so a PDF, a
+       * picture, an empty sheet and a file with one column all told the
+       * reader their file "contains trade logs or transaction records" -- a
+       * confident, specific and completely wrong diagnosis, and one that
+       * gives them nothing to fix. What is true is only that the two columns
+       * could not be found, so that is what it says, and it says which of the
+       * two was missing. */
+      var prof = columnProfile(body);
+      var anyDate = prof.some(function (c) { return c.isDates; });
+      var anyPrice = prof.some(function (c) { return c.isPrices; });
+
+      /* A column HEADED as the price, holding something that is not one.
+       *
+       * This is a different fault from "no price column here", and it is the
+       * one the reader can actually act on: they know which column they meant,
+       * and the file disagrees with them about what is in it. Naming that
+       * column is the whole of the fix, so it gets its own sentence rather
+       * than being folded into the general refusal. */
+      if (anyDate && !anyPrice && header) {
+        var named = -1;
+        for (var vh = 0; vh < header.length; vh++) {
+          var hh = String(header[vh] == null ? '' : header[vh]).toLowerCase().trim();
+          if (!hh) continue;
+          if (VALUE_HEADERS.indexOf(hh) !== -1 || headingRank(VALUE_RANK, hh) !== null) {
+            if (headingRank(NOT_VALUE, hh) === null) { named = vh; break; }
+          }
+        }
+        if (named !== -1) {
+          return { ok: false, code: 'NOT_NUMERIC',
+                   detected: [String(header[named]).trim()],
+                   columns: columnSummary(body, header),
+                   message: NOT_NUMERIC_COPY };
+        }
+      }
       return { ok: false, code: 'NO_SCHEMA',
                detected: header ? header.filter(Boolean).map(String) : [],
-               message: TRADEBOOK_COPY };
+               missing: !anyDate && !anyPrice ? 'both' : !anyDate ? 'date' : 'value',
+               columns: columnSummary(body, header),
+               message: noSchemaCopy(anyDate, anyPrice) };
     }
 
     /* 4. And the value column has to hold NUMBERS.
@@ -341,6 +507,38 @@
 
     return { ok: true, header: header, dateCol: cols.dateCol, valueCol: cols.valueCol };
   }
+
+  /* Three different faults, three different sentences.
+   *
+   * The specification writes one red banner, for a tradebook. Everything that
+   * is not a tradebook was getting that banner too, which is how a PDF came to
+   * be described as a trade log. A refusal that names the wrong fault is worse
+   * than a vague one: it sends the reader off to fix something that was never
+   * wrong with their file. */
+  function noSchemaCopy(anyDate, anyPrice) {
+    var need = 'This screen needs two columns: a date, and the NAV or index value on that date.';
+    if (!anyDate && !anyPrice) {
+      return 'No table could be read out of that file. ' + need +
+             ' Nothing in it read as a column of dates or a column of values — which usually ' +
+             'means it is not a spreadsheet at all, or the data sits inside a picture. ' +
+             'Save it as CSV or Excel and load that.';
+    }
+    if (!anyDate) {
+      return 'That file has values but no column of dates. ' + need +
+             ' Check that the dates are real dates rather than text, and that the file has not ' +
+             'been trimmed to a single day.';
+    }
+    return 'That file has dates but no column of prices. ' + need +
+           ' A column of units, order quantities or percentage changes is not a price. ' +
+           'Load a file that carries the NAV or the index value itself.';
+  }
+
+  var NOT_TABULAR_COPY =
+    'That file is not a spreadsheet. This screen reads a table of dates and values, and a PDF ' +
+    'stores its numbers as page layout rather than as columns, so there is nothing here that can ' +
+    'read one reliably — and a number read wrongly out of a PDF would be silently wrong. ' +
+    'Open the statement in Excel or your fund house’s portal and download the same history as ' +
+    'CSV or Excel, or copy the two columns and paste them in.';
 
   /* Section 3 of the specification, transcribed. */
   var TRADEBOOK_COPY =
@@ -407,8 +605,11 @@
     if (!rows || rows.length < 2) {
       return { ok: false, code: 'EMPTY', message: 'That file has no rows in it that could be read.' };
     }
-    var header = looksLikeHeader(rows[0]) ? rows[0] : null;
-    var body = header ? rows.slice(1) : rows;
+    /* The header can be on any of the first twenty rows, not only the first.
+       See findHeader: a downloaded file usually puts a title above it. */
+    var found = findHeader(rows);
+    var header = found.header;
+    var body = found.body;
 
     /* one file, many schemes: keep only the one asked for */
     var schemeCol = pickSchemeColumn(header, body);
@@ -568,6 +769,7 @@
     detectDelimiter: detectDelimiter,
     parseDelimited: parseDelimited,
     checkSchema: checkSchema, TRADEBOOK_COPY: TRADEBOOK_COPY, NOT_NUMERIC_COPY: NOT_NUMERIC_COPY,
+    NOT_TABULAR_COPY: NOT_TABULAR_COPY, findHeader: findHeader, columnProfile: columnProfile,
     parseNumber: parseNumber,
     parseDateParts: parseDateParts,
     toTimestamp: toTimestamp,

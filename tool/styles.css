@@ -619,6 +619,65 @@ svg .zero { stroke: var(--line-strong); stroke-width: 2; }
 .filebox p { margin: .5rem 0 0; font-size: .9375rem; color: var(--ink-3); }
 input[type="file"] { display: none; }
 
+/* The box answers for itself.
+ *
+ * Choosing a file used to change nothing where the reader was looking: the
+ * only confirmation was a notice further down the page, so the way to find
+ * out whether the file had been taken was to scroll and hope. These three
+ * states put the answer under the cursor that asked the question. */
+.filebox.loaded, .filebox.refused, .filebox.working {
+  border-style: solid; text-align: left;
+  display: flex; flex-wrap: wrap; align-items: center; gap: .75rem 1rem;
+  padding: 1rem;
+}
+.filebox.loaded  { border-color: var(--good); background: var(--surface); }
+.filebox.refused { border-color: var(--critical); background: var(--surface); }
+.filebox.working { border-color: var(--line-strong); background: var(--surface); }
+
+.fileok { display: flex; align-items: flex-start; gap: .7rem; flex: 1 1 12rem; min-width: 0; }
+.fileok-ic {
+  flex: none; display: grid; place-items: center;
+  width: 2rem; height: 2rem; border-radius: 50%;
+  font-size: 1.05rem; font-weight: 700; line-height: 1;
+}
+.filebox.loaded  .fileok-ic { background: var(--good); color: var(--accent-ink); }
+.filebox.refused .fileok-ic { background: var(--critical); color: var(--accent-ink); }
+.filebox.working .fileok-ic { background: var(--surface-2); border: 1px solid var(--line-strong); }
+.fileok-t { display: block; min-width: 0; }
+.fileok-name {
+  display: block; font-size: .97rem; color: var(--ink); line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.fileok-sub { display: block; margin-top: .15rem; font-size: .86rem; color: var(--ink-2); line-height: 1.45; }
+.fileok-sub .ok-word  { color: var(--good); }
+.fileok-sub .bad-word { color: var(--critical); }
+.filebox.loaded > button, .filebox.refused > button, .filebox.working > button { flex: none; margin: 0; }
+
+/* A ring rather than a spinner where motion is switched off: the state is
+   still legible, it simply does not turn. */
+.spin {
+  display: block; width: 1.05rem; height: 1.05rem; border-radius: 50%;
+  border: 2px solid var(--line-strong); border-top-color: var(--accent);
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+
+/* The third way in. Folded away, because most readers have a file. */
+.pastebox {
+  margin: .7rem 0 0; padding: .9rem; border: 1px solid var(--line-strong);
+  border-radius: var(--radius); background: var(--surface-2);
+}
+.pastebox textarea {
+  width: 100%; box-sizing: border-box; margin-top: .35rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: .86rem; line-height: 1.5;
+  background: var(--bg); color: var(--ink);
+  border: 1px solid var(--line-strong); border-radius: 8px; padding: .6rem .7rem;
+}
+.pastebox textarea:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.pastebox .btnrow { margin: .6rem 0 0; }
+
 /* A file can hold thousands of funds. A native dropdown of that length is a
    scroll wheel with no search, so the list is filtered as the reader types. */
 .picker { display: grid; gap: .35rem; max-height: 21rem; overflow-y: auto; margin-bottom: .6rem; }

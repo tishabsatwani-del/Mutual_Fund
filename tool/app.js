@@ -253,12 +253,75 @@
 
   /* ------------------------------------------------------------ file intake */
 
+  /* Is this text at all?
+   *
+   * A PDF handed to FileReader.readAsText comes back as its own bytes read as
+   * characters: "%PDF-1.7", a compressed stream, and a few thousand control
+   * codes. Split on commas that is a table of nonsense, and every reader
+   * downstream then reports something confident about it -- which is how a
+   * bank statement came to be described as containing trade logs.
+   *
+   * So the question "is this a spreadsheet" is answered before anything tries
+   * to read one out of it. */
+  function looksBinary(text) {
+    var head = String(text == null ? '' : text).slice(0, 4096);
+    if (!head) return null;
+    if (head.slice(0, 5) === '%PDF-') return 'pdf';
+    if (head.slice(0, 2) === 'PK' && head.charCodeAt(2) === 3 && head.charCodeAt(3) === 4) return 'zip';
+    if (head.slice(0, 4) === '\xD0\xCF\x11\xE0') return 'oldexcel';
+    var bad = 0;
+    for (var i = 0; i < head.length; i++) {
+      var c = head.charCodeAt(i);
+      if (c === 9 || c === 10 || c === 13) continue;
+      if (c < 32 || c === 0xFFFD) bad++;
+    }
+    return bad > head.length * 0.05 ? 'binary' : null;
+  }
+
+  var BINARY_COPY = {
+    zip: 'That file is a zip archive rather than a spreadsheet. If it is an Excel workbook, give ' +
+         'it back its .xlsx ending and load it again; if it is a folder of files, unzip it first ' +
+         'and load the one holding the history.',
+    oldexcel: 'That is an old .xls workbook, which this tool cannot open. Open it in Excel or ' +
+              'Google Sheets and save it as .xlsx or CSV, then load that.',
+    binary: 'That file is not a spreadsheet — it is not text at all. This screen reads a table of ' +
+            'dates and values, so load a CSV or Excel file, or copy the two columns and paste them in.'
+  };
+
   function readFile(file, onSeries, onError, onProgress) {
     var name = (file.name || '').toLowerCase();
+
+    /* Pasted columns arrive here exactly as a file does, so everything
+       downstream -- the schema gate, the scheme picker, the import report --
+       treats them identically and there is no second code path to keep
+       honest. */
+    if (file.pastedText != null) {
+      if (onProgress) onProgress('Reading the pasted rows\u2026');
+      try {
+        var pasteRows = P.parseDelimited(file.pastedText);
+        finish(P.rowsToSeries(pasteRows), pasteRows);
+      } catch (err) {
+        onError('Those pasted rows could not be read (' +
+                (err && err.message ? err.message : 'unknown') + ').');
+      }
+      return;
+    }
+
     if (onProgress) {
       var mb = file.size / (1024 * 1024);
       onProgress('Reading ' + file.name + (mb >= 1 ? ' (' + mb.toFixed(1) + ' MB)' : '') + '\u2026' +
         (mb > 25 ? ' This is a large file and may take a few seconds on a phone.' : ''));
+    }
+    /* Named before it is opened, because the answer is the same either way and
+       a reader should not wait for a 20 MB statement to be read to be told it
+       is a PDF. */
+    if (/\.pdf$/.test(name)) { onError(P.NOT_TABULAR_COPY); return; }
+    if (/\.xls$/.test(name)) { onError(BINARY_COPY.oldexcel); return; }
+    if (/\.(docx?|pptx?|png|jpe?g|gif|zip|rar|7z)$/.test(name)) {
+      onError('That is a ' + name.replace(/^.*\./, '.') + ' file. This screen reads a table of ' +
+              'dates and values, so load a CSV or Excel file, or copy the two columns and paste ' +
+              'them in.');
+      return;
     }
     if (/\.xlsx?$/.test(name)) {
       readWorkbook(file).then(function (rows) {
@@ -271,6 +334,11 @@
     var fr = new FileReader();
     fr.onerror = function () { onError('That file could not be opened.'); };
     fr.onload = function () {
+      /* Sniffed rather than trusted to the extension: a PDF saved as .csv is
+         still a PDF, and it is the contents that decide what can be read. */
+      var kind = looksBinary(fr.result);
+      if (kind === 'pdf') { onError(P.NOT_TABULAR_COPY); return; }
+      if (kind) { onError(BINARY_COPY[kind] || BINARY_COPY.binary); return; }
       try {
         var rows = P.parseDelimited(fr.result);
         finish(P.rowsToSeries(rows), rows);
@@ -327,7 +395,14 @@
     drop.addEventListener('drop', function (e) {
       if (e.dataTransfer.files && e.dataTransfer.files[0]) handler(e.dataTransfer.files[0]);
     });
-    input.addEventListener('change', function () { if (input.files[0]) handler(input.files[0]); });
+    input.addEventListener('change', function () {
+      var chosen = input.files[0];
+      /* Cleared so that choosing the SAME file again fires change again. A
+         reader who fixes their spreadsheet and re-picks it otherwise gets
+         nothing at all, and no way to tell whether the tool saw the click. */
+      input.value = '';
+      if (chosen) handler(chosen);
+    });
   }
 
   window.PRCApp = {

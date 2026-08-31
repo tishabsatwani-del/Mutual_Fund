@@ -121,7 +121,10 @@ function textValueFile(file) {
   section('Section 7 · Tradebook Rejection Test');
   await page.setInputFiles('#bm-file', trades);
   await page.waitForTimeout(1200);
-  const refusal = flat(await page.locator('#r-loaded').innerText());
+  /* The reason sits directly under the box that was clicked, not in a notice
+     further down the page. Finding out whether a file was taken must not
+     require scrolling. */
+  const refusal = flat(await page.locator('#bm-status').innerText());
   ok('a tradebook at Card A is refused',
      /trade logs or transaction records instead of historical NAV\/Index values/.test(refusal),
      refusal.slice(0, 200));
@@ -133,7 +136,14 @@ function textValueFile(file) {
      /Trade Type/.test(refusal) && /Quantity/.test(refusal) && /Order ID/.test(refusal),
      refusal);
   ok('the refusal is drawn in the refusing colour, not as information',
-     (await page.locator('#r-loaded .notice.bad').count()) === 1);
+     (await page.locator('#bm-status .notice.bad').count()) === 1);
+  ok('and the box itself says the file was not added',
+     (await page.locator('#bm-drop.refused').count()) === 1 &&
+     /Not added/.test(await page.locator('#bm-drop').innerText()),
+     await page.locator('#bm-drop').innerText());
+  ok('naming the file the reader chose, so there is no doubt which one',
+     /spec-tradebook\.csv/.test(await page.locator('#bm-drop').innerText()),
+     await page.locator('#bm-drop').innerText());
   ok('nothing was loaded, so the configurator stays shut',
      await page.locator('#r-run').isDisabled() &&
      await page.locator('#r-start').isDisabled() &&
@@ -145,7 +155,7 @@ function textValueFile(file) {
   await page.waitForTimeout(1500);
   await page.setInputFiles('#cmp-file', trades);
   await page.waitForTimeout(1200);
-  const refusalB = flat(await page.locator('#cmp-note').innerText());
+  const refusalB = flat(await page.locator('#cmp-status').innerText());
   ok('a tradebook at Card B is refused too',
      /trade logs or transaction records/.test(refusalB), refusalB.slice(0, 160));
   ok('and no benchmark was adopted from it',
@@ -157,7 +167,7 @@ function textValueFile(file) {
   await openIndexPath();
   await page.setInputFiles('#bm-file', textNav);
   await page.waitForTimeout(1200);
-  const mismatch = flat(await page.locator('#r-loaded').innerText());
+  const mismatch = flat(await page.locator('#bm-status').innerText());
   ok('text under a NAV heading halts processing',
      /does not hold numbers/.test(mismatch), mismatch.slice(0, 200));
   ok('and it is not called a trade log, because it is not one',
