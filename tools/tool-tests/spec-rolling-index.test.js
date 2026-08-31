@@ -73,6 +73,9 @@ function textValueFile(file) {
   const primary   = navFile(TMP + '/spec-primary.csv', 0.14, 2015, 2025, 100);
   const bench     = navFile(TMP + '/spec-bench.csv',   0.10, 2018, 2025, 1000, 'Date,Index Value');
   const benchLong = navFile(TMP + '/spec-bench-long.csv', 0.10, 2015, 2025, 1000, 'Date,Index Value');
+  /* Named so the tool can read what kind of index it is out of the file. */
+  const benchTRI = navFile(TMP + '/nifty-50-tri.csv', 0.10, 2015, 2025, 1000, 'Date,Index Value');
+  const benchPRI = navFile(TMP + '/nifty-50-price-return-index.csv', 0.085, 2015, 2025, 1000, 'Date,Index Value');
   const long20    = navFile(TMP + '/spec-long20.csv',  0.12, 2005, 2025, 100);
   const trades    = tradebookFile(TMP + '/spec-tradebook.csv');
   const textNav   = textValueFile(TMP + '/spec-textnav.csv');
@@ -511,6 +514,89 @@ function textValueFile(file) {
   ok('and the evidence line carries the years instead of a word',
      /History behind these figures [\d.]+ years/.test(graded),
      (graded.match(/History behind these figures[^A-Z]{0,30}/) || [''])[0]);
+
+  section('Total return, or price return — established, not asserted');
+  await openIndexPath();
+  await page.setInputFiles('#bm-file', primary);
+  await page.waitForTimeout(2000);
+  await page.setInputFiles('#cmp-file', benchLong);
+  await page.waitForTimeout(2000);
+  ok('the screen asks which kind of index was loaded',
+     await page.locator('#cmp-kind-chips').isVisible());
+  const kinds = await page.locator('#cmp-kind-chips .chip').allInnerTexts();
+  ok('offering exactly the two that matter',
+     kinds.join('|') === 'Total Return Index — dividends included|Price index — dividends excluded',
+     kinds.join('|'));
+  ok('and a file whose name says nothing leaves it unanswered',
+     (await page.locator('#cmp-kind-chips .chip[aria-checked="true"]').count()) === 0);
+  ok('saying plainly that it has not been established, and why that matters',
+     /Not established/.test(await page.locator('#cmp-kind-why').innerText()) &&
+     /dividends the index leaves out/.test(await page.locator('#cmp-kind-why').innerText()),
+     flat(await page.locator('#cmp-kind-why').innerText()));
+
+  await page.click('#r-run');
+  await page.waitForTimeout(2000);
+  let k = flat(await page.locator('#r-out').innerText());
+  ok('the results do not claim it counts dividends',
+     !/a total return index — dividends included/i.test(k), k.slice(0, 200));
+  ok('they say it is not established',
+     /not established — say which in step 4/i.test(k),
+     (k.match(/.{0,60}not established.{0,60}/i) || [''])[0]);
+  ok('and the summary table warns the outperformance row may be inflated',
+     /It has not been established whether the benchmark counts dividends/i.test(k),
+     k.slice(0, 200));
+
+  /* Answer it, and the screen follows the answer. */
+  await page.locator('#cmp-kind-chips .chip[data-kind="PRICE"]').click();
+  await page.waitForTimeout(1800);
+  k = flat(await page.locator('#r-out').innerText());
+  ok('a price index is described as one',
+     /a price index — dividends excluded/i.test(k),
+     (k.match(/.{0,50}price index.{0,60}/i) || [''])[0]);
+  ok('and the reader is told the gap is flattered, with the size of it',
+     /flattered here by roughly the market’s dividend yield/i.test(k) &&
+     /1 to 1\.5 points/.test(k), k.slice(0, 200));
+  ok('the summary table carries it too, where the outperformance row is',
+     /The benchmark column excludes dividends/i.test(k), k.slice(0, 200));
+  ok('and the reason is stated at the control as well',
+     /flatters the fund by roughly the market’s dividend yield/i
+       .test(await page.locator('#cmp-kind-why').innerText()),
+     flat(await page.locator('#cmp-kind-why').innerText()));
+
+  await page.locator('#cmp-kind-chips .chip[data-kind="TRI"]').click();
+  await page.waitForTimeout(1800);
+  k = flat(await page.locator('#r-out').innerText());
+  ok('answering TRI removes the caveat rather than leaving both on screen',
+     /a total return index — dividends included/i.test(k) &&
+     !/flattered here by roughly/i.test(k) &&
+     !/not been established whether/i.test(k), k.slice(0, 220));
+
+  section('A file that names itself is read, not asked about');
+  await openIndexPath();
+  await page.setInputFiles('#bm-file', primary);
+  await page.waitForTimeout(2000);
+  await page.setInputFiles('#cmp-file', benchTRI);
+  await page.waitForTimeout(2000);
+  ok('“nifty-50-tri” is taken as a total return index',
+     (await page.locator('#cmp-kind-chips .chip[data-kind="TRI"]').getAttribute('aria-checked')) === 'true',
+     await page.locator('#cmp-kind-chips').innerText());
+  ok('and the screen says where it got that from, so it can be corrected',
+     /Read from the name of the file you loaded/.test(await page.locator('#cmp-kind-why').innerText()),
+     flat(await page.locator('#cmp-kind-why').innerText()));
+
+  await openIndexPath();
+  await page.setInputFiles('#bm-file', primary);
+  await page.waitForTimeout(2000);
+  await page.setInputFiles('#cmp-file', benchPRI);
+  await page.waitForTimeout(2000);
+  ok('“price-return-index” is taken as a price index, not as a TRI',
+     (await page.locator('#cmp-kind-chips .chip[data-kind="PRICE"]').getAttribute('aria-checked')) === 'true',
+     await page.locator('#cmp-kind-chips').innerText());
+  await page.click('#r-run');
+  await page.waitForTimeout(2000);
+  ok('so the caveat is on the screen without anybody having been asked',
+     /excludes dividends/i.test(flat(await page.locator('#r-out').innerText())),
+     flat(await page.locator('#r-out').innerText()).slice(0, 200));
 
   /* ================================= THE FUND PATH IS NOT IN SCOPE AND IS NOT TOUCHED */
   section('The other source path is left exactly as it was');

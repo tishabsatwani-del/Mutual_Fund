@@ -877,6 +877,38 @@ ok('a single window has no spread to report', full.stats.stdev === null,
 eq('and its worst and best are the same window', full.worst.t, full.best.t);
 
 
+section('Reading TRI or PRI out of a file’s own name');
+/* The screen asks when it cannot tell, so the only thing that must never
+ * happen is a WRONG confident answer -- and the wrong answer in the flattering
+ * direction is calling a price index a total return one. Every case below is
+ * a name a provider or a browser actually produces. */
+function kindOf(name) {
+  var TRI = /\b(tri|total\s*returns?\s*index|total\s*returns?)\b/i;
+  var PRI = /\b(pri|price\s*returns?\s*index|price\s*returns?|price\s*index)\b/i;
+  var t = String(name).replace(/[_.\-]+/g, ' ');
+  if (PRI.test(t) && !TRI.test(t)) return 'PRICE';
+  if (TRI.test(t)) return 'TRI';
+  return null;
+}
+[['Nifty 50 TRI', 'TRI'],
+ ['nse-nifty50-tri', 'TRI'],
+ ['Nifty Midcap 150 TRI', 'TRI'],
+ ['Nifty 50 Total Returns Index', 'TRI'],
+ ['bse_500_total_return', 'TRI'],
+ ['nifty-50-price-return-index', 'PRICE'],
+ ['nifty_50_pri', 'PRICE'],
+ ['sensex-price-index', 'PRICE'],
+ ['NIFTY 50', null],
+ ['sensex', null],
+ ['my portfolio', null],
+ /* "Tri" inside a word is not the abbreviation. */
+ ['Triveni Fund', null],
+ ['Nutrition Index', null]
+].forEach(function (pair) {
+  eq('“' + pair[0] + '” reads as ' + (pair[1] || 'unknown'), kindOf(pair[0]), pair[1]);
+});
+
+
 console.log('\n' + passed + ' passed, ' + failed.length + ' failed');
 if (failed.length) {
   console.log('\nFAILED:\n  ' + failed.join('\n  '));

@@ -1545,7 +1545,8 @@
         var cmp = E.compareRolling(series, compareSeries, years, calc);
         if (cmp.ok) paired = cmp;
       }
-      html += statisticalSummary(r, years, paired, compareName, calc);
+      html += statisticalSummary(r, years, paired, compareName, calc,
+                                 compareSeries ? (compareMeta || null) : null);
       html += factualInsights(r, years, paired, compareName);
     }
 
@@ -1610,7 +1611,8 @@
     html += rateCheckCard(key, years, r.values);
 
     if (compareSeries) {
-      html += comparisonCards(series, compareSeries, years, meta.name, compareName, compareMeta);
+      html += comparisonCards(series, compareSeries, years, meta.name, compareName,
+                              compareMeta, calc);
     }
 
     html += '<div class="meaning"><h3>What this means</h3>' +
@@ -1659,7 +1661,7 @@
    * the two were measured over different stretches of history is the exact
    * mistake this table is meant to stop, so it is not offered as an option.
    */
-  function statisticalSummary(r, years, paired, compareName, calc) {
+  function statisticalSummary(r, years, paired, compareName, calc, compareMeta) {
     var have = !!paired;
     var f = have ? paired.fund : r.stats;
     var b = have ? paired.bench : null;
@@ -1722,6 +1724,17 @@
       '<p>Every figure is a description of the dates in these files. None of them is a ' +
       'probability, a forecast, or a statement about any fund outside this data. The windows ' +
       'overlap, so they are not independent observations however many of them there are.</p>' +
+      /* The outperformance row is the one a price index quietly inflates, and
+         it is on this table, so the caveat belongs on this table too rather
+         than only on the comparison card further down. */
+      (have && compareMeta && compareMeta.kind === 'PRICE'
+        ? '<p><strong>The benchmark column excludes dividends.</strong> A fund\u2019s NAV includes ' +
+          'them, so the outperformance row overstates the gap by roughly the market\u2019s ' +
+          'dividend yield \u2014 about 1 to 1.5 points a year.</p>' : '') +
+      (have && compareMeta && compareMeta.kind == null
+        ? '<p><strong>It has not been established whether the benchmark counts dividends.</strong> ' +
+          'If it does not, the outperformance row overstates the gap by roughly the market\u2019s ' +
+          'dividend yield. Say which it is in step 4.</p>' : '') +
       '</div></div>';
     return html;
   }
@@ -1980,8 +1993,11 @@
   /* Every window both series can cover, paired by start date. One end-to-end
    * number can be an accident of where it started; how often one led the other
    * cannot. */
-  function comparisonCards(series, compareSeries, years, name, compareName, compareMeta) {
-    var c = E.compareRolling(series, compareSeries, years);
+  function comparisonCards(series, compareSeries, years, name, compareName, compareMeta, calc) {
+    /* The frequency has to reach here, or this card measures a different set
+       of windows from the summary above it. Same defect as windowed(): the
+       options argument was simply not passed. */
+    var c = E.compareRolling(series, compareSeries, years, calc || {});
     if (!c.ok) {
       return '<div class="card">' + notice('bad', esc(c.message)) + '</div>';
     }
@@ -2012,7 +2028,13 @@
       '</div>' +
       (compareMeta ? '<div class="scroll" style="margin-top:.8rem"><table class="data"><tbody>' +
         '<tr><td>' + esc(compareName) + ' is</td><td>' + (compareMeta.kind === 'PRICE'
-          ? 'a price index — dividends excluded' : 'a total return index — dividends included') +
+          ? 'a price index — dividends excluded'
+          : compareMeta.kind === 'TRI'
+            ? 'a total return index — dividends included'
+            /* Never guessed. The old code had two branches and no third, so an
+               index nobody had established anything about was described as a
+               total return index -- the reassuring answer, asserted. */
+            : 'not established — say which in step 4') +
         '</td></tr>' +
         (compareMeta.firstDate ? '<tr><td>Its own data covers</td><td>' + esc(compareMeta.firstDate) +
           ' to ' + esc(compareMeta.lastDate) + '</td></tr>' : '') +
@@ -2020,8 +2042,15 @@
         '</tbody></table></div>' : '') +
       '<div class="meaning"><h3>What it does not mean</h3>' +
       (compareMeta && compareMeta.kind === 'PRICE'
-        ? '<p>This index excludes dividends while a fund\u2019s NAV includes them, so the fund is ' +
-          'flattered here by roughly the market\u2019s dividend yield each year.</p>' : '') +
+        ? '<p><strong>This index excludes dividends while a fund\u2019s NAV includes them.</strong> ' +
+          'The fund is flattered here by roughly the market\u2019s dividend yield each year \u2014 ' +
+          'about 1 to 1.5 points on Indian equity indices, which is larger than most of the gaps ' +
+          'this card is used to argue about.</p>' : '') +
+      (compareMeta && compareMeta.kind == null
+        ? '<p><strong>Whether this index counts dividends has not been established.</strong> If it ' +
+          'is a price index, every figure above overstates the gap by roughly the market\u2019s ' +
+          'dividend yield. Say which it is in step 4 and this line will say what follows from it.</p>'
+        : '') +
       '<p>A benchmark carries no costs, holds no cash and makes no decisions; a fund does all three. ' +
       'A benchmark comparison is a reference point, not proof that a fund is good or bad, and it says ' +
       'nothing about whether the fund suits you.</p></div></div>';
@@ -2133,6 +2162,11 @@
     bundled: {},           /* name -> series, for the comparison list */
     cmpSchemes: null,      /* a many-scheme file loaded into the benchmark slot */
     cmpRows: null,
+    /* Which kind of index each loaded benchmark is: 'TRI', 'PRICE', or null
+     * for not yet established. Card B's header asserts (TRI) and its rule
+     * tells the reader to use one; nothing checked, so a price index loaded
+     * here was silently treated as though it counted dividends. */
+    kinds: {},
     ran: false
   };
 
@@ -2819,6 +2853,7 @@
           dropZone('cmp', 'Choose an index history file',
                    'CSV or Excel &middot; a date column and the index value on that date') +
           '<div id="cmp-status" aria-live="polite"></div>' +
+          '<div id="cmp-kind"></div>' +
           pasteHtml('cmp') +
           '<div id="cmp-note" aria-live="polite"></div>' +
           /* This slot's own picker. It had none: a many-scheme file dropped
@@ -2844,6 +2879,7 @@
           $('#r-compare').value = nm;
           $('#step-compare').dataset.done = 'yes';
           overlapNote();
+          askIndexKind(nm);
           if (R.ran) runRolling();
         }
 
@@ -2918,6 +2954,7 @@
       $('#r-compare').value = nm;
       $('#step-compare').dataset.done = 'yes';
       overlapNote();
+      askIndexKind(nm);
       if (R.ran) runRolling();
     }
     showSchemePicker(schemes, {
@@ -2938,12 +2975,116 @@
     });
   }
 
+  /* ============================== TOTAL RETURN, OR PRICE RETURN?
+   *
+   * Card B's header says "(TRI)" and its rule says to use one. Both are
+   * assertions about a file the tool had never looked at.
+   *
+   * It matters more than a label. A price index leaves dividends out; a fund's
+   * NAV puts them back in. Compare the two and the fund wins by roughly the
+   * market's dividend yield before it has done anything at all -- about 1 to
+   * 1.5 points a year on Indian equity indices, which is larger than most of
+   * the gaps this screen is used to argue about. Every outperformance figure
+   * on the page inherits it, silently, and nothing downstream can detect it.
+   *
+   * So the screen establishes the fact instead of asserting it: read from the
+   * file's own name where the file says, asked where it does not, and stated
+   * as unknown until one of the two is true. */
+  var TRI_RE = /\b(tri|total\s*returns?\s*index|total\s*returns?)\b/i;
+  var PRICE_RE = /\b(pri|price\s*returns?\s*index|price\s*returns?|price\s*index)\b/i;
+
+  function guessIndexKind(name) {
+    /* Separators become spaces before anything is matched.
+     *
+     * What gets read here is usually a FILENAME, and nobody downloads
+     * "Nifty 50 Price Return Index.csv" -- they download
+     * nifty-50-price-return-index.csv or nifty_50_pri.csv. A hyphen defeats
+     * \s*, and an underscore is a word character so it defeats \b as well:
+     * before this, the first was read as a total return index and the second
+     * as nothing at all. Normalising once is simpler than teaching every
+     * pattern about punctuation, and it cannot be got half right. */
+    var t = String(name || '').replace(/[_.\-]+/g, ' ');
+    /* Price first: "Nifty 50 Price Return Index" contains neither TRI nor
+       "total return", but a file called "Nifty 50 TRI (Price adjusted)" would
+       match both and the narrower claim should not win by ordering luck. */
+    if (PRICE_RE.test(t) && !TRI_RE.test(t)) return 'PRICE';
+    if (TRI_RE.test(t)) return 'TRI';
+    return null;
+  }
+
+  function kindMeta(name) {
+    return { name: name, kind: R.kinds[name] || null };
+  }
+
+  function askIndexKind(name) {
+    var slot = $('#cmp-kind');
+    if (!slot) return;
+    if (R.source !== 'index' || !name) { slot.innerHTML = ''; return; }
+    if (!(name in R.kinds) || R.kinds[name] == null) {
+      R.kinds[name] = guessIndexKind(name);
+    }
+    var k = R.kinds[name];
+    slot.innerHTML =
+      '<div class="field" style="margin-top:1rem">' +
+        '<span class="fieldlabel" id="cmp-kind-label">Does <strong>' + esc(name) +
+          '</strong> include dividends?</span>' +
+        '<div class="chips" id="cmp-kind-chips" role="radiogroup" aria-labelledby="cmp-kind-label">' +
+          kindChip('TRI', 'Total Return Index — dividends included', k) +
+          kindChip('PRICE', 'Price index — dividends excluded', k) +
+        '</div>' +
+        '<p class="hint" id="cmp-kind-why"></p>' +
+      '</div>';
+    $$('#cmp-kind-chips .chip').forEach(function (b) {
+      b.addEventListener('click', function () {
+        R.kinds[name] = b.dataset.kind;
+        $$('#cmp-kind-chips .chip').forEach(function (c) {
+          c.setAttribute('aria-checked', String(c === b));
+        });
+        sayIndexKind(name);
+        if (R.ran) runRolling();
+      });
+    });
+    sayIndexKind(name);
+  }
+
+  function kindChip(kind, label, chosen) {
+    return '<button class="chip" type="button" role="radio" data-kind="' + kind + '" ' +
+           'data-always-on="yes" aria-checked="' + String(chosen === kind) + '">' +
+           label + '</button>';
+  }
+
+  function sayIndexKind(name) {
+    var why = $('#cmp-kind-why');
+    if (!why) return;
+    var k = R.kinds[name];
+    if (k === 'PRICE') {
+      why.innerHTML = 'A price index leaves dividends out while a fund’s NAV puts them back ' +
+        'in, so every outperformance figure below flatters the fund by roughly the market’s ' +
+        'dividend yield — about 1 to 1.5 points a year on Indian equity indices. Use a total ' +
+        'return version of this index if the provider offers one.';
+      why.className = 'hint refuse';
+    } else if (k === 'TRI') {
+      why.innerHTML = 'Dividends are counted on both sides, so the comparison is like for like.' +
+        (guessIndexKind(name) === 'TRI'
+          ? ' Read from the name of the file you loaded — change it if that is wrong.' : '');
+      why.className = 'hint';
+    } else {
+      why.innerHTML = '<strong>Not established.</strong> The file does not say, and until you do ' +
+        'the figures below cannot tell you whether a gap is real or just the dividends the index ' +
+        'leaves out. Check the page you downloaded it from: providers publish both, and the ' +
+        'difference is about 1 to 1.5 points a year.';
+      why.className = 'hint';
+    }
+  }
+
   function compareSeries() {
     var sel = $('#r-compare');
     var name = sel.value;
     if (!name || name === 'none') return null;
     var bMeta = (R.indexList || []).filter(function (x) { return x.name === name; })[0] || null;
-    if (R.bundled[name]) return { name: name, series: R.bundled[name], meta: bMeta };
+    if (R.bundled[name]) {
+      return { name: name, series: R.bundled[name], meta: bMeta || kindMeta(name) };
+    }
     var b = (R.indexList || []).filter(function (x) { return x.name === name; })[0];
     if (!b) return null;
     R.bundled[name] = seriesOf(b);
@@ -3475,6 +3616,7 @@
     $('#r-compare').addEventListener('change', function () {
       $('#step-compare').dataset.done = this.value !== 'none' ? 'yes' : 'no';
       overlapNote();
+      askIndexKind(this.value !== 'none' ? this.value : null);
       if (R.ran) runRolling();
     });
     ['r-start', 'r-end'].forEach(function (id) {
@@ -3505,7 +3647,7 @@
          button that says so. */
       R.years = DEFAULT_YEARS;
       R.frequency = 'daily';
-      R.cmpSchemes = null; R.cmpRows = null;
+      R.cmpSchemes = null; R.cmpRows = null; R.kinds = {};
       yearChips();
       freqChips();
       $('#r-scheme-wrap').hidden = true;
