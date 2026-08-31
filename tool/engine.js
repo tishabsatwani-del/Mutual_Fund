@@ -268,6 +268,75 @@
    * return says what was earned; this says what had to be sat through to earn
    * it, which is the part people actually abandon.
    */
+  /* ------------------------------------------------ several schemes as one
+   *
+   * Three funds cannot be averaged as they stand: their NAVs are on different
+   * scales -- one at 10 rupees a unit, one at 450 -- and a mean of those is a
+   * number about nothing. Each is rebased to 100 on the first date they all
+   * share, and the rebased lines are averaged with equal weight.
+   *
+   * What this IS: equal amounts bought on the first date they all share, and
+   * never rebalanced. The weights are equal on that day ONLY -- from then on
+   * they drift with performance, so a window starting five years in is tilted
+   * toward whichever scheme grew fastest, exactly as a real basket would be.
+   * That is why it is not called equally weighted: measured on a fixture of
+   * 14%, 8% and 20%, this construction returns 14.8% a year over a mid-file
+   * window where one re-struck at every window start returns 14.2%. Different
+   * questions, half a point apart, and only one of them is what a reader who
+   * bought once actually experienced.
+   *
+   * What it is NOT, and the screen has to say so: the reader's own portfolio.
+   * Equal amounts is an assumption this makes, not a fact it knows -- it has no
+   * idea how much money went into each -- and a composite weighted the way
+   * their money actually is would give a different answer.
+   *
+   * Only dates every scheme has a price on are kept. A date where one fund did
+   * not trade would otherwise move the composite on nothing but its own
+   * absence.
+   */
+  function combineEqualWeighted(seriesList) {
+    var lists = (seriesList || []).filter(function (s) { return s && s.length > 1; });
+    if (lists.length < 2) {
+      return { ok: false, code: 'TOO_FEW',
+               message: 'Combining needs at least two schemes with prices in them.' };
+    }
+
+    /* the dates every one of them has */
+    var maps = lists.map(function (s) {
+      var m = {};
+      s.forEach(function (p) { m[p.t] = p.v; });
+      return m;
+    });
+    var shared = [];
+    Object.keys(maps[0]).forEach(function (t) {
+      for (var i = 1; i < maps.length; i++) if (maps[i][t] == null) return;
+      shared.push(+t);
+    });
+    shared.sort(function (a, b) { return a - b; });
+    if (shared.length < 2) {
+      return { ok: false, code: 'NO_OVERLAP',
+               message: 'These schemes share too few dates to be combined. They may cover ' +
+                        'different years, or one may be much shorter than the rest.' };
+    }
+
+    var base = maps.map(function (m) { return m[shared[0]]; });
+    for (var b = 0; b < base.length; b++) {
+      if (!(base[b] > 0)) {
+        return { ok: false, code: 'BAD_BASE',
+                 message: 'One of these schemes has no usable price on the first date they share.' };
+      }
+    }
+
+    var out = shared.map(function (t) {
+      var total = 0;
+      for (var i = 0; i < maps.length; i++) total += (maps[i][t] / base[i]) * 100;
+      return { t: t, v: total / maps.length };
+    });
+
+    return { ok: true, series: out, count: lists.length,
+             from: shared[0], to: shared[shared.length - 1], points: out.length };
+  }
+
   function maxDrawdown(series) {
     if (!series || series.length < 2) {
       return fail('TOO_SHORT', 'There is not enough history to measure a fall.');
@@ -523,7 +592,7 @@
     futureValueOfSip: futureValueOfSip,
     sipGrowthFactor: sipGrowthFactor,
     projectGoal: projectGoal,
-    maxDrawdown: maxDrawdown,
+    maxDrawdown: maxDrawdown, combineEqualWeighted: combineEqualWeighted,
     compareRolling: compareRolling,
     requiredAcrossRates: requiredAcrossRates,
     costOfWaiting: costOfWaiting,

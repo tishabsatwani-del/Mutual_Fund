@@ -338,18 +338,6 @@
         comprehensive 5-Year statistical analysis.</p>
       </div>
 
-      <div id="r-scheme-wrap" hidden style="margin-top:1rem">
-        <div class="field">
-          <label for="r-scheme-q">Which fund in that file?</label>
-          <input type="text" id="r-scheme-q" autocomplete="off" placeholder="Type part of the name">
-          <p class="hint" id="r-scheme-count"></p>
-        </div>
-        <div id="r-scheme-list" class="picker" role="listbox" aria-label="Funds in this file"></div>
-        <p class="hint">Official downloads call these “schemes”, and hold every one of them in a
-        single file. Check the plan and option — Direct and Regular of the same fund are different
-        things, and so are Growth and IDCW.</p>
-      </div>
-
       <details class="explain">
         <summary>Where do I get my fund’s NAV file?</summary>
         <div class="body">
@@ -360,6 +348,21 @@
           rather than quietly dropped.</p>
         </div>
       </details>
+    </div>
+    <!-- One picker for step 1, outside both source blocks: a file holding many
+         schemes can arrive at either of them, and it used to exist only inside
+         the fund block, so an index file holding several was refused with
+         nothing to click. -->
+    <div id="r-scheme-wrap" hidden style="margin-top:1rem">
+      <div class="field">
+        <label for="r-scheme-q">Which fund in that file?</label>
+        <input type="text" id="r-scheme-q" autocomplete="off" placeholder="Type part of the name">
+        <p class="hint" id="r-scheme-count"></p>
+      </div>
+      <div id="r-scheme-list" class="picker" role="listbox" aria-label="Funds in this file"></div>
+      <p class="hint">Official downloads call these &ldquo;schemes&rdquo;, and hold every one of them
+      in a single file. Check the plan and option &mdash; Direct and Regular of the same fund are
+      different things, and so are Growth and IDCW. Pick another at any time to measure it instead.</p>
     </div>
     <div id="r-loaded" aria-live="polite"></div>
   </div>

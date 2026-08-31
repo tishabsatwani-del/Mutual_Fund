@@ -1868,6 +1868,8 @@
     blockMessage: null,    /* set when a length no longer fits the history */
     datesTouched: false,
     bundled: {},           /* name -> series, for the comparison list */
+    cmpSchemes: null,      /* a many-scheme file loaded into the benchmark slot */
+    cmpRows: null,
     ran: false
   };
 
@@ -2056,8 +2058,39 @@
     A.readFile(file, function (res) {
       var name = res.report.scheme || file.name.replace(/\.[^.]+$/, '');
       R.bundled[name] = res.series;
+      R.rows = res.rows || null;
+      R.schemes = null;
+      $('#r-scheme-wrap').hidden = true;
       setLoaded(res.series, name, { report: res.report });
-    }, function (msg) { clearLoaded(notice('bad', esc(msg))); },
+    }, function (msg, extra) {
+      /* This slot used to refuse a many-scheme file outright: the tool named
+         the problem -- "that file holds 3 schemes" -- and then offered nothing
+         to click. The picker is the same one the fund slot has always had. */
+      if (extra && extra.schemes && extra.rows) {
+        R.rows = extra.rows;
+        R.schemes = extra.schemes;
+        showSchemePicker(extra.schemes, {
+          rows: extra.rows,
+          onPick: function (sc) {
+            var res = P.rowsToSeries(extra.rows, { scheme: sc.name });
+            if (!res.ok) { clearLoaded(notice('bad', esc(res.message))); return; }
+            R.bundled[sc.name] = res.series;
+            setLoaded(res.series, sc.name, { report: res.report });
+          },
+          onCombine: function () {
+            combineInto(extra.schemes, extra.rows, function (series, name, opts) {
+              R.bundled[name] = series;
+              setLoaded(series, name, opts);
+            });
+          }
+        });
+        clearLoaded(notice('', 'That file holds <strong>' + extra.schemes.length +
+          '</strong> schemes. Choose one below, or all of them together.'));
+        return;
+      }
+      $('#r-scheme-wrap').hidden = true;
+      clearLoaded(notice('bad', esc(msg)));
+    },
     function (progress) { $('#r-loaded').innerHTML = notice('', esc(progress)); });
   }
 
@@ -2075,9 +2108,9 @@
       if (extra && extra.schemes && extra.rows) {
         R.rows = extra.rows;
         R.schemes = extra.schemes;
-        showSchemePicker(extra.schemes);
+        showSchemePicker(extra.schemes, { rows: extra.rows });
         clearLoaded(notice('', 'That file holds <strong>' + extra.schemes.length +
-          '</strong> funds. Choose yours below.'));
+          '</strong> funds. Choose one below, or all of them together.'));
         return;
       }
       $('#r-scheme-wrap').hidden = true;
@@ -2091,8 +2124,30 @@
    * they type, cap what is drawn, and say how many more are waiting. */
   var MAX_HITS = 40;
 
-  function showSchemePicker(schemes) {
-    var wrap = $('#r-scheme-wrap'), q = $('#r-scheme-q');
+  /* One picker, for whichever slot the many-scheme file arrived at.
+   *
+   * It used to serve step 1's FUND slot alone, and it lived inside that block.
+   * A file holding several schemes can arrive at step 1's index slot or at
+   * step 4's benchmark slot just as easily, and both of those refused it with a
+   * red line and nothing to click -- the tool naming the problem and then
+   * offering no way out of it.
+   *
+   * `into` names the three elements to draw in, so step 4 can have its own set
+   * without borrowing step 1's. `onPick` decides what a chosen scheme becomes:
+   * the thing being analysed, or the thing it is measured against. */
+  function showSchemePicker(schemes, opts) {
+    var o = opts || {};
+    var ids = o.ids || { wrap: 'r-scheme-wrap', q: 'r-scheme-q',
+                         count: 'r-scheme-count', list: 'r-scheme-list' };
+    var rows = o.rows || R.rows;
+    var onPick = o.onPick || function (sc) {
+      var res = P.rowsToSeries(rows, { scheme: sc.name });
+      if (!res.ok) { clearLoaded(notice('bad', esc(res.message))); return; }
+      setLoaded(res.series, sc.name, { report: res.report });
+    };
+    var onCombine = o.onCombine || function () { combineInto(schemes, rows, setLoaded); };
+
+    var wrap = $('#' + ids.wrap), q = $('#' + ids.q);
     wrap.hidden = false;
     q.value = '';
     render('');
@@ -2104,17 +2159,27 @@
       var hits = needle
         ? schemes.filter(function (sc) { return sc.name.toLowerCase().indexOf(needle) !== -1; })
         : schemes;
-      $('#r-scheme-count').textContent = schemes.length.toLocaleString() +
+      $('#' + ids.count).textContent = schemes.length.toLocaleString() +
         (schemes.length === 1 ? ' fund in this file' : ' funds in this file') +
         (needle ? ' \u00b7 ' + hits.length.toLocaleString() + ' match' + (hits.length === 1 ? '' : 'es')
                 : ' \u2014 type to narrow the list');
 
-      var list = $('#r-scheme-list');
+      var list = $('#' + ids.list);
       if (!hits.length) {
         list.innerHTML = '<p class="more">Nothing matches \u201c' + esc(term) + '\u201d.</p>';
         return;
       }
-      list.innerHTML = hits.slice(0, MAX_HITS).map(function (sc, i) {
+      /* All of them at once, offered first, and only when the whole list is in
+         view -- combining a filtered subset would silently measure something
+         other than what the row says. */
+      var all = (!needle && schemes.length > 1)
+        ? '<button class="hit combined" type="button" role="option" aria-selected="false" ' +
+          'data-all="1"><span class="nm">All ' + schemes.length +
+          ' together, equal amounts at the start</span><span class="sub">Bought in equal amounts ' +
+          'on the first date they all share and never rebalanced \u2014 a composite of these ' +
+          'schemes, not your own portfolio</span></button>'
+        : '';
+      list.innerHTML = all + hits.slice(0, MAX_HITS).map(function (sc, i) {
         /* rows are prices, not calendar days: a fund has no price at a weekend */
         var count = sc.rows === 1 ? 'one price only' : sc.rows.toLocaleString() + ' prices';
         return '<button class="hit" type="button" role="option" aria-selected="false" ' +
@@ -2127,21 +2192,37 @@
             ' more \u2014 keep typing to narrow them down.</p>'
           : '');
 
-      $$('#r-scheme-list .hit').forEach(function (btn) {
+      $$('#' + ids.list + ' .hit').forEach(function (btn) {
         btn.addEventListener('click', function () {
-          var sc = hits[+btn.dataset.i];
-          $$('#r-scheme-list .hit').forEach(function (o) { o.setAttribute('aria-selected', 'false'); });
+          $$('#' + ids.list + ' .hit').forEach(function (o) {
+            o.setAttribute('aria-selected', 'false');
+          });
           btn.setAttribute('aria-selected', 'true');
-          choose(sc);
+          if (btn.dataset.all) { onCombine(); return; }
+          onPick(hits[+btn.dataset.i]);
         });
       });
     }
+  }
 
-    function choose(sc) {
-      var res = P.rowsToSeries(R.rows, { scheme: sc.name });
-      if (!res.ok) { clearLoaded(notice('bad', esc(res.message))); return; }
-      setLoaded(res.series, sc.name, { report: res.report });
-    }
+  /* Every scheme in the file, rebased and averaged. The name says what it is,
+   * because a composite that reads like a fund would be a fund nobody holds. */
+  function combineInto(schemes, rows, land) {
+    var list = [], failed = [];
+    schemes.forEach(function (sc) {
+      var res = P.rowsToSeries(rows, { scheme: sc.name });
+      if (res.ok) list.push(res.series); else failed.push(sc.name);
+    });
+    var made = E.combineEqualWeighted(list);
+    if (!made.ok) { clearLoaded(notice('bad', esc(made.message))); return; }
+    land(made.series, 'All ' + made.count + ' together, equal amounts at the start', {
+      note: 'Equal amounts bought on ' + fmtDate(made.from) + ', the first date all ' + made.count +
+            ' share, and never rebalanced \u2014 so the weights are equal on that day only, and ' +
+            'drift afterwards toward whichever grew fastest, exactly as a real basket would. ' +
+            'Equal amounts is an assumption this makes, not a fact it knows: a composite weighted ' +
+            'the way your money actually is would read differently.' +
+            (failed.length ? ' ' + failed.length + ' could not be read and were left out.' : '')
+    });
   }
 
   /* ------------------------------------------------------------- controls */
@@ -2160,32 +2241,118 @@
     $('#step-compare').dataset.done = sel.value !== 'none' ? 'yes' : 'no';
 
     var hint = $('#r-compare-hint'), box = $('#r-compare-upload');
-    if (!names.length) {
-      hint.textContent = 'Nothing to compare against yet. This version bundles no index data, ' +
-        'so load an index file here and it becomes available as a benchmark.';
+    /* The upload stays while a many-scheme file is loaded here, so the reader
+     * can move from one scheme to the next without loading the file again.
+     * It used to be wiped the moment a benchmark existed -- which meant
+     * choosing scheme 1 destroyed the only way to reach schemes 2 and 3. */
+    if (!names.length || R.cmpSchemes) {
+      hint.textContent = names.length
+        ? 'A benchmark is a reference point, not a verdict. Only dates both sets of data cover ' +
+          'are compared. Pick another below at any time.'
+        : 'Nothing to compare against yet. This version bundles no index data, ' +
+          'so load an index file here and it becomes available as a benchmark.';
       if (!$('#cmp-file')) {
         box.innerHTML =
           '<label class="fieldlabel" for="cmp-pick">Index data file</label>' +
           '<div class="filebox" id="cmp-drop" tabindex="0" role="button" aria-label="Choose an index file">' +
           '<button class="secondary" type="button" id="cmp-pick">Choose a file</button>' +
           '<p>A date column and the index value on that date</p></div>' +
-          '<input type="file" id="cmp-file" accept=".csv,.txt,.xlsx">';
+          '<input type="file" id="cmp-file" accept=".csv,.txt,.xlsx">' +
+          '<div id="cmp-note" aria-live="polite"></div>' +
+          /* This slot's own picker. It had none: a many-scheme file dropped
+             here produced the red line in the screenshot and no control. */
+          '<div id="cmp-scheme-wrap" hidden style="margin-top:1rem">' +
+            '<div class="field">' +
+              '<label for="cmp-scheme-q">Which one in that file?</label>' +
+              '<input type="text" id="cmp-scheme-q" autocomplete="off" placeholder="Type part of the name">' +
+              '<p class="hint" id="cmp-scheme-count"></p>' +
+            '</div>' +
+            '<div id="cmp-scheme-list" class="picker" role="listbox" ' +
+              'aria-label="Schemes in this file"></div>' +
+            '<p class="hint">Whichever you pick becomes the benchmark. Pick another at any time ' +
+            'to measure against that one instead.</p>' +
+          '</div>';
+
+        var CMP_IDS = { wrap: 'cmp-scheme-wrap', q: 'cmp-scheme-q',
+                        count: 'cmp-scheme-count', list: 'cmp-scheme-list' };
+
+        function useAsBenchmark(series, nm) {
+          R.bundled[nm] = series;
+          refreshCompare();
+          $('#r-compare').value = nm;
+          $('#step-compare').dataset.done = 'yes';
+          if (R.ran) runRolling();
+        }
+
         A.wireDrop('cmp-drop', 'cmp-file', 'cmp-pick', function (file) {
           A.readFile(file, function (res) {
             var nm = res.report.scheme || file.name.replace(/\.[^.]+$/, '');
-            R.bundled[nm] = res.series;
-            refreshCompare();
-            $('#r-compare').value = nm;
-            $('#step-compare').dataset.done = 'yes';
-            if (R.ran) runRolling();
-          }, function (msg) { box.innerHTML += notice('bad', esc(msg)); });
+            useAsBenchmark(res.series, nm);
+          }, function (msg, extra) {
+            if (extra && extra.schemes && extra.rows) {
+              R.cmpSchemes = extra.schemes;
+              R.cmpRows = extra.rows;
+              $('#cmp-note').innerHTML = notice('', 'That file holds <strong>' +
+                extra.schemes.length + '</strong> schemes. Choose one below, or all of them ' +
+                'together, and it becomes the benchmark.');
+              showSchemePicker(extra.schemes, {
+                ids: CMP_IDS,
+                rows: extra.rows,
+                onPick: function (sc) {
+                  var r2 = P.rowsToSeries(extra.rows, { scheme: sc.name });
+                  if (!r2.ok) { $('#cmp-note').innerHTML = notice('bad', esc(r2.message)); return; }
+                  useAsBenchmark(r2.series, sc.name);
+                },
+                onCombine: function () {
+                  combineInto(extra.schemes, extra.rows, function (series, nm2, opts) {
+                    useAsBenchmark(series, nm2);
+                    $('#cmp-note').innerHTML = notice('', esc(opts.note));
+                  });
+                }
+              });
+              return;
+            }
+            $('#cmp-note').innerHTML = notice('bad', esc(msg));
+          });
         });
       }
+      /* Rebuilt box, or a rebuilt list of names: either way the picker has to
+         come back, or switching benchmark once removes the ability to switch
+         again. */
+      if (R.cmpSchemes && R.cmpRows) restoreComparePicker();
     } else {
       hint.textContent = 'A benchmark is a reference point, not a verdict. Only dates both sets ' +
         'of data cover are compared.';
       box.innerHTML = '';
     }
+  }
+
+  function restoreComparePicker() {
+    if (!$('#cmp-scheme-wrap')) return;
+    var schemes = R.cmpSchemes, rows = R.cmpRows;
+    function useAsBenchmark(series, nm) {
+      R.bundled[nm] = series;
+      refreshCompare();
+      $('#r-compare').value = nm;
+      $('#step-compare').dataset.done = 'yes';
+      if (R.ran) runRolling();
+    }
+    showSchemePicker(schemes, {
+      ids: { wrap: 'cmp-scheme-wrap', q: 'cmp-scheme-q',
+             count: 'cmp-scheme-count', list: 'cmp-scheme-list' },
+      rows: rows,
+      onPick: function (sc) {
+        var r2 = P.rowsToSeries(rows, { scheme: sc.name });
+        if (!r2.ok) { $('#cmp-note').innerHTML = notice('bad', esc(r2.message)); return; }
+        useAsBenchmark(r2.series, sc.name);
+      },
+      onCombine: function () {
+        combineInto(schemes, rows, function (series, nm2, opts) {
+          useAsBenchmark(series, nm2);
+          $('#cmp-note').innerHTML = notice('', esc(opts.note));
+        });
+      }
+    });
   }
 
   function compareSeries() {
@@ -2686,6 +2853,7 @@
          reader's own choice, and it is restored because they pressed the
          button that says so. */
       R.years = DEFAULT_YEARS;
+      R.cmpSchemes = null; R.cmpRows = null;
       yearChips();
       $('#r-scheme-wrap').hidden = true;
       $('#r-compare').value = 'none';

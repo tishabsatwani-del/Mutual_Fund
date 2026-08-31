@@ -569,6 +569,63 @@ ok('a 15-year file parses and rolls', parsed.ok && rolled.ok);
 close('an 11% file measures 11% over five years', rolled.stats.median, 0.11, 1e-3);
 
 /* ==================================================================== done */
+/* -------------------------------------------------------------------------
+ * Several schemes as one.
+ *
+ * Three funds cannot be averaged as they stand: one at 10 rupees a unit and one
+ * at 450 have no meaningful mean. Each is rebased to 100 on the first date they
+ * all share, and the rebased lines are averaged.
+ */
+section('Several schemes combined into one series');
+{
+  const day = i => Date.UTC(2020, 0, 1) + i * 86400000;
+  const grow = (start, rate, n) => {
+    const out = [];
+    for (let i = 0; i < n; i++) out.push({ t: day(i), v: start * Math.pow(1 + rate, i / 365.2425) });
+    return out;
+  };
+  /* deliberately incomparable NAV scales, and three different rates */
+  const a = grow(10, 0.14, 1500), b = grow(450, 0.08, 1500), c = grow(87, 0.20, 1500);
+
+  const made = E.combineEqualWeighted([a, b, c]);
+  ok('three schemes combine', made.ok && made.count === 3, made.code || '');
+  ok('and the composite starts at exactly 100, whatever the NAVs were',
+     Math.abs(made.series[0].v - 100) < 1e-9, String(made.series[0].v));
+
+  /* Equal amounts bought once and never rebalanced -- so the weights are equal
+     on the first day ONLY, and drift afterwards toward whichever grew fastest.
+     Worked out independently: the mean of (1+r)^y across the three. */
+  const level = y => [0.14, 0.08, 0.20].reduce((s, r) => s + Math.pow(1 + r, y), 0) / 3;
+  const yrs = (made.to - made.from) / (365.2425 * 86400000);
+  const measured = Math.pow(made.series[made.series.length - 1].v / 100, 1 / yrs) - 1;
+  const expected = Math.pow(level(yrs), 1 / yrs) - 1;
+  ok('and compounds at the rate a basket bought once actually would',
+     Math.abs(measured - expected) < 0.0005,
+     (measured * 100).toFixed(3) + '% vs ' + (expected * 100).toFixed(3) + '%');
+
+  /* This is NOT the same as re-striking equal weights at every window start,
+     and the difference is half a point on this fixture -- which is why the
+     label says "equal amounts at the start" rather than "equally weighted". */
+  const drift = Math.pow(level(6) / level(3), 1 / 3) - 1;
+  const rebal = Math.pow(level(3), 1 / 3) - 1;
+  ok('a drifting basket and a rebalanced one are genuinely different answers',
+     Math.abs(drift - rebal) > 0.004,
+     (drift * 100).toFixed(1) + '% vs ' + (rebal * 100).toFixed(1) + '%');
+
+  /* Only dates every scheme has a price on: a date one fund did not trade on
+     would move the composite on nothing but its own absence. */
+  const gappy = a.filter((_, i) => i % 3 !== 0);
+  const shared = E.combineEqualWeighted([a, gappy]);
+  ok('only dates every scheme shares are kept',
+     shared.ok && shared.points === gappy.length, String(shared.points));
+
+  ok('one series alone is refused', E.combineEqualWeighted([a]).code === 'TOO_FEW');
+  ok('and so are two that never overlap',
+     E.combineEqualWeighted([a, grow(10, 0.1, 5).map(p => ({ t: p.t + 4e11, v: p.v }))]).code
+       === 'NO_OVERLAP');
+}
+
+
 console.log('\n' + passed + ' passed, ' + failed.length + ' failed');
 if (failed.length) {
   console.log('\nFAILED:\n  ' + failed.join('\n  '));

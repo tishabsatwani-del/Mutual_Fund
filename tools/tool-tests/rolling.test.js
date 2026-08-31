@@ -117,11 +117,22 @@ function plainFile(file, rate, fromY, toY, start = 100) {
   ok('the reader is told how many funds it holds',
      /holds 3 funds/i.test(await page.locator('#r-loaded').innerText()),
      await page.locator('#r-loaded').innerText());
-  ok('every fund is offered', (await page.locator('#r-scheme-list .hit').count()) === 3);
+  /* Three funds, plus all of them together offered first. */
+  ok('every fund is offered, and all of them together',
+     (await page.locator('#r-scheme-list .hit').count()) === 4 &&
+     (await page.locator('#r-scheme-list .hit.combined').count()) === 1,
+     String(await page.locator('#r-scheme-list .hit').count()));
   ok('the list says how many the file holds',
      /3 funds in this file/.test(await page.locator('#r-scheme-count').innerText()));
   ok('each entry carries its own date range',
-     /01-Jan-2010 to 01-Jan-2025/.test(await page.locator('#r-scheme-list .hit').first().innerText()));
+     /01-Jan-2010 to 01-Jan-2025/
+       .test(await page.locator('#r-scheme-list .hit:not(.combined)').first().innerText()),
+     await page.locator('#r-scheme-list .hit:not(.combined)').first().innerText());
+  /* The combined row says what it is instead of a date range, because it is a
+     construction rather than a fund. */
+  ok('while the combined row says what it is instead',
+     /never rebalanced/.test(await page.locator('#r-scheme-list .hit.combined').innerText()),
+     await page.locator('#r-scheme-list .hit.combined').innerText());
   ok('the picker warns that Direct and Regular differ',
      /Direct and Regular/.test(await page.locator('#r-scheme-wrap').innerText()));
 
@@ -425,6 +436,106 @@ function plainFile(file, rate, fromY, toY, start = 100) {
   ok('choosing one clears the message again',
      (await page.locator('#r-hold-error').isHidden()) &&
      (await page.locator('#step-hold').getAttribute('data-error')) !== 'yes');
+
+  /* ------------------------------- a many-scheme file, at either end of the
+   *                                  comparison
+   *
+   * The picker served step 1's FUND slot alone, and it lived inside that block.
+   * A file holding several schemes can arrive at step 1's index slot or at
+   * step 4's benchmark slot just as easily, and both refused it with a red line
+   * and nothing to click -- the tool naming the problem and then offering no
+   * way out of it.
+   */
+  section('Every slot that can take a many-scheme file can also choose from it');
+  /* A real reload, not a hash change: earlier cases in this file leave loaded
+     series in the comparison list, and the benchmark upload only appears while
+     that list is empty. */
+  await page.goto(BASE_URL + '#rolling', { waitUntil: 'networkidle' });
+  await page.reload({ waitUntil: 'networkidle' });
+
+  const idxFile = plainFile(TMP + '/rr-idx.csv', 0.11, 2018, 2026, 1000);
+  const threeFile = TMP + '/rr-three.csv';
+  {
+    const out = ['Scheme Name,Date,NAV'];
+    for (const [nm, start, rate] of [['Alpha Fund - Direct Growth', 10, 0.14],
+                                     ['Beta Fund - Direct Growth', 450, 0.08],
+                                     ['Gamma Fund - Direct Growth', 87, 0.20]]) {
+      let v = start, t = Date.UTC(2018, 0, 1);
+      while (t <= Date.UTC(2026, 0, 1)) {
+        const d = new Date(t);
+        if (d.getUTCDay() % 6) out.push(nm + ',' + d.toISOString().slice(0, 10) + ',' + v.toFixed(4));
+        v *= Math.pow(1 + rate, 1 / 365.2425); t += 86400000;
+      }
+    }
+    fs.writeFileSync(threeFile, out.join('\n'));
+  }
+
+  /* The exact flow reported: the index in step 1, the three-scheme file in the
+     benchmark slot in step 4. */
+  await page.click('#r-source .chip[data-source="index"]');
+  await page.waitForTimeout(300);
+  await page.setInputFiles('#bm-file', idxFile);
+  await page.waitForTimeout(1400);
+  await page.setInputFiles('#cmp-file', threeFile);
+  await page.waitForTimeout(1600);
+
+  ok('a many-scheme file in the benchmark slot offers a picker, not just a refusal',
+     !(await page.locator('#cmp-scheme-wrap').isHidden()) &&
+     /holds\s*3\s*schemes/.test((await page.locator('#cmp-note').innerText()).replace(/\s+/g, ' ')),
+     (await page.locator('#cmp-note').innerText()).replace(/\n/g, ' '));
+  ok('with every scheme in it, and all of them together offered first',
+     (await page.locator('#cmp-scheme-list .hit .nm').allInnerTexts()).join(' | ') ===
+     'All 3 together, equal amounts at the start | Alpha Fund - Direct Growth | ' +
+     'Beta Fund - Direct Growth | Gamma Fund - Direct Growth',
+     (await page.locator('#cmp-scheme-list .hit .nm').allInnerTexts()).join(' | '));
+
+  await page.locator('#r-years .chip[data-years="3"]').click();
+  await page.waitForTimeout(300);
+
+  /* The index grows at 11%, the three at 14%, 8% and 20%. Every gap below is
+     that arithmetic and nothing else -- and each is reached WITHOUT loading the
+     file again, which is the whole point of keeping the picker alive. */
+  async function gapAgainst(i) {
+    await page.locator('#cmp-scheme-list .hit').nth(i).click();
+    await page.waitForTimeout(900);
+    await page.click('#r-run');
+    await page.waitForSelector('#r-out .result', { timeout: 20000 });
+    await page.waitForTimeout(400);
+    const t = await page.locator('#r-out').innerText();
+    return (t.match(/([+-]?\d+\.\d) points a year/) || ['', '?'])[1];
+  }
+  ok('the index against Alpha at 14% is 3.0 points behind', (await gapAgainst(1)) === '-3.0');
+  ok('against Beta at 8% it is 3.0 points ahead', (await gapAgainst(2)) === '+3.0');
+  ok('against Gamma at 20% it is 9.0 points behind', (await gapAgainst(3)) === '-9.0');
+  ok('and switching between them needed no second upload',
+     !(await page.locator('#cmp-scheme-wrap').isHidden()));
+
+  const combined = await gapAgainst(0);
+  ok('all three together are a benchmark of their own',
+     /All 3 together/.test(await page.locator('#r-out').innerText()), combined);
+  /* Bought once and never rebalanced, so it lands ABOVE the 14.2% a basket
+     re-struck at each window start would give. The label says which it is. */
+  ok('and the composite lands where a basket bought once actually would',
+     parseFloat(combined) < -3.2 && parseFloat(combined) > -4.5, combined + ' points');
+  ok('with the assumption it rests on stated, not implied',
+     /never rebalanced/.test(await page.locator('#cmp-note').innerText()),
+     (await page.locator('#cmp-note').innerText()).replace(/\n/g, ' ').slice(0, 160));
+
+  /* And the same file at step 1's INDEX slot, which had no picker either. */
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.click('#r-source .chip[data-source="index"]');
+  await page.waitForTimeout(300);
+  await page.setInputFiles('#bm-file', threeFile);
+  await page.waitForTimeout(1600);
+  ok('step 1’s index slot offers the picker too',
+     !(await page.locator('#r-scheme-wrap').isHidden()) &&
+     (await page.locator('#r-scheme-list .hit').count()) === 4,
+     String(await page.locator('#r-scheme-list .hit').count()));
+  await page.locator('#r-scheme-list .hit').nth(2).click();
+  await page.waitForTimeout(1000);
+  ok('and choosing one there analyses that scheme',
+     /Beta Fund - Direct Growth/.test(await page.locator('#r-loaded').innerText()),
+     await page.locator('#r-loaded').innerText());
 
   section('Old links still land somewhere sensible');
   for (const hash of ['#fund', '#history']) {
