@@ -1025,6 +1025,42 @@ const NIGHT = { paper: '#12161E', ink: '#E8E6E1', muted: '#9AA1AE', slate: '#8FA
     ok('and it is set as a reading, not as an alert box',
        (await page.locator('#r-fund .door-ask .refusal').count()) >= 1);
 
+    /* --- columns the parser cannot find, pointed at by the reader -------- */
+    const oddFile = path.join(TMP, 'v5-odd.csv');
+    {
+      const lines = ['Ref,Booked,Units,Price'];
+      for (let i = 0; i < 40; i++) {
+        lines.push(`x,week ${i},${1 + i},${(100 + i * 0.5).toFixed(4)}`);
+      }
+      fs.writeFileSync(oddFile, lines.join('\n'));
+    }
+    await page.setInputFiles('#r-file', oddFile);
+    await page.waitForTimeout(900);
+    const cols = await page.locator('#r-fund .door-ask').innerText();
+    ok('a file whose columns cannot be found is a question, not a dead end',
+       /I could not tell which columns to read/.test(cols) &&
+       /point at the dates and at the NAV/.test(cols), cols.slice(0, 200));
+    ok('and the reader is shown their own file, column by column',
+       (await page.locator('#r-fund .ledger.cols tbody tr').count()) === 4,
+       String(await page.locator('#r-fund .ledger.cols tbody tr').count()));
+    ok('with real cells from it, not a description of it',
+       /week 0/.test(cols) && /100\.0000/.test(cols), cols.slice(0, 300));
+    ok('each column offers itself as the dates or as the NAV',
+       (await page.locator('#r-fund .ledger.cols input[type="radio"]').count()) === 8);
+
+    /* Refuses to accept one column as both. */
+    await page.locator('#r-fund input[name="r-file-d"]').nth(1).check();
+    await page.locator('#r-fund input[name="r-file-v"]').nth(1).check();
+    await page.click('#r-file-cols-go');
+    await page.waitForTimeout(300);
+    ok('one column cannot be both the dates and the NAV',
+       /different columns/.test(await page.locator('#r-file-cols-note').innerText()),
+       await page.locator('#r-file-cols-note').innerText());
+
+    ok('every radio is a finger wide',
+       (await page.evaluate(() => [...document.querySelectorAll('#r-fund .ledger.cols input')]
+          .every(i => i.getBoundingClientRect().width >= 20))) === true);
+
     /* --- a file with no dates in it ------------------------------------- */
     const junk = path.join(TMP, 'v5-junk.csv');
     fs.writeFileSync(junk, 'Fund,Rating\nAcme,Five stars\nZenith,Four stars\n');
@@ -1034,6 +1070,8 @@ const NIGHT = { paper: '#12161E', ink: '#E8E6E1', muted: '#9AA1AE', slate: '#8FA
        /One column should be dates and one NAV/.test(await page.locator('#r-fund .door-ask').innerText()) &&
        /A screenshot or PDF will not work/.test(await page.locator('#r-fund .door-ask').innerText()),
        await page.locator('#r-fund .door-ask').innerText());
+    ok('and is not offered a column map it has nothing to fill in',
+       (await page.locator('#r-fund .ledger.cols').count()) === 0);
 
     ok('no script errors across the whole door', errors.length === 0, errors.join(' | '));
     await page.screenshot({ path: path.join(TMP, 'v5-door.png'), fullPage: true });

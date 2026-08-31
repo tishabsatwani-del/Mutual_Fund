@@ -161,6 +161,39 @@ section('Section 5 · a file with no dates in it');
   ok('and told what the file should hold, and what will not work',
      /One column should be dates and one NAV\./.test(r.message) &&
      /A screenshot or PDF will not work; download the table\./.test(r.message), r.message);
+  /* Nothing in it reads as a date OR as a number, so there is nothing to point
+     at. Asking "which column holds the dates" of a file that has none would
+     waste the reader's time twice. */
+  ok('and is NOT asked to map columns it does not have', r.ask === null, String(r.ask));
+}
+
+section('A file whose columns cannot be found is a question, not a dead end');
+{
+  /* Two numeric columns and dates in a shape the parser cannot read: the file
+     is fine, the guess is not, and the reader can see what the tool cannot. */
+  var rows = [['Ref', 'Booked', 'Units', 'Price']];
+  for (var i = 0; i < 12; i++) rows.push(['x', 'week ' + i, String(1 + i), (100 + i * 0.5).toFixed(4)]);
+  var q = U.read([{ name: 'odd.csv', rows: rows }]);
+  eq('the door asks which columns to read', q.ask, 'columns');
+  ok('showing the reader their own file rather than describing it',
+     q.columns.length === 4 && q.columns.every(function (c) { return c.samples.length > 0; }),
+     JSON.stringify(q.columns.map(function (c) { return c.samples[0]; })));
+  ok('each column says whether it reads as a date or as a number',
+     q.columns.some(function (c) { return c.looksLikeNumber; }),
+     JSON.stringify(q.columns.map(function (c) { return c.looksLikeDate + '/' + c.looksLikeNumber; })));
+  ok('and it starts from its own best guess rather than from nothing',
+     q.guess.valueCol >= 0, JSON.stringify(q.guess));
+
+  /* Answering it settles the file. */
+  var rows2 = [['Ref', 'When', 'Units', 'Price']];
+  for (var k = 0; k < 40; k++) {
+    rows2.push(['x', '2021-04-' + String((k % 28) + 1).padStart(2, '0'), '1', (100 + k * 0.1).toFixed(4)]);
+  }
+  var told = U.read([{ name: 'odd2.csv', rows: rows2 }], { dateCol: 1, valueCol: 3 });
+  ok('pointing at two columns reads the file', told.ok, told.message);
+  ok('and it is not asked again', told.ask === null);
+  ok('the reader\'s choice beats the parser\'s guess',
+     told.ok && told.series.length === 28, told.ok ? String(told.series.length) : '');
 }
 
 section('Section 5 · the shapes the door accepts');

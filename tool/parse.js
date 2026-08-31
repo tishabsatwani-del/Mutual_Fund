@@ -185,6 +185,36 @@
     return { dateCol: dateCol, valueCol: valueCol };
   }
 
+  /* What each column looks like, so a reader can be shown the file rather than
+   * told about it. One row per column: its heading if there is one, a few of
+   * its own cells, and how many of them read as a date or as a number. That
+   * last pair is what turns a wall of columns into an obvious choice. */
+  function columnSummary(rows, header) {
+    var probe = rows.slice(0, 40);
+    var width = Math.max.apply(null, probe.map(function (r) { return r.length; }).concat([0]));
+    var out = [];
+    for (var c = 0; c < width; c++) {
+      var dates = 0, nums = 0, samples = [], filled = 0;
+      for (var r = 0; r < probe.length; r++) {
+        var cell = probe[r][c];
+        if (cell == null || cell === '') continue;
+        filled++;
+        if (samples.length < 3) samples.push(String(cell).slice(0, 24));
+        if (!isNaN(toTimestamp(parseDateParts(cell, true)))) dates++;
+        else if (isFinite(parseNumber(cell))) nums++;
+      }
+      out.push({
+        index: c,
+        heading: header && header[c] != null ? String(header[c]).slice(0, 40) : '',
+        samples: samples,
+        filled: filled,
+        looksLikeDate: filled > 0 && dates >= filled * 0.6,
+        looksLikeNumber: filled > 0 && nums >= filled * 0.6
+      });
+    }
+    return out;
+  }
+
   /* --------------------------------------------------------------- schemes
    *
    * The official bulk NAV downloads carry hundreds of schemes in one file. A
@@ -273,10 +303,18 @@
       }
     }
 
+    /* Review v4 §5, and the reader's own override. Detection reads content
+     * rather than headers, which handles most files -- but "most" is not all,
+     * and a file it cannot read should ask rather than refuse. When the reader
+     * has told us which columns to use, that answer wins outright. */
     var cols = pickColumns(body, header);
+    if (opts.dateCol != null && opts.dateCol >= 0) cols.dateCol = opts.dateCol;
+    if (opts.valueCol != null && opts.valueCol >= 0) cols.valueCol = opts.valueCol;
     if (cols.dateCol === -1 || cols.valueCol === -1 || cols.dateCol === cols.valueCol) {
       return {
         ok: false, code: 'NO_COLUMNS',
+        header: header,
+        columns: columnSummary(body, header),
         message: 'Could not find a date column and a value column in that file. It needs two columns: the date, and the NAV or index value on that date.'
       };
     }
@@ -398,6 +436,7 @@
     parseDateParts: parseDateParts,
     toTimestamp: toTimestamp,
     rowsToSeries: rowsToSeries,
+    columnSummary: columnSummary,
     listSchemes: listSchemes,
     listSchemesText: listSchemesText,
     sliceSeries: sliceSeries,

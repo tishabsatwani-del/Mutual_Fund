@@ -185,6 +185,7 @@
       panel.hidden = false;
       if (v.ask === 'day-first') return askDayFirst(v);
       if (v.ask === 'scheme') return askScheme(v);
+      if (v.ask === 'columns') return askColumns(v);
       /* a refusal is set like a reading: sentence, then what to do */
       panel.innerHTML = '<div class="refusal"><p>' + esc(v.message) + '</p></div>';
     }
@@ -228,6 +229,44 @@
           var name = (el.dataset.scheme || el.textContent || '').toLowerCase();
           el.hidden = q !== '' && name.indexOf(q) < 0;
         });
+      });
+    }
+
+    /* A file whose columns cannot be found is a question, not a dead end. The
+     * reader can see their own file and the tool cannot, so it shows them the
+     * top of it -- each column with its own cells in it -- and asks which two
+     * matter. A parser that has run out of guesses is exactly when a person is
+     * fastest. */
+    function askColumns(v) {
+      var head = '<div class="refusal"><p>' + esc(v.message) + '</p>' +
+        '<div class="scroller"><table class="ledger cols"><thead><tr>' +
+        '<th>Column</th><th>Dates</th><th>NAV</th></tr></thead><tbody>';
+      var body = v.columns.map(function (c) {
+        var name = c.heading || ('Column ' + (c.index + 1));
+        var hint = c.samples.join(' · ');
+        return '<tr><td><b>' + esc(name) + '</b>' +
+          '<br><span class="gloss">' + esc(hint) + '</span></td>' +
+          '<td class="n"><input type="radio" name="' + opts.fileId + '-d" value="' + c.index + '"' +
+            (c.index === v.guess.dateCol ? ' checked' : '') +
+            ' aria-label="' + esc(name) + ' holds the dates"></td>' +
+          '<td class="n"><input type="radio" name="' + opts.fileId + '-v" value="' + c.index + '"' +
+            (c.index === v.guess.valueCol ? ' checked' : '') +
+            ' aria-label="' + esc(name) + ' holds the NAV"></td></tr>';
+      }).join('');
+      panel.innerHTML = head + body + '</tbody></table></div>' +
+        '<p class="gloss" id="' + opts.fileId + '-cols-note" aria-live="polite"></p>' +
+        '<button class="primary" id="' + opts.fileId + '-cols-go" type="button">Read it this way</button>' +
+        '</div>';
+
+      $('#' + opts.fileId + '-cols-go').addEventListener('click', function () {
+        var d = panel.querySelector('input[name="' + opts.fileId + '-d"]:checked');
+        var val = panel.querySelector('input[name="' + opts.fileId + '-v"]:checked');
+        var note = $('#' + opts.fileId + '-cols-note');
+        if (!d || !val) { note.textContent = 'Point at one column of dates and one of NAVs.'; return; }
+        if (d.value === val.value) { note.textContent = 'The dates and the NAVs are different columns.'; return; }
+        answers.dateCol = +d.value;
+        answers.valueCol = +val.value;
+        go();
       });
     }
 

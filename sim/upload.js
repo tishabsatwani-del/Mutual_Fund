@@ -193,6 +193,8 @@
       var opts = {};
       if (given.scheme) opts.scheme = given.scheme;
       if (given.dayFirst !== undefined) opts.dayFirst = given.dayFirst;
+      if (given.dateCol != null) opts.dateCol = given.dateCol;
+      if (given.valueCol != null) opts.valueCol = given.valueCol;
       var res = P.rowsToSeries(rows, opts);
 
       if (!res.ok) {
@@ -200,6 +202,26 @@
           schemeQuestion = schemeQuestion || { file: list[i].name, count: many.schemes.length,
                                                groups: groupSchemes(many.schemes) };
           continue;
+        }
+        /* A file whose columns cannot be found is a QUESTION, not a dead end.
+         * The reader can see their own file; the tool cannot. Showing them the
+         * columns and asking which two matter turns a refusal into one tap --
+         * and it is the only way a layout nobody anticipated ever works. */
+        if (res.code === 'NO_COLUMNS' && res.columns && res.columns.length >= 2) {
+          var guess = {
+            dateCol: firstMatching(res.columns, 'looksLikeDate'),
+            valueCol: firstMatching(res.columns, 'looksLikeNumber')
+          };
+          /* Only ask when there is plausibly something to point AT. A file with
+           * no column that reads as a date and none that reads as a number is
+           * not a mapping problem -- it is the wrong file, and section 5's
+           * message is the useful answer there. Asking "point at the dates" of
+           * a file that has none wastes the reader's time twice. */
+          if (guess.dateCol >= 0 || guess.valueCol >= 0) {
+            return ask('columns', MESSAGES.whichColumns, {
+              file: list[i].name, columns: res.columns, guess: guess
+            });
+          }
         }
         return refuse(res.code === 'NO_COLUMNS' ? 'NO-DATES' : res.code,
                       res.code === 'NO_COLUMNS' ? MESSAGES.noDates : res.message);
@@ -248,6 +270,11 @@
     };
   }
 
+  function firstMatching(columns, flag) {
+    for (var i = 0; i < columns.length; i++) if (columns[i][flag]) return columns[i].index;
+    return -1;
+  }
+
   function nameOf(file, res) {
     if (res.report && res.report.scheme) return res.report.scheme;
     return String(file.name || '').replace(/\.[^.]+$/, '');
@@ -258,6 +285,12 @@
   var MESSAGES = {
     noDates: 'I could not find a column of dates in this file. One column should be dates and one ' +
              'NAV. A screenshot or PDF will not work; download the table.',
+
+    /* The same failure, but with something to do about it. Section 5's message
+     * is right when there is nothing in the file to point at; when there ARE
+     * columns, the reader can point at them faster than any parser can guess. */
+    whichColumns: 'I could not tell which columns to read. Here is the top of your file — ' +
+                  'point at the dates and at the NAV.',
 
     ambiguousDates: function (ex) {
       return 'These dates read two ways. The first row is ' + ex.dayFirst + ' one way, ' +
@@ -317,7 +350,7 @@
   };
 
   var api = {
-    read: read, stitch: stitch, gapsIn: gapsIn, groupSchemes: groupSchemes,
+    read: read, firstMatching: firstMatching, stitch: stitch, gapsIn: gapsIn, groupSchemes: groupSchemes,
     rowsFrom: rowsFrom, jsonRows: jsonRows, firstAmbiguousDate: firstAmbiguousDate,
     MESSAGES: MESSAGES, GAP_DAYS: GAP_DAYS
   };
