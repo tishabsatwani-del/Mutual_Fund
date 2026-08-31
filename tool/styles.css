@@ -523,6 +523,16 @@ button.link {
    one block and the door lost its heading. */
 .upcard .fieldlabel { margin-top: 1.1rem; }
 
+/* The two doors, beside each other above 34rem and stacked below it.
+   Their own margins would double the grid gap, so inside the grid they have
+   none. Top-aligned rather than stretched: the two cards hold different
+   amounts, and stretching left a quarter of the shorter one as empty ruled
+   space, which reads as something missing rather than as a pair. */
+.upcards { margin: 1rem 0; align-items: start; }
+.upcards > .upcard { margin: 0; min-width: 0; }
+/* Long file names must wrap rather than push a column wider than its share. */
+.upcards .fileok-name { overflow-wrap: anywhere; }
+
 .notice.bad { border-color: var(--critical); }
 .notice.warn { border-color: var(--warn); }
 .notice .ic { flex: none; font-weight: 700; }

@@ -293,9 +293,13 @@
     unlocks once you do.</p>
 
     <div id="src-index" hidden>
-      <!-- Card A. The two doors this path needs, named and numbered, so nobody
-           has to work out which file goes where from a label that says
-           "Index" twice. Copy is the specification's, verbatim. -->
+      <!-- The two doors this path needs, named, numbered and BESIDE each other,
+           so nobody has to work out which file goes where from a label that
+           says "Index" twice -- and so neither of them is a step the reader
+           has to reach before they can see the other. Card B is moved in here
+           by setSource, because on the fund path it belongs where it has
+           always been. Copy is the specification's, verbatim. -->
+      <div class="grid2 upcards" id="up-cards">
       <div class="upcard" id="up-primary">
         <h3>1. Primary Investment Data (NAV)</h3>
         <p class="upcard-desc">Upload Mutual Fund Daily NAV history, Consolidated Account
@@ -312,6 +316,8 @@
         <div id="r-index-upload"></div>
         <div id="up-primary-note" aria-live="polite"></div>
       </div>
+      </div><!-- /up-cards -->
+      <div id="up-after-cards"></div>
     </div>
 
     <div id="src-fund" hidden>

@@ -598,6 +598,101 @@ function textValueFile(file) {
      /excludes dividends/i.test(flat(await page.locator('#r-out').innerText())),
      flat(await page.locator('#r-out').innerText()).slice(0, 200));
 
+  /* ================================ SECTION 2, BOTH DOORS IN ONE STEP */
+  section('Section 2 — the two cards are in step 1, beside each other');
+  await openIndexPath();
+  ok('Card A is in step 1', await page.evaluate(() =>
+     !!document.querySelector('#step-source #up-primary')));
+  ok('and so is Card B, which used to be three steps away', await page.evaluate(() =>
+     !!document.querySelector('#step-source #up-benchmark-head')));
+  ok('they are siblings in one container, not two stacked steps', await page.evaluate(() => {
+     const a = document.querySelector('#up-primary'), b = document.querySelector('#up-benchmark-head');
+     return !!a && !!b && a.parentElement === b.parentElement &&
+            a.parentElement.id === 'up-cards';
+  }));
+  ok('the benchmark upload travelled with its card', await page.evaluate(() =>
+     !!document.querySelector('#up-benchmark-head #r-compare-upload') &&
+     !!document.querySelector('#up-benchmark-head #cmp-file')));
+  ok('so step 4 no longer holds an upload at all', await page.evaluate(() =>
+     !document.querySelector('#step-compare #cmp-file')));
+  ok('and step 4 points at step 1 rather than at a box it no longer has',
+     /Load a benchmark index file in step 1/.test(await page.locator('#r-compare-hint').innerText()),
+     await page.locator('#r-compare-hint').innerText());
+  ok('the range warning sits under both files, not under one of them',
+     await page.evaluate(() => !!document.querySelector('#step-source #r-overlap-note')));
+
+  /* Both visible at once is the substance; side by side is the layout, and it
+     only applies where there is room for two columns. */
+  const wide = await ctx.newPage();
+  await wide.setViewportSize({ width: 1100, height: 900 });
+  await wide.goto(BASE_URL + '#rolling', { waitUntil: 'networkidle' });
+  await wide.reload({ waitUntil: 'networkidle' });
+  await wide.click('#r-source .chip[data-source="index"]');
+  await wide.waitForTimeout(300);
+  const boxes = await wide.evaluate(() => {
+    const a = document.querySelector('#up-primary').getBoundingClientRect();
+    const b = document.querySelector('#up-benchmark-head').getBoundingClientRect();
+    return { aTop: a.top, bTop: b.top, aRight: a.right, bLeft: b.left, innerW: window.innerWidth };
+  });
+  ok('on a wide screen they share a row',
+     Math.abs(boxes.aTop - boxes.bTop) < 2 && boxes.bLeft >= boxes.aRight - 1,
+     JSON.stringify(boxes));
+  await wide.setViewportSize({ width: 390, height: 900 });
+  await wide.waitForTimeout(300);
+  const stacked = await wide.evaluate(() => {
+    const a = document.querySelector('#up-primary').getBoundingClientRect();
+    const b = document.querySelector('#up-benchmark-head').getBoundingClientRect();
+    return { aBottom: a.bottom, bTop: b.top };
+  });
+  ok('and on a phone they stack, still both in step 1',
+     stacked.bTop >= stacked.aBottom - 1, JSON.stringify(stacked));
+  await wide.close();
+
+  section('Either file first, from the same step');
+  await openIndexPath();
+  await page.setInputFiles('#cmp-file', benchLong);
+  await page.waitForTimeout(2000);
+  await page.setInputFiles('#bm-file', primary);
+  await page.waitForTimeout(2000);
+  ok('benchmark first, then primary, both from step 1',
+     (await page.locator('#cmp-drop.loaded').count()) === 1 &&
+     (await page.locator('#bm-drop.loaded').count()) === 1 &&
+     !(await page.locator('#r-run').isDisabled()));
+
+  section('The card survives being moved back and forth');
+  /* The node is REPARENTED rather than rebuilt, so everything wired into it
+     at build time -- the drop zone, the paste box, the TRI question -- has to
+     keep working after a round trip through the other source path. Rebuilding
+     the markup instead would leave a second, dead upload box behind. */
+  await openIndexPath();
+  await page.click('#r-source .chip[data-source="fund"]');
+  await page.waitForTimeout(300);
+  ok('on the fund path Card B is hidden',
+     await page.locator('#up-benchmark-head').isHidden());
+  ok('and the benchmark upload is back in step 4 where that path expects it',
+     await page.evaluate(() => !!document.querySelector('#step-compare #cmp-file')));
+  ok('with exactly one of it, not a copy left behind',
+     (await page.locator('#cmp-file').count()) === 1 &&
+     (await page.locator('#cmp-drop').count()) === 1);
+  await page.click('#r-source .chip[data-source="index"]');
+  await page.waitForTimeout(300);
+  ok('coming back moves it into step 1 again',
+     await page.evaluate(() => !!document.querySelector('#up-benchmark-head #cmp-file')));
+  await page.setInputFiles('#bm-file', primary);
+  await page.waitForTimeout(2000);
+  await page.setInputFiles('#cmp-file', benchPRI);
+  await page.waitForTimeout(2000);
+  ok('and it still reads a file after the round trip',
+     (await page.locator('#cmp-drop.loaded').count()) === 1,
+     flat(await page.locator('#cmp-drop').innerText()));
+  ok('with the TRI question still wired',
+     (await page.locator('#cmp-kind-chips .chip[data-kind="PRICE"]').getAttribute('aria-checked')) === 'true');
+  await page.click('#r-run');
+  await page.waitForTimeout(2000);
+  ok('and the comparison runs',
+     /Outperformance Rate vs Benchmark/.test(flat(await page.locator('#r-out').innerText())),
+     flat(await page.locator('#r-out').innerText()).slice(0, 160));
+
   /* ================================= THE FUND PATH IS NOT IN SCOPE AND IS NOT TOUCHED */
   section('The other source path is left exactly as it was');
   await page.goto(BASE_URL + '#rolling', { waitUntil: 'networkidle' });

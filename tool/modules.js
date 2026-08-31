@@ -2181,21 +2181,64 @@
      * everything it adds appears only there. The fund path keeps exactly the
      * screen it had. */
     var onIndex = source === 'index';
-    var head = $('#up-benchmark-head');
-    if (head) head.hidden = !onIndex;
     var freq = $('#r-freq-wrap');
     if (freq) freq.hidden = !onIndex;
+    placeBenchmarkCard(onIndex);
     if (!onIndex) {
       var ov = $('#r-overlap-note');
       if (ov) ov.innerHTML = '';
     }
     $('#step-source').dataset.done = source ? 'yes' : 'no';
     yearChips();
+    /* Step 4's hint depends on which path is running -- on the index path the
+       upload it used to point at is now in step 1 -- and refreshCompare had
+       no reason to run again when the source changed, so it kept whatever it
+       had said at start-up. */
+    refreshCompare();
     gateSteps();
     var prompt = $('#r-source-prompt');
     if (prompt) {
       prompt.textContent = source ? ''
         : 'Pick one of the two above to begin. The rest of this screen unlocks once you do.';
+    }
+  }
+
+  /* Section 2 puts both datasets in step 1, side by side.
+   *
+   * The benchmark door was in step 4, which meant the reader met one of the
+   * two files it takes, dealt with it, and only later discovered there was a
+   * second. Two things named "1." and "2." three steps apart are not a pair.
+   *
+   * The NODE is moved rather than rebuilt. Everything inside it -- the drop
+   * zone, the file input, the paste box, the TRI question, the scheme picker
+   * -- carries listeners bound at build time, and refreshCompare only rebuilds
+   * when #cmp-file is missing. Reparenting keeps all of that intact; copying
+   * the markup across would have quietly produced a second, dead upload box.
+   *
+   * On the fund path it goes back where it has always been, so that screen is
+   * unchanged. */
+  function placeBenchmarkCard(onIndex) {
+    var head = $('#up-benchmark-head');
+    var upload = $('#r-compare-upload');
+    var overlap = $('#r-overlap-note');
+    if (!head || !upload) return;
+
+    if (onIndex) {
+      var cards = $('#up-cards');
+      var after = $('#up-after-cards');
+      if (upload.parentNode !== head) head.appendChild(upload);
+      if (cards && head.parentNode !== cards) cards.appendChild(head);
+      /* The amber range warning is about BOTH files, so it belongs under
+         both of them rather than under one. */
+      if (after && overlap && overlap.parentNode !== after) after.appendChild(overlap);
+      head.hidden = false;
+    } else {
+      var step = $('#step-compare');
+      head.hidden = true;
+      if (step) {
+        if (upload.parentNode !== step) step.appendChild(upload);
+        if (overlap && overlap.parentNode !== step) step.appendChild(overlap);
+      }
     }
   }
 
@@ -2842,11 +2885,18 @@
      * moment a benchmark existed, which left a reader who had loaded the
      * wrong TRI with no way to load another short of Start again. */
     if (!names.length || R.cmpSchemes || R.source === 'index') {
-      hint.textContent = names.length
-        ? 'A benchmark is a reference point, not a verdict. Only dates both sets of data cover ' +
-          'are compared. Pick another below at any time.'
-        : 'Nothing to compare against yet. This version bundles no index data, ' +
-          'so load an index file here and it becomes available as a benchmark.';
+      hint.textContent = R.source === 'index'
+        /* The upload is in step 1 now, so pointing at "below" would point at
+           nothing. What is left here is the choice, not the loading. */
+        ? (names.length
+            ? 'A benchmark is a reference point, not a verdict. Only dates both sets of data ' +
+              'cover are compared. Load another index file in step 1 to add to this list.'
+            : 'Load a benchmark index file in step 1 — card 2 — and it appears here.')
+        : names.length
+          ? 'A benchmark is a reference point, not a verdict. Only dates both sets of data cover ' +
+            'are compared. Pick another below at any time.'
+          : 'Nothing to compare against yet. This version bundles no index data, ' +
+            'so load an index file here and it becomes available as a benchmark.';
       if (!$('#cmp-file')) {
         box.innerHTML =
           '<label class="fieldlabel" for="cmp-pick">Benchmark index data file</label>' +
