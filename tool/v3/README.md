@@ -24,8 +24,8 @@ screens are still live at `../`; these replace them.
 
 ```
 python3 tools/v3/build_deck.py     # after editing sim/copy.json or sim/states.json
-node tools/tool-tests/v3.test.js   # 320 checks, needs a server on 8781
-node sim/tests/upload.test.js      # 69 checks on the door, headless
+node tools/tool-tests/v3.test.js   # 337 checks, needs a server on 8781
+node sim/tests/upload.test.js      # 90 checks on the door, headless
 node tools/v3/shoot.js             # the twelve screenshots, same server
 ```
 
@@ -113,6 +113,73 @@ control on that screen could **create** a money-out row, so her sentence was
 unreachable through the interface. A paste can write both, which is what a
 statement holds anyway.
 
+### Three ways in, one reader
+
+A file **picked** through the button, the same file **dropped** on the list, and
+**pasted** columns all reach `SimUpload.ledgerRows`. Nothing about the reader's
+money is decided differently because of how the rows arrived.
+
+The drop zone never replaces the picker. A zone that is only a zone cannot be
+reached from a keyboard and does not exist at all on a phone, where most of
+these readers are: drop is the shortcut, never the way in. The highlight it
+raises is the box's own edge firming up — no red, no green, nothing that glows —
+and `dragenter`/`dragleave` are counted in and out, because both fire again for
+every child element the pointer crosses.
+
+The handling behind all three lives once, in `shared.js`'s `ledgerDoor`. Tool 1
+and Tool 3 each had their own copy of it, forty lines apiece, which is one copy
+too many for rules about somebody's money.
+
+`ledgerRows` takes **rows as well as text**, so a dropped `.xlsx` arrives as the
+rows `SimWorkbook` already read rather than being flattened back into text and
+parsed a second time. A round trip like that can only lose.
+
+### Which way the money went
+
+A file whose amounts are all unsigned has one thing in it that knows: a type
+column — *Purchase*, *Redemption*, *SIP*. What those words **mean** is not
+decided here. The words are handed back with a count of the lines each covers,
+and the reader ticks the ones that took money out. Once, for the whole file.
+
+This is the `Dr`/`Cr` rule again, and it is worth being explicit about why the
+tool asks rather than knowing. Reading *Redemption* as money out is right almost
+always — and the almost is the problem. When it is wrong it is wrong silently,
+in the direction that makes a return look better than it was, with no error
+anywhere for the reader to catch. One click removes the whole class of failure.
+
+Guards, so the question is only asked where it means something:
+
+* **A sign the reader wrote wins outright.** One minus or one bracket anywhere
+  in the amounts and the type column is left alone entirely.
+* **The fund column is already spoken for**, or a three-column export would ask
+  the reader which of their own fund names means money out.
+* **An unnamed column needs at least two distinct words**, or every file with a
+  constant column in it (*NSE*, *INR*) would ask a question about nothing.
+* **A named one may hold just one**, because a file of nothing but redemptions
+  reads entirely backwards otherwise, without a word said.
+* **A narration column is not a type column** — more than eight distinct values,
+  or a cell over thirty characters, and it is prose.
+
+Ticking nothing is a real answer: every line reads as money in, which is what
+the file said before the question existed. So a reader who does not recognise
+the column is never stuck inside it. A row whose word was never shown — an empty
+type cell — is skipped and **counted on screen**, never quietly filed as money
+in.
+
+### Two things this door will never do
+
+Settled 31 August 2026, with the author.
+
+**It does not read password-protected CAS statements.** SheetJS cannot decrypt
+one at all (it throws `File is password-protected`), and pdf.js would mean 1.68
+MB vendored into a tool that has to survive a printed QR code, plus a password
+box on a screen whose whole promise is that nothing here wants anything from
+you. The reader exports plain CSV from the same statement, or copies the columns.
+
+**It ships no index history.** See `tool/data/README.md`: the TRI files are
+licensed for the reader's personal use, not for redistribution inside a tool.
+The reader loads one through this same door.
+
 ### The door holds a conversation
 
 Because it is the only door, it cannot just parse. Three of §5's rules are
@@ -139,7 +206,7 @@ Then it **confirms before computing**, in §5's own form: *Found 4,812 NAVs for
 [name as in the file], 12-Mar-2007 to 28-Aug-2026, no gaps.*
 
 All of it lives in `sim/upload.js` as pure functions over rows, so the whole
-conversation is tested headlessly (41 checks) as well as driven through a real
+conversation is tested headlessly (90 checks) as well as driven through a real
 screen. The index fund goes through the same door, with §5's *same source, same
 steps* note under it.
 

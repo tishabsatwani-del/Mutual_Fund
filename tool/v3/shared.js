@@ -133,6 +133,37 @@
    * question, refusal and confirmation is handled here, so all three doors
    * behave identically and there is one place to change them.
    */
+  /* ------------------------------------------------------------- a drop zone
+   * The file is already on the reader's desktop; making them find it through a
+   * picker is a step that exists only because the door had one shape.
+   *
+   * The picker STAYS. A zone that is only a zone cannot be reached from a
+   * keyboard and does not exist at all on a phone, where most of these readers
+   * are. Drop is the shortcut, never the way in.
+   *
+   * dragenter and dragleave fire again for every child element the pointer
+   * crosses, so the highlight is counted in and out rather than toggled. */
+  function dropzone(el, onFiles) {
+    if (!el || !onFiles) return;
+    var depth = 0;
+    function allow(e) {
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+    }
+    el.addEventListener('dragenter', function (e) { allow(e); depth++; el.classList.add('dropping'); });
+    el.addEventListener('dragover', allow);
+    el.addEventListener('dragleave', function () {
+      if (--depth <= 0) { depth = 0; el.classList.remove('dropping'); }
+    });
+    el.addEventListener('drop', function (e) {
+      e.preventDefault();
+      depth = 0;
+      el.classList.remove('dropping');
+      var files = Array.prototype.slice.call((e.dataTransfer && e.dataTransfer.files) || []);
+      if (files.length) onFiles(files);
+    });
+  }
+
   function door(opts) {
     var open = $('#' + opts.openId), input = $('#' + opts.fileId), state = $('#' + opts.stateId);
     if (!open || !input || !state) return;
@@ -190,16 +221,23 @@
 
     open.addEventListener('click', function () { input.click(); });
     input.addEventListener('change', function (e) {
-      var picked = Array.prototype.slice.call(e.target.files || []);
+      take(Array.prototype.slice.call(e.target.files || []));
+    });
+    /* Dropped anywhere in the door's own box, which is the thing the reader is
+       already looking at when they reach for the file. */
+    dropzone(opts.dropId ? $('#' + opts.dropId) : open.parentNode, take);
+
+    function take(picked) {
       if (!picked.length) return;
       answers = {};                       /* a new pile is a new conversation */
       chosen = picked;
       lastPaste = null;
+      pasteBox.hidden = true;
       state.textContent = picked.length === 1
         ? 'Reading ' + picked[0].name + '…'
         : 'Reading ' + count(picked.length) + ' files…';
       go();
-    });
+    }
 
     function go() {
       /* Whatever the reader gave us last -- files or a paste -- is what a
@@ -334,6 +372,127 @@
     }
   }
 
+  /* ---------------------------------------------------- the ledger's own door
+   * Tool 1 and Tool 3 both let the reader hand over a list of what they paid
+   * in. They had one way in each -- a textarea -- and the same forty lines of
+   * handling copied between them. This is that handling, once, with two more
+   * ways in: a CSV or workbook picked from disk, and the same file dropped.
+   *
+   * All three land on sim/upload.js's one ledger reader, so the columns are
+   * found the same way, a header is recognised the same way, and the question
+   * about which words mean money out is asked the same way. Nothing about the
+   * reader's money is decided differently because of how the rows arrived.
+   */
+  function ledgerDoor(opts) {
+    var openBtn = $('#' + opts.openId), box = $('#' + opts.boxId);
+    var text = $('#' + opts.textId), readBtn = $('#' + opts.readId);
+    var note = $('#' + opts.noteId), askPanel = $('#' + opts.askId);
+    var fileOpen = $('#' + opts.fileOpenId), input = $('#' + opts.fileId);
+    if (!openBtn || !box || !text || !readBtn || !note) return;
+
+    var answers = {}, source = null, sourceName = '';
+
+    openBtn.addEventListener('click', function () {
+      box.hidden = !box.hidden;
+      if (!box.hidden) text.focus();
+    });
+    readBtn.addEventListener('click', function () {
+      answers = {};
+      sourceName = '';
+      begin(text.value);
+    });
+
+    if (fileOpen && input) {
+      fileOpen.addEventListener('click', function () { input.click(); });
+      input.addEventListener('change', function (e) {
+        var picked = Array.prototype.slice.call(e.target.files || []);
+        if (picked.length) fromFile(picked[0]);
+      });
+    }
+    dropzone(opts.dropId ? $('#' + opts.dropId) : null, function (files) {
+      fromFile(files[0]);
+    });
+
+    function fromFile(file) {
+      answers = {};
+      sourceName = file.name || '';
+      say('Reading ' + (sourceName || 'that file') + '…', false);
+      contentOf(file).then(function (got) {
+        /* A workbook comes back as rows, a CSV as text. The ledger reader takes
+           either, so neither is turned into the other on the way. */
+        begin(got.rows ? got.rows : got.text);
+      }).catch(function (err) { say(err.message, true); });
+    }
+
+    function begin(src) {
+      source = src;
+      if (typeof source === 'string' && !source.trim()) { say('', false); return; }
+      run();
+    }
+
+    function run() {
+      var read = root.SimUpload.ledgerRows(source, answers);
+      if (askPanel) { askPanel.hidden = true; askPanel.innerHTML = ''; }
+
+      if (read.ask === 'direction') return askDirection(read);
+      if (!read.ok) return say(read.message, true);
+
+      opts.onRows(read.rows, read);
+
+      /* What was read, and what was not. Rows it cannot read are counted and
+         shown rather than quietly dropped. */
+      var said = count(read.rows.length) + (read.rows.length === 1 ? ' line read' : ' lines read');
+      if (sourceName) said += ' from ' + sourceName;
+      if (read.skipped) said += ', ' + count(read.skipped) + ' skipped';
+      var out = read.rows.filter(function (r) { return r.dir === 'out'; }).length;
+      if (out) said += '. ' + count(out) + (out === 1 ? ' is money out' : ' are money out');
+      said += '.';
+      if (!read.dateCertain && read.example) {
+        said += ' These dates read two ways; ' + read.example.raw + ' has been read as ' +
+                read.example.dayFirst + '. Check the lines above.';
+      }
+      say(said, false);
+      text.value = '';
+      box.hidden = true;
+      if (input) input.value = '';
+    }
+
+    /* The words out of the reader's own file, with how many lines each one
+     * covers, and nothing ticked. Ticking nothing is a real answer -- it reads
+     * every line as money in, which is what the file said before this question
+     * existed -- so a reader who does not recognise the column is never stuck
+     * inside it. */
+    function askDirection(read) {
+      if (!askPanel) return say(read.message, true);
+      say('', false);
+      var rows = read.words.map(function (w, i) {
+        return '<label class="tick"><input type="checkbox" data-word="' + esc(w.word) + '"' +
+          ' id="' + opts.askId + '-w' + i + '">' +
+          '<span>' + esc(w.word) + ' <span class="gloss">' +
+          count(w.count) + (w.count === 1 ? ' line' : ' lines') + '</span></span></label>';
+      }).join('');
+      askPanel.hidden = false;
+      askPanel.innerHTML = '<div class="refusal"><p>' + esc(read.message) + '</p>' +
+        '<div class="ticks">' + rows + '</div>' +
+        '<p class="gloss">Anything left unticked is read as money in.</p>' +
+        '<button class="primary" type="button" id="' + opts.askId + '-go">Read them this way</button>' +
+        '</div>';
+      $('#' + opts.askId + '-go').addEventListener('click', function () {
+        var map = {};
+        $$('[data-word]', askPanel).forEach(function (b) {
+          map[b.dataset.word] = b.checked ? 'out' : 'in';
+        });
+        answers.direction = map;
+        run();
+      });
+    }
+
+    function say(words, refuse) {
+      note.textContent = words;
+      note.classList[refuse ? 'add' : 'remove']('refuse');
+    }
+  }
+
   /* --------------------------------------------------------------- routing */
   var views = {};
   function view(name, fns) { views[name] = fns; }
@@ -371,7 +530,7 @@
     $: $, $$: $$, money: money, moneyWords: moneyWords, pct: pct, date: date,
     span: span, years: years, esc: esc, count: count, checkInput: F.checkInput, echo: F.echo,
     slot: slot, saying: saying, written: written, land: land,
-    door: door, contentOf: contentOf,
+    door: door, ledgerDoor: ledgerDoor, dropzone: dropzone, contentOf: contentOf,
     view: view, go: go, start: start, render: render,
     copy: COPY
   };

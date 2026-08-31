@@ -213,47 +213,16 @@
     $('#m-edit').hidden = true;
   }
 
-  /* ------------------------------------------------- paste from a spreadsheet
-   * Two columns: a date and an amount, with a minus for money out. That is
-   * what a bank statement and a fund's own transaction export both already
-   * look like, so most readers can paste without editing anything. */
-  function paste(text) {
-    /* One ledger reader for the whole product (sim/upload.js). What was here
-     * was positional -- column 0 the date, column 1 the amount -- so a sheet
-     * whose columns sit in another order silently produced nothing, and the
-     * word "Date" in a header counted as a line that could not be read.
-     *
-     * The shared reader finds the columns by content, recognises a header by
-     * content rather than by name, and reads a bracketed or true-minus figure
-     * as money out, which is how a statement writes it. */
-    var read = root.SimUpload.ledgerRows(text);
-    var note = $('#m-paste-note');
-
-    if (!read.ok) {
-      note.textContent = read.message;
-      note.classList.add('refuse');
-      return;
-    }
-    note.classList.remove('refuse');
-
-    read.rows.forEach(function (r) {
+  /* -------------------------------------------------- rows from a spreadsheet
+   * Pasted, picked or dropped -- all three go through the one ledger door in
+   * shared.js, which goes through the one ledger reader in sim/upload.js. What
+   * was here was this screen's own copy of that handling; Tool 3 had the other
+   * copy. Two copies of the rules about the reader's own money is one too many.
+   */
+  function take(rows) {
+    rows.forEach(function (r) {
       M.entries.push({ kind: 'one', t: r.t, dir: r.dir, amount: r.amount, fund: r.fund });
     });
-
-    /* What was read, and what was not. Rows it cannot read are counted and
-     * shown rather than quietly dropped. */
-    var said = W.count(read.rows.length) + (read.rows.length === 1 ? ' line read' : ' lines read');
-    if (read.skipped) said += ', ' + W.count(read.skipped) + ' skipped';
-    var out = read.rows.filter(function (r) { return r.dir === 'out'; }).length;
-    if (out) said += '. ' + W.count(out) + (out === 1 ? ' is money out' : ' are money out');
-    said += '.';
-    if (!read.dateCertain && read.example) {
-      said += ' These dates read two ways; ' + read.example.raw + ' has been read as ' +
-              read.example.dayFirst + '. Check the lines above.';
-    }
-    note.textContent = said;
-    $('#m-paste-text').value = '';
-    $('#m-paste').hidden = true;
     drawLedger();
   }
 
@@ -505,12 +474,12 @@
       drawLedger();
     });
 
-    $('#m-paste-open').addEventListener('click', function () {
-      var box = $('#m-paste');
-      box.hidden = !box.hidden;
-      if (!box.hidden) $('#m-paste-text').focus();
+    W.ledgerDoor({
+      openId: 'm-paste-open', boxId: 'm-paste', textId: 'm-paste-text',
+      readId: 'm-paste-read', noteId: 'm-paste-note', askId: 'm-paste-ask',
+      fileOpenId: 'm-file-open', fileId: 'm-file', dropId: 'm-ledger',
+      onRows: take
     });
-    $('#m-paste-read').addEventListener('click', function () { paste($('#m-paste-text').value); });
 
     $('#m-example').addEventListener('click', example);
     $('#m-save').addEventListener('click', save);
@@ -546,5 +515,5 @@
     }
   });
 
-  root.WYSMine = { state: M, expand: expand, init: init, show: show, paste: paste };
+  root.WYSMine = { state: M, expand: expand, init: init, show: show, take: take };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

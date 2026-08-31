@@ -135,7 +135,7 @@
       <div class="actions">
         <button class="linkish" id="add" type="button">Add a line</button>
         <button class="linkish" id="sip" type="button">Monthly instalments</button>
-        <button class="linkish" id="paste-open" type="button">Paste from a spreadsheet</button>
+        <button class="linkish" id="paste-open" type="button">From a spreadsheet</button>
         <button class="linkish" id="example" type="button">Try an example</button>
         <button class="linkish" id="clear" type="button">Clear</button>
       </div>
@@ -145,9 +145,15 @@
         <p class="gloss">A minus or brackets on the money you took out.</p>
         <textarea id="paste-text" rows="6" spellcheck="false"
                   aria-label="Paste two columns: the date, and the amount"></textarea>
-        <p class="gloss" id="paste-note" aria-live="polite"></p>
-        <button class="primary" id="paste-read" type="button">Read these lines</button>
+        <div class="actions">
+          <button class="primary" id="paste-read" type="button">Read these lines</button>
+          <button class="linkish" id="ledger-file-open" type="button">Read a CSV instead</button>
+          <input type="file" id="ledger-file" accept=".csv,.txt,.tsv,.xls,.xlsx" hidden>
+        </div>
+        <p class="gloss">Or drop the file anywhere on this list.</p>
       </div>
+      <p class="gloss" id="paste-note" aria-live="polite"></p>
+      <div class="boxed" id="paste-ask" hidden></div>
 
       <div class="boxed" id="sip-box" hidden>
         <label class="field" for="sip-from"><span class="label">First instalment</span>
@@ -186,7 +192,7 @@
       <div class="actions">
         <button class="linkish" id="m-add" type="button">Add a line</button>
         <button class="linkish" id="m-sip" type="button">Monthly instalments</button>
-        <button class="linkish" id="m-paste-open" type="button">Paste from a spreadsheet</button>
+        <button class="linkish" id="m-paste-open" type="button">From a spreadsheet</button>
       </div>
       <div class="actions">
         <button class="linkish" id="m-example" type="button">Try an example</button>
@@ -230,9 +236,15 @@
         <p class="gloss">A minus in front of an amount means money out.</p>
         <textarea id="m-paste-text" rows="6" spellcheck="false"
                   placeholder="2021-04-05&#9;5000&#10;2023-08-14&#9;-50000"></textarea>
-        <p class="gloss" id="m-paste-note" aria-live="polite"></p>
-        <button class="primary" id="m-paste-read" type="button">Read these lines</button>
+        <div class="actions">
+          <button class="primary" id="m-paste-read" type="button">Read these lines</button>
+          <button class="linkish" id="m-file-open" type="button">Read a CSV instead</button>
+          <input type="file" id="m-file" accept=".csv,.txt,.tsv,.xls,.xlsx" hidden>
+        </div>
+        <p class="gloss">Or drop the file anywhere on this list.</p>
       </div>
+      <p class="gloss" id="m-paste-note" aria-live="polite"></p>
+      <div class="boxed" id="m-paste-ask" hidden></div>
 
       <h2 style="margin-top:1.75rem">What it is worth</h2>
       <div class="pair">

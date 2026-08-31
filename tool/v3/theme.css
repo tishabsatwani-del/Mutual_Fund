@@ -308,6 +308,9 @@ body[data-view="about"] #foot-about { display: none; }
    Never a red box with an exclamation mark. */
 .refusal { border-top: 1px solid var(--rule); padding-top: 1.1rem; }
 .refusal p { font-family: var(--serif); font-size: 1.125rem; margin: 0 0 .6rem; }
+/* Inside its own box the hairline doubles the box's edge. The box is already
+   the separation the hairline was drawing. */
+.boxed > .refusal:first-child { border-top: 0; padding-top: 0; }
 
 .foot { border-top: 1px solid var(--rule); margin-top: 2.5rem; padding-top: 1.1rem;
         font-size: .8125rem; color: var(--muted); }
@@ -491,3 +494,20 @@ summary.linkish { list-style: revert; cursor: pointer; }
    but the reader's own ink rather than the muted grey of a plain gloss, so it
    reads as something to act on. */
 .gloss.refuse { color: var(--ink); }
+
+/* ------------------------------------------------------------- a drop zone
+   The file is over the list the reader is looking at. No red, no green, no
+   glow: the box's own edge simply firms up, the way the focus ring does. */
+.dropping { outline: 2px dashed var(--rule-edge); outline-offset: 4px; }
+
+/* Which words mean money out. Ticks rather than a pair of radios per word:
+   the answer is almost always one word out of two or three, and everything
+   left alone keeps the reading the file already had. */
+.ticks { margin: .6rem 0 .2rem; }
+.tick {
+  display: flex; align-items: baseline; gap: .55rem;
+  padding: .5rem 0; border-top: 1px solid var(--rule);
+  cursor: pointer;
+}
+.tick input { width: 1.05rem; height: 1.05rem; flex: none; accent-color: var(--ink); }
+.tick .gloss { margin-left: .3rem; }

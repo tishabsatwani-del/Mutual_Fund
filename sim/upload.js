@@ -121,9 +121,13 @@
   /* Two columns out of a spreadsheet, read by content. Returns rows the ledger
    * screens can use directly, plus everything a preview needs to show what was
    * read and what was left out. */
-  function ledgerRows(text, options) {
+  function ledgerRows(input, options) {
     var o = options || {};
-    var rows = P.parseDelimited(String(text == null ? '' : text));
+    /* Text from a paste, or rows already read out of a workbook by the same
+       reader the NAV door uses. A dropped .xlsx ledger arrives as the second. */
+    var rows = Array.isArray(input)
+      ? input
+      : P.parseDelimited(String(input == null ? '' : input));
     if (!rows.length) return ledgerFail('NO-ROWS', MESSAGES.ledgerNoRows);
 
     /* A header is recognised by CONTENT: a first row in which no cell reads as
@@ -158,13 +162,59 @@
 
     var fundCol = fundColumn(header, width, dateCol, amountCol);
 
+    /* ------------------------------------------------------- which way it went
+     * A minus sign or a bracket is the reader saying it themselves, and it wins
+     * outright. Where every amount is unsigned, the only thing in the file that
+     * knows is a type column -- "Purchase", "Redemption", "SIP". What those
+     * words MEAN is not decided here. They are handed back with their counts
+     * and the reader says which ones are money out, once, for the whole file.
+     *
+     * This is the same rule that makes "5000 Dr" unreadable: a direction taken
+     * from an abbreviation the tool has decided it understands is wrong
+     * silently, and backwards, which is the one failure this parser must not
+     * have. Asking costs one click. */
+    var signed = false;
+    for (var q = 0; q < body.length && !signed; q++) {
+      var probeAmt = ledgerAmount(body[q][amountCol]);
+      if (isFinite(probeAmt) && probeAmt < 0) signed = true;
+    }
+
+    var typeCol = -1, words = null, dirMap = null;
+    if (!signed) {
+      var found = typeColumn(header, body, width, dateCol, amountCol, fundCol);
+      if (found) { typeCol = found.col; words = found.words; }
+    }
+    if (typeCol >= 0) {
+      if (!o.direction) {
+        return {
+          ok: false, ask: 'direction', rows: [], skipped: 0, header: header,
+          dateCol: dateCol, amountCol: amountCol, fundCol: fundCol, typeCol: typeCol,
+          words: words, dayFirst: dayFirst, dateCertain: dateCertain, example: example,
+          code: 'ASK-DIRECTION', message: MESSAGES.whichDirection(words.length)
+        };
+      }
+      dirMap = {};
+      Object.keys(o.direction).forEach(function (k) {
+        dirMap[String(k).trim().toLowerCase()] = o.direction[k] === 'out' ? 'out' : 'in';
+      });
+    }
+
     var out = [], skipped = 0;
     for (var i = 0; i < body.length; i++) {
       var t = dateOf(body[i][dateCol], dayFirst);
       var n = ledgerAmount(body[i][amountCol]);
       if (!isFinite(t) || !isFinite(n) || n === 0) { skipped++; continue; }
+      var dir = n < 0 ? 'out' : 'in';
+      if (dirMap) {
+        /* A row whose word the reader never saw -- an empty type cell, or one
+           that turned up below where the words were counted -- is skipped and
+           counted, never quietly filed as money in. */
+        var said = dirMap[String(body[i][typeCol] == null ? '' : body[i][typeCol]).trim().toLowerCase()];
+        if (!said) { skipped++; continue; }
+        dir = said;
+      }
       out.push({
-        t: t, amount: Math.abs(n), dir: n < 0 ? 'out' : 'in',
+        t: t, amount: Math.abs(n), dir: dir,
         fund: fundCol >= 0 ? String(body[i][fundCol] == null ? '' : body[i][fundCol]).trim() : '',
         line: i + (header ? 2 : 1)
       });
@@ -172,17 +222,65 @@
 
     return {
       ok: out.length > 0, rows: out, skipped: skipped, header: header,
-      dateCol: dateCol, amountCol: amountCol, fundCol: fundCol,
-      dayFirst: dayFirst, dateCertain: dateCertain, example: example,
+      dateCol: dateCol, amountCol: amountCol, fundCol: fundCol, typeCol: typeCol,
+      words: words, dayFirst: dayFirst, dateCertain: dateCertain, example: example,
       code: out.length ? null : 'NO-ROWS',
       message: out.length ? null : MESSAGES.ledgerNoRows
     };
   }
 
+  /* A column of a few repeated short words is a transaction type. It is found
+   * by shape, not only by name, because half the exports in circulation head it
+   * "Particulars" or nothing at all.
+   *
+   * A named column may hold ONE word -- a file that is all redemptions still
+   * has to be asked about, or it reads entirely backwards. An unnamed one needs
+   * at least two, otherwise every file with a constant column in it ("NSE",
+   * "INR") would ask a question about nothing. */
+  var TYPE_HEADERS = ['type', 'transaction type', 'txn type', 'transaction', 'nature',
+                      'kind', 'particulars', 'description', 'narration'];
+
+  function typeColumn(header, body, width, dateCol, amountCol, fundCol) {
+    var named = [], rest = [], c;
+    for (c = 0; c < width; c++) {
+      /* The fund column is already spoken for. Without this, a three-column
+         export -- date, amount, fund -- asks the reader which of their own
+         fund names means money out. */
+      if (c === dateCol || c === amountCol || c === fundCol) continue;
+      var head = header ? String(header[c] == null ? '' : header[c]).toLowerCase().trim() : '';
+      if (head && TYPE_HEADERS.indexOf(head) >= 0) named.push(c); else rest.push(c);
+    }
+    var order = named.concat(rest);
+    for (var k = 0; k < order.length; k++) {
+      var words = typeWords(body, order[k], named.indexOf(order[k]) >= 0);
+      if (words) return { col: order[k], words: words };
+    }
+    return null;
+  }
+
+  function typeWords(body, col, isNamed) {
+    var seen = {}, order = [], filled = 0;
+    for (var i = 0; i < body.length; i++) {
+      var raw = String(body[i][col] == null ? '' : body[i][col]).trim();
+      if (raw === '') continue;
+      if (raw.length > 30) return null;                    /* a narration, not a type */
+      if (isFinite(ledgerAmount(raw))) return null;        /* another money column */
+      if (isFinite(dateOf(raw, true))) return null;        /* another date column */
+      filled++;
+      var key = raw.toLowerCase();
+      if (!seen[key]) { seen[key] = { word: raw, count: 0 }; order.push(key); }
+      seen[key].count++;
+      if (order.length > 8) return null;                   /* not a small set of types */
+    }
+    if (filled < Math.max(2, Math.ceil(body.length * 0.6))) return null;
+    if (order.length < (isNamed ? 1 : 2)) return null;
+    return order.map(function (k) { return seen[k]; });
+  }
+
   function ledgerFail(code, message) {
-    return { ok: false, rows: [], skipped: 0, header: null, dateCol: -1, amountCol: -1,
-             fundCol: -1, dayFirst: true, dateCertain: true, example: null,
-             code: code, message: message };
+    return { ok: false, ask: null, rows: [], skipped: 0, header: null, dateCol: -1,
+             amountCol: -1, fundCol: -1, typeCol: -1, words: null, dayFirst: true,
+             dateCertain: true, example: null, code: code, message: message };
   }
 
   function dateOf(cell, dayFirst) { return P.toTimestamp(P.parseDateParts(cell, dayFirst)); }
@@ -472,6 +570,14 @@
     ledgerNoAmount: 'I found the dates but no column of amounts beside them. Copy the amount column ' +
                     'too, with a minus or brackets on the money you took out.',
 
+    /* Not a refusal and not a guess: the file has a column saying what each
+       line was, and only the reader knows which of those words took money out.
+       Asked once, applied to every line. */
+    whichDirection: function (n) {
+      return 'Every amount here is unsigned, and one column says what each line was. ' +
+             'Tick the ' + (n === 1 ? 'word' : 'words') + ' that mean money going OUT.';
+    },
+
     /* A name, not a sentence. nameOf() strips a file extension; pasted columns
        have no file, and the confirmation must still say what it read. */
     pastedName: 'pasted columns',
@@ -541,7 +647,7 @@
 
   var api = {
     read: read, firstMatching: firstMatching,
-    ledgerRows: ledgerRows, ledgerAmount: ledgerAmount, stitch: stitch, gapsIn: gapsIn, groupSchemes: groupSchemes,
+    ledgerRows: ledgerRows, ledgerAmount: ledgerAmount, typeColumn: typeColumn, stitch: stitch, gapsIn: gapsIn, groupSchemes: groupSchemes,
     rowsFrom: rowsFrom, jsonRows: jsonRows, firstAmbiguousDate: firstAmbiguousDate,
     MESSAGES: MESSAGES, GAP_DAYS: GAP_DAYS
   };

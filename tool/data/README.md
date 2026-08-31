@@ -4,6 +4,24 @@
 return engine is finished and tested; what is missing is data, and the data must
 be real.
 
+## Settled: it stays empty
+
+**31 August 2026.** The author has decided against bundling any index history at
+all, and this file will not be filled.
+
+Review v4 §5 records niftyindices.com's terms: the TRI files are licensed for the
+reader's *personal* use, never for redistribution inside a tool. Shipping the
+series would put a licensing question inside a free companion to a printed book,
+which is a bad trade for a convenience the reader can supply in one click.
+
+So the reader loads an index file themselves, in the same door as everything
+else, and the tool ships with no index data of any kind. The pipeline below still
+works and is still tested; it exists for anyone with a licence in hand, not for
+this build.
+
+The rest of this file is the standing reason the file was never allowed to be
+filled with anything invented, which is unchanged.
+
 ## Why it is empty
 
 An index series cannot be approximated. A plausible-looking curve would produce a

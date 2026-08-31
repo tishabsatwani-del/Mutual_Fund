@@ -386,7 +386,7 @@ const NIGHT = { paper: '#12161E', ink: '#E8E6E1', muted: '#9AA1AE', slate: '#8FA
 
     ok('the four links the review asks for are all here',
        (await page.locator('#m-ledger > .actions .linkish').allInnerTexts()).join(' | ') ===
-       'Add a line | Monthly instalments | Paste from a spreadsheet | Try an example | ' +
+       'Add a line | Monthly instalments | From a spreadsheet | Try an example | ' +
        'Save entries | Load entries | Clear',
        (await page.locator('#m-ledger > .actions .linkish').allInnerTexts()).join(' | '));
 
@@ -1547,6 +1547,154 @@ const NIGHT = { paper: '#12161E', ink: '#E8E6E1', muted: '#9AA1AE', slate: '#8FA
     ok('and reports the money out it found', /1 is money out/.test(mnote), mnote);
 
     ok('no script errors across every paste', errors.length === 0, errors.join(' | '));
+    await ctx.close();
+  }
+
+  /* ================================= the file, picked or dropped, and the one
+   *                                     question an unsigned ledger raises
+   *
+   * Three ways in, one reader. A CSV picked from disk, the same file dropped on
+   * the list, and a paste all land in sim/upload.js's ledger reader, so the
+   * columns are found the same way and the same question gets asked.
+   *
+   * The question: where every amount is unsigned, only a type column knows
+   * which way the money went, and what its words MEAN is the reader's to say.
+   * A direction taken from a word the tool decided it understood is wrong
+   * silently and backwards, which is the one failure this parser must not have.
+   */
+  section('A ledger read from a file, picked and dropped');
+  {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 900 } });
+    const page = await ctx.newPage();
+    const errors = [];
+    page.on('pageerror', e => errors.push(e.message));
+    await page.goto(BASE + '#mine', { waitUntil: 'networkidle' });
+
+    const signedCsv = path.join(TMP, 'ledger-signed.csv');
+    fs.writeFileSync(signedCsv, 'Date,Amount\n2021-04-05,5000\n2023-08-14,-50000\n');
+    const typedCsv = path.join(TMP, 'ledger-typed.csv');
+    fs.writeFileSync(typedCsv,
+      'Date,Transaction Type,Amount\n' +
+      '2021-04-05,Purchase,5000\n' +
+      '2021-05-05,Purchase,5000\n' +
+      '2023-08-14,Redemption,50000\n');
+
+    await page.click('#m-paste-open');
+    ok('the CSV route lives inside the box the spreadsheet button opens',
+       (await page.locator('#m-file-open').isVisible()) === true);
+    await page.setInputFiles('#m-file', signedCsv);
+    await page.waitForTimeout(400);
+    const picked = await page.locator('#m-paste-note').innerText();
+    ok('a picked CSV is read, and says which file it came from',
+       /2 lines read from ledger-signed\.csv/.test(picked), picked);
+    ok('and its minus is money out, exactly as a paste of the same rows would be',
+       /Money out/.test(await page.locator('#m-rows').innerText()) &&
+       /1 is money out/.test(picked), picked);
+
+    /* The same file, dropped. A real DataTransfer, on the element the reader
+       is looking at -- not the hidden input, which would prove nothing. */
+    await page.click('#m-clear');
+    await page.waitForTimeout(200);
+    await page.evaluate(async ([csv]) => {
+      const dt = new DataTransfer();
+      dt.items.add(new File([csv], 'dropped.csv', { type: 'text/csv' }));
+      const list = document.querySelector('#m-ledger');
+      list.dispatchEvent(new DragEvent('dragenter', { dataTransfer: dt, bubbles: true }));
+      list.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true }));
+    }, ['Date,Amount\n2021-04-05,5000\n2023-08-14,-50000\n']);
+    await page.waitForTimeout(400);
+    const dropped = await page.locator('#m-paste-note').innerText();
+    ok('a dropped file goes through the same reader',
+       /2 lines read from dropped\.csv/.test(dropped), dropped);
+    ok('and the highlight it raised is put away again',
+       (await page.evaluate(() =>
+         document.querySelector('#m-ledger').classList.contains('dropping'))) === false);
+
+    /* An unsigned file with a type column is a question, not a guess. */
+    await page.click('#m-clear');
+    await page.waitForTimeout(200);
+    await page.click('#m-paste-open');
+    await page.setInputFiles('#m-file', typedCsv);
+    await page.waitForTimeout(400);
+    ok('an unsigned ledger with a type column asks rather than assuming',
+       (await page.locator('#m-paste-ask').isVisible()) === true &&
+       /Tick the words that mean money going OUT/
+         .test(await page.locator('#m-paste-ask').innerText()),
+       await page.locator('#m-paste-ask').innerText());
+    ok('and nothing was written to the ledger while the question stands',
+       (await page.locator('#m-rows tr').count()) === 0 ||
+       /Nothing written yet/.test(await page.locator('#m-rows').innerText()));
+    const askText = await page.locator('#m-paste-ask').innerText();
+    ok('it shows the reader their own words, and how many lines each covers',
+       /Purchase\s+2 lines/.test(askText) && /Redemption\s+1 line/.test(askText), askText);
+    ok('with nothing ticked, because a pre-ticked answer is still a guess',
+       (await page.locator('#m-paste-ask input:checked').count()) === 0);
+
+    await page.check('#m-paste-ask-w1');            /* Redemption */
+    await page.click('#m-paste-ask-go');
+    await page.waitForTimeout(400);
+    const answered = await page.locator('#m-paste-note').innerText();
+    ok('answered once, it is applied to every line',
+       /3 lines read/.test(answered) && /1 is money out/.test(answered), answered);
+    ok('and the ledger holds the money out the reader named',
+       /Money out/.test(await page.locator('#m-rows').innerText()),
+       await page.locator('#m-rows').innerText());
+    ok('the question is put away once it is answered',
+       (await page.locator('#m-paste-ask').isVisible()) === false);
+
+    /* Ticking nothing is a real answer: the file reads the way it read before
+       the question existed, so no reader is ever stuck inside it. */
+    await page.click('#m-clear');
+    await page.waitForTimeout(200);
+    await page.click('#m-paste-open');
+    await page.setInputFiles('#m-file', typedCsv);
+    await page.waitForTimeout(400);
+    await page.click('#m-paste-ask-go');
+    await page.waitForTimeout(400);
+    ok('ticking nothing reads every line as money in',
+       !/Money out/.test(await page.locator('#m-rows').innerText()) &&
+       /3 lines read/.test(await page.locator('#m-paste-note').innerText()),
+       await page.locator('#m-paste-note').innerText());
+
+    /* Tool 3's ledger is the same door, so it asks the same question and can
+       write the money out that reaches the author's withdrawals sentence. */
+    await page.evaluate(() => { location.hash = 'stand'; });
+    await page.waitForTimeout(300);
+    /* The ledger only exists once there is a fund to stand against. */
+    await page.setInputFiles('#file', navFile);
+    await page.waitForTimeout(900);
+    await page.click('#paste-open');
+    await page.setInputFiles('#ledger-file', typedCsv);
+    await page.waitForTimeout(400);
+    ok('Tool 3’s ledger asks the same question, from the same door',
+       (await page.locator('#paste-ask').isVisible()) === true,
+       await page.locator('#paste-note').innerText());
+    await page.check('#paste-ask-w1');
+    await page.click('#paste-ask-go');
+    await page.waitForTimeout(400);
+    ok('and writes the money out that only a handed-over ledger can create',
+       /Money out|out/.test(await page.locator('#rows').innerText()) &&
+       /1 is money out/.test(await page.locator('#paste-note').innerText()),
+       await page.locator('#paste-note').innerText());
+
+    /* The NAV door takes a drop too, and it is still the same read(): the
+       confirmation names the file, and the reading follows from it. */
+    await page.evaluate(() => { location.hash = 'record'; });
+    await page.waitForTimeout(300);
+    const nav = fs.readFileSync(navFile, 'utf8');
+    await page.evaluate(async ([csv]) => {
+      const dt = new DataTransfer();
+      dt.items.add(new File([csv], 'dropped-nav.csv', { type: 'text/csv' }));
+      const zone = document.querySelector('#r-fund');
+      zone.dispatchEvent(new DragEvent('dragenter', { dataTransfer: dt, bubbles: true }));
+      zone.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true }));
+    }, [nav]);
+    await page.waitForTimeout(900);
+    ok('a NAV file dropped on the door is confirmed like one that was picked',
+       /^Found [\d,]+ NAVs for dropped-nav, /.test(await page.locator('#r-state').innerText()),
+       await page.locator('#r-state').innerText());
+
+    ok('no script errors across the file door', errors.length === 0, errors.join(' | '));
     await ctx.close();
   }
 

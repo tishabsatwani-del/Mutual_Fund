@@ -314,5 +314,116 @@ section('Pasted columns go through the same door as a file');
      /download the table/.test(fromFile.message), fromFile.message);
 }
 
+
+/* -------------------------------------------------------------------------
+ * Which way the money went.
+ *
+ * The rule this section holds: direction is never inferred from a word the
+ * tool has decided it understands. A sign the reader wrote wins outright; an
+ * unsigned file with a type column becomes a question; an answered question is
+ * applied to every line and to nothing else.
+ */
+section('An unsigned ledger with a type column asks which way');
+{
+  var typed = 'Date,Type,Amount\n' +
+              '2021-04-05,Purchase,5000\n' +
+              '2021-05-05,Purchase,5000\n' +
+              '2023-08-14,Redemption,50000\n';
+
+  var q = U.ledgerRows(typed);
+  ok('it does not guess', q.ok === false && q.ask === 'direction', q.code);
+  eq('and it names the column it found', q.typeCol, 1);
+  ok('with each word and how many lines it covers',
+     JSON.stringify(q.words) === JSON.stringify([{ word: 'Purchase', count: 2 },
+                                                 { word: 'Redemption', count: 1 }]),
+     JSON.stringify(q.words));
+  ok('asking for the words that mean money out',
+     /Tick the words that mean money going OUT/.test(q.message), q.message);
+
+  var a = U.ledgerRows(typed, { direction: { Purchase: 'in', Redemption: 'out' } });
+  ok('answered, it reads every line that way',
+     a.ok && a.rows.length === 3 && a.rows[2].dir === 'out' && a.rows[0].dir === 'in',
+     JSON.stringify(a.rows.map(function (r) { return r.dir; })));
+  eq('and skips nothing it was told about', a.skipped, 0);
+
+  /* Ticking nothing is a real answer, not a dead end: it reads the file the
+     way it read before this question existed. */
+  var none = U.ledgerRows(typed, { direction: { Purchase: 'in', Redemption: 'in' } });
+  ok('ticking nothing reads every line as money in',
+     none.ok && none.rows.every(function (r) { return r.dir === 'in'; }),
+     JSON.stringify(none.rows.map(function (r) { return r.dir; })));
+
+  /* A word the reader never saw must not be filed as money in behind their
+     back. It is dropped, and the count of dropped lines is on the screen. */
+  var partial = U.ledgerRows(typed + '2024-01-09,Switch Out,7000\n',
+                             { direction: { Purchase: 'in', Redemption: 'out' } });
+  eq('a word with no answer is skipped, not assumed', partial.skipped, 1);
+  eq('and the lines that were answered still read', partial.rows.length, 3);
+}
+
+section('A sign the reader wrote wins outright');
+{
+  var signed = 'Date,Type,Amount\n' +
+               '2021-04-05,Purchase,5000\n' +
+               '2023-08-14,Redemption,-50000\n';
+  var r = U.ledgerRows(signed);
+  ok('one minus anywhere and there is no question', r.ok && r.ask !== 'direction', r.code);
+  eq('the sign decides', r.rows[1].dir, 'out');
+  eq('and the type column is left alone', r.typeCol, -1);
+
+  var brackets = U.ledgerRows('2021-04-05,Purchase,5000\n2023-08-14,Redemption,(50000)\n');
+  ok('brackets count as a sign the same way',
+     brackets.ok && brackets.rows[1].dir === 'out' && brackets.ask !== 'direction',
+     brackets.code);
+}
+
+section('The question is asked only where it means something');
+{
+  var plain = U.ledgerRows('2021-04-05,5000\n2022-01-09,20000\n');
+  ok('two plain columns are not a question', plain.ok && plain.ask !== 'direction', plain.code);
+
+  /* A fund column is already spoken for. Without that exclusion the reader is
+     asked which of their own fund names means money out. */
+  var funded = U.ledgerRows('2021-04-05,5000,Acme Bluechip\n' +
+                            '2022-01-09,7000,Acme Bluechip\n' +
+                            '2022-02-09,7000,Zenith Flexi\n');
+  ok('a fund column is not mistaken for a type column',
+     funded.ok && funded.ask !== 'direction', funded.code);
+  eq('it is read as the fund it is', funded.rows[2].fund, 'Zenith Flexi');
+
+  /* One repeated word says nothing on its own -- unless the column is NAMED,
+     in which case a file of nothing but redemptions would otherwise read
+     entirely backwards without a word said. */
+  var constant = U.ledgerRows('2021-04-05,5000,NSE\n2022-01-09,7000,NSE\n2022-02-09,9000,NSE\n');
+  ok('an unnamed column of one repeated word asks nothing',
+     constant.ok && constant.ask !== 'direction', constant.code);
+  var named = U.ledgerRows('Date,Transaction Type,Amount\n' +
+                           '2021-04-05,Redemption,5000\n2022-01-09,Redemption,20000\n');
+  ok('a named one holding only redemptions still asks',
+     named.ask === 'direction' && named.words.length === 1,
+     named.code + ' ' + JSON.stringify(named.words));
+
+  /* A narration column is prose, not a small set of types. */
+  var narration = U.ledgerRows(
+    'Date,Particulars,Amount\n' +
+    '2021-04-05,NEFT transfer to broker account ending 4412,5000\n' +
+    '2022-01-09,NEFT transfer to broker account ending 7781,7000\n');
+  ok('a narration column is not read as a type column',
+     narration.ok && narration.ask !== 'direction', narration.code);
+}
+
+section('The ledger reader takes rows as well as text');
+{
+  /* A dropped workbook comes back from the reader as rows already. Turning
+     those back into text to parse them again is a round trip that can only
+     lose. */
+  var rows = U.ledgerRows([['Date', 'Amount'], ['2021-04-05', 5000], ['2023-08-14', -50000]]);
+  ok('rows out of a workbook read like a paste',
+     rows.ok && rows.rows.length === 2 && rows.rows[1].dir === 'out',
+     rows.code || JSON.stringify(rows.rows));
+  ok('and an empty array is still nothing to read',
+     U.ledgerRows([]).ok === false, 'read something');
+}
+
 console.log('\n' + passed + ' passed, ' + failed.length + ' failed');
 if (failed.length) { console.log('\nFAILED:\n  ' + failed.join('\n  ')); process.exit(1); }
