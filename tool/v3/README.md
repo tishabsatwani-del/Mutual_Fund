@@ -19,7 +19,7 @@ screens are still live at `../`; these replace them.
 | `tokens.html`, `tokens.js` | The token sheet, built from the build |
 | *(shared)* `sim/upload.js` | The §5 door: its questions, its stitching, its messages |
 | *(shared)* `sim/workbook.js` | Reads an .xlsx without a library |
-| `shots/` | The twenty screenshots — run `node tools/v3/shoot.js` |
+| `shots/` | The twenty screenshots and two contact sheets — `node tools/v3/shoot.js` |
 | `deck.js` | Generated. Do not edit — run `python3 tools/v3/build_deck.py` |
 
 ```
@@ -386,6 +386,52 @@ They carry **their own caption**. The transactions in them are made up whether
 or not `--fund` pointed at a real NAV history, and a picture of somebody's
 transactions is not a thing to leave ambiguous, so `stamp.py` takes a per-shot
 caption and these four override the set's.
+
+### The set
+
+Ten screens on the day sheet, then the same ten at night. Each thumbnail is a
+full-page phone capture; open `shots/` for any one of them at size.
+
+![The day sheet](shots/CONTACT-day.png)
+
+![The night sheet](shots/CONTACT-night.png)
+
+`contact.py` builds these two at the end of every run. Twenty captures three to
+five thousand pixels tall cannot go into a document one at a time — a reader
+scrolls past the set rather than seeing it — and at contact width the caption
+strip composited on each capture is a grey smudge. A caption that cannot be
+read is not a caption, so the sheet **redraws it large**, and the strips stay
+on the full-size files where they are legible.
+
+| Shot | Screen | What state |
+|---|---|---|
+| `01-home` | Home | the four tools |
+| `02-about` | About this page | the checkable facts |
+| `03-record` | This fund's record | a five-year reading, with the life-line |
+| `04-stand` | My money in this fund | a reading against the fund's own record |
+| `05-plan` | My plan, tested | three landings and two levers |
+| `06-mine` | My return | XIRR, with the inflation line filled |
+| `07-mine-spreadsheet` | My return | the door open: paste, CSV, or drop |
+| `08-mine-asking` | My return | which words mean money out, nothing ticked |
+| `09-mine-read` | My return | answered, one line reading Money out |
+| `10-stand-asking` | My money in this fund | the same question, the same door |
+
+Each is written twice, `-day` and `-night`.
+
+### One thing the contact sheet caught
+
+Laying ten screens side by side is a different instrument from looking at one.
+Shot 03 showed **Load an index fundPaste two columns instead** — two inline
+buttons run together with no gap, because that door's markup is built in JS and
+had no whitespace text node between them where the hand-written doors do. It had
+been on the record screen since the paste landed and nobody reading one screen
+at a time had seen it.
+
+Fixed in two places: `door()` now inserts the separation itself, since it is the
+thing inserting the button and should not depend on how each caller formatted
+its template; and the index door's two ways in sit in an `.actions` row like
+every other pair on the product, with the whole block as the drop target rather
+than the row, which is a strip too thin to aim a file at.
 
 **On real data.** Step 7 asks for the set on real data, and no NAV source is
 reachable from the build environment: every request to AMFI and to the public

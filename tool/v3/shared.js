@@ -189,7 +189,14 @@
     pasteOpen.className = 'linkish';
     pasteOpen.id = opts.fileId + '-paste-open';
     pasteOpen.textContent = 'Paste two columns instead';
-    open.parentNode.insertBefore(pasteOpen, open.nextSibling);
+    /* A space, deliberately. Both buttons are inline, and where the door's own
+       markup is written by JS there is no whitespace text node between them --
+       the index door on Tool 2 rendered "Load an index fundPaste two columns
+       instead", run together with no gap. The door inserts this button, so the
+       door owns the separation rather than depending on how each caller happens
+       to have formatted its template. */
+    open.parentNode.insertBefore(document.createTextNode(' '), open.nextSibling);
+    open.parentNode.insertBefore(pasteOpen, open.nextSibling.nextSibling);
 
     var pasteBox = document.createElement('div');
     pasteBox.className = 'boxed paste-box';

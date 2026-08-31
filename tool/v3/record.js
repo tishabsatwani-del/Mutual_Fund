@@ -166,6 +166,7 @@
        time the reading is. §5's conversation applies to the second file too. */
     if ($('#r-index-open')) {
       W.door({ openId: 'r-index-open', fileId: 'r-index-file', stateId: 'r-index-state',
+               dropId: 'r-index',
                onLoad: function (series, name) { R.index = series; R.indexName = name; run(); } });
     }
     drawLine();
@@ -216,10 +217,15 @@
    * says what it is missing rather than quietly leaving the question out. */
   function comparisonBlock(s) {
     if (!R.index) {
-      return '<div class="section"><p class="label">Against an index fund</p>' +
+      /* The two ways in sit in an actions row like every other pair on the
+         product, and the whole block is the drop target -- not the row, which
+         is a strip too thin to aim a file at. */
+      return '<div class="section" id="r-index"><p class="label">Against an index fund</p>' +
         '<p class="gloss">No index fund is loaded, so this fund’s record stands on its own here.</p>' +
+        '<div class="actions">' +
         '<button class="linkish" id="r-index-open" type="button">Load an index fund</button>' +
         '<input type="file" id="r-index-file" accept=".csv,.txt,.xlsx,.json" multiple hidden>' +
+        '</div>' +
         '<p class="gloss" id="r-index-state" aria-live="polite"></p>' +
         '<p class="gloss">Same source, same steps as the fund’s own file.</p></div>';
     }
