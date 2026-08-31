@@ -129,7 +129,10 @@
   var CAPS = {
     rate:      { min: 0, max: 30,   unit: '%',  name: 'A return' },
     stepUp:    { min: 0, max: 25,   unit: '%',  name: 'A step-up' },
-    inflation: { min: 0, max: 20,   unit: '%',  name: 'Inflation' },
+    /* Raised from 20 at the author's instruction, 31 August 2026. Review v4 §11
+       set 20; leaving both numbers in circulation would have the code and the
+       review disagreeing about the same field. */
+    inflation: { min: 0, max: 25,   unit: '%',  name: 'Inflation' },
     years:     { min: 1, max: 50,   unit: '',   name: 'A number of years' },
     rupees:    { min: 0, max: 1e10, unit: '',   name: 'An amount' }   /* ₹1,000 crore */
   };

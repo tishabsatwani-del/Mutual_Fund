@@ -138,6 +138,39 @@ fs.mkdirSync(TMP + '/shots', { recursive: true });
 
   await page.screenshot({ path: path.join(SHOTS, '02-portfolio.png'), fullPage: true });
 
+  /* ------------------------------------- the core figures, before the prose */
+  ok('the four core figures sit above every word of explanation',
+     (await page.locator('#pf-out .stats.topline .stat').count()) === 4 &&
+     (await page.evaluate(() => {
+       const t = document.querySelector('#pf-out .stats.topline');
+       const m = document.querySelector('#pf-out .meaning');
+       return !!t && !!m && (t.compareDocumentPosition(m) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+     })) === true,
+     (await page.locator('#pf-out .stats.topline').innerText()).replace(/\n/g, ' | '));
+
+  /* A reader who does the quick maths in their head gets a different number
+     from the one on screen. Without both workings side by side the screen
+     looks wrong rather than exact. */
+  await page.fill('#pf-infl', '6');
+  await page.waitForTimeout(250);
+  await page.locator('#pf-real-out details summary').click();
+  await page.waitForTimeout(150);
+  const workings = await page.locator('#pf-real-out details').innerText();
+  ok('the exact division and the quick subtraction are shown side by side',
+     /÷/.test(workings) && /−/.test(workings) &&
+     /percentage points/.test(workings), workings.replace(/\n/g, ' | ').slice(0, 220));
+
+  /* §11 caps inflation, and the field refuses BEFORE anything is computed. */
+  await page.fill('#pf-infl', '30');
+  await page.waitForTimeout(250);
+  ok('an inflation figure outside its bounds is refused on the field',
+     (await page.locator('#pf-infl-bad').isVisible()) === true &&
+     /between 0% and 25%/.test(await page.locator('#pf-infl-bad').innerText()) &&
+     (await page.locator('#pf-real-out').innerText()).trim() === '',
+     await page.locator('#pf-infl-bad').innerText());
+  await page.fill('#pf-infl', '6');
+  await page.waitForTimeout(250);
+
   /* ==================================================== the portfolio door
    *
    * Two entirely different downloads work here, and the reader does not know
@@ -249,6 +282,57 @@ fs.mkdirSync(TMP + '/shots', { recursive: true });
   ok('while one that carries them is',
      !(await page.locator('#pf-group-card').isHidden()));
 
+  /* --------------------------------- what each holding is missing, per holding
+   *
+   * "not enough entries" told a reader something was wrong and nothing about
+   * what. The engine has known exactly which of five conditions failed since it
+   * was written; byLabel was throwing that away and substituting a shrug. */
+  await page.click('#pf-reset');
+  const sparseCsv = path.join(TMP, 'pf-sparse.csv');
+  fs.writeFileSync(sparseCsv,
+    'Date,Amount,Fund\n' +
+    '2024-01-01,100000,Acme Bluechip\n' +
+    '2025-01-01,50000,Acme Bluechip\n' +
+    '2024-06-01,25000,Zenith Flexi\n');
+  await page.setInputFiles('#pf-file', sparseCsv);
+  await page.waitForTimeout(700);
+  await page.selectOption('#pf-group', 'on');
+  await page.fill('#pf-worth', '200000');
+  await page.click('#pf-calc');
+  await page.waitForTimeout(600);
+  const perFund = await page.locator('#pf-out').innerText();
+  ok('a holding that cannot be measured says what it is missing, not "not enough entries"',
+     !/not enough entries/.test(perFund) &&
+     /no valuation and no withdrawal|needs 2 dated rows|only a valuation/.test(perFund),
+     (perFund.match(/.{0,120}(Zenith Flexi).{0,120}/) || [''])[0]);
+
+  /* ------------------------------------------ a statement of several tabs
+   *
+   * A consolidated statement is a cover, a summary and the transactions on a
+   * third tab. Reading sheet1 hands the reader a cover page and a refusal. */
+  await page.click('#pf-reset');
+  await page.waitForTimeout(200);
+  await page.setInputFiles('#pf-file',
+    path.join(__dirname, 'fixtures', 'three-tab-statement.xlsx'));
+  await page.waitForTimeout(1400);
+  ok('the tab holding the transactions is found, not the first one in the file',
+     (await page.locator('#pf-sheet').inputValue()) === 'Transaction Details',
+     await page.locator('#pf-sheet').inputValue());
+  ok('and every tab is offered so the choice can be changed',
+     (await page.locator('#pf-sheet option').allInnerTexts()).join('|') ===
+     'Cover|Summary|Transaction Details',
+     (await page.locator('#pf-sheet option').allInnerTexts()).join('|'));
+
+  /* The dictionary SUGGESTS and never decides: a word it does not know stays
+     unticked, which reads as money in, exactly as before it existed. */
+  ok('the words it recognises arrive already ticked',
+     (await page.locator('#pf-door-out input:checked').count()) === 1 &&
+     /Switch Out[\s\S]*read as money out/.test(await page.locator('#pf-door-out').innerText()),
+     await page.locator('#pf-door-out').innerText().then(t => t.replace(/\n/g, ' | ')));
+  ok('and a switch out is called out by name, because it is the one that misleads',
+     /switch out.*money leaving one fund and entering another/i
+       .test((await page.locator('#pf-door-out').innerText()).replace(/\s+/g, ' ')));
+
   /* ------------------------------------- the right file on the wrong screen */
   await page.click('#pf-reset');
   await page.waitForTimeout(200);
@@ -357,6 +441,21 @@ fs.mkdirSync(TMP + '/shots', { recursive: true });
      /On your own entries/i.test(await page.locator('#g-scn-out').innerText()));
   ok('the assumption is labelled, not sold as a forecast', /assumption you typed in|not a forecast/.test(goalText));
   ok('goal chart rendered', (await page.locator('#g-out svg').count()) >= 1);
+
+  /* A shortfall printed as a rupee figure is a number the reader has to hold
+     against another number to mean anything. Drawn as the remaining length of
+     the same bar it needs no arithmetic at all -- and it is hatched rather
+     than filled, because it is the part that does not exist yet. */
+  ok('the gap is drawn as the rest of the bar, not only printed',
+     (await page.locator('#g-out svg rect[fill^="url(#gaphatch"]').count()) === 1,
+     String(await page.locator('#g-out svg rect').count()) + ' rects');
+  ok('and the legend names it',
+     /Still to find/.test(await page.locator('#g-out .legend').innerText()),
+     await page.locator('#g-out .legend').innerText());
+  ok('the four core figures sit above the chart and the prose',
+     (await page.locator('#g-out .stats.topline .stat').count()) === 4 &&
+     /short by/i.test(await page.locator('#g-out .stats.topline').innerText()),
+     (await page.locator('#g-out .stats.topline').innerText()).replace(/\n/g, ' | '));
   ok('the chart has a text alternative', !!(await page.locator('#g-out svg[aria-label]').count()));
   await page.screenshot({ path: path.join(SHOTS, '03-goal.png'), fullPage: true });
 

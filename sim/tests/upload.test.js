@@ -334,8 +334,16 @@ section('An unsigned ledger with a type column asks which way');
   ok('it does not guess', q.ok === false && q.ask === 'direction', q.code);
   eq('and it names the column it found', q.typeCol, 1);
   ok('with each word and how many lines it covers',
-     JSON.stringify(q.words) === JSON.stringify([{ word: 'Purchase', count: 2 },
-                                                 { word: 'Redemption', count: 1 }]),
+     JSON.stringify(q.words.map(function (w) { return [w.word, w.count]; })) ===
+     JSON.stringify([['Purchase', 2], ['Redemption', 1]]),
+     JSON.stringify(q.words));
+
+  /* Each word also arrives with what the broker-term dictionary makes of it.
+     That is a SUGGESTION the screen pre-ticks, never a decision: a word the
+     dictionary does not know comes back null and stays unticked, which reads
+     as money in -- exactly as it did before the dictionary existed. */
+  ok('and with what the dictionary makes of each one',
+     q.words[0].guess === 'in' && q.words[1].guess === 'out',
      JSON.stringify(q.words));
   ok('asking for the words that mean money out',
      /Tick the words that mean money going OUT/.test(q.message), q.message);
@@ -538,6 +546,42 @@ section('The right file on the wrong screen is said to be exactly that');
   ok('while 48 monthly instalments are still payments',
      real.kind === 'ledger' && real.ok && real.rows.length === 48,
      real.kind + ' ' + real.rows.length);
+}
+
+
+/* -------------------------------------------------------------------------
+ * What the brokers call things.
+ *
+ * A dictionary that is right ninety-five times in a hundred is silent the other
+ * five, and a direction that is silently backwards is the one failure this
+ * parser must not have. So every entry below is a SUGGESTION the screen
+ * pre-ticks and the reader confirms.
+ */
+section('The broker dictionary suggests, and never decides');
+{
+  var OUT = ['Redemption', 'REDEEM', 'Sell', 'Sold', 'Switch Out', 'Switch-Out',
+             'Transfer Out', 'Withdrawal', 'SWP', 'Dividend Payout', 'Repurchase'];
+  var IN = ['Purchase', 'PURCHASE', 'Buy', 'SIP', 'Systematic Investment', 'Switch In',
+            'Transfer In', 'Investment', 'Subscription', 'Dividend Reinvestment',
+            'Lump sum', 'Additional Purchase'];
+  OUT.forEach(function (w) {
+    eq('"' + w + '" reads as money out', U.guessDirection(w), 'out');
+  });
+  IN.forEach(function (w) {
+    eq('"' + w + '" reads as money in', U.guessDirection(w), 'in');
+  });
+
+  /* Switch Out is the one that matters most. It is money leaving one fund and
+     entering another on the same day, and read as a plain redemption it
+     inflates the return of whatever it left. */
+  eq('and "Switch Out" is not confused with "Switch In"',
+     U.guessDirection('Switch Out') + '/' + U.guessDirection('Switch In'), 'out/in');
+
+  /* A word that says nothing about direction says nothing, rather than
+     guessing. Unticked reads as money in, which is where the file already was. */
+  ['NSE', 'BSE', 'Bonus', 'Folio 12345', 'Equity', ''].forEach(function (w) {
+    eq('"' + w + '" is left for the reader to answer', U.guessDirection(w), null);
+  });
 }
 
 console.log('\n' + passed + ' passed, ' + failed.length + ' failed');

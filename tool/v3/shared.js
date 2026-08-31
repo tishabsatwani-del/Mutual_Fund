@@ -477,11 +477,16 @@
          textarea that has nothing left to say. A refusal is the opposite case
          and keeps its box, because the text in it is what needs fixing. */
       box.hidden = true;
+      /* Pre-ticked from the broker dictionary, never decided by it: a word it
+         does not know stays unticked, which reads as money in, exactly as it
+         did before the dictionary existed. */
       var rows = read.words.map(function (w, i) {
         return '<label class="tick"><input type="checkbox" data-word="' + esc(w.word) + '"' +
+          (w.guess === 'out' ? ' checked' : '') +
           ' id="' + opts.askId + '-w' + i + '">' +
           '<span>' + esc(w.word) + ' <span class="gloss">' +
-          count(w.count) + (w.count === 1 ? ' line' : ' lines') + '</span></span></label>';
+          count(w.count) + (w.count === 1 ? ' line' : ' lines') +
+          (w.guess ? ' \u00b7 read as money ' + w.guess : '') + '</span></span></label>';
       }).join('');
       askPanel.hidden = false;
       askPanel.innerHTML = '<div class="refusal"><p>' + esc(read.message) + '</p>' +

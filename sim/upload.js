@@ -240,6 +240,49 @@
   var TYPE_HEADERS = ['type', 'transaction type', 'txn type', 'transaction', 'nature',
                       'kind', 'particulars', 'description', 'narration'];
 
+  /* ------------------------------------------- what the brokers call things
+   *
+   * The words that mean money leaving the reader's pocket, and the words that
+   * mean it coming back. This does NOT decide anything: it pre-ticks the
+   * question, and the reader still confirms.
+   *
+   * That is deliberate and it is the whole design. A dictionary that is right
+   * ninety-five times in a hundred is silent the other five, and a direction
+   * that is silently backwards is the one failure this parser must not have.
+   * "Switch Out" is the clearest case: it is money leaving one fund and
+   * entering another on the same day, and read as a plain redemption it
+   * inflates the return of whatever it left. So the words arrive already
+   * ticked and one tap confirms them, instead of three taps setting them.
+   */
+  var TERMS_OUT = [
+    /redem|redeem/i, /\bsell\b|\bsale\b|sold/i, /switch\s*[-_ ]?out/i, /transfer\s*[-_ ]?out/i,
+    /withdraw/i, /\bswp\b|systematic\s+withdraw/i, /payout|dividend\s+paid|idcw\s+paid/i,
+    /\bexit\b/i, /repurchase/i
+  ];
+  /* \bpurchases?\b, not /purchase/. "Repurchase" is the AMC buying units BACK
+     from the reader -- a redemption, money out -- and an unanchored match read
+     it as a purchase, which is precisely backwards. There is no word boundary
+     inside "Repurchase", so the anchor excludes it while "Additional Purchase"
+     still matches. */
+  var TERMS_IN = [
+    /\bpurchases?\b|\bbuy\b|bought/i, /\bsip\b|systematic\s+invest/i, /switch\s*[-_ ]?in/i,
+    /transfer\s*[-_ ]?in/i, /\binvest/i, /\bstp\s*[-_ ]?in/i, /subscription|allot/i,
+    /reinvest|dividend\s+reinvest/i, /\badd(ition)?\b/i, /lump\s*sum/i
+  ];
+
+  /* The reader's own word, matched against both lists. A word that matches
+   * NEITHER is left unticked -- which reads as money in, the same as before
+   * this dictionary existed -- and a word that somehow matches both is left
+   * unticked too, because two answers is not an answer. */
+  function guessDirection(word) {
+    var t = String(word == null ? '' : word);
+    var out = TERMS_OUT.some(function (re) { return re.test(t); });
+    var into = TERMS_IN.some(function (re) { return re.test(t); });
+    if (out && !into) return 'out';
+    if (into && !out) return 'in';
+    return null;
+  }
+
   function typeColumn(header, body, width, dateCol, amountCol, fundCol) {
     var named = [], rest = [], c;
     for (c = 0; c < width; c++) {
@@ -274,7 +317,11 @@
     }
     if (filled < Math.max(2, Math.ceil(body.length * 0.6))) return null;
     if (order.length < (isNamed ? 1 : 2)) return null;
-    return order.map(function (k) { return seen[k]; });
+    return order.map(function (k) {
+      var w = seen[k];
+      w.guess = guessDirection(w.word);      /* a suggestion, never a decision */
+      return w;
+    });
   }
 
   function ledgerFail(code, message) {
@@ -895,7 +942,7 @@
   var api = {
     read: read, firstMatching: firstMatching,
     ledgerRows: ledgerRows, ledgerAmount: ledgerAmount, typeColumn: typeColumn,
-    holdingsRows: holdingsRows, portfolioFile: portfolioFile, stitch: stitch, gapsIn: gapsIn, groupSchemes: groupSchemes,
+    holdingsRows: holdingsRows, portfolioFile: portfolioFile, guessDirection: guessDirection, stitch: stitch, gapsIn: gapsIn, groupSchemes: groupSchemes,
     rowsFrom: rowsFrom, jsonRows: jsonRows, firstAmbiguousDate: firstAmbiguousDate,
     MESSAGES: MESSAGES, GAP_DAYS: GAP_DAYS
   };

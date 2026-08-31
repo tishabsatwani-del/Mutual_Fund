@@ -125,6 +125,10 @@
     imported: null,    /* dated flows out of a transaction statement */
     source: '',        /* the filename, or "pasted columns" */
     answers: {},       /* the door's questions, once answered */
+    file: null,        /* kept, so another tab can be read without re-picking */
+    sheet: null,       /* the tab chosen, when the file has more than one */
+    sheets: null,
+    sheetName: null,
     last: null         /* what to re-read when one of them is answered */
   };
 
@@ -184,29 +188,62 @@
     $('#pf-reset').addEventListener('click', resetPortfolio);
   }
 
-  function takeFile(file) {
+  function takeFile(file, sheet) {
     PF.answers = {};
+    PF.file = file;
     PF.source = file.name || 'that file';
+    PF.sheet = sheet == null ? null : sheet;
     say('pf-door-out', 'Reading ' + esc(PF.source) + '…');
     /* A workbook comes back as rows and a CSV as text. The reader takes
        either, so neither is turned into the other on the way. */
-    W_contentOf(file).then(function (got) {
+    W_contentOf(file, PF.sheet).then(function (got) {
+      PF.sheets = got.sheets || null;
+      PF.sheetName = got.sheetName || null;
       readInto(got.rows ? got.rows : got.text);
+      /* A consolidated statement is a cover, a summary and the transactions on
+       * a third tab. Reading the first one hands the reader a cover page and a
+       * refusal, so every tab is offered and the one that reads is chosen. */
+      if (got.sheets && got.sheets.length > 1) offerSheets(got.sheets, got.sheetName);
     }).catch(function (err) {
       say('pf-door-out', '', notice('bad', esc(err.message)));
     });
   }
 
+  function offerSheets(sheets, current) {
+    var host = $('#pf-door-out');
+    var wrap = document.createElement('div');
+    wrap.className = 'field';
+    wrap.style.marginTop = '.8rem';
+    wrap.innerHTML = '<label for="pf-sheet">This file has ' + sheets.length +
+      ' tabs. Reading <strong>' + esc(current) + '</strong>.</label>' +
+      '<select id="pf-sheet">' + sheets.map(function (n) {
+        return '<option' + (n === current ? ' selected' : '') + '>' + esc(n) + '</option>';
+      }).join('') + '</select>' +
+      '<p class="hint">On a consolidated statement the transactions are usually not the first tab.</p>';
+    host.appendChild(wrap);
+    $('#pf-sheet').addEventListener('change', function () {
+      takeFile(PF.file, this.value);
+    });
+  }
+
   /* shared.js is a v3 file; this screen predates it, so the same two-shape
      reader is spelled out here rather than reached across. */
-  function W_contentOf(file) {
+  function W_contentOf(file, sheet) {
     if (/\.xlsx?$/i.test(file.name || '') && window.SimWorkbook) {
-      return window.SimWorkbook.readWorkbook(file)
-        .then(function (rows) { return { rows: rows }; })
-        .catch(function () {
-          throw new Error('That Excel file could not be read here. Open it and save it as CSV, ' +
-                          'then load that.');
+      var WB = window.SimWorkbook;
+      return WB.listSheets(file).catch(function () { return []; }).then(function (sheets) {
+        /* With no tab named, read the first one whose rows this door can
+           actually use, rather than the first one in the file. */
+        var order = sheet != null ? [sheet]
+          : (sheets.length > 1 ? sheets.slice() : [undefined]);
+        return firstReadable(WB, file, order).then(function (got) {
+          got.sheets = sheets;
+          return got;
         });
+      }).catch(function () {
+        throw new Error('That Excel file could not be read here. Open it and save it as CSV, ' +
+                        'then load that.');
+      });
     }
     return new Promise(function (resolve, reject) {
       var reader = new FileReader();
@@ -214,6 +251,25 @@
       reader.onload = function () { resolve({ text: String(reader.result) }); };
       reader.readAsText(file);
     });
+  }
+
+  /* Tries each tab in turn and keeps the first whose rows read as either shape.
+     If none does, the first tab is returned so the refusal describes something
+     the reader can see rather than a tab they never opened. */
+  function firstReadable(WB, file, order) {
+    var i = 0, firstGot = null;
+    function attempt() {
+      if (i >= order.length) return Promise.resolve(firstGot);
+      var name = order[i++];
+      return WB.readWorkbook(file, name).then(function (rows) {
+        var got = { rows: rows, sheetName: rows.sheetName || name };
+        if (!firstGot) firstGot = got;
+        var probe = window.SimUpload.portfolioFile(rows, {});
+        if (probe.ok || probe.ask) return got;
+        return attempt();
+      }, attempt);
+    }
+    return attempt();
   }
 
   function readInto(source) {
@@ -245,14 +301,26 @@
   /* The one question this door can raise: a statement whose amounts are all
      unsigned, where only a type column knows which way the money went. */
   function askDirection(r) {
+    /* Pre-ticked from the broker dictionary, never decided by it. A word the
+       dictionary does not know stays unticked, which reads as money in -- the
+       same as before the dictionary existed. */
+    var guessed = 0;
     var words = r.words.map(function (w, i) {
+      if (w.guess) guessed++;
       return '<label class="tick"><input type="checkbox" data-word="' + esc(w.word) +
-        '" id="pf-dir-' + i + '"><span>' + esc(w.word) + ' <span class="qsub">' +
-        w.count + (w.count === 1 ? ' line' : ' lines') + '</span></span></label>';
+        '" id="pf-dir-' + i + '"' + (w.guess === 'out' ? ' checked' : '') + '><span>' +
+        esc(w.word) + ' <span class="qsub">' + w.count +
+        (w.count === 1 ? ' line' : ' lines') +
+        (w.guess ? ' \u00b7 read as money ' + w.guess : ' \u00b7 not recognised') +
+        '</span></span></label>';
     }).join('');
     say('pf-door-out', '', '<div class="notice"><span class="ic">?</span><span>' +
       esc(r.message) + '</span></div><div class="ticks">' + words + '</div>' +
-      '<p class="hint">Anything left unticked is read as money in.</p>' +
+      '<p class="hint">' + (guessed
+        ? 'Ticked from what these words usually mean. Change anything that is wrong for your ' +
+          'statement \u2014 a switch out, for instance, is money leaving one fund and entering ' +
+          'another on the same day. '
+        : '') + 'Anything left unticked is read as money in.</p>' +
       '<div class="btnrow"><button class="primary" type="button" id="pf-dir-go">' +
       'Read them this way</button></div>');
     $('#pf-dir-go').addEventListener('click', function () {
@@ -536,6 +604,16 @@
       '<div class="value">' + pct(rate) + '</div>' +
       '<div class="sub">Across ' + years.toFixed(1) + ' years, from ' + fmtDate(first) + ' to ' + fmtDate(last) + '</div></div>';
 
+    /* The four figures, immediately under the headline and above every word of
+       explanation. A reader who reads nothing else on this screen should still
+       leave with these. */
+    html += '<div class="stats topline">' +
+      stat('Total return', A.signedPct(abs)) +
+      stat('You put in', money(invested)) +
+      stat('Worth now', money(current)) +
+      stat('Gain or loss', (net >= 0 ? '+' : '') + money(net)) +
+      '</div>';
+
     html += '<div class="card"><h2>The numbers behind it</h2><div class="stats">' +
       stat('You put in', money(invested)) +
       stat('You took out', money(withdrawn)) +
@@ -568,15 +646,15 @@
       years.toFixed(1) + ' years, it works out at the ' + pct(rate) + ' above.</p>' +
       '</div>';
 
-    html += '<div class="meaning"><h3>What it does not mean</h3>' +
-      '<p>This is not the fund\'s return. A fund can publish a strong number while your own is weaker, ' +
-      'simply because of when you happened to invest. The fund\'s figure describes the fund. This one ' +
-      'describes you.</p>' +
-      '<p>It compares with nothing else, either. Not the fund\'s own return, not another investor\'s, ' +
-      'not your other fund. Each of those ran on a different set of dates.</p>' +
-      '<p>It is before exit load and before tax, so what you finally keep will be a little less. On an ' +
-      'equity fund held for years, plan on roughly a point a year less once the tax is paid, and more ' +
-      'than that if you sell early.</p></div>';
+    html += '<div class="meaning"><h3>What it does not mean</h3><ul class="points">' +
+      '<li><strong>Not the fund\u2019s return.</strong> A fund can publish a strong number while ' +
+      'yours is weaker, purely because of when you happened to invest. Its figure describes the ' +
+      'fund; this one describes you.</li>' +
+      '<li><strong>Not comparable to anything.</strong> Not the fund\u2019s own return, not another ' +
+      'investor\u2019s, not your other holding \u2014 each ran on a different set of dates.</li>' +
+      '<li><strong>Before exit load and before tax.</strong> On an equity fund held for years, plan ' +
+      'on roughly a point a year less once tax is paid, and more than that if you sell early.</li>' +
+      '</ul></div>';
 
     html += disagreeCard();
 
@@ -649,7 +727,21 @@
     if (!input || !out) return;
     input.addEventListener('input', function () {
       var i = parseFloat(input.value);
-      if (!isFinite(i)) { out.innerHTML = ''; return; }
+      var bad = $('#pf-infl-bad');
+      if (!isFinite(i)) {
+        out.innerHTML = '';
+        if (bad) { bad.hidden = true; bad.textContent = ''; }
+        input.setAttribute('aria-invalid', 'false');
+        return;
+      }
+      /* Refused ON THE FIELD, before anything is computed. A number outside
+       * these bounds does not produce a wrong reading, it produces one that
+       * describes a country nobody lives in -- and the same cap governs the
+       * goal planner, so both screens agree about the same quantity. */
+      var say = A.checkInput('inflation', i);
+      if (bad) { bad.textContent = say || ''; bad.hidden = !say; }
+      input.setAttribute('aria-invalid', say ? 'true' : 'false');
+      if (say) { out.innerHTML = ''; return; }
       var real = (1 + rate) / (1 + i / 100) - 1;
       var band = realBand(real);
       out.innerHTML = '<div class="stats" style="margin:.2rem 0 0">' +
@@ -664,6 +756,26 @@
         '</span> <span class="qsub">' + pct(real) + ' a year, after ' + i.toFixed(1) +
         '% inflation</span></p>' +
         '<p class="hint" style="margin:.5rem 0 0">' + band.says + '</p>' +
+        /* Why it is not a subtraction. A reader who does the quick maths in
+         * their head gets a different number from the one on screen, and
+         * without both workings side by side the screen looks wrong rather
+         * than exact. Shown at their own figures, not at an example's. */
+        '<details class="explain"><summary>Why this is not ' + pct(rate) + ' minus ' +
+        i.toFixed(1) + '%</summary><div class="body">' +
+        '<div class="scroll"><table class="data"><tbody>' +
+        '<tr><td><strong>Exact</strong><br><span class="qsub">what this tool uses</span></td>' +
+        '<td class="mono">(1 + ' + rate.toFixed(4) + ') &divide; (1 + ' + (i / 100).toFixed(4) +
+        ') &minus; 1</td><td><strong>' + pct(real) + '</strong></td></tr>' +
+        '<tr><td>Quick<br><span class="qsub">the subtraction in your head</span></td>' +
+        '<td class="mono">' + pct(rate) + ' &minus; ' + i.toFixed(1) + '%</td><td>' +
+        pct(rate - i / 100) + '</td></tr>' +
+        '</tbody></table></div>' +
+        '<p>The quick maths is out by <strong>' +
+        (Math.abs((rate - i / 100) - real) * 100).toFixed(2) + ' percentage points</strong> here, ' +
+        'and the gap widens as both figures grow. Inflation does not subtract from a return; it ' +
+        'divides into it, because the price of things compounds against every rupee over the same ' +
+        'years your money is compounding.</p>' +
+        '</div></details>' +
         '<div class="meaning" style="margin-top:.8rem"><h3>Worth looking at</h3><ul class="lookat">' +
         band.look.map(function (t) { return '<li>' + t + '</li>'; }).join('') +
         '</ul><p>None of these is a thing to do. They are things about your own arrangement that ' +
@@ -727,8 +839,9 @@
       'earning is printed on the shop&rsquo;s bill. Type the inflation figure you want to measure ' +
       'against &mdash; this tool does not choose one for you.</p>' +
       '<div class="field" style="max-width:15rem"><label for="pf-infl">Inflation, % a year</label>' +
-      '<input type="number" id="pf-infl" inputmode="decimal" step="0.1" min="0" max="100" ' +
-      'placeholder="e.g. 6"></div>' +
+      '<input type="number" id="pf-infl" inputmode="decimal" step="0.1" min="0" max="25" ' +
+      'aria-describedby="pf-infl-bad" placeholder="e.g. 6">' +
+      '<p class="hint refuse" id="pf-infl-bad" hidden></p></div>' +
       '<div id="pf-real-out"></div>' +
       '<details class="explain"><summary>How this is worked out</summary><div class="body">' +
       '<p>The quick version is your return minus inflation. The exact version, which this tool uses, ' +
@@ -760,11 +873,19 @@
         '<strong>Which fund?</strong> box — one name per fund or goal. Rows sharing a name are ' +
         'measured together.') + '</div>';
     }
+    /* "not enough entries" told a reader that something was wrong and nothing
+     * about what. The engine already knows exactly which of five conditions
+     * failed -- it has said so since it was written -- and byLabel was throwing
+     * that away and substituting a shrug. Each holding now says what its own
+     * rows are missing, which is a different answer per holding on the same
+     * screen: one may be a single purchase with no valuation, another may be
+     * two entries on the same day. */
     var rows = keys.map(function (k) {
       var r = E.xirr(groups[k]);
       var put = groups[k].reduce(function (t, f) { return t + (f.amount < 0 ? -f.amount : 0); }, 0);
       return '<tr><td>' + esc(k) + '</td><td>' + money(put) + '</td><td>' +
-        (r.ok ? pct(r.rate) : 'not enough entries') + '</td></tr>';
+        (r.ok ? pct(r.rate)
+              : '<span class="qsub">' + esc(holdingWhy(r, groups[k])) + '</span>') + '</td></tr>';
     }).join('');
     var total = flows.reduce(function (t, f) { return t + (f.amount < 0 ? -f.amount : 0); }, 0);
     rows += '<tr style="border-top:2px solid var(--line-strong)"><td><strong>Your whole portfolio</strong></td>' +
@@ -777,6 +898,22 @@
       '<p>Each line above is the return of that holding on its own. Your portfolio number weighs them by ' +
       'how much money you actually had in each, and when. A brilliant return on a small, late investment ' +
       'moves your total far less than a mediocre one on a large, early holding.</p></div></div>';
+  }
+
+  /* An XIRR needs at least two dated rows, at least one of them money going in
+   * and at least one of them money coming back -- a valuation or a withdrawal
+   * -- and they cannot all fall on the same day. Which of those is missing is
+   * the whole of the answer, so it is what gets said. */
+  function holdingWhy(res, rowsForHolding) {
+    var n = rowsForHolding.length;
+    var says = {
+      TOO_FEW: 'needs 2 dated rows; this holding has ' + n,
+      NO_INVESTMENT: 'no money going in — only a valuation',
+      NO_VALUE: 'no valuation and no withdrawal, so there is nothing to measure against',
+      SAME_DAY: 'every row is on one date, so there is no period to annualise',
+      UNSOLVABLE: 'this pattern of money in and out has no single sensible rate'
+    };
+    return says[res.code] || res.message || 'not enough entries';
   }
 
   function stat(k, v) { return '<div class="stat"><div class="k">' + esc(k) + '</div><div class="v">' + esc(v) + '</div></div>'; }
@@ -1029,6 +1166,15 @@
         'assumed, ' + esc(name) + ' is not covered by what you are doing now.');
     }
 
+    html += '<div class="stats topline">' +
+      stat('You reach', A.moneyWords(plan.projected)) +
+      stat('Your goal', A.moneyWords(plan.target)) +
+      stat(plan.onTrack ? 'To spare' : 'Short by',
+           A.moneyWords(plan.onTrack ? plan.surplus : plan.gap)) +
+      stat(plan.onTrack ? 'Needed each month' : 'More each month',
+           plan.onTrack ? 'nothing more' : money(plan.extraMonthly)) +
+      '</div>';
+
     html += '<div class="card">' + A.goalChart(plan) + '</div>';
 
     html += '<div class="card"><h2>What it would take</h2>';
@@ -1193,11 +1339,42 @@
         'genuinely different markets. Shorten the window, or load a longer history.');
     }
 
+    /* ------------------------------------------------ how much is really here
+     *
+     * s.count runs to thousands, and every one of those windows overlaps its
+     * neighbours: on a daily file, today's five-year window and yesterday's
+     * share 1,824 of their 1,825 days. Counting them as evidence is counting
+     * the same market over and over.
+     *
+     * The number that means something is how many windows could stand side by
+     * side without touching -- the span divided by the window length -- and on
+     * a twelve-year file measured in five-year windows that is two. Two. The
+     * raw count on the same file is over two thousand, which is why the badge
+     * is computed from the independent figure and never from s.count.
+     */
+    var independent = Math.floor(spanYears / years);
+    if (independent < 12) {
+      html += '<p class="density"><span class="density-badge">Low data density</span> ' +
+        'These ' + s.count.toLocaleString() + ' windows overlap. Laid side by side without ' +
+        'touching, this history holds <strong>' + independent +
+        (independent === 1 ? ' independent ' + years + '-year period' :
+                             ' independent ' + years + '-year periods') + '</strong> \u2014 ' +
+        spanYears.toFixed(1) + ' years divided by ' + years + '. Read the range below as the shape ' +
+        'of that much market and no more.</p>';
+    }
+
     html += '<div class="result"><div class="label">Median ' + years + '-year return, % a year</div>' +
       '<div class="value">' + pct(s.median) + '</div>' +
       '<div class="sub">' + esc(meta.name) + ' \u00b7 the middle of ' + s.count.toLocaleString() +
       ' overlapping holding periods, ' + fmtDate(series[0].t) + ' to ' +
       fmtDate(series[series.length - 1].t) + '. Half did better, half did worse.</div></div>';
+
+    html += '<div class="stats topline">' +
+      stat('Worst', pct(s.min)) +
+      stat('Median', pct(s.median)) +
+      stat('Best', pct(s.max)) +
+      stat('Independent periods', String(independent)) +
+      '</div>';
 
     /* Worst to best across the quartiles, in that order. An average put at the
      * top of a screen becomes the number people remember, and it hides the
@@ -1249,11 +1426,14 @@
       ' ended below zero. That count depends on the dates this file happens to cover, so read it as ' +
       'a count of what is in front of you, not as a property of the fund.</p></div>';
 
-    html += '<div class="meaning"><h3>What it does not mean</h3>' +
-      '<p>This is what already happened, over the dates in this file and no others. It is not a forecast, ' +
-      'not a promise, and not a claim that the next ' + years + ' years will land inside this range.</p>' +
-      '<p>Periods overlap, so they are not independent samples. And the median is not a typical experience ' +
-      'anyone actually had — it is the middle of many possible starting days.</p></div>';
+    html += '<div class="meaning"><h3>What it does not mean</h3><ul class="points">' +
+      '<li><strong>Not a forecast.</strong> This is what already happened, over the dates in this ' +
+      'file and no others. Nothing here claims the next ' + years + ' years will land inside it.</li>' +
+      '<li><strong>Not independent samples.</strong> The windows overlap \u2014 ' +
+      independent + ' of them could stand side by side without touching.</li>' +
+      '<li><strong>Not anyone\u2019s experience.</strong> The median is the middle of many possible ' +
+      'starting days, not a result anybody actually had.</li>' +
+      '</ul></div>';
 
     html += trapsCard(years);
 

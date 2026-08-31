@@ -178,6 +178,15 @@
       }).join('; ') + '.';
   }
 
+  /* Short enough to sit inside a bar segment: a full rupee figure does not fit
+     and a truncated one is worse than none. */
+  function short(n) {
+    var a = Math.abs(n);
+    if (a >= 1e7) return '\u20b9' + (a / 1e7).toFixed(1) + ' cr';
+    if (a >= 1e5) return '\u20b9' + (a / 1e5).toFixed(1) + ' L';
+    return money(n);
+  }
+
   function goalChart(plan) {
     var W = 640, H = 150, padL = 12, padR = 12, padT = 34, padB = 34;
     var innerW = W - padL - padR;
@@ -196,6 +205,32 @@
       Math.max(0, wSip - 2).toFixed(1) + '" height="' + barH + '" rx="4" fill="var(--series-2)"><title>' +
       esc('From your monthly investing: ' + money(plan.fromSip)) + '</title></rect>');
 
+    /* The gap, drawn. A shortfall printed as "short by Rs 11,28,738" is a
+     * number the reader has to hold against another number to mean anything.
+     * Drawn as the remaining length of the same bar, it is the one thing on
+     * the chart that needs no arithmetic at all -- and it is hatched rather
+     * than filled, because it is the part that does not exist. */
+    if (plan.projected < plan.target) {
+      var xEnd = padL + ((plan.fromCorpus + plan.fromSip) / top) * innerW;
+      var wGap = Math.max(0, xTarget - xEnd);
+      if (wGap > 1) {
+        parts.push('<defs><pattern id="gaphatch" width="6" height="6" patternUnits="userSpaceOnUse" ' +
+          'patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" ' +
+          'stroke="var(--muted)" stroke-width="2"/></pattern></defs>');
+        parts.push('<rect x="' + (xEnd + 2).toFixed(1) + '" y="' + y + '" width="' +
+          Math.max(0, wGap - 2).toFixed(1) + '" height="' + barH + '" rx="4" ' +
+          'fill="url(#gaphatch)" stroke="var(--muted)" stroke-width="1"><title>' +
+          esc('Still to find: ' + money(plan.target - plan.projected)) + '</title></rect>');
+        /* The label sits ON the hatching, which is exactly the busiest ground
+           in the figure. It gets the page's own ink and a halo of the card
+           behind it, so it reads over the diagonals rather than through them. */
+        parts.push('<text class="barlabel gap" x="' + ((xEnd + xTarget) / 2).toFixed(1) + '" y="' +
+          (y + barH / 2 + 4) + '" text-anchor="middle" ' +
+          'stroke="var(--surface)" stroke-width="4" paint-order="stroke">' +
+          esc(short(plan.target - plan.projected)) + ' short</text>');
+      }
+    }
+
     parts.push('<line x1="' + xTarget.toFixed(1) + '" y1="' + (y - 12) + '" x2="' + xTarget.toFixed(1) +
       '" y2="' + (y + barH + 12) + '" stroke="var(--ink)" stroke-width="2" stroke-dasharray="4 3"/>');
     parts.push('<text class="barlabel" x="' + xTarget.toFixed(1) + '" y="' + (y - 18) +
@@ -211,6 +246,8 @@
       '<div class="legend">' +
       '<span class="key"><span class="swatch" style="background:var(--series-1)"></span>What you already have, grown</span>' +
       '<span class="key"><span class="swatch" style="background:var(--series-2)"></span>What your monthly investing adds</span>' +
+      (plan.projected < plan.target
+        ? '<span class="key"><span class="swatch hatched"></span>Still to find</span>' : '') +
       '</div></figure>';
   }
 

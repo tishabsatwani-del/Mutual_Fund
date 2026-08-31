@@ -1329,8 +1329,10 @@ const NIGHT = { paper: '#12161E', ink: '#E8E6E1', muted: '#9AA1AE', slate: '#8FA
        /01-Apr-2021 to 30-Aug-2026/.test(other), other);
 
     const caps = await page.locator('#caps').innerText();
+    /* Inflation was raised from 20% to 25% at the author's instruction on
+       31 August 2026, so the step-up and inflation caps now read alike. */
     ok('every input cap is stated with the sentence it refuses with',
-       /0% to 30%/.test(caps) && /0% to 25%/.test(caps) && /0% to 20%/.test(caps) &&
+       /0% to 30%/.test(caps) && (caps.match(/0% to 25%/g) || []).length === 2 &&
        /1 to 50/.test(caps) && /₹1,000 crore/.test(caps), caps);
 
     ok('the rules that are not values are on it too',
@@ -1627,11 +1629,20 @@ const NIGHT = { paper: '#12161E', ink: '#E8E6E1', muted: '#9AA1AE', slate: '#8FA
     const askText = await page.locator('#m-paste-ask').innerText();
     ok('it shows the reader their own words, and how many lines each covers',
        /Purchase\s+2 lines/.test(askText) && /Redemption\s+1 line/.test(askText), askText);
-    ok('with nothing ticked, because a pre-ticked answer is still a guess',
-       (await page.locator('#m-paste-ask input:checked').count()) === 0);
+    /* Ticked from what these words usually mean, and only where the dictionary
+       recognises them. A word it does not know stays unticked, which reads as
+       money in -- exactly as it did before the dictionary existed. A dictionary
+       that is right ninety-five times in a hundred is silent the other five,
+       which is why it suggests and never decides. */
+    ok('the words it recognises arrive already ticked',
+       (await page.locator('#m-paste-ask input:checked').count()) === 1 &&
+       (await page.locator('#m-paste-ask-w1').isChecked()) === true,
+       String(await page.locator('#m-paste-ask input:checked').count()));
+    ok('and each word says which way it was read',
+       /read as money out/.test(await page.locator('#m-paste-ask').innerText()),
+       await page.locator('#m-paste-ask').innerText());
 
-    await page.check('#m-paste-ask-w1');            /* Redemption */
-    await page.click('#m-paste-ask-go');
+    await page.click('#m-paste-ask-go');            /* Redemption already ticked */
     await page.waitForTimeout(400);
     const answered = await page.locator('#m-paste-note').innerText();
     ok('answered once, it is applied to every line',
@@ -1649,9 +1660,10 @@ const NIGHT = { paper: '#12161E', ink: '#E8E6E1', muted: '#9AA1AE', slate: '#8FA
     await page.click('#m-paste-open');
     await page.setInputFiles('#m-file', typedCsv);
     await page.waitForTimeout(400);
+    await page.uncheck('#m-paste-ask-w1');
     await page.click('#m-paste-ask-go');
     await page.waitForTimeout(400);
-    ok('ticking nothing reads every line as money in',
+    ok('and unticking everything still reads every line as money in',
        !/Money out/.test(await page.locator('#m-rows').innerText()) &&
        /3 lines read/.test(await page.locator('#m-paste-note').innerText()),
        await page.locator('#m-paste-note').innerText());
@@ -1669,8 +1681,7 @@ const NIGHT = { paper: '#12161E', ink: '#E8E6E1', muted: '#9AA1AE', slate: '#8FA
     ok('Tool 3’s ledger asks the same question, from the same door',
        (await page.locator('#paste-ask').isVisible()) === true,
        await page.locator('#paste-note').innerText());
-    await page.check('#paste-ask-w1');
-    await page.click('#paste-ask-go');
+    await page.click('#paste-ask-go');   /* Redemption already ticked */
     await page.waitForTimeout(400);
     ok('and writes the money out that only a handed-over ledger can create',
        /Money out|out/.test(await page.locator('#rows').innerText()) &&

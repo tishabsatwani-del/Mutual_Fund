@@ -75,7 +75,11 @@ eq('the step-up the recording accepted', F.checkInput('stepUp', 10000000),
    'A step-up has to be between 0% and 25%.');
 ok('a return above thirty is refused', F.checkInput('rate', 45) !== null);
 ok('and one inside it is not', F.checkInput('rate', 12) === null);
-ok('inflation stops at twenty', F.checkInput('inflation', 25) !== null);
+/* Raised from 20 to 25 at the author's instruction, 31 August 2026, so it now
+   matches the step-up cap. Review v4 §11 set 20; both numbers in circulation
+   would have the code and the review disagreeing about one field. */
+ok('inflation stops at twenty-five',
+   F.checkInput('inflation', 25) === null && F.checkInput('inflation', 26) !== null);
 ok('years run one to fifty',
    F.checkInput('years', 0) !== null && F.checkInput('years', 51) !== null &&
    F.checkInput('years', 50) === null);

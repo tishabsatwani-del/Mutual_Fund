@@ -11,24 +11,99 @@
 (function (root) {
   'use strict';
 
-  function readWorkbook(file) {
+  /* A consolidated account statement is not one sheet. CAMS and KFintech both
+   * write a workbook with a cover, a summary and the transactions on a third
+   * tab, and reading sheet1 out of that hands the reader a cover page and a
+   * refusal. So the sheets are listed, and which one to read is a choice. */
+  function readWorkbook(file, which) {
     if (typeof DecompressionStream === 'undefined') {
       return Promise.reject(new Error('this browser cannot unzip it'));
     }
     return file.arrayBuffer().then(function (buf) {
       var entries = unzip(new Uint8Array(buf));
-      var sheet = entries['xl/worksheets/sheet1.xml'];
-      if (!sheet) {
-        var first = Object.keys(entries).filter(function (k) { return /^xl\/worksheets\/.*\.xml$/.test(k); }).sort()[0];
-        sheet = first && entries[first];
-      }
-      if (!sheet) throw new Error('no worksheet inside');
-      return Promise.all([
-        inflate(sheet),
-        entries['xl/sharedStrings.xml'] ? inflate(entries['xl/sharedStrings.xml']) : Promise.resolve(''),
-        entries['xl/styles.xml'] ? inflate(entries['xl/styles.xml']) : Promise.resolve('')
-      ]).then(function (xml) { return sheetToRows(xml[0], xml[1], xml[2]); });
+      return sheetIndex(entries).then(function (sheets) {
+        var pick = null;
+        if (which != null) {
+          pick = sheets.filter(function (sh) {
+            return sh.name === which || sh.index === which;
+          })[0];
+        }
+        if (!pick) pick = sheets[0];
+        var raw = pick && entries[pick.path];
+        if (!raw) throw new Error('no worksheet inside');
+        return Promise.all([
+          inflate(raw),
+          entries['xl/sharedStrings.xml'] ? inflate(entries['xl/sharedStrings.xml']) : Promise.resolve(''),
+          entries['xl/styles.xml'] ? inflate(entries['xl/styles.xml']) : Promise.resolve('')
+        ]).then(function (xml) {
+          var rows = sheetToRows(xml[0], xml[1], xml[2]);
+          rows.sheetName = pick.name;
+          return rows;
+        });
+      });
     });
+  }
+
+  /* The names a reader sees on the tabs, in the order they appear on them. */
+  function listSheets(file) {
+    if (typeof DecompressionStream === 'undefined') {
+      return Promise.reject(new Error('this browser cannot unzip it'));
+    }
+    return file.arrayBuffer().then(function (buf) {
+      return sheetIndex(unzip(new Uint8Array(buf))).then(function (sheets) {
+        return sheets.map(function (sh) { return sh.name; });
+      });
+    });
+  }
+
+  /* workbook.xml holds the tab names and their relationship ids; the rels file
+   * maps those ids to the part each one lives in. The two are NOT in the same
+   * order in every writer, which is why the mapping is followed rather than
+   * assuming the nth tab is sheetN.xml. Positional order is the fallback for a
+   * package with no rels, which some exporters produce. */
+  function sheetIndex(entries) {
+    var parts = [
+      entries['xl/workbook.xml'] ? inflate(entries['xl/workbook.xml']) : Promise.resolve(''),
+      entries['xl/_rels/workbook.xml.rels'] ? inflate(entries['xl/_rels/workbook.xml.rels'])
+                                            : Promise.resolve('')
+    ];
+    return Promise.all(parts).then(function (xml) {
+      var byId = {};
+      String(xml[1]).replace(/<Relationship\b([^>]*)\/?>/g, function (all, attrs) {
+        var id = /Id="([^"]*)"/.exec(attrs), target = /Target="([^"]*)"/.exec(attrs);
+        if (id && target) {
+          var t = target[1].replace(/^\/?xl\//, '').replace(/^\.\//, '');
+          byId[id[1]] = 'xl/' + t;
+        }
+        return all;
+      });
+
+      var found = [], seen = 0;
+      String(xml[0]).replace(/<sheet\b([^>]*)\/?>/g, function (all, attrs) {
+        var name = /name="([^"]*)"/.exec(attrs);
+        var rid = /r:id="([^"]*)"/.exec(attrs) || /relationshipId="([^"]*)"/.exec(attrs);
+        var path = rid && byId[rid[1]];
+        seen++;
+        if (!path || !entries[path]) path = 'xl/worksheets/sheet' + seen + '.xml';
+        if (entries[path]) {
+          found.push({ name: name ? unescapeXml(name[1]) : 'Sheet ' + seen,
+                       path: path, index: found.length });
+        }
+        return all;
+      });
+
+      if (found.length) return found;
+      /* No workbook.xml at all: fall back to whatever worksheets are in there. */
+      return Object.keys(entries)
+        .filter(function (k) { return /^xl\/worksheets\/.*\.xml$/.test(k); })
+        .sort()
+        .map(function (path, i) { return { name: 'Sheet ' + (i + 1), path: path, index: i }; });
+    });
+  }
+
+  function unescapeXml(t) {
+    return String(t).replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
   }
 
   function unzip(bytes) {
@@ -134,7 +209,7 @@
            String(d.getUTCDate()).padStart(2, '0');
   }
 
-  var api = { readWorkbook: readWorkbook, sheetToRows: sheetToRows };
+  var api = { readWorkbook: readWorkbook, listSheets: listSheets, sheetToRows: sheetToRows };
   if (typeof module === 'object' && module.exports) module.exports = api;
   root.SimWorkbook = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -369,6 +369,19 @@ function plainFile(file, rate, fromY, toY, start = 100) {
 
   /* Three years of file for three-year windows is allowed and warned about:
      5+ years is what the step-1 helper text asks for. */
+  /* s.count runs to thousands and every window overlaps its neighbours: on a
+     daily file, today's window and yesterday's share all but one of their days.
+     The number that means something is how many could stand side by side
+     without touching -- the span divided by the window length. */
+  ok('the badge counts independent periods, not the thousands of overlapping ones',
+     await (async () => {
+       await page.click('#r-run');
+       await page.waitForTimeout(900);
+       const t = await page.locator('#r-out').innerText();
+       return /Low data density/i.test(t) && /1 independent 3-year period\b/.test(t);
+     })(),
+     (await page.locator('#r-out').innerText()).slice(0, 220));
+
   ok('a file thinner than the recommendation warns rather than refusing',
      !(await page.locator('#r-span-warn').isHidden()) &&
      /5\+ years is the recommended amount of history/

@@ -457,6 +457,7 @@ figure.chart figcaption { font-size: .85rem; color: var(--muted); margin-bottom:
 svg .grid { stroke: var(--line); stroke-width: 1; }
 svg .axis { fill: var(--muted); font-size: 11px; font-family: var(--sans); }
 svg .barlabel { fill: var(--ink-2); font-size: 11px; font-family: var(--sans); font-variant-numeric: tabular-nums; }
+svg .barlabel.gap { fill: var(--ink); font-weight: 700; font-size: 12px; }
 svg .bar { fill: var(--series-1); }
 svg .bar.hot { fill: var(--series-2); }
 svg .zero { stroke: var(--line-strong); stroke-width: 2; }
@@ -614,3 +615,37 @@ table.data.wide td:first-child, table.data.wide th:first-child { min-width: 9rem
 .rl-head .link { flex: none; min-height: 44px; }
 .rl-figs { display: flex; flex-wrap: wrap; gap: .25rem 1.2rem; margin-top: .2rem; }
 .rl-fig b { font-weight: 600; font-variant-numeric: tabular-nums; }
+/* The part of the goal that does not exist yet: hatched, never filled. */
+.swatch.hatched {
+  background: repeating-linear-gradient(45deg,
+    var(--muted) 0 2px, transparent 2px 6px);
+  border: 1px solid var(--muted);
+}
+
+/* -------------------------------------------- how much is really in here
+   A rolling-return count runs to thousands and every window overlaps its
+   neighbours, so the raw count reads as evidence it is not. The badge states
+   how many periods could stand side by side without touching. */
+.density {
+  margin: .8rem 0 0; padding: 16px 20px;
+  border: 1px solid var(--line-strong); border-radius: 10px;
+  background: var(--surface-2); color: var(--ink-2); font-size: .9rem;
+}
+.density-badge {
+  display: inline-block; margin-right: .4rem; padding: .15rem .55rem;
+  border: 1px solid var(--line-strong); border-radius: 999px;
+  background: var(--surface); color: var(--ink);
+  font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em;
+}
+
+/* The core figures, above every word of explanation. A reader who reads
+   nothing else on the screen should still leave with these. */
+.stats.topline { margin: 0 0 1.2rem; }
+.stats.topline .stat { border-color: var(--line-strong); }
+.stats.topline .v { font-size: 1.35rem; }
+
+/* Dense paragraphs read as one block on a phone and get skipped whole. The
+   claim goes in bold at the front of its own line; the qualification follows. */
+.points { margin: 0; padding-left: 1.1rem; color: var(--ink-2); font-size: .95rem; }
+.points li { margin-bottom: .55rem; }
+.points li:last-child { margin-bottom: 0; }
