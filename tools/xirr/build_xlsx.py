@@ -16,7 +16,7 @@ from openpyxl.workbook.defined_name import DefinedName
 
 OUT = sys.argv[1]
 
-VERSION = "1.3"
+VERSION = "1.4"
 BUILT = "31-Aug-2026"
 
 FIRST_ROW, LAST_ROW = 8, 507
@@ -43,13 +43,25 @@ HEAD_FILL = PatternFill("solid", fgColor="FF1F4E5F")
 RESULT_FONT = Font(name="Calibri", size=28, bold=True, color="FF1F4E5F")
 RESULT_FILL = PatternFill("solid", fgColor="FFEAF3F6")
 GREY_FILL = PatternFill("solid", fgColor="FFF2F2F2")
-INPUT_FILL = PatternFill("solid", fgColor="FFFFFDF0")   # every cell a reader types into
+# Every cell a reader types into, and nothing else. It was FFFFFDF0, a cream so
+# pale that on a laptop screen at an angle it was indistinguishable from white
+# -- which made "type in the cream cells only" an instruction the sheet did not
+# actually help anyone follow. FEF9C3 is a soft yellow that survives a bad
+# screen, and is still quiet enough to print.
+INPUT_FILL = PatternFill("solid", fgColor="FFFEF9C3")
 STATUS_FONT = Font(name="Calibri", size=12, color="FFB00020")
 LABEL_FONT = Font(name="Calibri", size=12, bold=True)
 
 UNLOCKED = Protection(locked=False)
 THIN = Side(style="thin", color="FFBFBFBF")
 CELL_BORDER = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
+
+PRIVACY_BADGE = (
+    "\U0001F512 100% Standalone & Private (.xlsx): Functions completely offline "
+    "with zero external server connections."
+)
+BADGE_FONT = Font(name="Calibri", size=12, bold=True, color="FF1F4E5F")
+BADGE_FILL = PatternFill("solid", fgColor="FFEAF3F6")
 
 INSTRUCTION = (
     "Type in the cream cells only \u2014 everything else is worked out for you. "
@@ -101,19 +113,37 @@ def header_block(ws, fund_name=None):
 
     ws["A4"] = "Your XIRR"
     ws["A4"].font = LABEL_FONT
-    ws["A4"].alignment = Alignment(vertical="center")
     ws["B4"].font = RESULT_FONT
     ws["B4"].fill = RESULT_FILL
     ws["B4"].number_format = PCT_FMT
-    ws["B4"].alignment = Alignment(horizontal="left", vertical="center")
-    ws.row_dimensions[4].height = 38
 
     ws["B5"].font = STATUS_FONT
-    ws["B5"].alignment = Alignment(vertical="center")
 
     ws["B6"] = INSTRUCTION
     ws["B6"].font = BODY
-    ws.row_dimensions[6].height = 16
+    ws["B6"].alignment = Alignment(wrap_text=True, vertical="top")
+    ws.row_dimensions[6].height = 32
+
+    # Rows 1-5 at 28 points, aligned to the top and centred across the row's own
+    # height, so a label and its figure sit on one line instead of the label
+    # being sliced through the middle by the row above it.
+    #
+    # Row 4 is the exception and stays at 38: it carries the result in a
+    # 28-POINT font, and a 28-point row cannot hold a 28-point glyph. Setting it
+    # to 28 would clip exactly the figure this whole change exists to protect.
+    # It is already taller than 28, so nothing here is clipped either way.
+    #
+    # Setting them here is not enough on its own: the recalculation pass in
+    # harden.py auto-fits every row, which turned 38 back into 33.85 -- clipping
+    # exactly the figure. harden.py puts these six heights straight back, the
+    # same way it puts the two number formats back, and its ROW_HEIGHTS must
+    # stay in step with what is set here.
+    for row in (1, 2, 3, 5):
+        ws.row_dimensions[row].height = 28
+    for col in "ABCDEF":
+        for row in (1, 2, 3, 4, 5):
+            ws[f"{col}{row}"].alignment = Alignment(horizontal="left", vertical="center")
+    ws["B4"].alignment = Alignment(horizontal="left", vertical="center")
 
     for col, heading in zip("BCDEF", HEADINGS):
         c = ws[f"{col}{HEAD_ROW}"]
@@ -234,7 +264,19 @@ for i, text in enumerate(lines):
     cell = start.cell(row=2 + i * 2, column=2, value=text)
     cell.font = BODY
     cell.alignment = Alignment(wrap_text=True, vertical="top")
-    start.row_dimensions[2 + i * 2].height = 32
+    # 92 characters of column against instruction lines that run to 160: two
+    # rows of text need two rows of height, or wrap_text hides the second half
+    # rather than showing it.
+    start.row_dimensions[2 + i * 2].height = 16 * (1 + len(text) // 88)
+
+# The one thing about this file a reader cannot check by opening it: that it
+# talks to nothing. Said at the top of the first tab, where it is read before
+# anything is typed rather than found later on the About tab.
+badge = start.cell(row=2 + len(lines) * 2, column=2, value=PRIVACY_BADGE)
+badge.font = BADGE_FONT
+badge.fill = BADGE_FILL
+badge.alignment = Alignment(wrap_text=True, vertical="center")
+start.row_dimensions[2 + len(lines) * 2].height = 32
 protect(start)
 
 # ----------------------------------------------------------- My investments
@@ -555,6 +597,7 @@ about.column_dimensions["A"].width = 3
 about.column_dimensions["B"].width = 92
 about_lines = [
     f"XIRR Calculator, version {VERSION}",
+    PRIVACY_BADGE,
     f"Built {BUILT}",
     "This is an educational tool for readers. The figure it produces is before "
     "exit load and before tax, and it is not investment advice.",
@@ -567,9 +610,13 @@ about_lines = [
 ]
 for i, text in enumerate(about_lines):
     cell = about.cell(row=2 + i * 2, column=2, value=text)
-    cell.font = BODY_BOLD if i == 0 else BODY
+    cell.font = BADGE_FONT if i == 1 else (BODY_BOLD if i == 0 else BODY)
+    if i == 1:
+        cell.fill = BADGE_FILL
     cell.alignment = Alignment(wrap_text=True, vertical="top")
-    about.row_dimensions[2 + i * 2].height = 30
+    # Height from the text's own length, for the same reason as Start here:
+    # a fixed 30 points cut the three-line entries off after two.
+    about.row_dimensions[2 + i * 2].height = 16 * (1 + len(text) // 88)
 protect(about)
 
 # --------------------------------------------------------------- Calc (hidden)

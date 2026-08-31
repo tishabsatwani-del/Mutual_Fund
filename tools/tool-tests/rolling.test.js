@@ -80,6 +80,23 @@ function plainFile(file, rate, fromY, toY, start = 100) {
      (await page.locator('#r-years .chip').allInnerTexts()).join('|') ===
      '1 year|3 years|5 years|7 years|10 years');
 
+  /* The author reversed review v4 §12.14 on 31 August 2026: the page opens on
+     three years rather than on nothing. What survives of the old rule is that
+     the default is never silently RESTORED over a reader's own choice -- see
+     "a choice the history can no longer measure is cleared, not swapped". */
+  ok('the page opens with three years chosen',
+     (await page.locator('#r-years .chip[aria-checked="true"]').allInnerTexts()).join('|') === '3 years',
+     (await page.locator('#r-years .chip[aria-checked="true"]').allInnerTexts()).join('|'));
+  ok('and step 3 is ticked accordingly',
+     (await page.locator('#step-hold').getAttribute('data-done')) === 'yes');
+
+  ok('the upload area says how much history each length wants',
+     /3\+ years of historical data for\s+1-Year rolling calculations, 5\+ years for 3-Year calculations, and 7\+ years for\s+comprehensive 5-Year statistical analysis/
+       .test((await page.locator('.helper-span').innerText()).replace(/\s+/g, ' ')) ||
+     /3\+ years .*1-Year .*5\+ years for 3-Year .*7\+ years for comprehensive 5-Year/
+       .test((await page.locator('.helper-span').innerText()).replace(/\s+/g, ' ')),
+     await page.locator('.helper-span').innerText());
+
   section('Controls stay visible but inert until there is data');
   ok('dates start disabled rather than hidden',
      await page.locator('#r-start').isDisabled() && await page.locator('#r-start').isVisible());
@@ -119,12 +136,42 @@ function plainFile(file, rate, fromY, toY, start = 100) {
      (await page.locator('#r-end').inputValue()) === '2025-01-01');
   ok('the available range is stated in words',
      /01-Jan-2010 to 01-Jan-2025/.test(await page.locator('#r-range').innerText()));
+
+  /* Steps 2-4 are held at half opacity until there is something to analyse.
+     gateSteps was called at init and from setSource -- both BEFORE a series can
+     exist -- and never again, so the locked state stayed on for the whole
+     session: every control below step 1 was live and usable while rendering at
+     50%, which is precisely the "faded, looks disabled" the chips were being
+     blamed for. Half of a 16.30:1 pill is not a 16.30:1 pill. */
+  ok('the later steps come out of their locked state once there is data',
+     (await page.evaluate(() => ['#step-period', '#step-hold', '#step-compare']
+       .map(s => document.querySelector(s).dataset.locked +
+                 ':' + getComputedStyle(document.querySelector(s)).opacity).join(' | '))) ===
+     'no:1 | no:1 | no:1',
+     await page.evaluate(() => ['#step-period', '#step-hold', '#step-compare']
+       .map(s => document.querySelector(s).dataset.locked +
+                 ':' + getComputedStyle(document.querySelector(s)).opacity).join(' | ')));
+
+  /* An UNCHOSEN length is a live option and has to look like one. It used to
+     take the card's own dark fill and the body ink, which is the same greyed
+     state the browser gives a disabled button, so every length but the chosen
+     one read as unavailable. Measured with a file loaded, because before that
+     the chips are genuinely disabled and SHOULD look it. */
+  const pill = await page.evaluate(() => {
+    const c = document.querySelector('#r-years .chip[data-years="5"]');
+    const s = getComputedStyle(c);
+    return { bg: s.backgroundColor, fg: s.color, opacity: s.opacity, disabled: c.disabled };
+  });
+  ok('an unchosen holding period is a high-contrast secondary control, not a faded one',
+     pill.disabled === false && pill.bg === 'rgb(241, 245, 249)' &&
+     pill.fg === 'rgb(15, 23, 42)' && pill.opacity === '1',
+     JSON.stringify(pill));
   ok('the dates cannot be set outside the data',
      (await page.locator('#r-start').getAttribute('min')) === '2010-01-01' &&
      (await page.locator('#r-end').getAttribute('max')) === '2025-01-01');
 
-  /* Review v4 §12.14: no default holding period, so the run begins by choosing
-     one -- nothing renders before the reader does. */
+  /* Five years rather than the default three, so the run is on a length the
+     reader actually chose. */
   await page.locator('#r-years .chip[data-years="5"]').click();
   await page.waitForTimeout(250);
   await page.click('#r-run');
@@ -206,14 +253,28 @@ function plainFile(file, rate, fromY, toY, start = 100) {
   const cmpOpts = await page.locator('#r-compare option').allInnerTexts();
   ok('and it is named in the list', cmpOpts.length === 2, cmpOpts.join('|'));
   await page.selectOption('#r-compare', { index: 1 });
-  /* Review v4 §12.14: no default holding period, so the run begins by choosing
-     one -- nothing renders before the reader does. */
+  /* Five years rather than the default three, so the run is on a length the
+     reader actually chose. */
   await page.locator('#r-years .chip[data-years="5"]').click();
   await page.waitForTimeout(250);
   await page.click('#r-run');
   await page.waitForSelector('#r-out .result', { timeout: 20000 });
   out = await page.locator('#r-out').innerText();
   ok('consistency against the benchmark is reported', /came out ahead/i.test(out));
+
+  /* Three measured rates, each saying what it counted -- and no verdict. */
+  ok('the record is summarised as three rates',
+     /The record, as three rates/.test(out) &&
+     /Historical success rate/.test(out) &&
+     /Benchmark outperformance rate/.test(out) &&
+     /Historical downside risk/.test(out), out.slice(0, 200));
+  ok('the outperformance rate is measured once a benchmark is loaded',
+     !/Benchmark outperformance rate\s*not measured/.test(out), out.slice(0, 200));
+  ok('and it carries the note that consistency guarantees nothing',
+     /Past historical consistency does not guarantee future results/.test(out));
+  ok('no card on this screen tells the reader to buy, sell, switch or hold',
+     !/\b(you should|we recommend|consider (buying|selling|switching)|time to (buy|sell|exit))\b/i.test(out),
+     (out.match(/.{0,60}(you should|we recommend|consider buying|time to buy).{0,60}/i) || [''])[0]);
   ok('a 14% fund beats a 10% index in every period', /100%/.test(out));
   ok('the reality check appears', /reality check/i.test(out));
   ok('only shared dates are compared', /both sets of data cover/.test(out));
@@ -232,9 +293,12 @@ function plainFile(file, rate, fromY, toY, start = 100) {
   ok('a choice the history can no longer measure is cleared, not swapped',
      (await page.locator('#r-years .chip[aria-checked="true"]').count()) === 0,
      String(await page.locator('#r-years .chip[aria-checked="true"]').count()));
-  ok('and with nothing chosen, nothing below it is rendered',
-     (await page.locator('#r-out').innerText()).trim() === '',
-     (await page.locator('#r-out').innerText()).slice(0, 80));
+  /* It used to render nothing at all here, which left the reader looking at an
+     empty results area and a set of chips that had changed under them. The
+     block now names the two numbers that did not fit. */
+  ok('and the block says why, in the place the answer would have been',
+     /shorter than the holding period/i.test(await page.locator('#r-out').innerText()),
+     (await page.locator('#r-out').innerText()).slice(0, 140));
 
   /* Choosing one that still fits brings the reading back. */
   await page.locator('#r-years .chip[data-years="1"]').click();
@@ -274,8 +338,80 @@ function plainFile(file, rate, fromY, toY, start = 100) {
   ok('the holding-period note is cleared too',
      (await page.locator('#r-window-note').innerText()).trim() === '',
      await page.locator('#r-window-note').innerText());
-  ok('and step 3 is no longer ticked',
-     (await page.locator('#step-hold').getAttribute('data-done')) !== 'yes');
+  /* Start again returns the page to the state it opens in, which now includes
+     the three-year default -- so the tick follows the choice, not the file.
+     Saying "not done" while a chip is plainly chosen is the screen
+     contradicting itself. */
+  ok('and step 3 is back to its opening choice, ticked',
+     (await page.locator('#r-years .chip[aria-checked="true"]').allInnerTexts()).join('|') === '3 years' &&
+     (await page.locator('#step-hold').getAttribute('data-done')) === 'yes',
+     (await page.locator('#r-years .chip[aria-checked="true"]').allInnerTexts()).join('|'));
+
+  /* ---------------------------------------- the run refuses, and says why ---
+   *
+   * Three states, and they are deliberately different things:
+   *
+   *   thinner than advised     a warning; the run is allowed, the numbers real
+   *   shorter than the window  a block, naming the two numbers that did not fit
+   *   nothing chosen           a refusal, in the step that holds the answer
+   */
+  section('A run that cannot happen says so, in the step that holds the answer');
+  await page.goto(BASE_URL + '#rolling', { waitUntil: 'networkidle' });
+  await page.click('#r-source .chip[data-source="fund"]');
+  await page.setInputFiles('#f-file', plainFile(TMP + '/r-short.csv', 0.11, 2022, 2025, 10));
+  await page.waitForTimeout(1500);
+
+  /* 2022-2025 is three years, so five, seven and ten are struck off and the
+     three-year default -- which exactly fits the span -- survives. */
+  ok('lengths the file cannot measure are struck off',
+     (await page.locator('#r-years .chip:disabled').count()) === 3,
+     String(await page.locator('#r-years .chip:disabled').count()));
+
+  /* Three years of file for three-year windows is allowed and warned about:
+     5+ years is what the step-1 helper text asks for. */
+  ok('a file thinner than the recommendation warns rather than refusing',
+     !(await page.locator('#r-span-warn').isHidden()) &&
+     /5\+ years is the recommended amount of history/
+       .test(await page.locator('#r-span-warn').innerText()),
+     await page.locator('#r-span-warn').innerText());
+  await page.click('#r-run');
+  await page.waitForTimeout(900);
+  ok('and the run still happens',
+     /Median/i.test(await page.locator('#r-out').innerText()),
+     (await page.locator('#r-out').innerText()).slice(0, 100));
+
+  /* Narrow the dates until no three-year period fits. The reader gets the two
+     numbers that did not fit, where the answer would have been -- not a screen
+     whose chips silently changed under them. */
+  await page.fill('#r-start', '2023-06-01');
+  await page.waitForTimeout(900);
+  const blocked = await page.locator('#r-out').innerText();
+  ok('a history shorter than the window itself is blocked, and names both numbers',
+     /shorter than the holding period/i.test(blocked) &&
+     /not one full 3-year period fits inside it/.test(blocked), blocked.slice(0, 200));
+  ok('and it says what would fit instead',
+     /Choose 1 year or shorter in step 3, or load a longer history/.test(blocked),
+     blocked.slice(0, 240));
+  ok('the choice is cleared rather than slid down to a shorter one',
+     (await page.locator('#r-years .chip[aria-checked="true"]').count()) === 0,
+     String(await page.locator('#r-years .chip[aria-checked="true"]').count()));
+
+  /* And with nothing chosen, pressing the button used to do nothing whatsoever:
+     it cleared the output and returned. */
+  await page.click('#r-run');
+  await page.waitForTimeout(500);
+  ok('pressing the button with nothing chosen says exactly what is missing',
+     (await page.locator('#r-hold-error').innerText()).trim() ===
+       'Please select a holding period to continue',
+     await page.locator('#r-hold-error').innerText());
+  ok('and the step itself is marked, not the button at the bottom of the page',
+     (await page.locator('#step-hold').getAttribute('data-error')) === 'yes');
+
+  await page.locator('#r-years .chip[data-years="1"]').click();
+  await page.waitForTimeout(400);
+  ok('choosing one clears the message again',
+     (await page.locator('#r-hold-error').isHidden()) &&
+     (await page.locator('#step-hold').getAttribute('data-error')) !== 'yes');
 
   section('Old links still land somewhere sensible');
   for (const hash of ['#fund', '#history']) {

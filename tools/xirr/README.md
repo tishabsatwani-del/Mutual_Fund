@@ -6,7 +6,7 @@ carry only one printed address.
 
 | What | Where |
 |---|---|
-| The file readers download | `tool/XIRR-Calculator.xlsx` |
+| The file readers download | `tool/XIRR-Calculator-4.xlsx` (`tool/XIRR-Calculator.xlsx` is kept as an identical copy, so any link already in circulation still resolves) |
 | The screen that offers it | the **sheet** view in `tool/index.html` |
 | The old separate page | `xirr/index.html`, now a redirect to the tool |
 
@@ -24,11 +24,12 @@ carry only one printed address.
 ```
 pip install openpyxl segno            # and: apt-get install libreoffice-calc
 python3 tools/xirr/build_xlsx.py       /tmp/raw.xlsx
-python3 tools/xirr/harden.py           /tmp/raw.xlsx tool/XIRR-Calculator.xlsx
-python3 tools/xirr/verify_structure.py tool/XIRR-Calculator.xlsx
-python3 tools/xirr/acceptance_tests.py tool/XIRR-Calculator.xlsx
-python3 tools/xirr/goal_acceptance.py  tool/XIRR-Calculator.xlsx
-python3 tools/xirr/holdings_acceptance.py tool/XIRR-Calculator.xlsx
+python3 tools/xirr/harden.py           /tmp/raw.xlsx tool/XIRR-Calculator-4.xlsx
+cp                                     tool/XIRR-Calculator-4.xlsx tool/XIRR-Calculator.xlsx
+python3 tools/xirr/verify_structure.py tool/XIRR-Calculator-4.xlsx
+python3 tools/xirr/acceptance_tests.py tool/XIRR-Calculator-4.xlsx
+python3 tools/xirr/goal_acceptance.py  tool/XIRR-Calculator-4.xlsx
+python3 tools/xirr/holdings_acceptance.py tool/XIRR-Calculator-4.xlsx
 ```
 
 **Do not skip `harden.py`.** A workbook straight out of openpyxl carries

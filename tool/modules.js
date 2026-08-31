@@ -210,6 +210,57 @@
     wireRealReturn(rate);
   }
 
+  /* Three bands of real return, and what each one is.
+   *
+   * The bands are the author's: below zero, nought to three, above three. What
+   * matters about how they are written is what they are NOT. A band is a
+   * DESCRIPTION of a subtraction the reader can check -- nominal return divided
+   * by inflation -- and never an instruction. So each band carries things to
+   * look at rather than things to do: how long the money has been invested, how
+   * it is spread, whether the amount going in has moved with prices. Every one
+   * of those is a fact about the reader's own arrangement that they can inspect
+   * without this tool knowing anything about their life. None of them names an
+   * asset, and none of them says buy, sell, switch or swap. */
+  var REAL_BANDS = [
+    { at: -Infinity, name: 'Purchasing Power Loss',
+      says: 'What this money buys fell over this period. The statement showed a positive return and ' +
+            'still printed no minus sign, because the subtraction below is one no statement makes.',
+      look: ['How long this money has been invested. Over a short stretch a single weak year decides ' +
+             'the whole figure, and the yearly rate above says nothing about which years those were.',
+             'How the money is spread. A real return below zero is what a mix held mostly in cash-like ' +
+             'assets does during a period of higher inflation, and that is a fact about the mix ' +
+             'rather than about any one holding.',
+             'Whether the amount going in each month has moved with prices at all. An unchanged ' +
+             'instalment buys a little less every year by definition.'] },
+    { at: 0, name: 'Capital Preservation',
+      says: 'What this money buys held roughly steady. It is not standing still &mdash; keeping pace ' +
+            'with prices is itself a result &mdash; but nothing here has been added to what the ' +
+            'money can do.',
+      look: ['The gap between the two rates above. A small real return can come from a high nominal ' +
+             'return in a high-inflation stretch or a low one in a quiet stretch, and those are very ' +
+             'different periods to have lived through.',
+             'How much of the period is recent. XIRR weighs every rupee by how long it was invested, ' +
+             'so money added lately moves this figure less than it feels like it should.',
+             'What the money is for and when it is needed. A real return near zero means the sum ' +
+             'itself, rather than growth on it, is doing the work.'] },
+    { at: 0.03, name: 'Real Wealth Generation',
+      says: 'What this money buys grew over this period. The figure below is the part that bought ' +
+            'something; everything above it went on holding the price of things steady.',
+      look: ['Whether this stretch included a fall. A high real return measured from the bottom of ' +
+             'one is a fact about the starting date as much as about the holding.',
+             'How concentrated the result is. If one holding produced most of it, the figure ' +
+             'describes that holding more than the arrangement around it.',
+             'Whether the inflation figure typed above matches your own basket. School fees and ' +
+             'hospital bills have outrun the headline number for years, and if your life is heavy ' +
+             'with either, your real subtraction is bigger than the country\u2019s.'] }
+  ];
+
+  function realBand(real) {
+    var found = REAL_BANDS[0];
+    REAL_BANDS.forEach(function (b) { if (real >= b.at) found = b; });
+    return found;
+  }
+
   function wireRealReturn(rate) {
     var input = $('#pf-infl'), out = $('#pf-real-out');
     if (!input || !out) return;
@@ -217,17 +268,24 @@
       var i = parseFloat(input.value);
       if (!isFinite(i)) { out.innerHTML = ''; return; }
       var real = (1 + rate) / (1 + i / 100) - 1;
+      var band = realBand(real);
       out.innerHTML = '<div class="stats" style="margin:.2rem 0 0">' +
         stat('Your return', pct(rate)) +
         stat('Inflation', i.toFixed(1) + '%') +
         stat('What is left', pct(real)) +
         '</div>' +
-        '<p class="hint" style="margin:.7rem 0 0">' +
-        (real < 0
-          ? 'Below zero. Over this period your money bought less at the end than at the start, and no ' +
-            'statement anywhere printed a minus sign for it.'
-          : 'This is the part that actually bought you something. Everything above it went on holding ' +
-            'the price of things steady.') + '</p>';
+        /* The band is a label on a subtraction, so it is set as a label with
+           the subtraction beside it -- never as a badge on its own, which is
+           how a description turns into a verdict. */
+        '<p class="bandline" style="margin:.9rem 0 0"><span class="bandname">' + esc(band.name) +
+        '</span> <span class="qsub">' + pct(real) + ' a year, after ' + i.toFixed(1) +
+        '% inflation</span></p>' +
+        '<p class="hint" style="margin:.5rem 0 0">' + band.says + '</p>' +
+        '<div class="meaning" style="margin-top:.8rem"><h3>Worth looking at</h3><ul class="lookat">' +
+        band.look.map(function (t) { return '<li>' + t + '</li>'; }).join('') +
+        '</ul><p>None of these is a thing to do. They are things about your own arrangement that ' +
+        'you can check, and this tool knows none of them: not your goal, not your horizon, not what ' +
+        'else you own, not what you can sit through.</p></div>';
     });
   }
 
@@ -448,6 +506,106 @@
     return broken;
   }
 
+  /* The four the reader may move, and nothing else. Each one says where it
+   * starts from, how far it goes and how to read its own value back, so the
+   * markup, the reset and the recompute all come from one list rather than
+   * three copies of the same four things. */
+  var SCENARIO_LEVERS = [
+    /* The top of this lever has to REACH the amount that closes the gap, or
+     * the model cannot answer the question a gap raises. Four times the
+     * current amount does not reach it for a reader currently paying in
+     * nothing, which is exactly the reader most likely to be short. */
+    { id: 'g-scn-sip', key: 'monthlySip', label: 'Monthly investment',
+      min: 0, step: 500,
+      from: function (i) { return Math.round(i.monthlySip); },
+      max: function (i, plan) {
+        var needed = i.monthlySip + ((plan && plan.extraMonthly) || 0);
+        return Math.max(5000, Math.ceil(Math.max(i.monthlySip * 4, needed * 1.5) / 500) * 500);
+      },
+      say: function (v) { return money(v) + ' a month'; } },
+
+    { id: 'g-scn-step', key: 'annualStepUpRate', label: 'Raised each year by',
+      min: 0, step: 1,
+      from: function (i) { return Math.round(i.annualStepUpRate * 100); },
+      max: function () { return 25; },
+      scale: 0.01,
+      say: function (v) { return v + '% a year'; } },
+
+    { id: 'g-scn-years', key: 'years', label: 'Years left',
+      min: 1, step: 1,
+      from: function (i) { return Math.round(i.years); },
+      max: function (i) { return Math.min(50, Math.max(10, Math.round(i.years) + 15)); },
+      say: function (v) { return v + (v === 1 ? ' year' : ' years'); } },
+
+    { id: 'g-scn-target', key: 'target', label: 'Amount you are aiming for',
+      min: 0, step: 50000,
+      from: function (i) { return Math.round(i.target / 50000) * 50000; },
+      max: function (i) { return Math.max(500000, Math.round(i.target * 2 / 50000) * 50000); },
+      say: function (v) { return A.moneyWords(v); } }
+  ];
+
+  /* Live while dragging: a scenario model that only answers when let go is a
+   * form with extra steps. Everything here is arithmetic on numbers already in
+   * the page, so there is nothing to wait for. */
+  function wireScenario(input, plan) {
+    var box = $('#g-scn');
+    if (!box) return;
+
+    function read() {
+      var v = {
+        currentValue: input.currentValue, monthlySip: input.monthlySip,
+        years: input.years, annualRate: input.annualRate,
+        annualStepUpRate: input.annualStepUpRate, target: input.target
+      };
+      SCENARIO_LEVERS.forEach(function (L) {
+        var el = $('#' + L.id);
+        if (!el) return;
+        var n = parseFloat(el.value);
+        v[L.key] = isFinite(n) ? n * (L.scale || 1) : v[L.key];
+        var out = $('#' + L.id + '-v');
+        if (out) out.textContent = L.say(isFinite(n) ? n : L.from(input));
+      });
+      return v;
+    }
+
+    function draw() {
+      var v = read();
+      var p = E.projectGoal(v);
+      var slot = $('#g-scn-out');
+      if (!slot) return;
+      if (!p.ok) { slot.innerHTML = notice('bad', esc(p.message)); return; }
+      var diff = p.projected - v.target;
+      var moved = SCENARIO_LEVERS.filter(function (L) {
+        var el = $('#' + L.id);
+        return el && parseFloat(el.value) !== L.from(input);
+      }).length;
+      slot.innerHTML =
+        '<div class="result" style="margin:.9rem 0 0"><div class="label">' +
+        (moved ? 'On these four, you reach' : 'On your own entries, you reach') + '</div>' +
+        '<div class="value small">' + A.moneyWords(p.projected) + '</div>' +
+        '<div class="sub">' + money(p.projected) + ' \u00b7 against ' + money(v.target) + ' \u00b7 ' +
+        (diff >= 0 ? 'covered, ' + money(diff) + ' to spare' : 'short by ' + money(-diff)) +
+        '</div></div>' +
+        '<p class="hint" style="margin:.6rem 0 0">Over ' + v.years.toFixed(0) + ' years you would pay ' +
+        'in ' + money(p.totalContributed) + ' of your own money, on top of the ' +
+        money(v.currentValue) + ' you already hold.</p>';
+    }
+
+    SCENARIO_LEVERS.forEach(function (L) {
+      var el = $('#' + L.id);
+      if (el) el.addEventListener('input', draw);
+    });
+    var reset = $('#g-scn-reset');
+    if (reset) reset.addEventListener('click', function () {
+      SCENARIO_LEVERS.forEach(function (L) {
+        var el = $('#' + L.id);
+        if (el) el.value = L.from(input);
+      });
+      draw();
+    });
+    draw();
+  }
+
   function calcGoal() {
     var out = $('#g-out');
     var broken = goalOutOfRange();
@@ -500,26 +658,29 @@
         '<div class="sub">On top of the ' + money(input.monthlySip) + ' a month you already invest</div></div>';
     }
 
-    var scenarios = [
-      { name: 'Carry on exactly as you are', extra: 0, step: input.annualStepUpRate },
-      { name: 'Add ₹2,000 a month', extra: 2000, step: input.annualStepUpRate },
-      { name: 'Add ₹5,000 a month', extra: 5000, step: input.annualStepUpRate },
-      { name: 'Same amount, raised 10% every year', extra: 0, step: Math.max(0.10, input.annualStepUpRate) }
-    ];
-    html += '<div class="scroll"><table class="data"><thead><tr><th>Scenario</th><th>You reach</th><th>Against goal</th></tr></thead><tbody>';
-    scenarios.forEach(function (s) {
-      var p = E.projectGoal({
-        currentValue: input.currentValue, monthlySip: input.monthlySip + s.extra,
-        years: input.years, annualRate: input.annualRate, annualStepUpRate: s.step, target: input.target
-      });
-      if (!p.ok) return;
-      var diff = p.projected - input.target;
-      html += '<tr><td>' + esc(s.name) + '</td><td>' + money(p.projected) + '</td><td>' +
-        (diff >= 0 ? 'covered, +' + money(diff) : 'short by ' + money(-diff)) + '</td></tr>';
-    });
-    html += '</tbody></table></div>';
-    html += '<p class="hint" style="margin-top:.6rem">Every row uses the same assumed return of ' +
-      pct(input.annualRate) + ' a year.</p></div>';
+    /* Four fixed rows told a reader what ₹2,000 more a month would do. They
+     * could not ask what ₹3,500 would do, or what a year longer would do, and
+     * a gap is exactly the moment somebody wants to ask. The rows are now four
+     * levers they can move, and everything below them recomputes as they move.
+     *
+     * Only these four move. The assumed RETURN stays where the reader put it,
+     * because raising it until the gap closes is not a plan -- it is the one
+     * lever nobody controls, and the table further down already shows what
+     * happens if the market disagrees. */
+    html += '<div class="scenario" id="g-scn">' +
+      '<p class="hint" style="margin:0 0 .8rem">Move any of these four. The figure below moves ' +
+      'with them. Your own entries above are untouched.</p>' +
+      SCENARIO_LEVERS.map(function (L) {
+        return '<div class="lever"><label for="' + L.id + '">' + L.label + '</label>' +
+          '<input type="range" id="' + L.id + '" min="' + L.min + '" max="' + L.max(input, plan) +
+          '" step="' + L.step + '" value="' + L.from(input) + '">' +
+          '<output id="' + L.id + '-v" for="' + L.id + '"></output></div>';
+      }).join('') +
+      '<div id="g-scn-out" aria-live="polite"></div>' +
+      '<button class="secondary" type="button" id="g-scn-reset">Put them back</button>' +
+      '</div>';
+    html += '<p class="hint" style="margin-top:.6rem">Every figure here uses the same assumed return of ' +
+      pct(input.annualRate) + ' a year, the one you typed in.</p></div>';
 
     /* ---- §8: one assumed return printed alone reads as a promise */
     html += '<div class="card"><h2>It depends what the market does</h2>' +
@@ -602,11 +763,26 @@
       '</div>';
 
     out.innerHTML = html;
+    wireScenario(input, plan);
   }
 
   /* ================================================ ROLLING RETURN RENDERER */
 
   var RATE_DATA = {};
+
+  /* The length the page opens on. See R.years for why this exists. */
+  var DEFAULT_YEARS = 3;
+
+  /* How much history a window of this length wants behind it before its range
+   * is worth reading. The step-1 helper text states this as 3+ years for
+   * 1-year windows, 5+ for 3-year and 7+ for 5-year, which is length + 2, and
+   * this is the function that keeps the warning honest to that promise.
+   *
+   * The result card carries a STRICTER test of its own (length + 3, the book's
+   * rule) which refuses to be quiet about a range built from one stretch of
+   * market. That one is a judgement about the numbers; this one is a warning
+   * about the file, and they are deliberately not the same threshold. */
+  function recommendedYears(years) { return years + 2; }
 
   function renderRolling(series, years, meta, compareSeries, compareName, prefix, compareMeta) {
     var r = E.rollingReturns(series, years);
@@ -670,6 +846,8 @@
         caption: 'Each bar counts the ' + years + '-year periods that ended in that range'
       }) + '</div>';
 
+    html += summaryCard(r, s, series, years, below, compareSeries, compareName);
+
     html += worstIsNotWorstCard(series, s, years);
     html += startDateCard(r, years);
     html += drawdownCard(series);
@@ -707,6 +885,73 @@
       'rather than stretched.</p></div></details>';
 
     return html;
+  }
+
+  /* ------------------------------------------------------------- the summary
+   *
+   * Three measured rates and nothing else. Every figure here is a count over
+   * the windows in front of the reader, divided by how many windows there were,
+   * and each one says what it counted so the reader can check the arithmetic
+   * rather than take the label on trust.
+   *
+   * What this card must never become: a verdict. "Consistent enough to hold",
+   * "strong track record", "consider adding" are all sentences about a decision
+   * this tool cannot see -- it does not know the reader's goal, horizon, what
+   * else they own or what they can sit through. So the card reports rates and
+   * stops, and the note under it says the one thing a run of good windows most
+   * tempts a reader to forget. */
+  function summaryCard(r, s, series, years, below, compareSeries, compareName) {
+    var n = s.count;
+    var success = n ? (n - below) / n : 0;
+
+    /* Downside risk, two ways, because they answer different questions:
+     * how OFTEN a window ended below zero, and how BAD it got at the worst --
+     * both the worst window's own rate and the deepest fall along the way,
+     * which is what had to be sat through rather than what was earned. */
+    var dd = E.maxDrawdown(series);
+
+    var rows = [
+      ['Historical success rate', pct(success, 0),
+       (n - below).toLocaleString() + ' of ' + n.toLocaleString() + ' ' + years +
+       '-year windows ended above zero.']
+    ];
+
+    if (compareSeries) {
+      var c = E.compareRolling(series, compareSeries, years);
+      rows.push(c.ok
+        ? ['Benchmark outperformance rate', pct(c.fundAheadShare, 0),
+           'Ahead of ' + esc(compareName) + ' in ' + c.fundAhead.toLocaleString() + ' of ' +
+           c.pairs.toLocaleString() + ' windows both sets of data cover.']
+        : ['Benchmark outperformance rate', 'not measured', esc(c.message)]);
+    } else {
+      rows.push(['Benchmark outperformance rate', 'not measured',
+                 'No benchmark is loaded. Choose one in step 4 and this becomes a rate.']);
+    }
+
+    rows.push(['Historical downside risk', pct(s.min),
+               'The worst of these windows returned ' + pct(s.min) + ' a year. ' +
+               below.toLocaleString() + ' of ' + n.toLocaleString() + ' ended below zero' +
+               (dd.ok ? ', and the deepest fall along the way was ' + pct(dd.depth) + '.' : '.')]);
+
+    return '<div class="card"><h2>The record, as three rates</h2>' +
+      '<p class="hint" style="margin:0 0 .8rem">Each figure is a count over the ' +
+      n.toLocaleString() + ' windows above, divided by how many there were. The third column says ' +
+      'what was counted.</p>' +
+      '<div class="scroll"><table class="data"><thead><tr><th>Measure</th><th>Over these ' + years +
+      '-year windows</th><th>What that counts</th></tr></thead><tbody>' +
+      rows.map(function (row) {
+        return '<tr><td>' + esc(row[0]) + '</td><td><strong>' + esc(row[1]) + '</strong></td><td>' +
+          row[2] + '</td></tr>';
+      }).join('') +
+      '</tbody></table></div>' +
+      '<div class="meaning"><h3>What these three rates are not</h3>' +
+      '<p><strong>Past historical consistency does not guarantee future results.</strong> A high ' +
+      'success rate is a description of the dates in this file and no others. It is not a ' +
+      'probability, because the future is not drawn from this file, and the windows counted here ' +
+      'overlap, so they are not independent samples of anything.</p>' +
+      '<p>Nothing on this card is a recommendation to buy, hold, sell or switch. Whether any of it ' +
+      'suits you depends on your goal, your horizon, what else you own and what you can sit ' +
+      'through &mdash; none of which this tool knows.</p></div></div>';
   }
 
   /* The worst window in a file is only the worst of the years the file covers.
@@ -928,11 +1173,19 @@
     report: null,          /* import report, when it came from a file */
     rows: null,            /* raw rows, kept so the scheme can be changed */
     schemes: null,
-    /* Review v4 §12.14 and §4: NO default. The chapter's rule is never the
-     * window the page opens on, because a default is a recommendation and the
-     * length a reader means to hold is the one thing this screen cannot guess.
-     * Nothing below renders until one is chosen. */
-    years: null,
+    /* Three years, chosen on the page, at the author's instruction.
+     *
+     * Recorded because it reverses a decision: review v4 §12.14 and §4 said NO
+     * default, on the ground that a default is a recommendation and the length
+     * a reader means to hold is the one thing this screen cannot guess. The
+     * author has since asked for 3 years pre-selected, and that is what ships.
+     *
+     * What survives of the old rule: DEFAULT_YEARS is never silently restored.
+     * If the loaded history cannot measure three years, limitYears clears the
+     * selection to null rather than sliding the reader onto a shorter length
+     * they did not choose, and the run then refuses in words. */
+    years: DEFAULT_YEARS,
+    blockMessage: null,    /* set when a length no longer fits the history */
     datesTouched: false,
     bundled: {},           /* name -> series, for the comparison list */
     ran: false
@@ -989,6 +1242,13 @@
     limitYears(selectedSpanYears());
     updateWindowNote();
     $('#step-period').dataset.done = 'yes';
+    /* Steps 2, 3 and 4 are held at half opacity until there is something to
+     * analyse. gateSteps was called at init and from setSource -- both BEFORE
+     * a series can exist -- and never again, so the locked state stayed on for
+     * the whole session: every control below step 1 was live and usable while
+     * rendering at 50%, which is precisely the "faded, looks disabled" the
+     * chips were being blamed for. */
+    gateSteps();
 
     $('#r-loaded').innerHTML = notice('ok', 'Ready to analyse <strong>' + esc(name) + '</strong>.' +
       (reset ? ' Your dates fell outside this data, so they have been set to its full range.' : '') +
@@ -1013,6 +1273,10 @@
     if (!note) return;
     var to = A.isoToTs($('#r-end').value), from = A.isoToTs($('#r-start').value);
     if (!R.series || isNaN(to) || isNaN(from) || to <= from) { note.textContent = ''; return; }
+    /* With no length chosen there is nothing to say, and saying it anyway
+       printed "With a null-year holding period, start dates from ..." on the
+       screen -- a sentence with a JavaScript value in the middle of it. */
+    if (R.years === null) { note.textContent = ''; return; }
     var lastStart = E.addYears(to, -R.years);
     note.textContent = lastStart <= from
       ? 'These dates leave less than one ' + R.years + '-year holding period.'
@@ -1027,11 +1291,17 @@
     $('#r-run').disabled = true;
     limitYears(null);
     $('#step-period').dataset.done = 'no';
-    $('#step-hold').dataset.done = 'no';
+    /* The chosen length survives a cleared file -- limitYears has nothing to
+       measure it against -- so the step's own tick has to follow the choice,
+       not the file. Saying "not done" while a chip is plainly chosen is the
+       screen contradicting itself. */
+    $('#step-hold').dataset.done = R.years === null ? 'no' : 'yes';
+    holdError(null);
     $('#r-range').textContent = 'Choose something to analyse first.';
     var note = $('#r-window-note');
     if (note) note.textContent = '';
     $('#r-out').innerHTML = '';
+    gateSteps();
     if (message) $('#r-loaded').innerHTML = message;
   }
 
@@ -1272,9 +1542,46 @@
     if (range && !haveSeries) range.textContent = 'Choose something to analyse first.';
   }
 
+  /* The refusal, said in the step that holds the answer.
+   *
+   * Clicking a button that will not run and will not say why is the worst
+   * thing a screen can do to somebody, and it is exactly what this did: with
+   * no length chosen, runRolling cleared the output and returned. */
+  function holdError(message) {
+    var step = $('#step-hold'), slot = $('#r-hold-error');
+    if (!step || !slot) return;
+    if (!message) {
+      step.dataset.error = 'no';
+      slot.hidden = true;
+      slot.textContent = '';
+      return;
+    }
+    step.dataset.error = 'yes';
+    slot.hidden = false;
+    slot.textContent = message;
+    if (step.scrollIntoView) step.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
+
+  /* Not a refusal: the run is allowed and the numbers are real. It says the
+   * range they came from is thinner than the file's own helper text asks for,
+   * which is a thing to know BEFORE reading a median, not after. */
+  function spanWarning() {
+    var slot = $('#r-span-warn');
+    if (!slot) return;
+    if (!R.series || R.years === null) { slot.hidden = true; slot.textContent = ''; return; }
+    var span = (R.series[R.series.length - 1].t - R.series[0].t) / (365.2425 * 86400000);
+    var want = recommendedYears(R.years);
+    if (span >= want) { slot.hidden = true; slot.textContent = ''; return; }
+    slot.hidden = false;
+    slot.textContent = 'This file covers ' + span.toFixed(1) + ' years. For ' + R.years +
+      '-year windows, ' + want + '+ years is the recommended amount of history. The figures below ' +
+      'will still be worked out, but every window will begin inside a narrow band of dates.';
+  }
+
   function yearChips() {
     var box = $('#r-years');
     box.innerHTML = '';
+    $('#step-hold').dataset.done = R.years === null ? 'no' : 'yes';
     A.HORIZONS.forEach(function (h) {
       var b = A.el('button', { class: 'chip', type: 'button', role: 'radio',
                                'aria-checked': String(h === R.years) });
@@ -1287,7 +1594,10 @@
           c.setAttribute('aria-checked', String(c === b));
         });
         $('#step-hold').dataset.done = 'yes';
+        R.blockMessage = null;
+        holdError(null);
         updateWindowNote();
+        spanWarning();
         if (R.ran) runRolling();
       });
       box.appendChild(b);
@@ -1298,6 +1608,7 @@
    * only then be told no. Say it on the chip instead. */
   function limitYears(spanYears) {
     var best = null;
+    R.blockMessage = null;
     $$('#r-years .chip').forEach(function (c) {
       var h = +c.dataset.years;
       var possible = spanYears == null || h <= spanYears;
@@ -1311,10 +1622,31 @@
        one the reader did not ask for: silently moving them from 10 years to 3
        is the same recommendation the default was. */
     if (R.years !== null && best !== null && R.years > best) {
+      /* Not one holding period of the chosen length fits inside this history,
+       * so there is no range to compute -- that is arithmetic, not judgement,
+       * and it is the one hard stop on this screen.
+       *
+       * The choice is CLEARED rather than slid down to a shorter length: moving
+       * a reader from five years to one after they have looked away is the same
+       * recommendation a default is. And the block says which two numbers did
+       * not fit, in the results area where the answer would have been, so the
+       * reader is not left to work out why the chips changed under them. */
+      var wanted = R.years;
       R.years = null;
       $('#step-hold').dataset.done = 'no';
       $$('#r-years .chip').forEach(function (c) { c.setAttribute('aria-checked', 'false'); });
+      R.blockMessage = notice('bad',
+        '<strong>This history is shorter than the holding period.</strong> It covers ' +
+        spanYears.toFixed(1) + ' years and ' + wanted + '-year windows need ' + wanted +
+        ', so not one full ' + wanted + '-year period fits inside it. ' +
+        (best === null
+          ? 'Load a longer history.'
+          : 'Choose ' + best + (best === 1 ? ' year' : ' years') +
+            ' or shorter in step 3, or load a longer history.'));
+      var out = $('#r-out');
+      if (out) out.innerHTML = R.blockMessage;
     }
+    spanWarning();
   }
 
   /* The About paragraph is the author's, and it lives in one place: slot
@@ -1336,7 +1668,18 @@
   function runRolling() {
     var out = $('#r-out');
     if (!R.series) { out.innerHTML = ''; return; }
-    if (R.years === null) { out.innerHTML = ''; return; }
+    /* This used to clear the output and return, which meant pressing the button
+       did nothing at all and said nothing at all. The step that holds the
+       answer now says what is missing, in the step. */
+    if (R.years === null) {
+      /* Keep whatever limitYears put here. A run triggered by the same date
+         change that caused the block would otherwise erase the explanation
+         for the block, which is the one thing the reader needs. */
+      out.innerHTML = R.blockMessage || '';
+      holdError('Please select a holding period to continue');
+      return;
+    }
+    holdError(null);
 
     var from = A.isoToTs($('#r-start').value);
     var to = A.isoToTs($('#r-end').value);
@@ -1351,6 +1694,19 @@
     var series = P.sliceSeries(R.series, from, to);
     if (series.length < 2) {
       out.innerHTML = notice('bad', 'There is no data between those two dates.');
+      return;
+    }
+    /* The one hard stop. Short history makes a range worth doubting, and the
+     * warning above says so; history SHORTER THAN THE WINDOW ITSELF makes no
+     * range at all, because not one holding period of that length fits inside
+     * it. That is arithmetic, not judgement, so it refuses rather than warns. */
+    var chosenSpan = (to - from) / (365.2425 * 86400000);
+    if (chosenSpan < R.years) {
+      out.innerHTML = notice('bad',
+        '<strong>This stretch is shorter than the holding period.</strong> The dates in step 2 cover ' +
+        chosenSpan.toFixed(1) + ' years and you asked for ' + R.years + '-year windows, so not one ' +
+        'full ' + R.years + '-year period fits inside them. Choose a shorter holding period in step 3, ' +
+        'or widen the dates in step 2.');
       return;
     }
     /* Report the dates the data actually reaches, never the ones typed: a
@@ -1640,6 +1996,12 @@
     applyPreset();
     $('#r-reset').addEventListener('click', function () {
       R.ran = false; R.rows = null; R.schemes = null;
+      /* Start again means the state the page opens in, and the page now opens
+         on three years. This is the one place the default is restored over a
+         reader's own choice, and it is restored because they pressed the
+         button that says so. */
+      R.years = DEFAULT_YEARS;
+      yearChips();
       $('#r-scheme-wrap').hidden = true;
       $('#r-compare').value = 'none';
       $('#step-compare').dataset.done = 'no';

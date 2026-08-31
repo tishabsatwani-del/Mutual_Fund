@@ -78,6 +78,35 @@ fs.mkdirSync(TMP + '/shots', { recursive: true });
   const body = await page.locator('#pf-out').innerText();
   ok('no raw NaN or undefined leaks to the screen', !/NaN|undefined|#VALUE|Infinity/.test(body), body.slice(0,120));
   ok('absolute return is kept separate from XIRR', /Absolute return/.test(body));
+  /* --------------------------------------------- the three real-return bands
+   *
+   * A band is a label on a subtraction the reader can check, never a verdict.
+   * The XIRR here is 9.1%, so the inflation figure alone decides the band:
+   * 12% puts the real return below zero, 6% lands it between nought and three,
+   * and 2% puts it above three. */
+  const BANDS = [
+    ['12', 'Purchasing Power Loss'],
+    ['6',  'Capital Preservation'],
+    ['2',  'Real Wealth Generation']
+  ];
+  for (const [infl, name] of BANDS) {
+    await page.fill('#pf-infl', infl);
+    await page.waitForTimeout(200);
+    const real = await page.locator('#pf-real-out').innerText();
+    ok('at ' + infl + '% inflation the real return is called ' + name,
+       (await page.locator('#pf-real-out .bandname').innerText()).trim() === name, real.slice(0, 160));
+    ok('and ' + name + ' comes with things to look at, not things to do',
+       (await page.locator('#pf-real-out .lookat li').count()) === 3 &&
+       !/\b(you should|we recommend|consider (buying|selling|switching)|buy |sell |switch to|swap )\b/i
+         .test(real),
+       (real.match(/.{0,60}(you should|we recommend|consider buying|switch to|swap ).{0,60}/i) || [''])[0]);
+    ok('and the band is set beside its own arithmetic, never alone',
+       /a year, after/.test(await page.locator('#pf-real-out .bandline').innerText()),
+       await page.locator('#pf-real-out .bandline').innerText());
+  }
+  await page.fill('#pf-infl', '6');
+  await page.waitForTimeout(200);
+
   await page.screenshot({ path: path.join(SHOTS, '02-portfolio.png'), fullPage: true });
 
   /* error handling: no current value */
@@ -112,7 +141,50 @@ fs.mkdirSync(TMP + '/shots', { recursive: true });
   ok('projection matches the compounding done by hand', /5,87,731|587,731/.test(goalText), goalText.slice(0, 160));
   ok('the shortfall is stated', /Short by/.test(goalText));
   ok('a required monthly top-up is given', /a month/.test(goalText));
-  ok('scenarios are shown', /Add ₹2,000 a month/.test(goalText));
+  /* Four fixed rows told the reader what ₹2,000 more a month would do, and
+     could not answer what ₹3,500 would do, or a year longer -- which is the
+     question a gap actually raises. They are four levers now. */
+  ok('a gap opens an interactive model with four levers',
+     (await page.locator('#g-scn .lever input[type="range"]').count()) === 4,
+     String(await page.locator('#g-scn .lever input[type="range"]').count()));
+  ok('the four are the monthly amount, the step-up, the horizon and the target',
+     (await page.locator('#g-scn .lever label').allInnerTexts()).join(' | ') ===
+     'Monthly investment | Raised each year by | Years left | Amount you are aiming for',
+     (await page.locator('#g-scn .lever label').allInnerTexts()).join(' | '));
+  /* The assumed RETURN is deliberately not among them: raising it until the
+     gap closes is not a plan, it is the one lever nobody controls. */
+  ok('and the assumed return is not one of them',
+     (await page.locator('#g-scn .lever label').allInnerTexts())
+       .every(t => !/return|rate/i.test(t)));
+
+  ok('the model starts on the reader\u2019s own entries',
+     /On your own entries, you reach/i.test(await page.locator('#g-scn-out').innerText()),
+     await page.locator('#g-scn-out').innerText());
+
+  /* The top of the monthly lever has to REACH the amount that closes the gap,
+     or the model cannot answer the question a gap raises. This reader pays in
+     nothing today, and four times nothing is nothing. */
+  const sipTop = +(await page.getAttribute('#g-scn-sip', 'max'));
+  const needed = +((await page.locator('#g-out').innerText())
+    .match(/₹([\d,]+) a month/) || [0, '0'])[1].replace(/,/g, '');
+  ok('the monthly lever reaches the amount that would close the gap',
+     sipTop >= needed && needed > 0, sipTop + ' vs ' + needed);
+
+  const before = await page.locator('#g-scn-out .value').innerText();
+  await page.locator('#g-scn-sip').fill(String(sipTop));
+  await page.waitForTimeout(250);
+  const after = await page.locator('#g-scn-out .value').innerText();
+  ok('moving a lever moves the figure, live', after !== before, before + ' -> ' + after);
+  ok('and the model says it is no longer on the reader\u2019s own entries',
+     /On these four, you reach/i.test(await page.locator('#g-scn-out').innerText()));
+  ok('the entries above are left alone', (await page.inputValue('#g-sip')) === '0',
+     await page.inputValue('#g-sip'));
+
+  await page.click('#g-scn-reset');
+  await page.waitForTimeout(250);
+  ok('and they can be put back',
+     (await page.locator('#g-scn-out .value').innerText()) === before &&
+     /On your own entries/i.test(await page.locator('#g-scn-out').innerText()));
   ok('the assumption is labelled, not sold as a forecast', /assumption you typed in|not a forecast/.test(goalText));
   ok('goal chart rendered', (await page.locator('#g-out svg').count()) >= 1);
   ok('the chart has a text alternative', !!(await page.locator('#g-out svg[aria-label]').count()));
@@ -154,7 +226,11 @@ fs.mkdirSync(TMP + '/shots', { recursive: true });
   ok('the date warning survived the move', /05-Aug-2026/.test(sheetText));
   ok('the Google Sheets line survived the move', /Google Sheets and it works there too/.test(sheetText));
   const href = await page.locator('#view-sheet a.download').getAttribute('href');
-  ok('the download points at a file beside the tool', href === 'XIRR-Calculator.xlsx', href);
+  ok('the download points at a file beside the tool', href === 'XIRR-Calculator-4.xlsx', href);
+  ok('and the download says what the file does not do',
+     /100% Standalone & Private \(\.xlsx\): Functions completely offline with zero external server connections/
+       .test((await page.locator('.privacy-badge').innerText()).replace(/\s+/g, ' ')),
+     await page.locator('.privacy-badge').innerText());
   const dl = await page.request.get(new URL(href, BASE_URL).href);
   ok('the file is actually served', dl.status() === 200, 'status ' + dl.status());
   ok('it is served as a spreadsheet, not a web page',

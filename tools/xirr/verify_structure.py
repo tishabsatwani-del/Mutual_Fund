@@ -152,6 +152,64 @@ check("the goal tab says the return is an assumption",
       any("assumption, not a forecast" in str(c.value)
           for row in goal.iter_rows() for c in row if c.value))
 
+# ---------------------------------------------------------------- presentation
+#
+# Every check below is about whether a reader can READ what the sheet says, and
+# every one of them has been broken at least once by the recalculation pass
+# rather than by the build -- which is why they are asserted on the SHIPPED
+# file rather than trusted from build_xlsx.py.
+
+# The header block. 28 points on rows 1-5 so a label and its figure sit on one
+# line; row 4 taller still, because it carries the result in a 28-point font and
+# a 28-point row cannot hold a 28-point glyph.
+for row, want in {1: 28, 2: 28, 3: 28, 5: 28}.items():
+    dim = inv.row_dimensions[row]
+    check(f"row {row} of My investments is 28 points",
+          dim.height is not None and abs(dim.height - want) < 0.5, f"height {dim.height}")
+check("row 4 is taller still, so the 28-point result is not clipped",
+      inv.row_dimensions[4].height is not None and inv.row_dimensions[4].height >= 36,
+      f"height {inv.row_dimensions[4].height}")
+check("the header block is aligned to the middle of its own row height",
+      all(inv[f"{c}{r}"].alignment.vertical == "center" for c in "AB" for r in (1, 2, 3, 4, 5)))
+
+# Editable cells are the ONLY yellow ones, and the yellow has to survive a bad
+# screen: the previous FFFFFDF0 was indistinguishable from white at an angle,
+# which made "type in the coloured cells only" an instruction the sheet did not
+# help anyone follow.
+check("every cell a reader types into is filled #FEF9C3",
+      all(inv[f"{c}8"].fill.fgColor.rgb == "FFFEF9C3" for c in "BCDF") and
+      inv["H11"].fill.fgColor.rgb == "FFFEF9C3",
+      inv["B8"].fill.fgColor.rgb)
+check("and every formula output is locked",
+      all(inv[ref].protection.locked for ref in
+          ("B4", "B5", "E8", "E507", "I3", "I4", "I5", "I6", "I7", "J11", "J15")))
+check("while the cells a reader types into are not",
+      not any(inv[ref].protection.locked for ref in ("B2", "B8", "C8", "D8", "F8", "H11")))
+check("every tab is protected", all(ws.protection.sheet for ws in wb.worksheets
+                                    if ws.title != "Calc"))
+
+# Instruction blocks wrap, and their rows are tall enough to SHOW the wrap. A
+# wrapped line in a row too short for it is hidden, not wrapped.
+for tab in ("Start here", "About"):
+    sheet = wb[tab]
+    blocks = [(r, sheet.cell(row=r, column=2)) for r in range(2, 20)
+              if isinstance(sheet.cell(row=r, column=2).value, str)]
+    check(f"every instruction block on {tab} wraps",
+          blocks and all(c.alignment.wrap_text for _, c in blocks), f"{len(blocks)} blocks")
+    check(f"and each row on {tab} is tall enough to show what it wraps to",
+          all(sheet.row_dimensions[r].height is None or
+              sheet.row_dimensions[r].height >= 15.5 * (1 + len(c.value) // 88)
+              for r, c in blocks),
+          str([(r, sheet.row_dimensions[r].height, len(c.value)) for r, c in blocks]))
+
+BADGE = ("\U0001F512 100% Standalone & Private (.xlsx): Functions completely offline "
+         "with zero external server connections.")
+for tab in ("Start here", "About"):
+    sheet = wb[tab]
+    check(f"the privacy badge is on {tab}",
+          any(c.value == BADGE for r in sheet.iter_rows() for c in r),
+          tab)
+
 # forbidden functions, anywhere in the workbook
 ALLOWED = {"XIRR", "IF", "IFERROR", "DATE", "EDATE", "TODAY", "COUNT", "COUNTA",
            "OFFSET", "SUM", "TEXT"}

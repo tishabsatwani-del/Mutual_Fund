@@ -9,7 +9,7 @@
 
   var E = window.PRCEngine, P = window.PRCParse;
   var VERSION = '2.0';
-  var SHEET_VERSION = '1.2';
+  var SHEET_VERSION = '1.4';
   var HORIZONS = [1, 3, 5, 7, 10];
 
   /* ------------------------------------------------------------ formatting */

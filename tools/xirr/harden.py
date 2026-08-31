@@ -40,6 +40,38 @@ for wrong, right in FIXES:
     print(f"{'patched' if styles != before else 'NOT FOUND'}: {wrong!r} -> {right!r}")
 parts["xl/styles.xml"] = styles.encode("utf-8")
 
+# The recalculation pass also AUTO-FITS row heights, which silently undoes the
+# heights the build set on the My investments header block: 28 points came back
+# as 27.75 and the 38 that holds a 28-point result figure came back as 33.85,
+# where the figure it exists to protect is clipped. The heights are the build's
+# decision, so they are put straight back, the same way the number formats are.
+ROW_HEIGHTS = {1: 28, 2: 28, 3: 28, 4: 38, 5: 28, 6: 32}
+INV_SHEET = "xl/worksheets/sheet2.xml"      # My investments, in workbook order
+
+sheet = parts[INV_SHEET].decode("utf-8")
+
+
+def set_height(tag, height):
+    """Rewrite one <row> opening tag with the height the build asked for.
+
+    The whole tag is taken apart and put back rather than patched in place: a
+    substitution that only INSERTS ht= leaves the one LibreOffice wrote sitting
+    further along the same tag, and a row element carrying two ht attributes is
+    not XML at all -- Excel and every parser reject the file outright.
+    """
+    attrs = re.sub(r'\s+(ht|customHeight)="[^"]*"', "", tag.rstrip("/>").rstrip())
+    return f'{attrs} ht="{height}" customHeight="1">'
+
+
+for row, height in ROW_HEIGHTS.items():
+    match = re.search(r'<row r="%d"[^>]*>' % row, sheet)
+    if not match:
+        print(f"ROW NOT FOUND: row {row}")
+        continue
+    sheet = sheet[:match.start()] + set_height(match.group(0), height) + sheet[match.end():]
+    print(f"set: row {row} height {height}")
+parts[INV_SHEET] = sheet.encode("utf-8")
+
 with zipfile.ZipFile(OUT, "w", zipfile.ZIP_DEFLATED) as z:
     for name, data in parts.items():
         z.writestr(name, data)

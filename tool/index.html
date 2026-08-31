@@ -144,7 +144,7 @@
       <label for="pf-group">Break the result down by fund as well</label>
       <select id="pf-group">
         <option value="off">No — one portfolio total is enough</option>
-        <option value="on">Yes — measure each fund on its own too</option>
+        <option value="on">Yes — measure each fund on its own</option>
       </select>
       <p class="hint">Name the funds in the rows above, then turn this on to see the difference
       between how each holding did and how your money as a whole did.</p>
@@ -269,6 +269,9 @@
           <p>CSV or Excel &middot; a date column and a NAV column is all it needs</p>
         </div>
         <input type="file" id="f-file" accept=".csv,.txt,.xlsx">
+        <p class="hint helper-span">&#128161; Upload at least 3+ years of historical data for
+        1-Year rolling calculations, 5+ years for 3-Year calculations, and 7+ years for
+        comprehensive 5-Year statistical analysis.</p>
       </div>
 
       <div id="r-scheme-wrap" hidden style="margin-top:1rem">
@@ -318,7 +321,10 @@
   <!-- 3 ------------------------------------------------------------------ -->
   <div class="card step" id="step-hold">
     <h2><span class="stepno">3</span> How long is each holding period?</h2>
-    <div class="chips" id="r-years" role="radiogroup" aria-label="Holding period"></div>
+    <div class="chips" id="r-years" role="radiogroup" aria-label="Holding period"
+         aria-describedby="r-hold-error"></div>
+    <p class="steperror" id="r-hold-error" role="alert" hidden></p>
+    <p class="spanwarn" id="r-span-warn" aria-live="polite" hidden></p>
     <p class="hint">Every possible start date within the stretch above is measured over this length.</p>
   </div>
 
@@ -352,8 +358,10 @@
     <p style="margin:0 0 .4rem;color:var(--ink-2)">Use this when you want a permanent record you can add to
     over the years, or when you would rather not type into a web page at all. It works with no internet
     connection once downloaded.</p>
-    <a class="btn download" href="XIRR-Calculator.xlsx" download="XIRR-Calculator.xlsx">Download the sheet</a>
+    <a class="btn download" href="XIRR-Calculator-4.xlsx" download="XIRR-Calculator-4.xlsx">Download the sheet</a>
     <p class="filenote">Excel file (.xlsx)</p>
+    <p class="privacy-badge">&#128274; 100% Standalone &amp; Private (.xlsx): Functions completely
+    offline with zero external server connections.</p>
     <p class="appnote">On a phone you will need a free spreadsheet app, such as
     Google Sheets, to open it.</p>
   </div>

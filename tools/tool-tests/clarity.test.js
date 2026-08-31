@@ -67,16 +67,22 @@ function longFile(file) {
      /needs 10 years of data/.test(await page.locator('#r-years .chip[data-years="10"]').innerText()));
   ok('three years is still offered',
      !(await page.locator('#r-years .chip[data-years="3"]').isDisabled()));
-  /* Review v4 §12.14: no selection, ever, and nothing below renders until the
-     reader makes one. The screen used to fall back to the longest period that
-     fits, which is the same recommendation a default is -- it just makes it
-     after the reader has looked away. */
-  ok('nothing is chosen for the reader, even as a fallback',
-     (await page.locator('#r-years .chip[aria-checked="true"]').count()) === 0,
-     String(await page.locator('#r-years .chip[aria-checked="true"]').count()));
-  ok('and nothing renders until they choose one',
-     (await page.locator('#r-out').innerText()).trim() === '',
-     (await page.locator('#r-out').innerText()).slice(0, 80));
+  /* The author reversed review v4 §12.14 on 31 August 2026: the page opens on
+     three years. What survives of the old rule is that the screen never SLIDES
+     a reader onto a different length -- it does not fall back to the longest
+     period that fits, which is the same recommendation a default is, just made
+     after the reader has looked away. Three years fits this file, so the
+     opening choice stands and nothing was chosen on the reader's behalf. */
+  ok('the opening choice stands, and nothing is slid onto the reader',
+     (await page.locator('#r-years .chip[aria-checked="true"]').allInnerTexts()).join('|') === '3 years',
+     (await page.locator('#r-years .chip[aria-checked="true"]').allInnerTexts()).join('|'));
+  /* A three-year file for three-year windows is thin -- 5+ is what the step-1
+     helper text asks for -- so it warns, and lets the run happen. */
+  ok('and a file thinner than the recommendation says so before anything is run',
+     !(await page.locator('#r-span-warn').isHidden()) &&
+     /5\+ years is the recommended amount of history/
+       .test(await page.locator('#r-span-warn').innerText()),
+     await page.locator('#r-span-warn').innerText());
 
   await page.setInputFiles('#f-file', long);
   await page.waitForTimeout(1200);
@@ -180,6 +186,37 @@ function longFile(file) {
   ok('that route reaches the rolling module on the index source',
      await page.locator('#view-rolling').isVisible() &&
      (await page.locator('#r-source .chip[data-source="index"]').getAttribute('aria-checked')) === 'true');
+
+  /* -------------------------------------------------- copy and padding fixes */
+  section('Two small things a reader meets on a phone');
+
+  await page.goto(BASE_URL + '#portfolio', { waitUntil: 'networkidle' });
+  await page.waitForTimeout(300);
+  const opts = await page.locator('#pf-group option').allInnerTexts();
+  ok('the per-fund option reads as a whole sentence',
+     opts.includes('Yes \u2014 measure each fund on its own'), opts.join(' | '));
+
+  /* A two-line refusal on a narrow phone used to sit against the rounded
+     corner, which is where the eye is already being pulled by the border. */
+  await page.setViewportSize({ width: 360, height: 780 });
+  await page.locator('#pf-rows .entry').nth(0).locator('.in-date').fill('2024-01-01');
+  await page.locator('#pf-rows .entry').nth(0).locator('.in-amt').fill('100000');
+  await page.click('#pf-calc');
+  await page.waitForSelector('#pf-out .notice');
+  const pad = await page.evaluate(() => {
+    const s = getComputedStyle(document.querySelector('#pf-out .notice'));
+    return [s.paddingTop, s.paddingRight, s.paddingBottom, s.paddingLeft].join(' ');
+  });
+  ok('the error banner is padded 16px top and bottom, 20px each side',
+     pad === '16px 20px 16px 20px', pad);
+  ok('and its text wraps clear of the border on a 360px phone',
+     await page.evaluate(() => {
+       const n = document.querySelector('#pf-out .notice');
+       const p = n.querySelector('span:last-child') || n.lastElementChild || n;
+       const a = n.getBoundingClientRect(), b = p.getBoundingClientRect();
+       return b.right <= a.right - 19 && b.bottom <= a.bottom - 15;
+     }));
+  await page.setViewportSize({ width: 390, height: 844 });
 
   ok('no script errors anywhere', errors.length === 0, errors.slice(0, 3).join(' | '));
   await browser.close();
