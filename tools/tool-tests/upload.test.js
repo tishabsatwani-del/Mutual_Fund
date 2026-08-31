@@ -192,8 +192,9 @@ execFileSync('python3', [path.join(__dirname, 'fixtures', 'make_upload_fixtures.
   await page.waitForTimeout(2000);
   const tb = flat(await page.locator('#bm-status').innerText());
   ok('it is named as a trade log', /trade logs or transaction records/.test(tb), tb);
-  ok('and the columns that gave it away are listed',
-     /trade_type/.test(tb) && /quantity/.test(tb), tb);
+  ok('and the columns that gave it away are listed, snake_case and all',
+     /trade_date/.test(tb) && /trade_type/.test(tb) &&
+     /quantity/.test(tb) && /order_id/.test(tb), tb);
   ok('the box shows it was not added',
      (await page.locator('#bm-drop.refused').count()) === 1);
 
@@ -245,7 +246,20 @@ execFileSync('python3', [path.join(__dirname, 'fixtures', 'make_upload_fixtures.
     }
     return L.join('\n');
   })();
-  await page.fill('#bm-paste-text', pasted);
+  /* Set on the element rather than typed in.
+   *
+   * Thirteen years is 95 KB, and page.fill() drives that through the input
+   * pipeline a chunk at a time and never finishes -- it is the harness that
+   * cannot take it, not the page: setting the value outright and reading it
+   * takes the tool about two and a half seconds. Paste is what a reader does
+   * anyway, and a paste sets the value and raises input; it does not type. */
+  async function pasteInto(prefix, text) {
+    await page.locator('#' + prefix + '-paste-text').evaluate((el, v) => {
+      el.value = v;
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    }, text);
+  }
+  await pasteInto('bm', pasted);
   await page.click('#bm-paste-read');
   await page.waitForTimeout(2500);
   const pasteBox = await boxText('bm-drop');
@@ -325,9 +339,11 @@ execFileSync('python3', [path.join(__dirname, 'fixtures', 'make_upload_fixtures.
      }));
   await page.click('#r-run');
   await page.waitForTimeout(2000);
+  /* Case-insensitive: the stat card's label is uppercased by the stylesheet,
+     and innerText reports what is rendered. */
   ok('and the fund path still computes 13% on a 13% file',
-     /Median 13\.0%/.test(flat(await page.locator('#r-out').innerText())),
-     (flat(await page.locator('#r-out').innerText())).match(/Median[^A-Z]{0,20}/));
+     /median 13\.0%/i.test(flat(await page.locator('#r-out').innerText())),
+     (flat(await page.locator('#r-out').innerText())).match(/[Mm]edian[^|]{0,30}/));
 
   section('My own fund refuses the same things, in the same place');
   await open('fund');
@@ -348,7 +364,7 @@ execFileSync('python3', [path.join(__dirname, 'fixtures', 'make_upload_fixtures.
   await open('fund');
   await page.click('#f-paste-open');
   await page.waitForTimeout(200);
-  await page.fill('#f-paste-text', pasted);
+  await pasteInto('f', pasted);
   await page.click('#f-paste-read');
   await page.waitForTimeout(2500);
   ok('the pasted rows are accepted',

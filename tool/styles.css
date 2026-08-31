@@ -519,6 +519,9 @@ button.link {
   border-left: 3px solid var(--warn); padding: .35rem 0 .35rem .7rem;
 }
 .upcard-rule strong { color: var(--warn); }
+/* The file label sat directly on the rule line above it, so the two read as
+   one block and the door lost its heading. */
+.upcard .fieldlabel { margin-top: 1.1rem; }
 
 .notice.bad { border-color: var(--critical); }
 .notice.warn { border-color: var(--warn); }

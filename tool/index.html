@@ -333,6 +333,7 @@
           <p>CSV or Excel &middot; a date column and a NAV column is all it needs</p>
         </div>
         <input type="file" id="f-file" accept=".csv,.txt,.tsv,.xlsx">
+        <div id="f-status" aria-live="polite"></div>
         <button class="link" type="button" id="f-paste-open">Or paste the two columns from a spreadsheet</button>
         <div class="pastebox" id="f-paste-box" hidden>
           <label class="fieldlabel" for="f-paste-text">Copy the date column and the NAV column, and paste them here</label>
@@ -340,7 +341,6 @@
                     placeholder="01-Jan-2020&#9;45.1234&#10;02-Jan-2020&#9;45.2210"></textarea>
           <div class="btnrow"><button class="secondary" type="button" id="f-paste-read">Read these rows</button></div>
         </div>
-        <div id="f-status" aria-live="polite"></div>
         <p class="hint helper-span">&#128161; Upload at least 3+ years of historical data for
         1-Year rolling calculations, 5+ years for 3-Year calculations, and 7+ years for
         comprehensive 5-Year statistical analysis.</p>

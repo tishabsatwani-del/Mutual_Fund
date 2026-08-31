@@ -2241,8 +2241,11 @@
           '<label class="fieldlabel" for="bm-pick">Primary Investment Data file</label>' +
           dropZone('bm', 'Choose a NAV or value history file',
                    'CSV or Excel &middot; a date column and the NAV or value on that date') +
-          pasteHtml('bm') +
-          '<div id="bm-status" aria-live="polite"></div>';
+          /* The reason a file was refused belongs against the box, with
+             nothing between them. The paste link went in that gap and split
+             the refusal from the thing it was about. */
+          '<div id="bm-status" aria-live="polite"></div>' +
+          pasteHtml('bm');
         A.wireDrop('bm-drop', 'bm-file', 'bm-pick', function (file) { loadIndexFile(file); });
         wirePaste('bm', function (text, name) { loadIndexFile(pastedFile(text, name)); });
       });
@@ -2708,8 +2711,8 @@
           '<label class="fieldlabel" for="cmp-pick">Benchmark index data file</label>' +
           dropZone('cmp', 'Choose an index history file',
                    'CSV or Excel &middot; a date column and the index value on that date') +
-          pasteHtml('cmp') +
           '<div id="cmp-status" aria-live="polite"></div>' +
+          pasteHtml('cmp') +
           '<div id="cmp-note" aria-live="polite"></div>' +
           /* This slot's own picker. It had none: a many-scheme file dropped
              here produced the red line in the screenshot and no control. */

@@ -280,6 +280,28 @@
    * word "value" cannot pass, because the rows under it will not line up. */
   var HEADER_SEARCH_ROWS = 20;
 
+  /* How many cells a row of this table actually holds, taken as the commonest
+     count among the data rows rather than the widest -- one stray trailing
+     comma should not decide it. */
+  function filledCount(row) {
+    var n = 0;
+    for (var c = 0; c < (row ? row.length : 0); c++) {
+      if (row[c] != null && String(row[c]).trim() !== '') n++;
+    }
+    return n;
+  }
+
+  function modalWidth(rows) {
+    var counts = {}, best = 0, seen = 0;
+    for (var i = 0; i < Math.min(rows.length, 40); i++) {
+      var n = filledCount(rows[i]);
+      if (!n) continue;
+      counts[n] = (counts[n] || 0) + 1;
+      if (counts[n] > seen) { seen = counts[n]; best = n; }
+    }
+    return best;
+  }
+
   function findHeader(rows) {
     var limit = Math.min(rows.length, HEADER_SEARCH_ROWS);
     var fallback = null;
@@ -287,6 +309,20 @@
       if (!looksLikeHeader(rows[i])) continue;
       var body = rows.slice(i + 1);
       if (!body.length) continue;
+
+      /* A TITLE IS NOT A HEADER, and telling them apart is a counting job.
+       *
+       * "Scheme NAV history report" in cell A2 of a fund house's workbook
+       * reads as a header by every word test -- it contains "nav" and it is
+       * text -- and the columns beneath it check out too, because the real
+       * header one row further down is just one more text row among four
+       * thousand. Taken as the header it has ONE cell, so its single title
+       * became the name of column A, the date column was read as a column of
+       * scheme names, and the tool announced the file held 4,751 schemes.
+       *
+       * A header names the columns, so it has about as many cells as they do. */
+      var width = modalWidth(body);
+      if (width >= 2 && filledCount(rows[i]) < Math.max(2, width - 1)) continue;
       /* Kept even though its columns may not check out. A row that reads as a
          header IS the header; whether the rows under it hold what it claims is
          a separate question, and it is the question worth answering. Throwing
@@ -379,10 +415,13 @@
    *
    * What is left is genuinely transaction-only: an order, a trade, a
    * quantity, an exchange, a segment. */
+  /* Underscores and hyphens count as spaces here: Zerodha's tradebook ships
+     order_id and trade_date, and \s* matched neither, so the two columns a
+     reader would recognise instantly were the two the refusal did not name. */
   var TRADE_HEADERS = [
-    /\border\s*(id|no|number|type)\b/i,
-    /\b(buy|sell)\s*\/?\s*(sell|buy)?\b/i,
-    /\btrade\s*(id|no|type|date)\b/i,
+    /\border[\s_-]*(id|no|number|type)\b/i,
+    /\b(buy|sell)[\s_-]*\/?[\s_-]*(sell|buy)?\b/i,
+    /\btrade[\s_-]*(id|no|type|date)\b/i,
     /\bquantity\b|\bqty\b/i,
     /\bbrokerage\b/i,
     /\btransaction\s*(id|type)\b/i,
