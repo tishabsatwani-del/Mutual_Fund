@@ -65,6 +65,18 @@ function textValueFile(file) {
   fs.mkdirSync(TMP + '/shots', { recursive: true });
   const browser = await chromium.launch({ executablePath: CHROME });
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
+  /* The market-index results are tabbed on a phone: only the chosen panel is
+     drawn, and innerText leaves undrawn panels out. These sections read the
+     whole result as one page, so the harness un-tabs it. The tab behaviour
+     itself is checked in spec-rolling-index.test.js, on a context without
+     this. */
+  await ctx.addInitScript(() => {
+    document.addEventListener('DOMContentLoaded', () => {
+      const s = document.createElement('style');
+      s.textContent = '.ixpanel{display:block!important}';
+      document.head.appendChild(s);
+    });
+  });
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
@@ -317,12 +329,15 @@ function textValueFile(file) {
      heads.join('|').toLowerCase() === 'performance metric|primary investment|benchmark index',
      heads.join('|'));
   const metrics = await page.locator('#r-out .summary3 tbody td:first-child').allInnerTexts();
-  ok('and the eight rows, in the specification’s order',
+  /* The specification's eight rows, then the two ratio rows the September
+     review added to this table (item 3). */
+  ok('and the eight rows, in the specification’s order, then Sharpe and Sortino',
      metrics.join('|') === [
        'Total Rolling Windows Analysed', 'Average Rolling Return (Mean)', 'Median Rolling Return',
        'Maximum Return (Best Window)', 'Minimum Return (Worst Window)',
        'Return Volatility (Std Deviation)', 'Negative Return Frequency (Historical)',
-       'Outperformance Rate vs Benchmark'].join('|'),
+       'Outperformance Rate vs Benchmark', 'Sharpe Ratio (vs your target)',
+       'Sortino Ratio (vs your target)'].join('|'),
      metrics.join('|'));
   ok('windows are counted as Observations',
      /Total Rolling Windows Analysed [\d,]+ Observations [\d,]+ Observations/.test(out), out.slice(0, 400));
@@ -1005,8 +1020,10 @@ function textValueFile(file) {
      /3 years ← chosen/.test(hz), hz.slice(0, 300));
   ok('and on a constant-growth file every horizon reads 14%',
      (hz.match(/14\.0%/g) || []).length >= 9, String((hz.match(/14\.0%/g) || []).length));
-  ok('the label now says what the count is, not what it is not',
-     /Non-overlapping periods, at most/i.test(flat(await page.locator('#r-out').innerText())));
+  ok('the label now says what the count is, with the fraction kept',
+     /Independent \(Non-Overlapping\) 3-Year Horizons 3\.3 Periods/i.test(flat(await page.locator('#r-out').innerText())) &&
+     /Total Rolling Sample Windows [\d,]+ \(Daily Shifts\)/i.test(flat(await page.locator('#r-out').innerText())),
+     flat(await page.locator('#r-out').innerText()).slice(0, 900));
 
   section('The fall, priced in rupees and ended with the question');
   /* A file with a real crash in it: up 8%/yr, a 30% fall over 2 months in
@@ -1103,30 +1120,135 @@ function textValueFile(file) {
     await page.setInputFiles('#cmp-file', benchTRI);
     await page.waitForTimeout(1500);
     const note = flat(await page.locator('#r-overlap-note').innerText());
-    ok('the mismatch is said at load time, before any result',
-       /Notice: you are comparing a fixed-income \(debt\) fund with an equity index/i.test(note),
-       note.slice(0, 240));
-    ok('and states the classes\u2019 own record, with the way out',
-       /higher long-term growth alongside significantly higher short-term volatility/.test(note) &&
-       /like-for-like/i.test(note) && /Read from the names/i.test(note), note.slice(0, 400));
+    ok('the mismatch is said at load time, before any result, in the approved words',
+       /Notice: Asset Class Context/i.test(note) &&
+       /You are comparing a Fixed Income \/ Debt Asset with an Equity Index\. Equity indices typically exhibit higher long-term capital growth alongside significantly higher short-term volatility and drawdown risk\. Fixed Income assets are generally structured for income generation, capital stability, and lower price fluctuation\./.test(note),
+       note.slice(0, 400));
+    ok('as a neutral notice, not a red or amber one',
+       (await page.locator('#r-overlap-note .notice.info').count()) === 1 &&
+       (await page.locator('#r-overlap-note .notice.bad, #r-overlap-note .notice.warn').count()) === 0);
+    ok('it points at a like-for-like TRI and says how the classes were decided',
+       /like-for-like/i.test(note) && /Total Return Index \(TRI\)/.test(note) &&
+       /How this was decided/i.test(note) && /read from its name as debt/i.test(note) &&
+       /read from its name as equity/i.test(note), note.slice(0, 700));
     await page.locator('#r-years .chip[data-years="5"]').click();
     await page.waitForTimeout(250);
     await page.click('#r-run');
     await page.waitForTimeout(2200);
-    ok('the comparison card repeats the warning beside the gap',
-       /fixed-income \(debt\) fund with an equity index/i.test(flat(await page.locator('#r-out').innerText())));
+    const gapOut = flat(await page.locator('#r-out').innerText());
+    ok('the comparison panel repeats the notice beside the gap',
+       /Notice: Asset Class Context/i.test(gapOut) &&
+       (await page.locator('#r-out .ixpanel[data-panel="bench"] .notice.info').count()) === 1);
     ok('and the comparison table carries a Difference column',
-       /difference/i.test(await page.locator('#r-out').innerText()));
+       /difference/i.test(gapOut));
+
+    /* Item 12: the fee note, verbatim, under the benchmark comparison table. */
+    const fee = flat(await page.locator('#r-out .feenote').innerText());
+    ok('the data-standard note sits under the comparison table, verbatim',
+       fee === 'Data Standard Note: Fund NAVs reflect net performance after Total Expense Ratio (TER) deductions. Index TRI values represent gross market performance without expense deductions, transaction costs, or cash drag.',
+       fee);
+    ok('and it is in the benchmark panel, after the Against table',
+       await page.evaluate(() => {
+         const note = document.querySelector('#r-out .feenote');
+         const table = note && note.closest('.card') && note.closest('.card').querySelector('table.data');
+         return !!(note && table && note.closest('.ixpanel').dataset.panel === 'bench' &&
+                   (table.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING));
+       }));
+
+    /* Item 15: the scope note, verbatim, on the first panel. */
+    const scope = flat(await page.locator('#r-out .scopenote').innerText());
+    ok('the dataset scope note is on the summary panel, verbatim',
+       scope === 'Dataset Scope Note: This analysis reflects historical performance exclusively for the selected scheme and benchmark. It does not account for category-wide peer distributions or schemes that were merged, renamed, or liquidated during this timeframe.' &&
+       await page.evaluate(() => document.querySelector('#r-out .scopenote').closest('.ixpanel').dataset.panel === 'summary'),
+       scope);
+
+    /* Item 11: the two counts, relabelled, with the fractional horizon count. */
+    ok('the window count is labelled as sample windows with the shift frequency',
+       /Total Rolling Sample Windows 1,827 \(Daily Shifts\)/i.test(gapOut), gapOut.slice(0, 900));
+    ok('and the independent count is a fraction of periods, not a floor',
+       /Independent \(Non-Overlapping\) 5-Year Horizons 2\.0 Periods/i.test(gapOut));
+
+    /* Item 3: Sharpe and Sortino as rows in both comparison tables. */
+    ok('Sharpe and Sortino are rows of the statistical summary and the Against table',
+       (await page.locator('#r-out table.summary3 td[data-ratio="sharpe"]').count()) === 2 &&
+       (await page.locator('#r-out table.summary3 td[data-ratio="sortino"]').count()) === 2 &&
+       (await page.locator('#r-out .card table.data td[data-ratio-delta]').count()) === 2);
+    ok('on a flat series the ratios are said to be undefined, not printed as a huge number',
+       (await page.locator('#r-out td[data-ratio="sharpe"][data-side="bench"]').first().innerText()).trim() === 'not defined');
+
+    /* Item 5: the side-by-side characteristic matrix, fund | benchmark | delta. */
+    const matrixRows = await page.locator('#r-out table.charmatrix tbody tr').allInnerTexts();
+    ok('the characteristic matrix carries the five rows in order',
+       matrixRows.length === 5 &&
+       /^Median Return/.test(flat(matrixRows[0])) && /^Worst Window/.test(flat(matrixRows[1])) &&
+       /^Volatility/.test(flat(matrixRows[2])) && /^Max Drawdown/.test(flat(matrixRows[3])) &&
+       /^Positive Window Ratio/.test(flat(matrixRows[4])), matrixRows.map(flat).join(' | '));
+    ok('with a delta that is fund minus benchmark',
+       /Median Return \(% a year\) 7\.0% 10\.0% \u22123\.0%/.test(flat(matrixRows[0])), flat(matrixRows[0]));
+    ok('and legend dots on both column headings',
+       (await page.locator('#r-out table.charmatrix th .legend-dot.fund').count()) === 1 &&
+       (await page.locator('#r-out table.charmatrix th .legend-dot.bench').count()) === 1);
+
+    /* Item 9: two colours, two marks. */
+    ok('the histogram draws the fund and the benchmark as separate bars',
+       (await page.locator('#r-out .ixbar.fund').count()) >= 1 &&
+       (await page.locator('#r-out .ixbar.bench').count()) >= 1);
+    const colours = await page.evaluate(() => {
+      const f = document.querySelector('#r-out .ixbar.fund'), b = document.querySelector('#r-out .ixbar.bench');
+      const fl = document.querySelector('#r-out .rl-line:not(.bench)'), bl = document.querySelector('#r-out .rl-line.bench');
+      return {
+        fund: getComputedStyle(f).fill, bench: getComputedStyle(b).fill,
+        fundLine: getComputedStyle(fl).strokeDasharray, benchLine: getComputedStyle(bl).strokeDasharray,
+        benchStroke: getComputedStyle(bl).stroke
+      };
+    });
+    ok('the fund is blue and the benchmark is amber, and they are not the same colour',
+       colours.fund === 'rgb(0, 180, 216)' && colours.bench === 'rgb(238, 155, 0)', JSON.stringify(colours));
+    ok('the fund line is solid and the benchmark line is dashed',
+       colours.fundLine === 'none' && colours.benchLine !== 'none', JSON.stringify(colours));
+    ok('the legend dots sit beside the metric titles in the comparison tables',
+       (await page.locator('#r-out table.summary3 th .legend-dot.fund').count()) === 1 &&
+       (await page.locator('#r-out table.summary3 th .legend-dot.bench').count()) === 1);
+
+    /* Item 6: the fan chart, one horizon at a time. */
+    ok('the fan chart is drawn with a band, a median and one hit target per horizon',
+       (await page.locator('#r-out figure.fanchart').count()) === 1 &&
+       (await page.locator('#r-out .fan-band.fund').count()) === 1 &&
+       (await page.locator('#r-out .fan-line.fund').count()) === 1 &&
+       (await page.locator('#r-out .fan-line.bench').count()) === 1 &&
+       (await page.locator('#r-out .fan-hit').count()) === 4);
+    const readoutBefore = flat(await page.locator('#r-out .fan-readout').innerText());
+    ok('its readout opens on the chosen horizon',
+       /^5 years: 10th percentile 7\.0% \u00b7 median 7\.0% \u00b7 90th percentile 7\.0% \(1,827 windows\) \u2014 nifty-50-tri: 10th 10\.0% \u00b7 median 10\.0% \u00b7 90th 10\.0%$/.test(readoutBefore),
+       readoutBefore);
+    await page.locator('#r-out .fan-hit[data-fan-h="1"]').dispatchEvent('click');
+    await page.waitForTimeout(150);
+    const readoutAfter = flat(await page.locator('#r-out .fan-readout').innerText());
+    ok('and tapping the 1-year horizon moves the readout to it',
+       /^1 year: 10th percentile 7\.0%/.test(readoutAfter) && /\(3,[23]\d\d windows\)/.test(readoutAfter),
+       readoutAfter);
+
+    /* Item 10: the arithmetic, written out on the data panel. */
+    ok('the data panel writes out CAGR with 365.25 over the calendar-day count',
+       /CAGR = \(NAVend \/ NAVstart\)365\.25 \/ \(Dateend \u2212 Datestart\) \u2212 1/.test(gapOut) &&
+       /joined on the calendar date \(YYYY-MM-DD\)/.test(gapOut));
   }
 
   section('A same-class or unnamed pairing is not nagged');
   await openIndexPath();
+  /* Neither name says a class, and both synthetic series compound so evenly
+     that their volatility reads as fixed income: the same class twice, so
+     there is nothing to notice. (A nifty-named file against the same primary
+     IS noticed, by the volatility rule -- the September section checks it.) */
   await page.setInputFiles('#bm-file', primary);
   await page.waitForTimeout(1500);
+  await page.setInputFiles('#cmp-file', benchLong);
+  await page.waitForTimeout(1500);
+  ok('no class warning appears when neither the names nor the volatility set two classes apart',
+     !/asset class/i.test(flat(await page.locator('#r-overlap-note').innerText())),
+     flat(await page.locator('#r-overlap-note').innerText()).slice(0, 200));
   await page.setInputFiles('#cmp-file', benchTRI);
   await page.waitForTimeout(1500);
-  ok('no class warning appears when the names do not establish two classes',
-     !/asset class/i.test(flat(await page.locator('#r-overlap-note').innerText())));
 
   section('The results carry the chart, the matrix, the ratios and the questions');
   await page.locator('#r-years .chip[data-years="3"]').click();
@@ -1218,6 +1340,115 @@ function textValueFile(file) {
        /a different measurement from the Minimum Rolling Return/.test(fall));
     ok('depth, fall time and recovery time stand as a triplet',
        /Deepest fall/i.test(fall) && /The fall took/i.test(fall) && /Recovery took/i.test(fall));
+    /* Item 2: the two measurements as two named rows of one table. */
+    const ddRows = (await page.locator('#r-out table.ddtwo tbody tr').allInnerTexts()).map(flat);
+    ok('the worst window and the peak-to-trough fall are two rows of one table',
+       ddRows.length === 2 && /^Worst Rolling Return Window \(%\)/.test(ddRows[0]) &&
+       /^Peak-to-Trough NAV Drawdown/.test(ddRows[1]), ddRows.join(' | '));
+    ok('the drawdown row is a triplet: max decline, fall duration, recovery time',
+       /Max decline −?\d+\.\d%/.test(ddRows[1]) && /fall duration \d+ months?/.test(ddRows[1]) &&
+       /recovery time \d+ months?/.test(ddRows[1]), ddRows[1]);
+    ok('and the two rows hold different figures',
+       (ddRows[0].match(/−?\d+\.\d%/) || [])[0] !== (ddRows[1].match(/−?\d+\.\d%/) || [])[0], ddRows.join(' | '));
+  }
+
+  /* ====================== ITEM 14: a horizon the file cannot hold is refused, in years and months */
+  section('A holding period longer than the file is refused, with the file’s span in years and months');
+  {
+    /* 4 years and 11 months of daily data: 1 Feb 2020 to 1 Jan 2025. */
+    const short = (() => {
+      const L = ['Date,NAV'];
+      let v = 100, t = Date.UTC(2020, 1, 1);
+      while (t <= Date.UTC(2025, 0, 1)) {
+        L.push(new Date(t).toISOString().slice(0, 10) + ',' + v.toFixed(4));
+        v *= Math.pow(1.10, 1 / 365.2425); t += 86400000;
+      }
+      fs.writeFileSync(TMP + '/spec-short-4y11m.csv', L.join('\n'));
+      return TMP + '/spec-short-4y11m.csv';
+    })();
+    await openIndexPath();
+    await page.setInputFiles('#bm-file', short);
+    await page.waitForTimeout(1500);
+    const chip5 = page.locator('#r-years .chip[data-years="5"]');
+    ok('the 5-year chip is disabled on a file 4 years 11 months long',
+       (await chip5.count()) === 1 && await chip5.isDisabled());
+    await page.locator('#r-years .chip[data-years="3"]').click();
+    await page.waitForTimeout(250);
+    await page.click('#r-run');
+    await page.waitForTimeout(1600);
+    ok('a 3-year hold still runs', (await page.locator('#r-out .result').count()) >= 1);
+    /* Force the 5-year hold through the state, as a stale chip or a saved link
+       could, and read the refusal. */
+    await page.evaluate(() => {
+      const c = document.querySelector('#r-years .chip[data-years="5"]');
+      c.disabled = false; c.click();
+    });
+    await page.waitForTimeout(250);
+    await page.click('#r-run');
+    await page.waitForTimeout(1200);
+    const refusal = flat(await page.locator('#r-out').innerText());
+    ok('and the refusal names the horizon and the file’s span in years and months',
+       /Selected holding period \(5 Years\) requires at least 5 years of historical data\. Your file covers 4 Years, 11 Months\./.test(refusal),
+       refusal.slice(0, 300));
+  }
+
+  /* ====================== ITEM 7: four tabs on a phone, one panel at a time */
+  section('On a phone the results are four tabs, one panel showing at a time');
+  {
+    /* A context WITHOUT the harness style that un-tabs the panels. */
+    const phone = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const p2 = await phone.newPage();
+    const errs2 = [];
+    p2.on('pageerror', e => errs2.push(e.message));
+    await p2.goto(BASE_URL + '#rolling', { waitUntil: 'networkidle' });
+    await p2.click('#r-source .chip[data-source="index"]');
+    await p2.waitForTimeout(250);
+    await p2.setInputFiles('#bm-file', primary);
+    await p2.waitForTimeout(1500);
+    await p2.setInputFiles('#cmp-file', benchTRI);
+    await p2.waitForTimeout(1500);
+    await p2.locator('#r-years .chip[data-years="3"]').click();
+    await p2.waitForTimeout(250);
+    await p2.click('#r-run');
+    await p2.waitForTimeout(2200);
+    const tabs = (await p2.locator('#r-out .ixtab').allInnerTexts()).map(flat);
+    ok('the four tabs are named as specified, in order',
+       tabs.join('|') === 'Summary & Context|Risk & Return|Benchmark Comparison|Data Table', tabs.join('|'));
+    ok('four panels exist and only the first is showing',
+       (await p2.locator('#r-out .ixpanel').count()) === 4 &&
+       await p2.locator('#r-out .ixpanel[data-panel="summary"]').isVisible() &&
+       await p2.locator('#r-out .ixpanel[data-panel="risk"]').isHidden() &&
+       await p2.locator('#r-out .ixpanel[data-panel="bench"]').isHidden() &&
+       await p2.locator('#r-out .ixpanel[data-panel="data"]').isHidden());
+    ok('the first tab is the selected one',
+       (await p2.locator('#r-out .ixtab').first().getAttribute('aria-selected')) === 'true');
+    await p2.locator('#r-out .ixtab[data-panel="bench"]').click();
+    await p2.waitForTimeout(200);
+    ok('tapping Benchmark Comparison shows that panel and hides the rest',
+       await p2.locator('#r-out .ixpanel[data-panel="bench"]').isVisible() &&
+       await p2.locator('#r-out .ixpanel[data-panel="summary"]').isHidden() &&
+       (await p2.locator('#r-out .ixtab[data-panel="bench"]').getAttribute('aria-selected')) === 'true' &&
+       (await p2.locator('#r-out .ixtab[data-panel="summary"]').getAttribute('aria-selected')) === 'false');
+    ok('the comparison table and its fee note are on that panel',
+       await p2.locator('#r-out .ixpanel[data-panel="bench"] table.summary3').isVisible() &&
+       await p2.locator('#r-out .ixpanel[data-panel="bench"] .feenote').isVisible());
+    await p2.locator('#r-out .ixtab[data-panel="data"]').click();
+    await p2.waitForTimeout(200);
+    ok('and Data Table shows the numbers as a table',
+       await p2.locator('#r-out .ixpanel[data-panel="data"]').isVisible() &&
+       /The numbers as a table/.test(flat(await p2.locator('#r-out .ixpanel[data-panel="data"]').innerText())));
+    ok('nothing on the tabbed screen scrolls sideways',
+       await p2.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+    /* Wide screens keep every panel open; the row becomes a jump bar. */
+    await p2.setViewportSize({ width: 1100, height: 900 });
+    await p2.waitForTimeout(200);
+    ok('on a wide screen all four panels are open at once',
+       await p2.locator('#r-out .ixpanel[data-panel="summary"]').isVisible() &&
+       await p2.locator('#r-out .ixpanel[data-panel="risk"]').isVisible() &&
+       await p2.locator('#r-out .ixpanel[data-panel="bench"]').isVisible() &&
+       await p2.locator('#r-out .ixpanel[data-panel="data"]').isVisible());
+    ok('no script errors on the tabbed screen', errs2.length === 0, errs2.slice(0, 2).join(' | '));
+    await phone.close();
   }
 
   ok('no script errors in the whole run', errors.length === 0, errors.slice(0, 3).join(' | '));

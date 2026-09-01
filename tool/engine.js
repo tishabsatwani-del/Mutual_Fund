@@ -174,9 +174,18 @@
    *
    * Two copies of an algorithm are two algorithms. There is now one.
    */
-  function measureWindows(series, years, tol, freq) {
+  /* The day basis of the annualisation exponent. 365 is the spreadsheet
+   * (XIRR) convention and the default everywhere; 365.25 is the mean calendar
+   * year, and a caller that wants CAGR = (end/start)^(365.25/days) - 1 asks
+   * for it by name. The two differ by under 0.01 points a year on any window
+   * this tool measures, but they are two conventions and a screen has to say
+   * which one it used. */
+  var DEFAULT_DAY_BASIS = 365;
+
+  function measureWindows(series, years, tol, freq, basis) {
     var pairs = [];
     var j = 0;
+    var dayBasis = basis > 0 ? basis : DEFAULT_DAY_BASIS;
     var nextStart = null;      /* the earliest date the next window may begin */
     for (var i = 0; i < series.length; i++) {
       /* Thin the starts before doing any work on them. */
@@ -199,7 +208,7 @@
       var days = dayCount(series[i].t, end.t);
       pairs.push({
         t: series[i].t, endT: end.t, days: days,
-        r: Math.pow(end.v / series[i].v, 365 / days) - 1
+        r: Math.pow(end.v / series[i].v, dayBasis / days) - 1
       });
       if (freq === 'weekly') nextStart = series[i].t + FREQUENCY.weekly.days * MS_PER_DAY;
       else if (freq === 'monthly') nextStart = addMonths(series[i].t, FREQUENCY.monthly.months);
@@ -221,7 +230,7 @@
         years + '-year holding period. Choose a shorter period, or use a file with more history.');
     }
 
-    var pairs = measureWindows(series, years, tol, freq);
+    var pairs = measureWindows(series, years, tol, freq, opts.dayBasis);
 
     if (!pairs.length) {
       return fail('NO_WINDOWS', 'No complete ' + years + '-year periods could be measured from this data.');
@@ -235,8 +244,81 @@
     return {
       ok: true, years: years, values: values, pairs: pairs,
       stats: describe(values), toleranceDays: tol, frequency: freq,
+      dayBasis: opts.dayBasis > 0 ? opts.dayBasis : DEFAULT_DAY_BASIS,
       best: best, worst: worst
     };
+  }
+
+  /* ------------------------------------------ the spread of the daily moves
+   *
+   * The standard deviation of the observation-to-observation log returns,
+   * scaled to a year by the square root of how many observations this file
+   * holds per year. On a weekday NAV file that is the textbook sigma * sqrt(252);
+   * on a weekly or monthly file the scaling follows the file rather than
+   * assuming a trading calendar it does not have. Used to tell a debt-like
+   * series from an equity-like one when the names do not say.
+   */
+  function annualisedVolatility(series) {
+    if (!series || series.length < 3) return fail('TOO_SHORT', 'Too few observations to measure volatility.');
+    var spanYears = (series[series.length - 1].t - series[0].t) / (365.2425 * MS_PER_DAY);
+    if (!(spanYears > 0)) return fail('TOO_SHORT', 'Too few observations to measure volatility.');
+    var rets = [];
+    for (var i = 1; i < series.length; i++) {
+      if (series[i].v > 0 && series[i - 1].v > 0) rets.push(Math.log(series[i].v / series[i - 1].v));
+    }
+    if (rets.length < 2) return fail('TOO_SHORT', 'Too few observations to measure volatility.');
+    var mean = 0;
+    for (var a = 0; a < rets.length; a++) mean += rets[a];
+    mean /= rets.length;
+    var acc = 0;
+    for (var b = 0; b < rets.length; b++) { var d = rets[b] - mean; acc += d * d; }
+    var perYear = rets.length / spanYears;
+    var sigma = Math.sqrt(acc / (rets.length - 1)) * Math.sqrt(perYear);
+    return { ok: true, sigma: sigma, observationsPerYear: perYear, observations: rets.length };
+  }
+
+  /* --------------------------------------- two series on one calendar
+   *
+   * A strict inner join on the calendar date, with the last available value
+   * carried forward where one file has a date the other lacks. The joined
+   * calendar is every date either file holds inside the stretch both cover;
+   * a series is carried forward onto a date only from an observation it
+   * actually has, never backwards, so no value is invented before a file
+   * begins. The count of carried values is returned because the screen
+   * says it.
+   */
+  function alignCalendar(a, b) {
+    if (!a || a.length < 2 || !b || b.length < 2) {
+      return fail('TOO_SHORT', 'Both series need at least two observations to be aligned.');
+    }
+    var from = Math.max(a[0].t, b[0].t), to = Math.min(a[a.length - 1].t, b[b.length - 1].t);
+    if (to <= from) return fail('NO_OVERLAP', 'The two series share no dates.');
+    var seen = {}, dates = [];
+    function collect(s) {
+      for (var i = 0; i < s.length; i++) {
+        var t = s[i].t;
+        if (t < from || t > to || seen[t]) continue;
+        seen[t] = true; dates.push(t);
+      }
+    }
+    collect(a); collect(b);
+    dates.sort(function (x, y) { return x - y; });
+    function fill(s) {
+      var out = [], j = 0, filled = 0, last = null;
+      /* start from the last observation on or before the first shared date */
+      while (j < s.length && s[j].t <= from) { last = s[j]; j++; }
+      for (var k = 0; k < dates.length; k++) {
+        var t = dates[k];
+        while (j < s.length && s[j].t <= t) { last = s[j]; j++; }
+        if (!last) continue;
+        if (last.t === t) out.push({ t: t, v: last.v });
+        else { out.push({ t: t, v: last.v, carried: true }); filled++; }
+      }
+      return { series: out, filled: filled };
+    }
+    var fa = fill(a), fb = fill(b);
+    return { ok: true, a: fa.series, b: fb.series, filledA: fa.filled, filledB: fb.filled,
+             from: from, to: to, dates: dates.length };
   }
 
   /* ------------------------------------------- do the two files line up?
@@ -519,6 +601,20 @@
     var b = rollingReturns(benchSeries, years, options);
     if (!b.ok) return b;
 
+    /* options.join === 'calendar': put both files on one calendar first, so
+       a window starts and ends on the same date in each -- a date one file
+       lacks is filled from that file's last earlier value (see alignCalendar).
+       Without it, each file is measured on its own dates and windows are
+       paired by identical start timestamp, which drops a start date the
+       other file does not hold rather than filling it. */
+    var filledA = 0, filledB = 0, joined = false;
+    if (options && options.join === 'calendar') {
+      var al = alignCalendar(fundSeries, benchSeries);
+      if (!al.ok) return al;
+      fundSeries = al.a; benchSeries = al.b;
+      filledA = al.filledA; filledB = al.filledB; joined = true;
+    }
+
     /* only windows whose start dates both series actually cover */
     var lo = Math.max(fundSeries[0].t, benchSeries[0].t);
     var hi = Math.min(fundSeries[fundSeries.length - 1].t, benchSeries[benchSeries.length - 1].t);
@@ -557,8 +653,13 @@
          numbers or the two figures disagree by one and neither is wrong. */
       fundValues: pairs.map(function (p) { return p.fund; }),
       benchValues: pairs.map(function (p) { return p.bench; }),
+      /* the same pairs with their start dates, for a chart drawn in date order */
+      matched: pairs,
       from: window.from,
-      to: window.to
+      to: window.to,
+      join: joined ? 'calendar' : 'start-date',
+      filledFund: filledA,
+      filledBench: filledB
     };
   }
 
@@ -570,7 +671,7 @@
     var tol = opts.toleranceDays == null ? 7 : opts.toleranceDays;
     var freq = FREQUENCY[opts.frequency] ? opts.frequency : 'daily';
     /* The same measurement the headline uses. See measureWindows. */
-    var pairs = measureWindows(slice, years, tol, freq);
+    var pairs = measureWindows(slice, years, tol, freq, opts.dayBasis);
     if (!pairs.length) return fail('NO_WINDOWS', 'No complete period inside the shared dates.');
     return { ok: true, pairs: pairs };
   }
@@ -740,6 +841,9 @@
     maxHorizon: maxHorizon, FREQUENCY: FREQUENCY, rangeOverlap: rangeOverlap,
     medianGapDays: medianGapDays,
     compareRolling: compareRolling,
+    annualisedVolatility: annualisedVolatility,
+    alignCalendar: alignCalendar,
+    DEFAULT_DAY_BASIS: DEFAULT_DAY_BASIS,
     requiredAcrossRates: requiredAcrossRates,
     costOfWaiting: costOfWaiting,
     contributions: contributions

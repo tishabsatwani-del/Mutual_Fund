@@ -1107,6 +1107,72 @@ details.overlapinfo summary, details.teachnotes summary { color: var(--ink-2); }
 .ratioline { margin: .5rem 0 0; }
 table.hmatrix td, table.hmatrix th { white-space: nowrap; }
 
+/* ---- Market-index path only (.ixpath). Nothing below is emitted by the
+   My Own Fund path, so nothing below can change it. ----
+   Two series on one chart need two colours that do not meet: the fund is a
+   bright blue, the index is amber. The fund is always the solid mark, the
+   index always dashed or lighter, so the pair still reads in greyscale. */
+.ixpath { --ix-fund: #00B4D8; --ix-bench: #EE9B00; }
+.ixpath svg .ixbar.fund  { fill: var(--ix-fund); }
+.ixpath svg .ixbar.bench { fill: var(--ix-bench); opacity: .85; }
+.ixpath svg .ix-lossground { fill: var(--critical); opacity: .09; }
+.ixpath svg .ix-zerorule { stroke: var(--critical); stroke-width: 1.2; stroke-dasharray: 3 3; opacity: .8; }
+.ixpath svg .ix-lossword { fill: var(--critical); font-weight: 600; }
+.ixpath .swatch.ix-lossswatch { background: var(--critical); opacity: .25; }
+.ixpath .rl-line { stroke: var(--ix-fund); stroke-width: 1.8; }
+.ixpath .rl-line.bench { stroke: var(--ix-bench); stroke-width: 1.4; stroke-dasharray: 5 4; opacity: .8; }
+
+.legend-dot {
+  display: inline-block; width: .7em; height: .7em; border-radius: 50%;
+  margin-right: .35em; vertical-align: -.02em; flex: none;
+}
+.legend-dot.fund  { background: var(--ix-fund, #00B4D8); }
+.legend-dot.bench { background: var(--ix-bench, #EE9B00); }
+
+/* fan chart: 10th to 90th percentile band, median line, one dot per horizon */
+svg.fanchart { width: 100%; height: auto; display: block; }
+.fan-band.fund { fill: var(--ix-fund); opacity: .18; stroke: none; }
+.fan-line.fund { fill: none; stroke: var(--ix-fund); stroke-width: 2; }
+.fan-line.bench { fill: none; stroke: var(--ix-bench); stroke-width: 1.5; stroke-dasharray: 5 4; opacity: .85; }
+.fan-edge.bench { fill: none; stroke: var(--ix-bench); stroke-width: 1; stroke-dasharray: 2 4; opacity: .55; }
+.fan-dot.fund { fill: var(--ix-fund); stroke: var(--surface); stroke-width: 1.5; }
+.fan-dot.fund.now { stroke: var(--ink); stroke-width: 2; }
+.fan-hit { fill: transparent; cursor: pointer; }
+.fan-hit:focus-visible { outline: none; stroke: var(--accent); stroke-width: 2; }
+.fan-readout { margin: .4rem 0 0; min-height: 1.4em; font-variant-numeric: tabular-nums; }
+
+/* tabbed results. Every panel is in the page; on a phone only the chosen one
+   shows, on a wide screen the row is a jump bar and all four stay open. */
+.ixtabs {
+  display: flex; gap: .4rem; flex-wrap: wrap; margin: 1rem 0 .4rem;
+  position: sticky; top: 0; z-index: 4; padding: .5rem 0;
+  background: var(--bg, #0B1220);
+}
+.ixtab {
+  flex: 1 1 auto; padding: .5rem .7rem; font-size: .84rem; font-weight: 600;
+  border: 1px solid var(--line-strong); border-radius: 999px;
+  background: var(--surface-2); color: var(--ink-2); cursor: pointer;
+}
+.ixtab.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.ixtab:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.ixpanel-h {
+  font-family: var(--serif); font-size: 1.25rem; margin: 1.6rem 0 .2rem;
+  padding-bottom: .3rem; border-bottom: 1px solid var(--line);
+}
+@media (max-width: 45rem) {
+  .ixpanel:not(.on) { display: none; }
+  .ixpanel-h { display: none; }
+}
+
+.scopenote, .feenote {
+  border: 1px solid var(--line); border-left: 3px solid var(--series-3);
+  border-radius: 8px; background: var(--surface-2);
+  padding: .65rem .9rem; margin: .8rem 0; font-size: .88rem; color: var(--ink-2);
+}
+.notice.info { border-color: var(--series-3); }
+.notice.info .ic { color: var(--series-3); }
+.notice.info .hint { margin: .5rem 0 0; }
+
 @media print {
   .topbar, .doors, .filebox, .pastebox, .btnrow, .printbtn, .ratepresets,
   #up-doors, .backlink { display: none !important; }

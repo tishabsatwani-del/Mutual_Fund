@@ -50,6 +50,18 @@ function plainFile(file, rate, fromY, toY, start = 100) {
   fs.mkdirSync(TMP + '/shots', { recursive: true });
   const browser = await chromium.launch({ executablePath: CHROME });
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
+  /* The market-index results are tabbed on a phone: only the chosen panel is
+     drawn, and innerText leaves undrawn panels out. These sections read the
+     whole result as one page, so the harness un-tabs it. The tab behaviour
+     itself is checked in spec-rolling-index.test.js, on a context without
+     this. */
+  await ctx.addInitScript(() => {
+    document.addEventListener('DOMContentLoaded', () => {
+      const s = document.createElement('style');
+      s.textContent = '.ixpanel{display:block!important}';
+      document.head.appendChild(s);
+    });
+  });
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
@@ -355,8 +367,10 @@ function plainFile(file, rate, fromY, toY, start = 100) {
   /* It used to render nothing at all here, which left the reader looking at an
      empty results area and a set of chips that had changed under them. The
      block now names the two numbers that did not fit. */
+  /* On the market-index path the block carries the September review's
+     wording (item 14); the fund path keeps its own. */
   ok('and the block says why, in the place the answer would have been',
-     /shorter than the holding period/i.test(await page.locator('#r-out').innerText()),
+     /shorter than the holding period|requires at least 5 years of historical data/i.test(await page.locator('#r-out').innerText()),
      (await page.locator('#r-out').innerText()).slice(0, 140));
 
   /* Choosing one that still fits brings the reading back. */

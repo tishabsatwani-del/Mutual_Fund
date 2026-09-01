@@ -62,6 +62,18 @@ function pretty(iso) {
   const browser = await chromium.launch({ executablePath: CHROME });
   try {
     const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    /* The market-index results are tabbed on a phone: only the chosen panel is
+       drawn, and innerText leaves undrawn panels out. These sections read the
+       whole result as one page, so the harness un-tabs it. The tab behaviour
+       itself is checked in spec-rolling-index.test.js, on a context without
+       this. */
+    await ctx.addInitScript(() => {
+      document.addEventListener('DOMContentLoaded', () => {
+        const s = document.createElement('style');
+        s.textContent = '.ixpanel{display:block!important}';
+        document.head.appendChild(s);
+      });
+    });
     const page = await ctx.newPage();
     const errors = [];
     page.on('pageerror', e => errors.push(e.message));

@@ -1067,6 +1067,102 @@ section('Percentile bands and downside deviation — closed-form');
   close('all values above the mark measure zero',
         E.downsideDeviation([0.10, 0.12, 0.14], 0.05), 0, 1e-12);
 }
+
+/* ============================ September review: the market-index arithmetic */
+section('CAGR over calendar days: 365.25 is opt-in, 365 stays the default');
+{
+  /* Two points, 1,461 days apart (four calendar years including one leap
+     day), the value doubling. Closed form: 2^(basis/1461) - 1. */
+  var two = [{ t: d(2020, 1, 1), v: 100 }, { t: d(2024, 1, 1), v: 200 }];
+  var r365 = E.rollingReturns(two, 4);
+  var r36525 = E.rollingReturns(two, 4, { dayBasis: 365.25 });
+  ok('both measure the one window', r365.ok && r36525.ok && r365.values.length === 1 && r36525.values.length === 1);
+  close('the default basis is 365 days', r365.values[0], Math.pow(2, 365 / 1461) - 1, 1e-12);
+  close('365.25 is used when asked for', r36525.values[0], Math.pow(2, 365.25 / 1461) - 1, 1e-12);
+  /* A longer year takes a larger share of the doubling: the 365.25 figure is
+     the higher, and only by about a hundredth of a point. */
+  ok('and the 365.25 figure is the larger of the two, by a hair',
+     r36525.values[0] > r365.values[0] && r36525.values[0] - r365.values[0] < 2e-4,
+     r365.values[0] + ' vs ' + r36525.values[0]);
+  eq('the default is written down', E.DEFAULT_DAY_BASIS, 365);
+}
+
+section('Annualised volatility, scaled by the observations the file actually holds');
+{
+  /* A constant-growth series has no dispersion in its log returns at all. */
+  var flat = [], v = 100, t = d(2020, 1, 1);
+  for (var i = 0; i < 400; i++) { flat.push({ t: t, v: v }); v *= 1.0003; t += 86400000; }
+  var fv = E.annualisedVolatility(flat);
+  ok('a constant-growth series reads as zero volatility', fv.ok && fv.sigma < 1e-9, JSON.stringify(fv));
+  /* Alternating +10% / -10% daily, 365 observations a year: the log returns
+     alternate between ln(1.1) and ln(0.9); their sample standard deviation
+     is half their gap (for an even count), times sqrt(365). */
+  var alt = [], av = 100, at = d(2020, 1, 1);
+  for (var j = 0; j <= 730; j++) { alt.push({ t: at, v: av }); av *= (j % 2 === 0 ? 1.1 : 0.9); at += 86400000; }
+  var fa = E.annualisedVolatility(alt);
+  var gap = Math.log(1.1) - Math.log(0.9);
+  /* 730 returns over two years of 365.2425 days: 365.2425 observations a
+     year, and the (n-1) sample correction on 730 of them. */
+  var expected = (gap / 2) * Math.sqrt(730 / 729) * Math.sqrt(365.2425);
+  close('an alternating series measures half the gap times root observations-a-year',
+        fa.sigma, expected, 1e-6);
+  ok('the observations a year are the file’s own count', fa.ok && Math.abs(fa.observationsPerYear - 365.2425) < 1e-6,
+     String(fa.observationsPerYear));
+  ok('a series of two cannot be measured', E.annualisedVolatility(flat.slice(0, 2)).ok === false);
+  /* The two class marks used by the screen: 4% a year stays under 6, 20% over 12. */
+  ok('the flat series is under the fixed-income mark', fv.sigma <= 0.06);
+  ok('the alternating series is over the equity mark', fa.sigma >= 0.12);
+}
+
+section('A strict calendar join, filled forward and never backward');
+{
+  /* Fund on every day of ten; index only on days 1, 4, 7, 10. */
+  var f = [], x = [], t0 = d(2021, 1, 1);
+  for (var k = 0; k < 10; k++) {
+    f.push({ t: t0 + k * 86400000, v: 100 + k });
+    if (k % 3 === 0) x.push({ t: t0 + k * 86400000, v: 1000 + k });
+  }
+  var al = E.alignCalendar(f, x);
+  ok('the join succeeds', al.ok);
+  eq('every date either file holds inside the overlap is on the calendar', al.dates, 10);
+  eq('the fund needed no filling', al.filledA, 0);
+  eq('the index was carried forward on the six dates it lacked', al.filledB, 6);
+  eq('a carried value is the last one actually observed', al.b[2].v, 1000);
+  ok('and is marked as carried', al.b[2].carried === true && !al.b[3].carried);
+  eq('an observed date keeps its own value', al.b[3].v, 1003);
+  /* The index starts two days later: nothing is invented before it begins. */
+  var late = x.slice(1);
+  var al2 = E.alignCalendar(f, late);
+  eq('the calendar begins where both files have a value', al2.from, late[0].t);
+  eq('so the fund loses its first three dates and the index is never filled backward', al2.dates, 7);
+  ok('no shared dates at all is refused',
+     E.alignCalendar(f, [{ t: d(2022, 1, 1), v: 1 }, { t: d(2022, 1, 2), v: 1 }]).ok === false);
+}
+
+section('compareRolling on the calendar join');
+{
+  var fund = [], bench = [], tt = d(2018, 1, 1);
+  var fvv = 100, bvv = 1000;
+  while (tt <= d(2024, 1, 1)) {
+    fund.push({ t: tt, v: fvv });
+    /* the index file skips every seventh day */
+    if (Math.round((tt - d(2018, 1, 1)) / 86400000) % 7 !== 6) bench.push({ t: tt, v: bvv });
+    fvv *= Math.pow(1.07, 1 / 365.2425); bvv *= Math.pow(1.10, 1 / 365.2425); tt += 86400000;
+  }
+  var cj = E.compareRolling(fund, bench, 3, { join: 'calendar', dayBasis: 365.25 });
+  var cs = E.compareRolling(fund, bench, 3, { dayBasis: 365.25 });
+  ok('both joins succeed', cj.ok && cs.ok);
+  eq('the calendar join says so', cj.join, 'calendar');
+  eq('the start-date join says so', cs.join, 'start-date');
+  ok('the calendar join fills the index on the days it lacked and the fund on none',
+     cj.filledBench > 0 && cj.filledFund === 0, cj.filledFund + '/' + cj.filledBench);
+  ok('the calendar join pairs every window the fund has, the start-date join fewer',
+     cj.pairs > cs.pairs, cj.pairs + ' vs ' + cs.pairs);
+  close('the fund side still measures 7% a year', cj.fund.median, 0.07, 2e-3);
+  close('and the index side 10%', cj.bench.median, 0.10, 2e-3);
+  eq('the fund is never ahead of a faster index', cj.fundAhead, 0);
+}
+
 console.log('\n' + passed + ' passed, ' + failed.length + ' failed');
 if (failed.length) {
   console.log('\nFAILED:\n  ' + failed.join('\n  '));
