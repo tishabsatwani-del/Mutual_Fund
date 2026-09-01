@@ -2912,6 +2912,34 @@
         : ''));
   }
 
+  /* ----------------------------------------------- the wrong-door gatekeeper
+   *
+   * Shape passes both doors: a fund NAV file and an index file are each a
+   * date and a value, so an index dropped on card 1 — or a portfolio on
+   * card 2 — used to be accepted without a word, and the analysis it fed was
+   * labelled as the other thing. The words inside the file say which kind it
+   * is (parse.guessDataKind), so each door now states what it expected, what
+   * it found, and which door the file actually belongs to. A file that names
+   * neither kind still passes: a bare date,value paste is not evidence. */
+  function kindRefusal(rows, expect) {
+    if (!rows || !P.guessDataKind) return null;
+    var g = P.guessDataKind(rows);
+    if (!g.kind || g.kind === expect) return null;
+    var found = (g.kind === 'index' ? g.indexFound : g.navFound).slice(0, 3)
+      .map(function (s) { return '<strong>' + esc(s) + '</strong>'; }).join(', ');
+    if (g.kind === 'index') {
+      return notice('bad',
+        '<strong>This looks like index data, not your investment data.</strong> The file ' +
+        'mentions ' + found + '. Index history belongs in card 2 — Benchmark Index Data ' +
+        '(TRI). This card takes your own fund’s NAV history, CAS, or portfolio value series.');
+    }
+    return notice('bad',
+      '<strong>This looks like fund NAV data, not index data.</strong> The file mentions ' +
+      found + '. A fund’s NAV history belongs in card 1 — Primary Investment Data (NAV). ' +
+      'This card takes the benchmark index history itself (for example, Nifty 50 TRI ' +
+      'downloaded from niftyindices.com).');
+  }
+
   /* Section 3's amber banner.
    *
    * Two files that overlap only in part are not a refusal: the comparison is
@@ -2960,7 +2988,7 @@
       /* The gate runs on the raw rows, before the file becomes a series: by
          the time there is a series the tradebook has already been read as
          prices and nothing downstream can tell. */
-      var refused = schemaRefusal(res.rows);
+      var refused = schemaRefusal(res.rows) || kindRefusal(res.rows, 'nav');
       if (refused) {
         $('#r-scheme-wrap').hidden = true;
         dropRejected('bm', file.name);
@@ -2981,7 +3009,8 @@
          to click. The picker is the same one the fund slot has always had. */
       /* Before the parser's own words, the gate's. "Only 0 usable rows could
          be read" is a true description of a tradebook and a useless one. */
-      var bad = extra && extra.rows ? schemaRefusal(extra.rows) : null;
+      var bad = extra && extra.rows
+        ? (schemaRefusal(extra.rows) || kindRefusal(extra.rows, 'nav')) : null;
       if (bad) {
         $('#r-scheme-wrap').hidden = true;
         dropRejected('bm', file.name);
@@ -3246,14 +3275,15 @@
                slot is exactly as wrong as one dropped on the primary slot, and
                would be harder to spot: it would arrive as a comparison line
                rather than as the headline figure. Market-index path only. */
-            var refused = R.source === 'index' ? schemaRefusal(res.rows) : null;
+            var refused = R.source === 'index'
+              ? (schemaRefusal(res.rows) || kindRefusal(res.rows, 'index')) : null;
             if (refused) { dropRejected('cmp', file.name); dropSay('cmp', refused); return; }
             var nm = res.report.scheme || file.name.replace(/\.[^.]+$/, '');
             dropAdded('cmp', file.name, res.report);
             useAsBenchmark(res.series, nm);
           }, function (msg, extra) {
             var gated = (R.source === 'index' && extra && extra.rows)
-              ? schemaRefusal(extra.rows) : null;
+              ? (schemaRefusal(extra.rows) || kindRefusal(extra.rows, 'index')) : null;
             if (gated) { dropRejected('cmp', file.name); dropSay('cmp', gated); return; }
             if (extra && extra.schemes && extra.rows) {
               dropAdded('cmp', file.name, null,

@@ -81,11 +81,15 @@ execFileSync('python3', [path.join(__dirname, 'fixtures', 'make_upload_fixtures.
      /CSV or Excel/.test(await boxText('bm-drop')), await boxText('bm-drop'));
 
   /* ------------------------------------------------ the confirmation itself */
-  section('A valid index file is confirmed where it was chosen');
+  /* Card 1 takes the reader's own investment data, so the file that proves
+     the confirmation is a NAV file. The NSE index file that used to sit here
+     now proves the refusal a few sections down: the wrong-door gate reads the
+     words in the file, and "Nifty 50 Total Returns Index" is not a fund. */
+  section('A valid NAV file is confirmed where it was chosen');
   await openCard('a');
   await page.locator('#bm-drop').scrollIntoViewIfNeeded();
   const beforeScroll = await page.evaluate(() => window.scrollY);
-  await page.setInputFiles('#bm-file', f('nse-nifty50-tri.csv'));
+  await page.setInputFiles('#bm-file', f('amfi-alpha-nav.csv'));
   await page.waitForTimeout(2500);
 
   const added = await boxText('bm-drop');
@@ -93,7 +97,7 @@ execFileSync('python3', [path.join(__dirname, 'fixtures', 'make_upload_fixtures.
   ok('and says so in as many words',
      /File added successfully/.test(added), added);
   ok('it names the file the reader chose',
-     /nse-nifty50-tri\.csv/.test(added), added);
+     /amfi-alpha-nav\.csv/.test(added), added);
   ok('and says how much of it was read, and over what dates',
      /[\d,]+ rows read/.test(added) && /01-Jan-2010 to 01-Jan-2025/.test(added), added);
   ok('it offers the next move without hunting for it',
@@ -117,25 +121,40 @@ execFileSync('python3', [path.join(__dirname, 'fixtures', 'make_upload_fixtures.
   });
   ok('the confirmation is on screen without scrolling anywhere', inView);
   ok('and it names the file there',
-     /nse-nifty50-tri\.csv/.test(await page.locator('#door-a-status').innerText()),
+     /amfi-alpha-nav\.csv/.test(await page.locator('#door-a-status').innerText()),
      await page.locator('#door-a-status').innerText());
   ok('and the page did not scroll out from under the reader',
      Math.abs((await page.evaluate(() => window.scrollY)) - beforeScroll) < 40);
 
-  /* ------------------------------------------------ the right column, still */
-  section('Thirteen columns, and it takes the closing index value');
   ok('the analysis becomes available', !(await page.locator('#r-run').isDisabled()));
   await page.click('#r-run');
   await page.waitForTimeout(2000);
   const out = flat(await page.locator('#r-out').innerText());
-  /* Built to grow at exactly 12% a year, so every window must read 12.0%.
-     Open/High/Low are within half a percent of the close on every row, so a
-     wrong column would still look plausible -- which is the danger. */
-  ok('a series built to return 12% a year measures 12% a year',
-     /Median Rolling Return 12\.0%/.test(out) || /Median 12\.0%/.test(out),
+  ok('a series built to return 14% a year measures 14% a year',
+     /Median Rolling Return 14\.0%/.test(out) || /Median 14\.0%/.test(out),
      (out.match(/Median[^A-Z]{0,24}/) || [''])[0]);
   ok('over the whole file, not a fragment of it',
      /01-Jan-2010 to 01-Jan-2025/.test(out), out.slice(0, 220));
+
+  /* ------------------------------------------------- the wrong-door refusal
+     The report this section answers: "When I uploaded the Nifty 50 file in
+     the Primary Investment Data section, the system accepted it." It must
+     not. The file is a date and a value like any NAV file, so only the words
+     inside it can say it is an index -- and they do. */
+  section('An index file at the Primary Investment door is turned away');
+  await open('index');
+  await openCard('a');
+  await page.setInputFiles('#bm-file', f('nse-nifty50-tri.csv'));
+  await page.waitForTimeout(2500);
+  const wrongA = flat(await page.locator('#bm-status').innerText());
+  ok('the box shows it was not added',
+     (await page.locator('#bm-drop.refused').count()) === 1, await boxText('bm-drop'));
+  ok('it is named as index data', /looks like index data/.test(wrongA), wrongA);
+  ok('with the words that gave it away',
+     /Total Returns Index|Nifty/.test(wrongA), wrongA);
+  ok('and it points at the door the file belongs to',
+     /card 2/.test(wrongA) && /Benchmark Index Data/.test(wrongA), wrongA);
+  ok('nothing was loaded from it', await page.locator('#r-run').isDisabled());
 
   /* ================================================= Excel, with a preamble */
   section('An .xlsx whose header is on row 4');
@@ -249,8 +268,8 @@ execFileSync('python3', [path.join(__dirname, 'fixtures', 'make_upload_fixtures.
   section('Getting it wrong once does not trap the reader');
   ok('the box still offers another try',
      /Choose another file/.test(await boxText('bm-drop')), await boxText('bm-drop'));
-  await page.setInputFiles('#bm-file', f('nse-nifty50-tri.csv'));
-  await page.waitForTimeout(2500);
+  await page.setInputFiles('#bm-file', f('amc-nav-history.xlsx'));
+  await page.waitForTimeout(3500);
   ok('and a good file after a bad one is accepted',
      (await page.locator('#bm-drop.loaded').count()) === 1, await boxText('bm-drop'));
   ok('with the refusal cleared away',
@@ -349,6 +368,20 @@ execFileSync('python3', [path.join(__dirname, 'fixtures', 'make_upload_fixtures.
        await page.waitForTimeout(1500);
        return /not a spreadsheet/.test(flat(await page.locator('#cmp-status').innerText()));
      })(), flat(await page.locator('#cmp-status').innerText()));
+
+  /* The other half of the same report: "when I uploaded portfolio data in
+     the Benchmark Index Data section, it also accepted it." */
+  section('A fund NAV file at the Benchmark Index door is turned away');
+  await page.setInputFiles('#cmp-file', f('amfi-alpha-nav.csv'));
+  await page.waitForTimeout(2500);
+  const wrongB = flat(await page.locator('#cmp-status').innerText());
+  ok('the box shows it was not added',
+     (await page.locator('#cmp-drop.refused').count()) === 1, await boxText('cmp-drop'));
+  ok('it is named as fund NAV data', /looks like fund NAV data/.test(wrongB), wrongB);
+  ok('with the words that gave it away',
+     /Net Asset Value|Direct\/Regular plan|Scheme/i.test(wrongB), wrongB);
+  ok('and it points at the door the file belongs to',
+     /card 1/.test(wrongB) && /Primary Investment Data/.test(wrongB), wrongB);
 
   /* ================================================== what was removed, gone */
   section('The empty dropdown is gone');

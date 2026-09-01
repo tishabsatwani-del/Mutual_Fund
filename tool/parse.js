@@ -794,6 +794,66 @@
   function parseSeriesText(text, options) { return rowsToSeries(parseDelimited(text), options); }
   function listSchemesText(text) { return listSchemes(parseDelimited(text)); }
 
+  /* ============================================== which KIND of history this is
+   *
+   * Shape cannot tell a fund NAV file from an index file: both are a date and
+   * a value. But the files themselves say what they are — AMFI's export
+   * carries "Net Asset Value", scheme names and plan words; NSE's carries
+   * "Total Returns Index", index columns and never a scheme — so the words in
+   * the file are read and weighed. An index FUND's NAV file mentions "Nifty"
+   * too, which is why one hit decides nothing: the fund-side words must
+   * clearly outweigh the index-side words, or nothing is claimed. A file that
+   * says neither (a bare date,value paste) stays null and passes any door.
+   */
+  var NAV_SIGNALS = [
+    [/net[\s_-]*asset[\s_-]*value/i, 3, 'Net Asset Value'],
+    [/historical\s+nav|nav\s+history/i, 3, 'Historical NAV'],
+    [/\bnav\b/i, 3, 'a NAV column'],
+    [/repurchase/i, 3, 'Repurchase Price'],
+    [/\bsale\s*price\b/i, 2, 'Sale Price'],
+    [/\bmutual\s*fund\b/i, 2, 'Mutual Fund'],
+    [/\bscheme\b/i, 2, 'a Scheme column'],
+    [/\b(direct|regular)[\s_-]*plan\b/i, 2, 'a Direct/Regular plan name'],
+    [/\bidcw\b|\bdividend\s*payout\b/i, 2, 'IDCW'],
+    [/\bfolio\b/i, 2, 'Folio'],
+    [/\bfund\b/i, 1, 'a fund name'],
+    [/\bgrowth\b/i, 1, 'a Growth option']
+  ];
+  var INDEX_SIGNALS = [
+    [/total[\s_-]*returns?[\s_-]*index/i, 4, 'Total Returns Index'],
+    [/\bntr[\s_-]*values?\b/i, 3, 'NTR values'],
+    [/historical[\s_-]*index[\s_-]*data/i, 3, 'Historical Index Data'],
+    [/\bindex[\s_-]*(value|name|date)\b/i, 2, 'an Index value/name column'],
+    [/\btri\b/i, 2, 'TRI'],
+    [/\b(nifty|sensex)\b/i, 2, 'an index name (Nifty/Sensex)'],
+    [/\b(open|high|low|closing?)[\s_-]*index\b|\bday[\s_-]*(high|low)\b/i, 2, 'Open/High/Low/Close index columns'],
+    [/\bturnover\b/i, 1, 'Turnover'],
+    [/\bp\/e\b/i, 1, 'P/E'],
+    [/div[\s_-]*yield/i, 1, 'Div Yield']
+  ];
+
+  function guessDataKind(rows) {
+    var out = { kind: null, navScore: 0, indexScore: 0, navFound: [], indexFound: [] };
+    if (!rows || !rows.length) return out;
+    /* the header rows and a sample of the body carry every naming there is */
+    var text = rows.slice(0, 60).map(function (r) {
+      return (r || []).map(function (c) { return String(c == null ? '' : c); }).join(' ');
+    }).join('\n');
+    NAV_SIGNALS.forEach(function (s) {
+      if (s[0].test(text)) { out.navScore += s[1]; out.navFound.push(s[2]); }
+    });
+    INDEX_SIGNALS.forEach(function (s) {
+      if (s[0].test(text)) { out.indexScore += s[1]; out.indexFound.push(s[2]); }
+    });
+    var hi = Math.max(out.navScore, out.indexScore);
+    var lo = Math.min(out.navScore, out.indexScore);
+    /* decide only on a clear verdict: a real score, a real margin, dominance */
+    if (hi >= 3 && hi - lo >= 2 && hi >= 2 * lo) {
+      out.kind = out.navScore > out.indexScore ? 'nav' : 'index';
+    }
+    return out;
+  }
+
   /* Keep only the part of a series inside a chosen window. Both bounds are
    * inclusive, and either may be left out. */
   function sliceSeries(series, fromT, toT) {
@@ -817,6 +877,7 @@
     detectDayFirst: detectDayFirst,
     listSchemes: listSchemes,
     listSchemesText: listSchemesText,
+    guessDataKind: guessDataKind,
     sliceSeries: sliceSeries,
     parseSeriesText: parseSeriesText
   };

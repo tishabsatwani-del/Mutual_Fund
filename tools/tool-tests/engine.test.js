@@ -828,6 +828,42 @@ section('The schema gatekeeper: a tradebook is not a price series');
      })());
 }
 
+section('Which KIND of history: a NAV file and an index file tell themselves apart');
+{
+  /* Shape passes both doors -- date and value each time -- so the words in
+     the file decide. The user's own uploads proved the hole: a Nifty 50 file
+     was accepted as Primary Investment Data, and a portfolio file as the
+     Benchmark Index, and nothing downstream could tell either apart. */
+  /* NOT "kindOf": that name is a module-level var in the index-NAME section
+     below, and a var here would clobber it (bare blocks do not scope var). */
+  var dataKindOf = function (text) { return P.guessDataKind(P.parseDelimited(text)).kind; };
+
+  eq('AMFI’s NAV export reads as fund data',
+     dataKindOf('Scheme Code;Scheme Name;Net Asset Value;Repurchase Price;Sale Price;Date\n' +
+            '120503;Alpha Bluechip Fund - Direct Plan - Growth;100.5;100.4;100.6;01-Jan-2021\n'),
+     'nav');
+  eq('NSE’s price-index export reads as index data',
+     dataKindOf('Nifty 50 Total Returns Index\nHistorical Index Data\n\n' +
+            'Date,Index Name,Open Index Value,High Index Value,Low Index Value,Closing Index Value\n' +
+            '01-Jan-2021,Nifty 50 TRI,1000,1010,995,1005\n'),
+     'index');
+  eq('the TRI csv with NTR values reads as index data',
+     dataKindOf('Index Name,Index Date,Total Returns Index,NTR Values\n' +
+            'NIFTY 50,31-Aug-2026,36579.00,31765.47\n'),
+     'index');
+  /* The trap the weighting exists for: an index FUND is a fund. Its NAV file
+     says Nifty in every scheme name, and one hit must not outvote the plan
+     words, the scheme column and the NAV column that say what it really is. */
+  eq('an index FUND’s NAV file still reads as fund data',
+     dataKindOf('Scheme Name,Date,NAV\n' +
+            'UTI Nifty 50 Index Fund - Direct Plan - Growth,2021-01-01,120.5\n'),
+     'nav');
+  eq('a bare date,value paste claims nothing',
+     dataKindOf('Date,Value\n2021-01-01,100\n2021-01-04,101\n'), null);
+  eq('and a lone weak hit is not a verdict',
+     dataKindOf('Date,Close\n2021-01-01,100\n'), null);
+}
+
 
 section('The headline and the comparison are the same measurement');
 /* They were not. rollingReturns annualised over the days that actually

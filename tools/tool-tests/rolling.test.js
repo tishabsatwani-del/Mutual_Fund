@@ -523,67 +523,72 @@ function plainFile(file, rate, fromY, toY, start = 100) {
     fs.writeFileSync(threeFile, out.join('\n'));
   }
 
-  /* The exact flow reported: the index in step 1, the three-scheme file in the
-     benchmark slot in step 4. */
+  /* The flow as the wrong-door gate now requires it: fund data through door 1,
+     the index through door 2. The reported flow (index in step 1, funds in
+     step 4) is refused at both doors with a pointer to the right one -- the
+     refusal for the benchmark half is proved at the end of this section. */
   await page.click('#r-source .chip[data-source="index"]');
   await page.waitForTimeout(300);
-  await page.setInputFiles('#bm-file', idxFile);
-  await page.waitForTimeout(1400);
-  await page.setInputFiles('#cmp-file', threeFile);
+  await page.setInputFiles('#bm-file', threeFile);
   await page.waitForTimeout(1600);
-  /* The picker lives inside card 2, and a many-scheme file is the one case
-     that does NOT fold the card away -- there is still a question on it. */
-  await openCard('b');
+  await page.setInputFiles('#cmp-file', idxFile);
+  await page.waitForTimeout(1400);
 
-  ok('a many-scheme file in the benchmark slot offers a picker, not just a refusal',
-     !(await page.locator('#cmp-scheme-wrap').isHidden()) &&
-     /holds\s*3\s*schemes/.test((await page.locator('#cmp-note').innerText()).replace(/\s+/g, ' ')),
-     (await page.locator('#cmp-note').innerText()).replace(/\n/g, ' '));
+  ok('a many-scheme file in the primary slot offers a picker, not just a refusal',
+     !(await page.locator('#r-scheme-wrap').isHidden()) &&
+     /holds\s*3\s*(funds|schemes)/.test((await page.locator('#r-loaded').innerText()).replace(/\s+/g, ' ')),
+     (await page.locator('#r-loaded').innerText()).replace(/\n/g, ' '));
   ok('with every scheme in it, and all of them together offered first',
-     (await page.locator('#cmp-scheme-list .hit .nm').allInnerTexts()).join(' | ') ===
+     (await page.locator('#r-scheme-list .hit .nm').allInnerTexts()).join(' | ') ===
      'All 3 together, equal amounts at the start | Alpha Fund - Direct Growth | ' +
      'Beta Fund - Direct Growth | Gamma Fund - Direct Growth',
-     (await page.locator('#cmp-scheme-list .hit .nm').allInnerTexts()).join(' | '));
+     (await page.locator('#r-scheme-list .hit .nm').allInnerTexts()).join(' | '));
+  ok('and the index landed as the benchmark',
+     (await page.locator('#cmp-drop.loaded').count()) === 1, await page.locator('#r-compare').inputValue());
 
-  await page.locator('#r-years .chip[data-years="3"]').click();
-  await page.waitForTimeout(300);
-
-  /* The index grows at 11%, the three at 14%, 8% and 20%. Every gap below is
-     that arithmetic and nothing else -- and each is reached WITHOUT loading the
-     file again, which is the whole point of keeping the picker alive. */
-  async function gapAgainst(i) {
-    /* Picking a scheme completes the upload, so the card folds away as it does
-       for any other file. Reopening it is one tap and the picker is still
-       populated -- which is the claim being tested: no SECOND UPLOAD. */
-    await openCard('b');
-    await page.locator('#cmp-scheme-list .hit').nth(i).click();
+  /* The three grow at 14%, 8% and 20%; the index at 11%. Every gap below is
+     that arithmetic and nothing else -- and each scheme is reached WITHOUT
+     loading the file again, which is the whole point of keeping the picker
+     alive. The picker lives outside the folding cards, so no door needs
+     reopening between picks. */
+  async function gapFor(i) {
+    await page.locator('#r-scheme-list .hit').nth(i).click();
     await page.waitForTimeout(900);
+    if (i === 0) { /* the composite resets the holding period with the primary */ }
+    await page.locator('#r-years .chip[data-years="3"]').click();
+    await page.waitForTimeout(300);
     await page.click('#r-run');
     await page.waitForSelector('#r-out .result', { timeout: 20000 });
     await page.waitForTimeout(400);
     const t = await page.locator('#r-out').innerText();
     return (t.match(/([+-]?\d+\.\d) points a year/) || ['', '?'])[1];
   }
-  ok('the index against Alpha at 14% is 3.0 points behind', (await gapAgainst(1)) === '-3.0');
-  ok('against Beta at 8% it is 3.0 points ahead', (await gapAgainst(2)) === '+3.0');
-  ok('against Gamma at 20% it is 9.0 points behind', (await gapAgainst(3)) === '-9.0');
-  await openCard('b');
+  ok('Alpha at 14% is 3.0 points ahead of the 11% index', (await gapFor(1)) === '+3.0');
+  ok('Beta at 8% is 3.0 points behind it', (await gapFor(2)) === '-3.0');
+  ok('Gamma at 20% is 9.0 points ahead', (await gapFor(3)) === '+9.0');
   ok('and switching between them needed no second upload',
-     !(await page.locator('#cmp-scheme-wrap').isHidden()) &&
-     (await page.locator('#cmp-scheme-list .hit').count()) === 4,
-     String(await page.locator('#cmp-scheme-list .hit').count()));
+     !(await page.locator('#r-scheme-wrap').isHidden()) &&
+     (await page.locator('#r-scheme-list .hit').count()) === 4,
+     String(await page.locator('#r-scheme-list .hit').count()));
 
-  const combined = await gapAgainst(0);
-  ok('all three together are a benchmark of their own',
+  const combined = await gapFor(0);
+  ok('all three together are a primary of their own',
      /All 3 together/.test(await page.locator('#r-out').innerText()), combined);
-  /* Bought once and never rebalanced, so it lands ABOVE the 14.2% a basket
+  /* Bought once and never rebalanced, so it lands ABOVE what a basket
      re-struck at each window start would give. The label says which it is. */
   ok('and the composite lands where a basket bought once actually would',
-     parseFloat(combined) < -3.2 && parseFloat(combined) > -4.5, combined + ' points');
-  await openCard('b');
+     parseFloat(combined) > 3.2 && parseFloat(combined) < 4.5, combined + ' points');
   ok('with the assumption it rests on stated, not implied',
-     /never rebalanced/.test(await page.locator('#cmp-note').innerText()),
-     (await page.locator('#cmp-note').innerText()).replace(/\n/g, ' ').slice(0, 160));
+     /never rebalanced/.test(await page.locator('body').innerText()));
+
+  /* The other placement -- the fund file at the benchmark door -- is the
+     wrong-door report itself, and the answer is no longer a dead end but a
+     refusal that names the right door. */
+  await page.setInputFiles('#cmp-file', threeFile);
+  await page.waitForTimeout(1600);
+  const cmpRefusal = (await page.locator('#cmp-status').innerText()).replace(/\s+/g, ' ');
+  ok('a fund file at the benchmark door is refused, and pointed at card 1',
+     /looks like fund NAV data/.test(cmpRefusal) && /card 1/.test(cmpRefusal), cmpRefusal);
 
   /* And the same file at step 1's INDEX slot, which had no picker either. */
   await page.reload({ waitUntil: 'networkidle' });
