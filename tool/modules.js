@@ -2260,27 +2260,22 @@
     var host = $('#up-loaded');
     if (!host) return;
 
-    /* NOT a list of what was uploaded.
+    /* ONE SINGLE LINE, by the author's explicit instruction, given twice.
      *
-     * The tiles already carry that: each one shows its own file name and
-     * reopens its card when tapped, so a row repeating it underneath is a
-     * second copy of an answer already on screen. What is NOT on screen is
-     * the only thing left to say once both doors are shut -- that there is
-     * enough here to run, and where to go next.
-     *
-     * So this area holds one thing: the go-ahead, and the scroll that saves
-     * the reader hunting for step 2 on a phone. */
+     * The first attempt here was a three-line panel per file; the second a
+     * two-line bar. Both were boxes holding a job already done. What the
+     * author asked for is the line from their own screenshot -- "Ready to
+     * analyse <name>" -- dressed properly, not a paragraph. So: one row that
+     * cannot wrap, naming what will be analysed, and carrying the reader to
+     * step 2 when tapped, which was the other thing they asked for by name. */
     if (!LOADED.a) { host.innerHTML = ''; return; }
 
-    var both = !!(LOADED.a && LOADED.b);
     host.innerHTML =
-      '<button class="readybar" type="button" id="up-ready">' +
-        '<span class="rb-ic" aria-hidden="true">✓</span>' +
-        '<span class="rb-t">' +
-          '<span class="rb-h">Ready to analyse</span>' +
-          '<span class="rb-s">' + esc(readySub(both)) + '</span>' +
-        '</span>' +
-        '<span class="rb-go" aria-hidden="true">' +
+      '<button class="readyline" type="button" id="up-ready">' +
+        '<span class="rl-ic" aria-hidden="true">✓</span>' +
+        '<span class="rl-t">Ready to analyse <strong>' + esc(R.name || LOADED.a.name) +
+          '</strong></span>' +
+        '<span class="rl-go" aria-hidden="true">' +
           '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"' +
           ' stroke-linecap="round" stroke-linejoin="round">' +
           '<path d="M12 5v14"/><path d="M19 12l-7 7-7-7"/></svg>' +
@@ -2302,12 +2297,6 @@
       });
     }
   }
-
-  function readySub(both) {
-    if (both) return 'Both files are in. Choose the dates and the holding period.';
-    return 'Your investment data is in. Add a benchmark above, or carry on without one.';
-  }
-
 
   function wireDoors() {
     ['a', 'b'].forEach(function (d) {
@@ -2486,6 +2475,10 @@
                (extraWord ? ' ' + extraWord : ''));
     refreshCompare();
     overlapNote();
+    /* The ready line names R.name, and dropAdded ran before this function set
+       it -- rendered then, it would carry the PREVIOUS file's name for the
+       length of one upload. Re-rendered here, after the name is true. */
+    renderLoadedList();
     if (R.ran) runRolling();
   }
 

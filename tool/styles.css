@@ -638,57 +638,62 @@ button.link {
     border-top-left-radius: 0; border-top-right-radius: 0;
     margin-top: -1px;
   }
-  /* The open card's own heading repeats the door's, so it goes. */
-  #up-cards[data-open] > .upcard > h3 { display: none; }
+  /* The open card keeps its own full heading. The door carries the short
+     name; the card, once opened to be READ, carries the complete one --
+     "1. Primary Investment Data (NAV)" -- which is also where the
+     specification's approved header lives now that the tile is shorter. */
 }
 
 @media (max-width: 33.99rem) and (prefers-reduced-motion: reduce) {
   .door { transition: none; }
 }
 
-/* ================================================ THE GO-AHEAD
+/* ================================================ THE GO-AHEAD, AS ONE LINE
  *
- * Not a list of what was uploaded. The tiles already carry that -- each one
- * shows its own file name and reopens its card when tapped -- so a row
- * repeating it underneath is a second copy of an answer already on screen.
- *
- * What is not on screen once both doors are shut is the only thing left to
- * say: that there is enough here to run, and where to go next. On a phone
- * step 2 is below the fold, and hunting for it is the last friction in a flow
- * that has just been cleared of all the others.
+ * The author's instruction, given twice: one single line, premium, not a
+ * plain text line and not a box. A first attempt here was a three-line panel
+ * per file; a second was a two-line bar. This is the line from their own
+ * screenshot, dressed: a slim pill that cannot wrap, naming what will be
+ * analysed, tappable to carry the reader down to step 2.
  */
 .loadedlist:not(:empty) { margin: .9rem 0 0; }
 
-.readybar {
-  display: flex; align-items: center; gap: .75rem;
-  width: 100%; text-align: left; cursor: pointer; font: inherit; color: var(--ink);
-  padding: .8rem .85rem;
-  border: 1px solid var(--good); border-radius: 14px;
-  background: linear-gradient(100deg, var(--good-soft), rgba(0, 0, 0, 0) 60%), var(--surface);
+.readyline {
+  display: flex; flex-wrap: nowrap; align-items: center; gap: .6rem;
+  width: 100%; min-height: 48px;
+  text-align: left; cursor: pointer; font: inherit; color: var(--ink);
+  padding: .35rem .45rem .35rem .5rem;
+  border: 1px solid var(--good); border-radius: 999px;
+  background: linear-gradient(100deg, var(--good-soft), rgba(0, 0, 0, 0) 55%), var(--surface);
+  box-shadow: 0 0 0 3px var(--good-soft);
   transition: transform .16s ease, border-color .16s ease;
 }
-.readybar:hover { border-color: var(--accent); }
-.readybar:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
-.readybar:active { transform: translateY(1px); }
+.readyline:hover { border-color: var(--accent); }
+.readyline:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.readyline:active { transform: translateY(1px); }
 
-.rb-ic {
+.rl-ic {
   flex: none; display: grid; place-items: center;
-  width: 2rem; height: 2rem; border-radius: 50%;
+  width: 1.7rem; height: 1.7rem; border-radius: 50%;
   background: var(--good); color: var(--accent-ink);
-  font-size: 1rem; font-weight: 800; line-height: 1;
+  font-size: .88rem; font-weight: 800; line-height: 1;
 }
-.rb-t { display: grid; gap: .1rem; min-width: 0; }
-.rb-h { font-size: 1rem; font-weight: 700; color: var(--ink); line-height: 1.2; }
-.rb-s { font-size: .82rem; color: var(--ink-2); line-height: 1.35; }
-.rb-go {
+/* One line means one line: the file name gives way, never the sentence. */
+.rl-t {
+  flex: 1 1 auto; min-width: 0;
+  font-size: .95rem; color: var(--ink-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.rl-t strong { color: var(--ink); font-weight: 700; }
+.rl-go {
   flex: none; margin-left: auto; display: grid; place-items: center;
-  width: 2rem; height: 2rem; border-radius: 50%;
+  width: 1.9rem; height: 1.9rem; border-radius: 50%;
   border: 1px solid var(--line-strong); color: var(--accent);
 }
-.rb-go svg { width: 1.05rem; height: 1.05rem; }
-.readybar:hover .rb-go { border-color: var(--accent); }
+.rl-go svg { width: 1rem; height: 1rem; }
+.readyline:hover .rl-go { border-color: var(--accent); }
 
-@media (prefers-reduced-motion: reduce) { .readybar { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .readyline { transition: none; } }
 
 }
 

@@ -770,8 +770,11 @@ function textValueFile(file) {
      /Accepted columns/.test(openA) &&
      /Rule: Do NOT upload Tradebooks/.test(openA) &&
      /Choose a file/.test(openA), openA.slice(0, 220));
-  ok('and the card does not repeat the heading the door already carries',
-     !/1\. Primary Investment Data \(NAV\)/.test(openA), openA.slice(0, 120));
+  /* The door carries the short name; the card, opened to be READ, carries
+     the complete one -- which is also where the specification's approved
+     header lives now that the tile is shorter. */
+  ok('and the opened card carries its full approved title',
+     /1\. Primary Investment Data \(NAV\)/.test(openA), openA.slice(0, 120));
 
   await page.click('#door-b');
   await page.waitForTimeout(300);
@@ -838,8 +841,18 @@ function textValueFile(file) {
      (await page.locator('#up-ready').count()) === 1 &&
      (await page.locator('#up-loaded .loaded-line').count()) === 0);
   const ready = flat(await page.locator('#up-ready').innerText());
-  ok('it says the analysis can run', /Ready to analyse/.test(ready), ready);
-  ok('and that both files are in', /Both files are in/.test(ready), ready);
+  ok('it says the analysis can run, naming what will be analysed',
+     /Ready to analyse/.test(ready) && /spec-primary/.test(ready), ready);
+  /* ONE SINGLE LINE, the author's words. The name gives way to an ellipsis
+     before the sentence ever wraps. */
+  ok('and it is genuinely one line',
+     await page.evaluate(() => {
+       const r = document.querySelector('#up-ready');
+       const kids = r.querySelectorAll(':scope > span');
+       const tops = Array.prototype.map.call(kids, k => k.getBoundingClientRect().top);
+       return r.getBoundingClientRect().height < 64 &&
+              Math.max.apply(null, tops) - Math.min.apply(null, tops) < 10;
+     }));
   ok('the plain “Ready to analyse” notice is retired, its job done better here',
      !/Ready to analyse/.test(flat(await page.locator('#r-loaded').innerText())),
      flat(await page.locator('#r-loaded').innerText()));
