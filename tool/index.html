@@ -347,6 +347,28 @@
         <p class="upcard-cols">Accepted columns: <code>Date</code> &middot; <code>NAV / Value</code></p>
         <p class="upcard-rule"><strong>Rule:</strong> Do NOT upload Tradebooks, Order Histories,
         or Buy/Sell Transaction Logs.</p>
+        <!-- Every fact below was verified on a phone against amfiindia.com,
+             on camera, on 1 September 2026 — including both failure modes. -->
+        <details class="explain">
+          <summary>How to download NAV history from AMFI</summary>
+          <div class="body">
+            <p>On <strong>amfiindia.com</strong>: NAV &rarr; <strong>NAV History</strong> &rarr;
+            tick &ldquo;Historical NAV for a period&rdquo;. Select the fund house, then the exact
+            scheme you hold &mdash; Direct and Regular, Growth and IDCW are all listed
+            separately.</p>
+            <p>Set the dates &mdash; the form types them <strong>MM/DD/YYYY</strong>, so
+            09/01/2024 is 1 September 2024; tap the pencil to type a date directly &mdash; and
+            press GO <strong>once</strong>. Nothing moves on screen for 20&ndash;30 seconds while
+            it works; that is normal. At most <strong>5 years</strong> in one download.</p>
+            <p>&ldquo;No records to display&rdquo; &mdash; or a spinner that never ends &mdash;
+            means the scheme and the period don&rsquo;t match: that scheme has no NAV in that
+            window. Fix the dates rather than switching schemes; the site returns only the dates
+            the scheme actually has.</p>
+            <p>The green Excel icon downloads
+            <code>NAV_&lt;from&gt;_to_&lt;to&gt;.xlsx</code>. Load that file here exactly as it
+            arrives, and skip the Word icon next to it.</p>
+          </div>
+        </details>
         <!-- The bundled-history chooser is built into this slot only when there
              is bundled history to choose. Nothing ships bundled, so what the
              reader used to meet here was a labelled dropdown holding one
@@ -398,8 +420,13 @@
       <details class="explain">
         <summary>Where do I get my fund’s NAV file?</summary>
         <div class="body">
-          <p>Download the NAV history from AMFI or your fund house for the period you want. Load the
-          file exactly as it arrives — if it holds hundreds of funds, you pick yours above.</p>
+          <p>On amfiindia.com: NAV &rarr; NAV History &rarr; &ldquo;Historical NAV for a
+          period&rdquo; &rarr; your fund house &rarr; the exact scheme &rarr; From and To dates
+          (typed MM/DD/YYYY, at most 5 years at a time) &rarr; GO, pressed once &mdash; it can
+          take half a minute with nothing on screen. &ldquo;No records to display&rdquo; means
+          the period doesn&rsquo;t overlap that scheme&rsquo;s history; fix the dates. The Excel
+          icon then downloads the file. Load it exactly as it arrives — if it holds hundreds of
+          funds, you pick yours above.</p>
           <p>It reads AMFI’s semicolon files, ordinary comma files and Excel workbooks. Dates can be
           05-08-2026, 05-Aug-2026 or 2026-08-05. Rows it cannot read are counted and shown to you
           rather than quietly dropped.</p>
@@ -477,15 +504,28 @@
            that says do not put an index file in this one. -->
         <details class="explain">
           <summary>Where do I get an index file?</summary>
+          <!-- Route verified on a phone against niftyindices.com, on camera,
+               on 1 September 2026 — including the one-year refusal. -->
           <div class="body">
-            <p>Download the historical values of the index from the index provider’s own site — for
-            Indian equity indices that is NSE Indices. Ask for the longest period they offer.</p>
+            <p>Download it from the index provider’s own site — for Indian equity indices that is
+            NSE Indices, <strong>niftyindices.com</strong>. The route: menu &rarr; Reports &rarr;
+            <strong>Historical Data</strong>, then switch the report dropdown from
+            &ldquo;Historical Index Data&rdquo; to
+            <strong>&ldquo;Total returns Index Values&rdquo;</strong>. Pick Equity &rarr; Broad
+            Market Indices &rarr; your index (Nifty 50, say), set the period, Submit, and
+            download with the <strong>csv format</strong> link.</p>
+            <p>The site allows <strong>at most 1 year per request</strong> &mdash; ask for more
+            and it answers &ldquo;Please select date range not more than 1 Year&rdquo;. A longer
+            history is several one-year downloads: stack their rows into one sheet, keep a
+            single header, and load that.</p>
             <p>The file needs two columns and nothing else matters: <strong>a date</strong>, and
             <strong>the index value on that date</strong>. Any of 05-08-2026, 05-Aug-2026 or
             2026-08-05 will be read. Extra columns are ignored.</p>
-            <p>Prefer a <strong>Total Return Index</strong> (TRI) file where one is offered. A TRI
-            counts dividends; a price index does not, and will read several percent a year lower
-            than what an investor actually received.</p>
+            <p>&ldquo;Total returns Index Values&rdquo; is the <strong>Total Return Index</strong>
+            (TRI): it counts dividends. The plain &ldquo;Historical Index Data&rdquo; report is a
+            price index &mdash; it does not, and will read several percent a year lower than what
+            an investor actually received. When this tool asks which kind you loaded, answer TRI
+            only for the total-returns download.</p>
           </div>
         </details>
     </div>
