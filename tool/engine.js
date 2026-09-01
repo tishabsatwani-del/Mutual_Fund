@@ -214,7 +214,7 @@
     if (!(years > 0)) return fail('BAD_HORIZON', 'Choose a holding period of at least one year.');
     if (!series || series.length < 2) return fail('TOO_SHORT', 'This file does not hold enough history to measure.');
 
-    var spanYears = (series[series.length - 1].t - series[0].t) / (365.25 * MS_PER_DAY);
+    var spanYears = (series[series.length - 1].t - series[0].t) / (365.2425 * MS_PER_DAY);
     if (spanYears < years) {
       return fail('NOT_ENOUGH_HISTORY',
         'This data covers about ' + spanYears.toFixed(1) + ' years, which is not enough for a ' +
@@ -263,11 +263,11 @@
       from: from, to: to,
       /* Same start AND same end, to the day: only then is nothing dropped. */
       full: aFrom === bFrom && aTo === bTo,
-      years: (to - from) / (365.25 * MS_PER_DAY),
+      years: (to - from) / (365.2425 * MS_PER_DAY),
       /* How much of each file falls outside the shared stretch, in years --
          which is the figure that says whether the restriction matters. */
-      lostA: ((from - aFrom) + (aTo - to)) / (365.25 * MS_PER_DAY),
-      lostB: ((from - bFrom) + (bTo - to)) / (365.25 * MS_PER_DAY)
+      lostA: ((from - aFrom) + (aTo - to)) / (365.2425 * MS_PER_DAY),
+      lostB: ((from - bFrom) + (bTo - to)) / (365.2425 * MS_PER_DAY)
     };
   }
 
@@ -303,7 +303,7 @@
 
   function maxHorizon(series) {
     if (!series || series.length < 2) return null;
-    var span = (series[series.length - 1].t - series[0].t) / (365.25 * MS_PER_DAY);
+    var span = (series[series.length - 1].t - series[0].t) / (365.2425 * MS_PER_DAY);
     var whole = Math.floor(span);
     return whole >= 1 ? whole : null;
   }

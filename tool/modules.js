@@ -1710,7 +1710,7 @@
         row1('Minimum Return (Worst Window)', pct(f.min)) +
         row1('Return Volatility (Std Deviation)',
              f.stdev == null ? 'not measurable on one window' : pct(f.stdev)) +
-        row1('Negative Return Probability', negCell(fNeg, f.count))
+        row1('Negative Return Frequency (Historical)', negCell(fNeg, f.count))
       : row('Total Rolling Windows Analysed', obs(f.count), have ? obs(b.count) : none) +
         row('Average Rolling Return (Mean)', pct(f.mean), have ? pct(b.mean) : none) +
         row('Median Rolling Return', pct(f.median), have ? pct(b.median) : none) +
@@ -1722,7 +1722,11 @@
         row('Return Volatility (Std Deviation)',
             f.stdev == null ? 'not measurable on one window' : pct(f.stdev),
             have ? (b.stdev == null ? 'not measurable on one window' : pct(b.stdev)) : none) +
-        row('Negative Return Probability', negCell(fNeg, f.count),
+        /* "Probability" was the specification's word, and it is the wrong one:
+           this row is a count of past windows, and the caveat two inches below
+           says outright that nothing on the card is a probability. The label
+           now agrees with the caveat. */
+        row('Negative Return Frequency (Historical)', negCell(fNeg, f.count),
             have ? negCell(bNeg, b.count) : none) +
         row('Outperformance Rate vs Benchmark',
             have ? pct(paired.fundAheadShare, 1) + ' of total windows'
@@ -1847,7 +1851,7 @@
         pct(f.max) + ', indicating an overall return variance spread of ' +
         pct(f.max - f.min) + '.']);
 
-      items.push(['Capital Loss Probability',
+      items.push(['Capital Loss Frequency',
         'In ' + loss.toLocaleString() + ' out of ' + total.toLocaleString() + ' rolling periods (' +
         pct(total ? loss / total : 0, 1) + '), the investment recorded a negative return over a ' +
         years + '-Year holding period.']);

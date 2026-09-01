@@ -321,7 +321,7 @@ function textValueFile(file) {
      metrics.join('|') === [
        'Total Rolling Windows Analysed', 'Average Rolling Return (Mean)', 'Median Rolling Return',
        'Maximum Return (Best Window)', 'Minimum Return (Worst Window)',
-       'Return Volatility (Std Deviation)', 'Negative Return Probability',
+       'Return Volatility (Std Deviation)', 'Negative Return Frequency (Historical)',
        'Outperformance Rate vs Benchmark'].join('|'),
      metrics.join('|'));
   ok('windows are counted as Observations',
@@ -334,8 +334,8 @@ function textValueFile(file) {
      /Return Volatility \(Std Deviation\) 0\.0% 0\.0%/.test(out),
      (out.match(/Return Volatility[^A-Z]{0,40}/) || [''])[0]);
   ok('nothing ended below zero, and it is counted in windows',
-     /Negative Return Probability 0\.0% \(0 Windows\) 0\.0% \(0 Windows\)/.test(out),
-     (out.match(/Negative Return Probability[^A-Z]{0,50}/) || [''])[0]);
+     /Negative Return Frequency \(Historical\) 0\.0% \(0 Windows\) 0\.0% \(0 Windows\)/.test(out),
+     (out.match(/Negative Return Frequency[^A-Z()]{0,60}/) || [''])[0]);
   ok('14% beats 10% in every single window',
      /Outperformance Rate vs Benchmark 100\.0% of total windows N\/A/.test(out),
      (out.match(/Outperformance Rate vs Benchmark[^A-Z]{0,50}/) || [''])[0]);
@@ -358,8 +358,8 @@ function textValueFile(file) {
      /^Return Range & Distribution/.test(flat(insights[3])) &&
      /Historical 3-Year rolling returns ranged from 14\.0% to 14\.0%, indicating an overall return variance spread of 0\.0%\./.test(flat(insights[3])),
      flat(insights[3]));
-  ok('5 · Capital Loss Probability, as a count and a share',
-     /^Capital Loss Probability/.test(flat(insights[4])) &&
+  ok('5 · Capital Loss Frequency, as a count and a share',
+     /^Capital Loss Frequency/.test(flat(insights[4])) &&
      /In 0 out of [\d,]+ rolling periods \(0\.0%\), the investment recorded a negative return over a 3-Year holding period\./.test(flat(insights[4])),
      flat(insights[4]));
 
