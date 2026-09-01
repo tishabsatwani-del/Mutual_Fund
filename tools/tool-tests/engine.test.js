@@ -665,10 +665,14 @@ section('Rolling frequency: how far the window moves each time');
 {
   /* Weekdays only, so five observations a week -- which is what makes the
      expected counts below arithmetic rather than guesswork. */
+  /* A bare { } block does not scope var, so a `var d` here would hoist to
+     module level and silently overwrite the d = E.utc helper for every test
+     below this line. It did, and the first test to use d() afterwards was
+     written months later. */
   var s = [], t = Date.UTC(2006, 0, 1), v = 100;
   while (t <= Date.UTC(2026, 0, 1)) {
-    var d = new Date(t);
-    if (d.getUTCDay() % 6) s.push({ t: t, v: v });
+    var day = new Date(t);
+    if (day.getUTCDay() % 6) s.push({ t: t, v: v });
     v *= Math.pow(1.12, 1 / 365.2425);
     t += 86400000;
   }
@@ -907,6 +911,70 @@ function kindOf(name) {
 ].forEach(function (pair) {
   eq('“' + pair[0] + '” reads as ' + (pair[1] || 'unknown'), kindOf(pair[0]), pair[1]);
 });
+
+
+section('Sparse files: the tolerance drops windows, it never stretches them');
+/* A reviewer claimed windows were being matched "to nearest observations
+ * separated by up to 100 days" and annualised over the nominal length. Both
+ * halves are tested here against a file shaped like the one they used --
+ * 29 rows across ~7 years -- because the correct answer to a wrong claim
+ * about arithmetic is arithmetic. */
+var sparse = [];
+(function () {
+  var t = d(2017, 7, 3), v = 100;
+  for (var i = 0; i < 29; i++) {
+    sparse.push({ t: t, v: v });
+    t += 88 * 86400000;
+    v *= Math.pow(1.10, 88 / 365.2425);
+  }
+})();
+eq('uniform 88-day gaps at a 6-year horizon leave NO windows at all',
+   E.rollingReturns(sparse, 6).code, 'NO_WINDOWS');
+
+/* An end 8 days short of the target is refused; 3 days short is taken, and
+ * annualised over the days that actually elapsed, not the nominal length. */
+/* Both files span 6.4 years, so the horizon fits; what differs is where the
+   observations land around the 6-year target of 01-Jan-2023. Twelve days
+   short is beyond the 7-day tolerance; three days short is inside it. */
+var nearMiss = [
+  { t: d(2017, 1, 1), v: 100 },
+  { t: d(2018, 1, 1), v: 110 },
+  { t: d(2022, 12, 20), v: 168 },
+  { t: d(2023, 6, 1), v: 180 }
+];
+eq('an end twelve days short of the target is dropped, not stretched',
+   E.rollingReturns(nearMiss, 6).code, 'NO_WINDOWS');
+var nearHit = [
+  { t: d(2017, 1, 1), v: 100 },
+  { t: d(2018, 1, 1), v: 110 },
+  { t: d(2022, 12, 29), v: 170 },
+  { t: d(2023, 6, 1), v: 180 }
+];
+var nh = E.rollingReturns(nearHit, 6);
+eq('three days short is taken', nh.stats.count, 1);
+var elapsed = E.dayCount(d(2017, 1, 1), d(2022, 12, 29));
+close('and annualised over the days that actually elapsed (the reviewer’s own formula)',
+      nh.values[0], Math.pow(1.7, 365 / elapsed) - 1, 1e-12);
+ok('which is not the figure the nominal six years would give',
+   Math.abs(nh.values[0] - (Math.pow(1.7, 1 / 6) - 1)) > 1e-5,
+   String(nh.values[0]));
+
+section('How often a file has a value at all');
+/* The median day-gap, which is what gates the frequency chips: a control
+ * offering daily steps over quarterly data promises a fineness the file does
+ * not have. Median, not mean -- a weekday file is 1-day gaps with 3-day
+ * weekends, and the mean would call that 1.4. */
+function gapSeries(gaps) {
+  var out = [{ t: d(2020, 1, 1), v: 100 }];
+  var t = d(2020, 1, 1);
+  gaps.forEach(function (g) { t += g * 86400000; out.push({ t: t, v: 100 }); });
+  return out;
+}
+eq('a weekday file reads as daily', E.medianGapDays(gapSeries([1, 1, 1, 1, 3, 1, 1, 1, 1, 3])), 1);
+eq('a quarterly statement reads as quarterly', E.medianGapDays(gapSeries([88, 92, 90, 91])), 90.5);
+eq('one gap is that gap', E.medianGapDays(gapSeries([30])), 30);
+eq('one row has no gap to measure', E.medianGapDays([{ t: 0, v: 1 }]), null);
+eq('and no series, none either', E.medianGapDays(null), null);
 
 
 console.log('\n' + passed + ' passed, ' + failed.length + ' failed');

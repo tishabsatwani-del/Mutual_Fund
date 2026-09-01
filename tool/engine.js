@@ -279,6 +279,28 @@
    * "max history" can honestly mean -- and at that length there is only one
    * such window, so the screen has to say how thin that is rather than let a
    * single measurement read like a distribution. */
+  /* How often this file actually has a value, as the median day-gap between
+   * consecutive observations. The MEDIAN, not the mean: a weekday NAV file is
+   * mostly 1-day gaps with 3-day weekends, and the mean would call that 1.4
+   * and muddle every threshold built on it, while a quarterly statement file
+   * is ~90 whichever way it is averaged.
+   *
+   * This exists because the frequency chips were offering "Daily" on a file
+   * holding 29 values across seven years. The engine itself was never fooled
+   * -- windows are dropped, not stretched, when the dates are not there --
+   * but a control that offers a step size the data cannot take is a promise
+   * the data cannot keep. */
+  function medianGapDays(series) {
+    if (!series || series.length < 2) return null;
+    var gaps = [];
+    for (var i = 1; i < series.length; i++) {
+      gaps.push((series[i].t - series[i - 1].t) / MS_PER_DAY);
+    }
+    gaps.sort(function (a, b) { return a - b; });
+    var n = gaps.length;
+    return n % 2 ? gaps[(n - 1) / 2] : (gaps[n / 2 - 1] + gaps[n / 2]) / 2;
+  }
+
   function maxHorizon(series) {
     if (!series || series.length < 2) return null;
     var span = (series[series.length - 1].t - series[0].t) / (365.25 * MS_PER_DAY);
@@ -698,6 +720,7 @@
     projectGoal: projectGoal,
     maxDrawdown: maxDrawdown, combineEqualWeighted: combineEqualWeighted,
     maxHorizon: maxHorizon, FREQUENCY: FREQUENCY, rangeOverlap: rangeOverlap,
+    medianGapDays: medianGapDays,
     compareRolling: compareRolling,
     requiredAcrossRates: requiredAcrossRates,
     costOfWaiting: costOfWaiting,

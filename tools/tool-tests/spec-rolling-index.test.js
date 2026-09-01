@@ -893,6 +893,166 @@ function textValueFile(file) {
      await page.locator('#up-primary').isHidden() &&
      await page.locator('#up-benchmark-head').isHidden());
 
+  /* ============================ THE REVIEWER'S SPARSE FILE, AND WHAT CHANGED */
+  section('A quarterly file is told what it is, before anything runs');
+  /* 29 rows across ~7 years, ~96-day gaps — the reviewer's shape. The engine
+     was never fooled by it (windows are dropped, not stretched), but the
+     screen recommended Daily steps over it and said nothing about density
+     until five windows arrived. */
+  const sparse = (() => {
+    const L = ['Date,NAV']; let v = 100;
+    const dates = []; let t = Date.UTC(2017, 6, 3);
+    for (let i = 0; i < 29; i++) { dates.push(t); t += Math.round((80 + (i % 5) * 8) * 86400000); }
+    dates[26] = Date.UTC(2023, 6, 1); dates[27] = Date.UTC(2023, 9, 1); dates[28] = Date.UTC(2024, 5, 28);
+    let prev = dates[0];
+    dates.forEach((dt, i) => {
+      if (i) v *= Math.pow(1.10, (dt - prev) / (365.2425 * 86400000));
+      prev = dt;
+      L.push(new Date(dt).toISOString().slice(0, 10) + ',' + v.toFixed(4));
+    });
+    fs.writeFileSync(TMP + '/sparse29.csv', L.join('\n'));
+    return TMP + '/sparse29.csv';
+  })();
+
+  await openIndexPath();
+  await openCard('a');
+  await page.setInputFiles('#bm-file', sparse);
+  await page.waitForTimeout(2000);
+  const warned = flat(await page.locator('#r-loaded').innerText());
+  ok('the density warning arrives at load time, not after a run',
+     /a value about every \d+ days/.test(warned) && /29 observations/.test(warned), warned);
+  ok('and it is drawn as a warning, not as good news',
+     (await page.locator('#r-loaded .notice.warn').count()) === 1);
+  const freqNow = await page.locator('#r-freq .chip').allInnerTexts();
+  ok('Daily is disabled, with the reason on the chip',
+     await page.locator('#r-freq .chip[data-frequency="daily"]').isDisabled() &&
+     /this file has a value about every \d+ days/.test(freqNow[0]), freqNow[0]);
+  ok('and no longer calls itself Recommended over data it cannot step through',
+     !/Recommended/.test(freqNow[0]), freqNow[0]);
+  ok('Weekly is disabled too', await page.locator('#r-freq .chip[data-frequency="weekly"]').isDisabled());
+  ok('the selection moved to the coarsest step, not left on a dead one',
+     (await page.locator('#r-freq .chip[data-frequency="monthly"]').getAttribute('aria-checked')) === 'true');
+  ok('and the row says plainly that nothing here has anything to thin',
+     /every observation is already further apart than any of these steps/
+       .test(await page.locator('#r-freq-note').innerText()),
+     await page.locator('#r-freq-note').innerText());
+
+  await page.locator('#r-years .chip[data-years="5"]').click();
+  await page.waitForTimeout(300);
+  await page.click('#r-run');
+  await page.waitForTimeout(1500);
+  const sparseOut = flat(await page.locator('#r-out').innerText());
+  ok('the results own their thinness in words',
+     /The only \d+ 5-year periods in this data/i.test(sparseOut) ||
+     /The only 5-year period in this data/i.test(sparseOut), sparseOut.slice(0, 400));
+  ok('with the plural the right way round',
+     !/\d+ 5-year period ,|\d+ 5-year period in/i.test(sparseOut), sparseOut.slice(0, 300));
+
+  /* A dense file gets Daily back, Recommended and all. */
+  await openIndexPath();
+  await openCard('a');
+  await page.setInputFiles('#bm-file', primary);
+  await page.waitForTimeout(2000);
+  ok('a daily file gets all three steps back',
+     (await page.locator('#r-freq .chip:disabled').count()) === 0 &&
+     /Recommended/.test((await page.locator('#r-freq .chip').allInnerTexts())[0]));
+
+  /* ================================ THE FOUR PILLARS, FIRST THING ON SCREEN */
+  section('Every result opens with what it is');
+  await page.locator('#r-years .chip[data-years="3"]').click();
+  await page.waitForTimeout(250);
+  await page.click('#r-run');
+  await page.waitForTimeout(1600);
+  const strip = flat(await page.locator('#r-out .pastnote').innerText());
+  ok('the past-performance line is the first element of the results',
+     await page.evaluate(() => {
+       const first = document.querySelector('#r-out').firstElementChild;
+       return first && first.classList.contains('pastnote');
+     }));
+  ok('and says already-happened, on-your-device, before-tax',
+     /Already happened/.test(strip) && /do not guarantee future performance/.test(strip) &&
+     /nothing you upload leaves this page/.test(strip) && /before tax and exit load/.test(strip),
+     strip);
+  ok('without repeating the reviewer’s error about expense ratios',
+     /NAV already includes its expense ratio/.test(strip), strip);
+
+  section('The target-rate card answers the reviewer’s question, factually');
+  const rateCard = flat(await page.locator('#r-out .ratepresets').innerText());
+  ok('round-number presets are offered',
+     rateCard === '6% 8% 10% 12%', rateCard);
+  ok('and the copy says whose number the target has to be',
+     /The target is YOURS/i.test(flat(await page.locator('#r-out').innerText())));
+  await page.locator('.ratepresets .chip', { hasText: '8%' }).click();
+  await page.waitForTimeout(400);
+  const verdict = flat(await page.locator('[id^="ratesub-"]').first().innerText());
+  ok('a preset types the target and the sentence answers in the reviewer’s own shape',
+     /In 100% of the 3-year holding periods in this data \([\d,]+ of [\d,]+\), the return beat your target of 8\.0% a year/.test(verdict),
+     verdict);
+  ok('and closes with past periods, not future odds',
+     /Past periods, not future odds/.test(verdict), verdict);
+
+  section('The same data, held for longer');
+  const hz = flat(await page.locator('#r-out .card', { hasText: 'The same data, held for longer' }).innerText());
+  ok('the multi-horizon card renders', hz.length > 0);
+  ok('with 1, 3 and 5-year rows on a ten-year file',
+     /1 year/.test(hz) && /3 years/.test(hz) && /5 years/.test(hz), hz.slice(0, 300));
+  ok('the chosen horizon is marked in its row',
+     /3 years ← chosen/.test(hz), hz.slice(0, 300));
+  ok('and on a constant-growth file every horizon reads 14%',
+     (hz.match(/14\.0%/g) || []).length >= 9, String((hz.match(/14\.0%/g) || []).length));
+  ok('the label now says what the count is, not what it is not',
+     /Non-overlapping periods, at most/i.test(flat(await page.locator('#r-out').innerText())));
+
+  section('The fall, priced in rupees and ended with the question');
+  /* A file with a real crash in it: up 8%/yr, a 30% fall over 2 months in
+     2020, then recovery. */
+  const crashy = (() => {
+    const L = ['Date,NAV']; let v = 100; let t = Date.UTC(2015, 0, 1);
+    while (t <= Date.UTC(2025, 0, 1)) {
+      const inCrash = t >= Date.UTC(2020, 0, 15) && t < Date.UTC(2020, 2, 15);
+      /* Recovery stretched past a year on purpose: the mismatch line fires
+         only when the chosen hold is NOT longer than fall-plus-recovery, so
+         the fixture needs ~19 months underwater for a 1-year hold to trip it. */
+      const inRecovery = t >= Date.UTC(2020, 2, 15) && t < Date.UTC(2021, 8, 15);
+      if (inCrash) v *= Math.pow(0.70, 1 / 60);
+      else if (inRecovery) v *= Math.pow(1 / 0.70, 1 / 549) * Math.pow(1.08, 1 / 365.2425);
+      else v *= Math.pow(1.08, 1 / 365.2425);
+      L.push(new Date(t).toISOString().slice(0, 10) + ',' + v.toFixed(4));
+      t += 86400000;
+    }
+    fs.writeFileSync(TMP + '/crashy.csv', L.join('\n'));
+    return TMP + '/crashy.csv';
+  })();
+  await openIndexPath();
+  await openCard('a');
+  await page.setInputFiles('#bm-file', crashy);
+  await page.waitForTimeout(2200);
+  await page.locator('#r-years .chip[data-years="1"]').click();
+  await page.waitForTimeout(250);
+  await page.click('#r-run');
+  await page.waitForTimeout(1600);
+  /* The whole results area: the sentences below appear exactly once on it,
+     and pinning the card element proved fragile against Playwright's
+     ancestor-inclusive text filtering. */
+  const fall = flat(await page.locator('#r-out').innerText());
+  ok('the fall is priced: what ₹10,000 became at the bottom',
+     /every ₹10,000 held through this was worth about ₹[\d,]+ at the bottom/.test(fall), fall.slice(0, 400));
+  ok('and the reader is asked the one question the record puts',
+     /would anything .* force you to take the money out/.test(fall) &&
+     /Whoever sells at the bottom turns this dip into their permanent result/.test(fall),
+     fall.slice(0, 500));
+  ok('a 1-year hold is called out as not longer than this fall-and-recovery',
+     /Your chosen 1-year holding period is not longer than this fall-and-recovery/.test(fall),
+     fall.slice(0, 600));
+
+  /* And the summary table must not spill on a phone, benchmark or not —
+     the reviewer reported clipping on an older build; this pins the fix. */
+  ok('the statistical summary does not spill sideways without a benchmark',
+     await page.evaluate(() => {
+       const w = document.querySelector('#r-out .summary3').closest('.scroll');
+       return w.scrollWidth <= w.clientWidth + 1;
+     }));
+
   /* ================================= THE FUND PATH IS NOT IN SCOPE AND IS NOT TOUCHED */
   section('The other source path is left exactly as it was');
   await page.goto(BASE_URL + '#rolling', { waitUntil: 'networkidle' });

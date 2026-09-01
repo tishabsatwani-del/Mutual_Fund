@@ -697,6 +697,21 @@ button.link {
 
 }
 
+/* First thing in every result: what follows already happened. The reviewer
+   asked for the past-performance line to be prominent rather than buried in
+   the footer, and they were right. */
+.pastnote {
+  margin: 0 0 1rem; padding: .65rem .9rem;
+  border-left: 3px solid var(--warn); border-radius: 6px;
+  background: var(--surface); font-size: .88rem; color: var(--ink-2); line-height: 1.55;
+}
+.pastnote strong { color: var(--warn); }
+
+/* The chosen holding period's own row in the horizon table. */
+table.data.spread tr.now td { color: var(--accent); font-weight: 700; }
+
+.ratepresets { margin: 0 0 .9rem; }
+
 .notice.bad { border-color: var(--critical); }
 .notice.warn { border-color: var(--warn); }
 .notice .ic { flex: none; font-weight: 700; }

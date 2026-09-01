@@ -437,7 +437,10 @@ function plainFile(file, rate, fromY, toY, start = 100) {
   ok('the badge counts independent periods, not the hundreds of overlapping ones',
      await (async () => {
        const t = await page.locator('#r-out').innerText();
-       return /Low data density/i.test(t) && /3 independent 1-year periods\b/.test(t);
+       /* "Independent" overclaimed: dividing the span by the window length
+          gives at most how many periods could stand apart, not a sample of
+          independent observations. The badge now says which it is. */
+       return /Low data density/i.test(t) && /3 non-overlapping 1-year periods\b/.test(t);
      })(),
      (await page.locator('#r-out').innerText()).replace(/\s+/g, ' ').slice(0, 240));
   await page.locator('#r-years .chip[data-years="3"]').click();

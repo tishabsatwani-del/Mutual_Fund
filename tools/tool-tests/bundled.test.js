@@ -101,9 +101,16 @@ function pretty(iso) {
     ok('it makes no forecast claim', /nothing in it forecasts/.test(out));
 
     ok('rolling statistics are calculated automatically', /Median 5-year return/i.test(out), out.slice(0, 160));
-    const spread = await page.locator('#r-out table.spread td').allInnerTexts();
+    /* .first(): a second .spread table now compares horizons side by side,
+       and its rows carry labels and spreads, not just percentiles. */
+    const spread = await page.locator('#r-out table.spread').first().locator('td').allInnerTexts();
     ok('a 10% series measures 10% across every percentile',
        spread.every(v => v.trim() === '10.0%'), spread.join('|'));
+    ok('and the horizon comparison shows a zero spread at every length',
+       await (async () => {
+         const t = (await page.locator('#r-out table.spread').nth(1).innerText()).replace(/\s+/g, ' ');
+         return /1 year/.test(t) && /Spread/i.test(t) && !/[1-9]\d*\.\d points/.test(t);
+       })());
     ok('positive and negative shares are shown', /Made money/i.test(out) && /Lost money/i.test(out));
     ok('the distribution chart is drawn', (await page.locator('#r-out svg').count()) >= 1);
     ok('the hurdle-rate box is offered', await page.locator('#rate-rolling').isVisible());

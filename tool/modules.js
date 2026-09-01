@@ -1491,8 +1491,8 @@
       html += '<p class="density"><span class="density-badge">Low data density</span> ' +
         'These ' + s.count.toLocaleString() + ' windows overlap. Laid side by side without ' +
         'touching, this history holds <strong>' + independent +
-        (independent === 1 ? ' independent ' + years + '-year period' :
-                             ' independent ' + years + '-year periods') + '</strong> \u2014 ' +
+        (independent === 1 ? ' non-overlapping ' + years + '-year period' :
+                             ' non-overlapping ' + years + '-year periods') + '</strong> \u2014 ' +
         spanYears.toFixed(1) + ' years divided by ' + years + '. Read the range below as the shape ' +
         'of that much market and no more.</p>';
     }
@@ -1509,8 +1509,9 @@
      * says outright that there is no distribution to read. */
     if (thin) {
       html += '<div class="result"><div class="label">' +
-        (s.count === 1 ? 'The only ' : 'Each of the only ' + s.count + ' ') + years +
-        '-year period in this data, % a year</div>' +
+        (s.count === 1 ? 'The only ' + years + '-year period in this data'
+                       : 'The only ' + s.count + ' ' + years + '-year periods in this data') +
+        ', % a year</div>' +
         '<div class="value">' + (s.count === 1 ? pct(r.values[0]) : pct(s.min) + ' to ' + pct(s.max)) +
         '</div>' +
         '<div class="sub">' + esc(meta.name) + ' \u00b7 ' + fmtDate(r.worst.t) + ' to ' +
@@ -1533,7 +1534,7 @@
         stat('Worst', pct(s.min)) +
         stat('Median', pct(s.median)) +
         stat('Best', pct(s.max)) +
-        stat('Independent periods', String(independent)) +
+        stat('Non-overlapping periods, at most', String(independent)) +
         '</div>';
     }
 
@@ -1602,12 +1603,14 @@
 
     html += summaryCard(r, s, series, years, below, compareSeries, compareName, calc, o.indexPath);
 
+    if (o.indexPath && !thin) html += horizonSpreadCard(series, years, calc);
+
     html += worstIsNotWorstCard(series, s, years);
     /* "The only difference between them was the day they started" needs two
        of them. With one window the best start and the worst start are the
        same day, and the card printed that spread as 0.0%. */
     if (s.count > 1) html += startDateCard(r, years);
-    html += drawdownCard(series);
+    html += drawdownCard(series, years);
     html += rateCheckCard(key, years, r.values);
 
     if (compareSeries) {
@@ -1892,6 +1895,55 @@
       'through &mdash; none of which this tool knows.</p></div></div>';
   }
 
+  /* ============================= THE SPREAD, ACROSS HOLDING PERIODS
+   *
+   * The claim the whole rolling screen makes is that the length of the hold
+   * changes the range of outcomes more than anything else a reader controls.
+   * One horizon at a time, they have to take that on trust; side by side,
+   * they can watch the worst column climb as the periods lengthen -- or see
+   * that in this particular data it does not, which is just as much worth
+   * knowing. Every row is the same arithmetic as the headline, at a different
+   * length. */
+  function horizonSpreadCard(series, chosenYears, calc) {
+    var spanYears = (series[series.length - 1].t - series[0].t) / (365.2425 * 86400000);
+    var horizons = A.HORIZONS.slice();
+    var m = E.maxHorizon ? E.maxHorizon(series) : null;
+    if (m !== null && horizons.indexOf(m) === -1) horizons.push(m);
+    horizons.sort(function (a, b) { return a - b; });
+
+    var rows = [];
+    horizons.forEach(function (h) {
+      if (h > spanYears) return;
+      var r = E.rollingReturns(series, h, calc);
+      if (!r.ok || r.stats.count < 3) return;
+      rows.push({ h: h, s: r.stats });
+    });
+    if (rows.length < 2) return '';
+
+    return '<div class="card"><h2>The same data, held for longer</h2>' +
+      '<p class="hint" style="margin:0 0 .8rem">Every row is every holding period of that ' +
+      'length in this data — the same arithmetic as above, at other lengths. Read the ' +
+      'Worst column downwards.</p>' +
+      '<div class="scroll"><table class="data spread">' +
+      '<caption>Annualised return, % a year, by holding period</caption>' +
+      '<thead><tr><th>Held for</th><th>Worst</th><th>Median</th><th>Best</th>' +
+      '<th>Spread</th></tr></thead><tbody>' +
+      rows.map(function (row) {
+        var em = row.h === chosenYears;
+        return '<tr' + (em ? ' class="now"' : '') + '><td>' + row.h +
+          (row.h === 1 ? ' year' : ' years') + (em ? ' ← chosen' : '') + '</td>' +
+          '<td>' + pct(row.s.min) + '</td><td>' + pct(row.s.median) + '</td>' +
+          '<td>' + pct(row.s.max) + '</td>' +
+          '<td>' + pct(row.s.max - row.s.min) + '</td></tr>';
+      }).join('') +
+      '</tbody></table></div>' +
+      '<div class="meaning"><h3>What this means</h3>' +
+      '<p>Each figure describes the periods of that length inside this one file. Where the ' +
+      'Worst column rises as the holding period grows, longer holds narrowed the range of ' +
+      'outcomes <em>in this data</em>; that is a description of these dates, not a law, and ' +
+      'not a promise about the next period of any length.</p></div></div>';
+  }
+
   /* The worst window in a file is only the worst of the years the file covers.
    * A history that begins after a crash has never been measured through one. */
   function worstIsNotWorstCard(series, s, years) {
@@ -1940,7 +1992,7 @@
   }
 
   /* A return says what was earned. This says what had to be sat through. */
-  function drawdownCard(series) {
+  function drawdownCard(series, years) {
     var dd = E.maxDrawdown(series);
     if (!dd.ok || dd.depth === 0) return '';
     var html = '<div class="card"><h2>The worst fall along the way</h2><div class="stats">' +
@@ -1958,6 +2010,29 @@
       html += '<p>The fall of <strong>' + pct(-dd.depth) + '</strong> had not been recovered by the end ' +
         'of this data.</p>';
     }
+    /* The reviewer's point, and a good one: a depth in percent tests nothing.
+       A reader has to put THEIR money at the bottom of it and ask whether
+       they could have stayed. Same figures, priced in rupees, ended with the
+       one question the record actually puts. */
+    var bottom = Math.round(10000 * (1 + dd.depth));
+    html += '<p>Priced plainly: every \u20b910,000 held through this was worth about ' +
+      '<strong>\u20b9' + bottom.toLocaleString('en-IN') + '</strong> at the bottom' +
+      (dd.recoveredOn
+        ? ', and took until ' + fmtDate(dd.recoveredOn) + ' to be \u20b910,000 again'
+        : ', and had not got back to \u20b910,000 by the end of this data') + '.</p>' +
+      '<p><strong>The question to ask yourself before any return figure:</strong> if this ' +
+      'fall began the month after you invested, would anything \u2014 a fee due, a purchase ' +
+      'planned, your own nerve \u2014 force you to take the money out before it climbed back? ' +
+      'Whoever sells at the bottom turns this dip into their permanent result.</p>';
+    if (dd.recoveredOn && years) {
+      var underwaterMonths = Math.round((dd.fallDays + dd.recoveryDays) / 30);
+      if (underwaterMonths > 0 && years * 12 <= underwaterMonths) {
+        html += '<p><strong>Your chosen ' + years + '-year holding period is not longer than ' +
+          'this fall-and-recovery (' + underwaterMonths + ' months).</strong> A hold of that ' +
+          'length starting on a day like ' + fmtDate(dd.from.t) + ' would have ended before ' +
+          'the money was whole again.</p>';
+      }
+    }
     html += '<p>Returns are earned by the people who were still there afterwards. This is the part ' +
       'of the record that decides who those people are.</p></div></div>';
     return html;
@@ -1970,6 +2045,17 @@
     var start = 0.07;
     var res = E.shareAbove(values, start);
     return '<div class="card"><h2>How often did it beat a rate you choose?</h2>' +
+      '<p class="hint" style="margin:0 0 .8rem">Type your own target \u2014 the return you need, ' +
+      'a deposit rate you could get instead, your own guess at inflation plus a margin \u2014 ' +
+      'or start from one of these. The target is YOURS: this tool does not know today\u2019s ' +
+      'deposit rates or inflation, and does not pretend to.</p>' +
+      /* Round numbers, not recommendations: a preset here is a button that
+         types for you, and the copy above says whose number it has to be. */
+      '<div class="chips ratepresets" data-key="' + key + '">' +
+      [6, 8, 10, 12].map(function (r) {
+        return '<button class="chip" type="button" data-rate="' + r + '">' + r + '%</button>';
+      }).join('') +
+      '</div>' +
       '<div class="field" style="max-width:16rem">' +
       '<label for="rate-' + key + '">Rate to compare against, % a year</label>' +
       '<input type="number" id="rate-' + key + '" class="ratecheck" data-key="' + key +
@@ -1988,8 +2074,12 @@
 
   function rateSentence(res, rate, years) {
     if (!res.ok) return '';
-    return res.above.toLocaleString() + ' of ' + res.count.toLocaleString() + ' ' + years +
-      '-year periods returned more than ' + pct(rate, 1) + ' a year.';
+    /* The reviewer's own wording, which is right: a share of past periods,
+       stated as exactly that. */
+    return 'In ' + pct(res.share, 0) + ' of the ' + years + '-year holding periods in this ' +
+      'data (' + res.above.toLocaleString() + ' of ' + res.count.toLocaleString() +
+      '), the return beat your target of ' + pct(rate, 1) + ' a year. Past periods, not ' +
+      'future odds.';
   }
 
   /* Every window both series can cover, paired by start date. One end-to-end
@@ -2446,8 +2536,11 @@
       ' \u2014 ' + spanYears.toFixed(1) + ' years, ' + series.length.toLocaleString() +
       ' observations.';
     /* Rebuilt, not just re-measured: the Max History chip is worth a different
-       number of years for every file, so it cannot be drawn once at start-up. */
+       number of years for every file, so it cannot be drawn once at start-up
+       -- and the frequency chips read the file's own cadence, so neither can
+       they. */
     yearChips();
+    freqChips();
     limitYears(selectedSpanYears());
     updateWindowNote();
     $('#step-period').dataset.done = 'yes';
@@ -2466,12 +2559,24 @@
        that has one. Kept for anything the row does NOT say -- a date range
        that had to be reset, an aging note on bundled data -- and kept whole on
        the fund path, which has no summary row. */
+    /* The density warning the sparse file never got. 29 values across seven
+       years ran under a row recommending daily steps, and nothing said so
+       until the results arrived with five windows in them. Said here, at load
+       time, before anything is configured. */
+    var gapDays = E.medianGapDays(series);
+    var sparse = (gapDays != null && gapDays > 7)
+      ? 'This file holds a value about every ' + Math.round(gapDays) + ' days \u2014 ' +
+        series.length.toLocaleString() + ' observations over ' + spanYears.toFixed(1) +
+        ' years. Rolling periods can only start on dates the file actually has, so there ' +
+        'will be few of them, and none of the figures will be fine-grained.'
+      : '';
     var extraWord = (reset ? 'Your dates fell outside this data, so they have been set to its ' +
-                             'full range.' : '') + (o.note ? (reset ? ' ' : '') + o.note : '');
+                             'full range.' : '') + (o.note ? (reset ? ' ' : '') + o.note : '') +
+                    (sparse ? ((reset || o.note) ? ' ' : '') + sparse : '');
     var quiet = R.source === 'index' && (LOADED.a || LOADED.b);
     $('#r-loaded').innerHTML = quiet
-      ? (extraWord ? notice('', extraWord) : '')
-      : notice('ok', 'Ready to analyse <strong>' + esc(name) + '</strong>.' +
+      ? (extraWord ? notice(sparse ? 'warn' : '', extraWord) : '')
+      : notice(sparse ? 'warn' : 'ok', 'Ready to analyse <strong>' + esc(name) + '</strong>.' +
                (extraWord ? ' ' + extraWord : ''));
     refreshCompare();
     overlapNote();
@@ -3465,6 +3570,26 @@
     var box = $('#r-freq');
     if (!box || !E.FREQUENCY) return;
     box.innerHTML = '';
+
+    /* A STEP SIZE THE DATA CANNOT TAKE IS NOT OFFERED.
+     *
+     * This row said "Daily \u2014 Recommended" over a file holding 29 values
+     * across seven years. The engine was never fooled -- windows are dropped,
+     * not stretched, when the dates are not there -- but the label promised a
+     * fineness the file does not have, and a reader could only find out how
+     * few windows they really got after running. So the chips read the file's
+     * own cadence first: a file with a value every ~90 days has no daily steps
+     * in it, and the chip says so instead of recommending them. */
+    var gap = R.series ? E.medianGapDays(R.series) : null;
+    var can = {
+      daily:   gap == null || gap <= 3.5,
+      weekly:  gap == null || gap <= 10,
+      monthly: true
+    };
+    if (!can[R.frequency]) {
+      R.frequency = can.weekly ? 'weekly' : 'monthly';
+    }
+
     var order = ['daily', 'weekly', 'monthly'];
     var says = {
       daily:   'Daily \u2014 Recommended (shifts by 1 trading day)',
@@ -3475,7 +3600,14 @@
       var b = A.el('button', { class: 'chip', type: 'button', role: 'radio',
                                'aria-checked': String(key === R.frequency) });
       b.dataset.frequency = key;
-      b.textContent = says[key];
+      b.disabled = !can[key];
+      /* gateSteps re-walks every control in this step whenever the gate
+         changes, and re-enables whatever it does not know to be infeasible.
+         The year chips carry this marker for exactly that reason. */
+      b.dataset.infeasible = can[key] ? 'no' : 'yes';
+      b.textContent = can[key] ? says[key]
+        : says[key].replace(' \u2014 Recommended', '') +
+          ' \u2014 this file has a value about every ' + Math.round(gap) + ' days';
       b.addEventListener('click', function () {
         if (b.disabled) return;
         R.frequency = key;
@@ -3486,6 +3618,19 @@
       });
       box.appendChild(b);
     });
+
+    /* Sparser than monthly: no step size has anything left to thin. Said once
+       under the row rather than three times on the chips. */
+    var note = $('#r-freq-note');
+    if (!note) {
+      note = A.el('p', { class: 'hint', id: 'r-freq-note' });
+      box.parentNode.insertBefore(note, box.nextSibling);
+    }
+    note.textContent = (gap != null && gap > 31)
+      ? 'This file holds a value about every ' + Math.round(gap) + ' days, so every ' +
+        'observation is already further apart than any of these steps. All of them use ' +
+        'every start date the file has.'
+      : '';
   }
 
   /* Offering "10 years" on a three-year file invites a reader to choose it and
@@ -3614,7 +3759,18 @@
     }
 
     R.ran = true;
-    out.innerHTML = warning +
+    /* The reviewer's four regulatory pillars, three of which already stand in
+       the footer. The one they wanted made PROMINENT goes first, before any
+       number: what follows already happened. One correction to their text,
+       though: they asked for "expense ratios will reduce actual yield", and
+       for NAV figures that is false -- a fund's NAV is already net of its
+       expense ratio. The strip says what is actually true instead. */
+    out.innerHTML =
+      '<p class="pastnote"><strong>Already happened \u2014 not a forecast.</strong> Past rolling ' +
+      'returns do not guarantee future performance. Figures are before tax and exit load; a ' +
+      'fund\u2019s NAV already includes its expense ratio. Worked out on your device \u2014 ' +
+      'nothing you upload leaves this page.</p>' +
+      warning +
       periodCard(from, to, usedFrom, usedTo, R.years, R.name) +
       (R.meta ? datasetCard(R.meta, series) : '') +
       (R.report ? importReport(R.report, R.name) : '') +
@@ -3783,6 +3939,14 @@
   /* =================================================================== INIT */
 
   function wireRateChecks() {
+    document.addEventListener('click', function (ev) {
+      var btn = ev.target && ev.target.closest ? ev.target.closest('.ratepresets .chip') : null;
+      if (!btn) return;
+      var input = document.getElementById('rate-' + btn.parentNode.dataset.key);
+      if (!input) return;
+      input.value = btn.dataset.rate;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
     document.addEventListener('input', function (ev) {
       var input = ev.target;
       if (!input.classList || !input.classList.contains('ratecheck')) return;
