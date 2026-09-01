@@ -76,15 +76,17 @@ function plainFile(file, rate, fromY, toY, start = 100) {
   /* ------------------------------------------------------------ structure */
   section('One screen, four labelled steps, nothing hidden');
   await page.goto(BASE_URL + '#rolling', { waitUntil: 'networkidle' });
-  const steps = (await page.locator('.card.step > h2').allInnerTexts())
+  /* Three steps on screen. The old step 4 (Compare against) is gone from
+     every path: the market-index path answers the comparison inside step 1's
+     card 2, and my-own-fund offers no comparison at all. */
+  const steps = (await page.locator('.card.step:visible > h2').allInnerTexts())
     .map(t => t.replace(/\s+/g, ' ').trim());
-  ok('the steps are numbered and named', steps.length === 4, steps.join(' // '));
+  ok('three steps are numbered and named', steps.length === 3, steps.join(' // '));
   ok('step 1 asks what to analyse', /1 What do you want to analyse/.test(steps[0]), steps[0]);
   ok('step 2 asks which stretch of history', /2 Which stretch of history/.test(steps[1]), steps[1]);
   ok('step 3 asks how long each holding period is',
      /3 How long is each holding period/.test(steps[2]), steps[2]);
-  ok('step 4 offers a comparison and marks it optional',
-     /4 Compare against/.test(steps[3]) && /OPTIONAL/i.test(steps[3]), steps[3]);
+  ok('and the old step 4 is not on screen', await page.locator('#step-compare').isHidden());
 
   ok('the dates say what they bound',
      (await page.locator('label[for="r-start"]').innerText()).trim() === 'History from' &&
@@ -257,33 +259,44 @@ function plainFile(file, rate, fromY, toY, start = 100) {
      (await page.locator('#rateout-rolling').innerText()).trim() === '0%');
 
   /* -------------------------------------------------------- the benchmark */
+  /* My own fund analyses one fund on its own. A reader who wants it measured
+     against an index has the market-index path below; nothing on the fund
+     path offers a comparison, optional or otherwise. (Checked here, before
+     the comparison flow rebuilds state on the other path.) */
+  section('My own fund offers no comparison at all');
+  ok('the compare step stays hidden on the fund path',
+     await page.locator('#step-compare').isHidden());
+  ok('and no benchmark chooser is on screen',
+     await page.locator('#r-compare').isHidden() &&
+     await page.locator('#r-compare-field').isHidden());
+
   section('Comparing against an index');
+  /* The one place a comparison lives now: the market-index path, the fund
+     through card 1 and the index through card 2. The fund path no longer
+     offers one at all -- that refusal is proved in its own section below. */
   await page.click('#r-source .chip[data-source="index"]');
   ok('switching source clears the previous result',
      (await page.locator('#r-out').innerText()).trim() === '');
-  await page.setInputFiles('#bm-file', index);
-  await page.waitForTimeout(1200);
-  /* The index path says this with the go-ahead now: "Ready to analyse" as a
-     control that carries the reader to step 2, rather than as a line of text
-     under the card. */
-  ok('an index file loads',
-     /Ready to analyse/.test(await page.locator('#up-ready').innerText()),
-     (await page.locator('#up-ready').innerText()).replace(/\s+/g, ' '));
-  ok('and the door it came through shows the file it holds',
-     (await page.locator('#door-a').getAttribute('data-state')) === 'loaded');
-
-  await page.click('#r-source .chip[data-source="fund"]');
-  await page.setInputFiles('#f-file', bulk);
+  await page.setInputFiles('#bm-file', bulk);
   await page.waitForTimeout(1500);
   await page.fill('#r-scheme-q', 'alpha fund - direct');
   await page.waitForTimeout(300);
   await page.locator('#r-scheme-list .hit').first().click();
   await page.waitForTimeout(600);
-  ok('the loaded index is now offered as a comparison',
-     !(await page.locator('#r-compare').isDisabled()));
-  const cmpOpts = await page.locator('#r-compare option').allInnerTexts();
-  ok('and it is named in the list', cmpOpts.length === 2, cmpOpts.join('|'));
-  await page.selectOption('#r-compare', { index: 1 });
+  /* The index path says this with the go-ahead now: "Ready to analyse" as a
+     control that carries the reader to step 2, rather than as a line of text
+     under the card. */
+  ok('the fund loads through card 1',
+     /Ready to analyse/.test(await page.locator('#up-ready').innerText()),
+     (await page.locator('#up-ready').innerText()).replace(/\s+/g, ' '));
+  ok('and the door it came through shows what it holds',
+     (await page.locator('#door-a').getAttribute('data-state')) === 'loaded');
+
+  await page.setInputFiles('#cmp-file', index);
+  await page.waitForTimeout(1200);
+  ok('the index through card 2 becomes the benchmark without a second question',
+     (await page.locator('#r-compare').inputValue()) !== 'none',
+     await page.locator('#r-compare').inputValue());
   /* Five years rather than the default three, so the run is on a length the
      reader actually chose. */
   await page.locator('#r-years .chip[data-years="5"]').click();
@@ -293,14 +306,16 @@ function plainFile(file, rate, fromY, toY, start = 100) {
   out = await page.locator('#r-out').innerText();
   ok('consistency against the benchmark is reported', /came out ahead/i.test(out));
 
-  /* Three measured rates, each saying what it counted -- and no verdict. */
+  /* Three measured rates, each saying what it counted -- and no verdict.
+     These are the index path's approved labels (§6): what is counted, not
+     "success" or "risk". */
   ok('the record is summarised as three rates',
      /The record, as three rates/.test(out) &&
-     /Historical success rate/.test(out) &&
-     /Benchmark outperformance rate/.test(out) &&
-     /Historical downside risk/.test(out), out.slice(0, 200));
+     /Windows ending above zero/.test(out) &&
+     /Outperformance Frequency \(%\)/.test(out) &&
+     /Minimum Rolling Return/.test(out), out.slice(0, 200));
   ok('the outperformance rate is measured once a benchmark is loaded',
-     !/Benchmark outperformance rate\s*not measured/.test(out), out.slice(0, 200));
+     !/Outperformance Frequency \(%\)\s*not measured/.test(out), out.slice(0, 200));
   ok('and it carries the note that consistency guarantees nothing',
      /Past historical consistency does not guarantee future results/.test(out));
   ok('no card on this screen tells the reader to buy, sell, switch or hold',
@@ -319,6 +334,7 @@ function plainFile(file, rate, fromY, toY, start = 100) {
   ok('the outperformance figure is a share of matched periods',
      /Outperformance Frequency \(%\)/.test(out) && /matched periods/.test(out), out.slice(0, 200));
   ok('only shared dates are compared', /both sets of data cover/.test(out));
+
 
   /* ------------------------------------------------------------ refusals */
   section('It refuses rather than guessing');

@@ -805,46 +805,81 @@
    * clearly outweigh the index-side words, or nothing is claimed. A file that
    * says neither (a bare date,value paste) stays null and passes any door.
    */
+  /* Each signal is tried two ways: as a word pattern on the file's text with
+   * separators kept, and as a substring of the text with every separator
+   * stripped -- because NSE writes "TotalReturnsIndex" and "HistoricalDate"
+   * as single camelCase words that no \s* can bridge. A signal counts once
+   * however many ways it matches. Third column: the compact form (or null
+   * where the compact form would be unsafe -- "tri" is inside "distribution"). */
   var NAV_SIGNALS = [
-    [/net[\s_-]*asset[\s_-]*value/i, 3, 'Net Asset Value'],
-    [/historical\s+nav|nav\s+history/i, 3, 'Historical NAV'],
-    [/\bnav\b/i, 3, 'a NAV column'],
-    [/repurchase/i, 3, 'Repurchase Price'],
-    [/\bsale\s*price\b/i, 2, 'Sale Price'],
-    [/\bmutual\s*fund\b/i, 2, 'Mutual Fund'],
-    [/\bscheme\b/i, 2, 'a Scheme column'],
-    [/\b(direct|regular)[\s_-]*plan\b/i, 2, 'a Direct/Regular plan name'],
-    [/\bidcw\b|\bdividend\s*payout\b/i, 2, 'IDCW'],
-    [/\bfolio\b/i, 2, 'Folio'],
-    [/\bfund\b/i, 1, 'a fund name'],
-    [/\bgrowth\b/i, 1, 'a Growth option']
+    [/net[\s_-]*asset[\s_-]*value/i, 3, 'Net Asset Value', 'netassetvalue'],
+    [/historical\s+nav|nav\s+history/i, 3, 'Historical NAV', 'navhistory'],
+    [/\bnav\b/i, 3, 'a NAV column', null],
+    [/repurchase/i, 3, 'Repurchase Price', 'repurchase'],
+    [/\bsale\s*price\b/i, 2, 'Sale Price', 'saleprice'],
+    [/\bmutual\s*fund\b/i, 2, 'Mutual Fund', 'mutualfund'],
+    [/\bscheme\b/i, 2, 'a Scheme column', 'schemename'],
+    [/\b(direct|regular)[\s_-]*plan\b/i, 2, 'a Direct/Regular plan name', 'directplan'],
+    [/\bidcw\b|\bdividend\s*payout\b/i, 2, 'IDCW', null],
+    [/\bfolio\b/i, 2, 'Folio', 'folio'],
+    [/\bfund\b/i, 1, 'a fund name', null],
+    [/\bgrowth\b/i, 1, 'a Growth option', null]
   ];
   var INDEX_SIGNALS = [
-    [/total[\s_-]*returns?[\s_-]*index/i, 4, 'Total Returns Index'],
-    [/\bntr[\s_-]*values?\b/i, 3, 'NTR values'],
-    [/historical[\s_-]*index[\s_-]*data/i, 3, 'Historical Index Data'],
-    [/\bindex[\s_-]*(value|name|date)\b/i, 2, 'an Index value/name column'],
-    [/\btri\b/i, 2, 'TRI'],
-    [/\b(nifty|sensex)\b/i, 2, 'an index name (Nifty/Sensex)'],
-    [/\b(open|high|low|closing?)[\s_-]*index\b|\bday[\s_-]*(high|low)\b/i, 2, 'Open/High/Low/Close index columns'],
-    [/\bturnover\b/i, 1, 'Turnover'],
-    [/\bp\/e\b/i, 1, 'P/E'],
-    [/div[\s_-]*yield/i, 1, 'Div Yield']
+    [/total[\s_-]*returns?[\s_-]*index/i, 4, 'Total Returns Index', 'totalreturnsindex'],
+    [/\bntr[\s_-]*values?\b/i, 3, 'NTR values', 'ntrvalue'],
+    [/historical[\s_-]*index[\s_-]*data/i, 3, 'Historical Index Data', 'historicalindexdata'],
+    [/\bindex[\s_-]*(value|name|date)\b/i, 2, 'an Index value/name column', 'indexname'],
+    [/\btri\b/i, 2, 'TRI', null],
+    [/\b(nifty|sensex)\b/i, 2, 'an index name (Nifty/Sensex)', 'nifty'],
+    [/\b(open|high|low|closing?)[\s_-]*index\b|\bday[\s_-]*(high|low)\b/i, 2,
+      'Open/High/Low/Close index columns', 'openindex'],
+    [/historical[\s_-]*date\b/i, 2, 'a HistoricalDate column', 'historicaldate'],
+    [/\bshares\s*traded\b/i, 2, 'Shares Traded', 'sharestraded'],
+    [/\bturnover\b/i, 1, 'Turnover', 'turnover'],
+    [/\bp\/e\b/i, 1, 'P/E', null],
+    [/div[\s_-]*yield/i, 1, 'Div Yield', 'divyield']
   ];
 
-  function guessDataKind(rows) {
+  function guessDataKind(rows, fileName) {
     var out = { kind: null, navScore: 0, indexScore: 0, navFound: [], indexFound: [] };
     if (!rows || !rows.length) return out;
     /* the header rows and a sample of the body carry every naming there is */
     var text = rows.slice(0, 60).map(function (r) {
       return (r || []).map(function (c) { return String(c == null ? '' : c); }).join(' ');
     }).join('\n');
-    NAV_SIGNALS.forEach(function (s) {
-      if (s[0].test(text)) { out.navScore += s[1]; out.navFound.push(s[2]); }
+    var compact = text.toLowerCase().replace(/[^a-z0-9]+/g, '');
+    function score(signals, side, found) {
+      signals.forEach(function (s) {
+        if (s[0].test(text) || (s[3] && compact.indexOf(s[3]) !== -1)) {
+          out[side] += s[1]; found.push(s[2]);
+        }
+      });
+    }
+    score(NAV_SIGNALS, 'navScore', out.navFound);
+    score(INDEX_SIGNALS, 'indexScore', out.indexFound);
+
+    /* A header of Open/High/Low/Close is market data whatever else it says:
+     * a NAV has one value a day, never a traded range. Count the four words
+     * across the first rows (NSE writes them as bare uppercase headings). */
+    var ohlc = 0;
+    ['open', 'high', 'low', 'close'].forEach(function (w) {
+      if (new RegExp('\\b' + w + '\\b', 'i').test(text)) ohlc++;
     });
-    INDEX_SIGNALS.forEach(function (s) {
-      if (s[0].test(text)) { out.indexScore += s[1]; out.indexFound.push(s[2]); }
-    });
+    if (ohlc >= 3) { out.indexScore += 3; out.indexFound.push('Open/High/Low/Close columns'); }
+
+    /* The file's own name testifies too: NSE names its exports after the
+     * index ("NIFTY 50_Data.csv") and often says nothing inside the file,
+     * while AMFI names them NAV_<from>_to_<to>.xlsx. Weighted below any
+     * content signal so words inside the file always outrank the label on it. */
+    var nm = String(fileName == null ? '' : fileName).replace(/[_.\-]+/g, ' ');
+    if (/\b(nifty|sensex|tri|index)\b/i.test(nm) && !/\bfund\b/i.test(nm)) {
+      out.indexScore += 2; out.indexFound.push('the file’s name (' + nm.trim() + ')');
+    }
+    if (/\bnav\b/i.test(nm)) {
+      out.navScore += 2; out.navFound.push('the file’s name (' + nm.trim() + ')');
+    }
+
     var hi = Math.max(out.navScore, out.indexScore);
     var lo = Math.min(out.navScore, out.indexScore);
     /* decide only on a clear verdict: a real score, a real margin, dominance */

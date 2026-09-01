@@ -351,7 +351,21 @@
              on camera, on 1 September 2026 — including both failure modes. -->
         <details class="explain">
           <summary>How to download NAV history from AMFI</summary>
-          <div class="body">
+          <div class="body howto">
+            <p class="howto-lede">Read the steps, or watch the same download done on a phone
+            &mdash; whichever suits you.</p>
+            <div class="howto-pick">
+              <button class="secondary howto-btn" type="button" data-show="read"
+                      data-always-on="yes" aria-pressed="false">Read Instructions</button>
+              <button class="secondary howto-btn" type="button" data-show="video"
+                      data-always-on="yes" aria-pressed="false">Watch Video</button>
+            </div>
+            <div class="howto-video" hidden>
+              <video controls playsinline preload="none" src="media/amfi-nav-download.mp4"></video>
+              <p class="hint">A real download from amfiindia.com, recorded on a phone &mdash;
+              including what a failed attempt looks like and how it was fixed. 1 minute.</p>
+            </div>
+            <div class="howto-read" hidden>
             <p>On <strong>amfiindia.com</strong>: NAV &rarr; <strong>NAV History</strong> &rarr;
             tick &ldquo;Historical NAV for a period&rdquo;. Select the fund house, then the exact
             scheme you hold &mdash; Direct and Regular, Growth and IDCW are all listed
@@ -367,6 +381,7 @@
             <p>The green Excel icon downloads
             <code>NAV_&lt;from&gt;_to_&lt;to&gt;.xlsx</code>. Load that file here exactly as it
             arrives, and skip the Word icon next to it.</p>
+            </div><!-- /howto-read -->
           </div>
         </details>
         <!-- The bundled-history chooser is built into this slot only when there
@@ -419,7 +434,21 @@
 
       <details class="explain">
         <summary>Where do I get my fund’s NAV file?</summary>
-        <div class="body">
+        <div class="body howto">
+          <p class="howto-lede">Read the steps, or watch the same download done on a phone
+          &mdash; whichever suits you.</p>
+          <div class="howto-pick">
+            <button class="secondary howto-btn" type="button" data-show="read"
+                    data-always-on="yes" aria-pressed="false">Read Instructions</button>
+            <button class="secondary howto-btn" type="button" data-show="video"
+                    data-always-on="yes" aria-pressed="false">Watch Video</button>
+          </div>
+          <div class="howto-video" hidden>
+            <video controls playsinline preload="none" src="media/amfi-nav-download.mp4"></video>
+            <p class="hint">A real NAV download from amfiindia.com, recorded on a phone &mdash;
+            including what a failed attempt looks like and how it was fixed. 1 minute.</p>
+          </div>
+          <div class="howto-read" hidden>
           <p>On amfiindia.com: NAV &rarr; NAV History &rarr; &ldquo;Historical NAV for a
           period&rdquo; &rarr; your fund house &rarr; the exact scheme &rarr; From and To dates
           (typed MM/DD/YYYY, at most 5 years at a time) &rarr; GO, pressed once &mdash; it can
@@ -430,6 +459,7 @@
           <p>It reads AMFI’s semicolon files, ordinary comma files and Excel workbooks. Dates can be
           05-08-2026, 05-Aug-2026 or 2026-08-05. Rows it cannot read are counted and shown to you
           rather than quietly dropped.</p>
+          </div><!-- /howto-read -->
         </div>
       </details>
     </div>
@@ -487,7 +517,11 @@
   </div>
 
   <!-- 4 ------------------------------------------------------------------ -->
-  <div class="card step" id="step-compare">
+  <!-- Hidden on every path now. The market-index path answers the comparison
+       question inside step 1's card 2; the my-own-fund path offers no
+       comparison at all. The element stays as the parking bay for the
+       comparison nodes the index path reparents into card 2. -->
+  <div class="card step" id="step-compare" hidden>
     <h2><span class="stepno">4</span> Compare against <span class="optional">optional</span></h2>
     <!-- Card B. Shown only on the market-index path, where the specification
          names this door and says what belongs behind it. The fund path keeps
@@ -506,7 +540,21 @@
           <summary>Where do I get an index file?</summary>
           <!-- Route verified on a phone against niftyindices.com, on camera,
                on 1 September 2026 — including the one-year refusal. -->
-          <div class="body">
+          <div class="body howto">
+            <p class="howto-lede">Read the steps, or watch the same download done on a phone
+            &mdash; whichever suits you.</p>
+            <div class="howto-pick">
+              <button class="secondary howto-btn" type="button" data-show="read"
+                      data-always-on="yes" aria-pressed="false">Read Instructions</button>
+              <button class="secondary howto-btn" type="button" data-show="video"
+                      data-always-on="yes" aria-pressed="false">Watch Video</button>
+            </div>
+            <div class="howto-video" hidden>
+              <video controls playsinline preload="none" src="media/nse-tri-download.mp4"></video>
+              <p class="hint">A real TRI download from niftyindices.com, recorded on a phone
+              &mdash; including the 1-year limit and how to work inside it. 1 minute.</p>
+            </div>
+            <div class="howto-read" hidden>
             <p>Download it from the index provider’s own site — for Indian equity indices that is
             NSE Indices, <strong>niftyindices.com</strong>. The route: menu &rarr; Reports &rarr;
             <strong>Historical Data</strong>, then switch the report dropdown from
@@ -526,6 +574,7 @@
             price index &mdash; it does not, and will read several percent a year lower than what
             an investor actually received. When this tool asks which kind you loaded, answer TRI
             only for the total-returns download.</p>
+            </div><!-- /howto-read -->
           </div>
         </details>
     </div>

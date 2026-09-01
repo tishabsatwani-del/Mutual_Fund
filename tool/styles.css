@@ -1065,3 +1065,18 @@ table.data.wide td:first-child, table.data.wide th:first-child { min-width: 9rem
 .val-fields .label {
   display: block; font-size: .78rem; font-weight: 600; margin-bottom: .25rem; color: var(--ink-2);
 }
+
+/* ------------------------------------------------- how-to: read or watch
+   The help panels open to a choice rather than a wall of text: two buttons,
+   and only the chosen medium is drawn. The pressed one stays marked. */
+.howto-lede { margin: 0 0 .55rem; }
+.howto-pick { display: flex; gap: .6rem; flex-wrap: wrap; margin: 0 0 .7rem; }
+.howto-btn[aria-pressed="true"] {
+  border-color: var(--accent); color: var(--accent);
+  background: var(--accent-soft, rgba(5, 255, 196, .08));
+}
+.howto-video video {
+  width: 100%; max-height: 70vh; display: block;
+  border-radius: 10px; background: #000; border: 1px solid var(--line);
+}
+.howto-video .hint { margin-top: .45rem; }

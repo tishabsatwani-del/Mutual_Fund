@@ -862,6 +862,28 @@ section('Which KIND of history: a NAV file and an index file tell themselves apa
      dataKindOf('Date,Value\n2021-01-01,100\n2021-01-04,101\n'), null);
   eq('and a lone weak hit is not a verdict',
      dataKindOf('Date,Close\n2021-01-01,100\n'), null);
+
+  /* The shapes that slipped through on a real phone. NSE's own csv writes
+     "TotalReturnsIndex" and "HistoricalDate" as single camelCase words that a
+     \s* cannot bridge, and its price export can carry nothing but bare
+     OPEN/HIGH/LOW/CLOSE headings -- the index's name lives only in the file
+     name. Each of these was accepted at the Primary door and must not be. */
+  var kindWithName = function (text, name) {
+    return P.guessDataKind(P.parseDelimited(text), name).kind;
+  };
+  eq('NSE’s camelCase TRI csv reads as index data',
+     dataKindOf('HistoricalDate,TotalReturnsIndex\n31 Aug 2026,36579.00\n'), 'index');
+  eq('a bare OPEN/HIGH/LOW/CLOSE header reads as index data',
+     dataKindOf('Date,OPEN,HIGH,LOW,CLOSE\n31 Aug 2026,24117.55,24128.7,23993.6,24080.40\n'),
+     'index');
+  eq('a nameless date,value csv named after an index reads as index data',
+     kindWithName('HistoricalDate,CLOSE\n31 Aug 2026,24080.40\n01 Sep 2026,24055.80\n',
+                  'NIFTY 50_Data.csv'), 'index');
+  eq('but a fund named after the index it tracks stays fund data',
+     kindWithName('Scheme Name,Date,NAV\nAcme Nifty 50 Index Fund - Growth,2021-01-01,12.5\n',
+                  'nifty50-index-fund-nav.xlsx'), 'nav');
+  eq('and AMFI’s own file name is NAV evidence',
+     kindWithName('Date,Value\n2021-01-01,100\n', 'NAV_2022-09-01_to_2026-08-19.xlsx'), null);
 }
 
 

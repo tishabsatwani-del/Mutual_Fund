@@ -702,13 +702,16 @@ function textValueFile(file) {
   await page.waitForTimeout(300);
   ok('on the fund path Card B is hidden',
      await page.locator('#up-benchmark-head').isHidden());
-  ok('step 4 comes back, because that path still needs it',
-     await page.locator('#step-compare').isVisible());
-  ok('and the benchmark upload is back inside it, where that path expects it',
+  /* My own fund offers no comparison at all: whoever wants their fund
+     measured against an index has the Market index path. Step 4 stays
+     hidden and serves only as the parking bay for the comparison nodes. */
+  ok('step 4 does NOT come back — the fund path offers no comparison',
+     await page.locator('#step-compare').isHidden());
+  ok('but the benchmark upload is parked inside it, intact for the way back',
      await page.evaluate(() => !!document.querySelector('#step-compare #cmp-file')) &&
      await page.evaluate(() => !!document.querySelector('#step-compare #r-compare-field')));
-  ok('with the lede counting four again',
-     /Set the four things below/.test(await page.locator('#r-lede').innerText()),
+  ok('with the lede counting three on this path too',
+     /Set the three things below/.test(await page.locator('#r-lede').innerText()),
      await page.locator('#r-lede').innerText());
   ok('with exactly one of it, not a copy left behind',
      (await page.locator('#cmp-file').count()) === 1 &&

@@ -2388,6 +2388,32 @@
     }
   }
 
+  /* The help panels open to a choice — Read Instructions or Watch Video —
+   * instead of a wall of text. The video is the phone recording the written
+   * instructions were verified against, bundled with the tool so nothing is
+   * fetched from anywhere at runtime. */
+  function wireHowto() {
+    $$('.howto').forEach(function (box) {
+      var read = box.querySelector('.howto-read');
+      var vid = box.querySelector('.howto-video');
+      if (!read || !vid) return;
+      $$('.howto-btn', box).forEach(function (b) {
+        b.addEventListener('click', function () {
+          var show = b.dataset.show;
+          read.hidden = show !== 'read';
+          vid.hidden = show !== 'video';
+          $$('.howto-btn', box).forEach(function (o) {
+            o.setAttribute('aria-pressed', o === b ? 'true' : 'false');
+          });
+          if (show !== 'video') {
+            var v = vid.querySelector('video');
+            if (v) v.pause();
+          }
+        });
+      });
+    });
+  }
+
   function wireDoors() {
     ['a', 'b'].forEach(function (d) {
       var btn = $('#door-' + d);
@@ -2464,12 +2490,18 @@
       sayHowMany(3);
     } else {
       head.hidden = true;
+      /* My own fund analyses one fund on its own: the reader who wants their
+         fund measured against an index has the Market index path, where
+         card 2 holds the benchmark. So the whole step goes here — not just
+         the duplicate chooser — and nothing on this path offers a
+         comparison. The nodes are still parked in the hidden step so the
+         index path can take them back intact. */
       if (step) {
-        step.hidden = false;
+        step.hidden = true;
         if (upload.parentNode !== step) step.appendChild(upload);
         if (overlap && overlap.parentNode !== step) step.appendChild(overlap);
       }
-      sayHowMany(4);
+      sayHowMany(3);
     }
     placeCompareField(onIndex);
   }
@@ -2921,20 +2953,27 @@
    * is (parse.guessDataKind), so each door now states what it expected, what
    * it found, and which door the file actually belongs to. A file that names
    * neither kind still passes: a bare date,value paste is not evidence. */
-  function kindRefusal(rows, expect) {
+  function kindRefusal(rows, expect, fileName, door) {
     if (!rows || !P.guessDataKind) return null;
-    var g = P.guessDataKind(rows);
+    var g = P.guessDataKind(rows, fileName);
     if (!g.kind || g.kind === expect) return null;
     var found = (g.kind === 'index' ? g.indexFound : g.navFound).slice(0, 3)
       .map(function (s) { return '<strong>' + esc(s) + '</strong>'; }).join(', ');
     if (g.kind === 'index') {
+      if (door === 'fund') {
+        return notice('bad',
+          '<strong>This looks like index data, not a fund’s NAV.</strong> It shows ' + found +
+          '. This door analyses a single fund’s own NAV history. To measure your fund ' +
+          'against an index, use the <strong>Market index</strong> path: your fund’s NAV in ' +
+          'card 1, the index file in card 2.');
+      }
       return notice('bad',
-        '<strong>This looks like index data, not your investment data.</strong> The file ' +
-        'mentions ' + found + '. Index history belongs in card 2 — Benchmark Index Data ' +
+        '<strong>This looks like index data, not your investment data.</strong> It shows ' +
+        found + '. Index history belongs in card 2 — Benchmark Index Data ' +
         '(TRI). This card takes your own fund’s NAV history, CAS, or portfolio value series.');
     }
     return notice('bad',
-      '<strong>This looks like fund NAV data, not index data.</strong> The file mentions ' +
+      '<strong>This looks like fund NAV data, not index data.</strong> It shows ' +
       found + '. A fund’s NAV history belongs in card 1 — Primary Investment Data (NAV). ' +
       'This card takes the benchmark index history itself (for example, Nifty 50 TRI ' +
       'downloaded from niftyindices.com).');
@@ -2988,7 +3027,7 @@
       /* The gate runs on the raw rows, before the file becomes a series: by
          the time there is a series the tradebook has already been read as
          prices and nothing downstream can tell. */
-      var refused = schemaRefusal(res.rows) || kindRefusal(res.rows, 'nav');
+      var refused = schemaRefusal(res.rows) || kindRefusal(res.rows, 'nav', file.name);
       if (refused) {
         $('#r-scheme-wrap').hidden = true;
         dropRejected('bm', file.name);
@@ -3010,7 +3049,7 @@
       /* Before the parser's own words, the gate's. "Only 0 usable rows could
          be read" is a true description of a tradebook and a useless one. */
       var bad = extra && extra.rows
-        ? (schemaRefusal(extra.rows) || kindRefusal(extra.rows, 'nav')) : null;
+        ? (schemaRefusal(extra.rows) || kindRefusal(extra.rows, 'nav', file.name)) : null;
       if (bad) {
         $('#r-scheme-wrap').hidden = true;
         dropRejected('bm', file.name);
@@ -3062,6 +3101,16 @@
     dropReading('f', file.name);
     dropSay('f', '');
     A.readFile(file, function (res) {
+      /* The same wrong-door gate as the index path's two cards: an index file
+         here would be analysed under a fund's name. */
+      var refused = schemaRefusal(res.rows) || kindRefusal(res.rows, 'nav', file.name, 'fund');
+      if (refused) {
+        $('#r-scheme-wrap').hidden = true;
+        dropRejected('f', file.name);
+        dropSay('f', refused);
+        clearLoaded('', { rejected: true });
+        return;
+      }
       R.rows = res.rows || null;
       R.schemes = null;
       $('#r-scheme-wrap').hidden = true;
@@ -3069,6 +3118,15 @@
       setLoaded(res.series, res.report.scheme || file.name.replace(/\.[^.]+$/, ''),
                 { report: res.report });
     }, function (msg, extra) {
+      var gated = extra && extra.rows
+        ? (schemaRefusal(extra.rows) || kindRefusal(extra.rows, 'nav', file.name, 'fund')) : null;
+      if (gated) {
+        $('#r-scheme-wrap').hidden = true;
+        dropRejected('f', file.name);
+        dropSay('f', gated);
+        clearLoaded('', { rejected: true });
+        return;
+      }
       /* one file, many schemes: let the reader pick theirs out of it */
       if (extra && extra.schemes && extra.rows) {
         dropAdded('f', file.name, null,
@@ -3276,14 +3334,14 @@
                would be harder to spot: it would arrive as a comparison line
                rather than as the headline figure. Market-index path only. */
             var refused = R.source === 'index'
-              ? (schemaRefusal(res.rows) || kindRefusal(res.rows, 'index')) : null;
+              ? (schemaRefusal(res.rows) || kindRefusal(res.rows, 'index', file.name)) : null;
             if (refused) { dropRejected('cmp', file.name); dropSay('cmp', refused); return; }
             var nm = res.report.scheme || file.name.replace(/\.[^.]+$/, '');
             dropAdded('cmp', file.name, res.report);
             useAsBenchmark(res.series, nm);
           }, function (msg, extra) {
             var gated = (R.source === 'index' && extra && extra.rows)
-              ? (schemaRefusal(extra.rows) || kindRefusal(extra.rows, 'index')) : null;
+              ? (schemaRefusal(extra.rows) || kindRefusal(extra.rows, 'index', file.name)) : null;
             if (gated) { dropRejected('cmp', file.name); dropSay('cmp', gated); return; }
             if (extra && extra.schemes && extra.rows) {
               dropAdded('cmp', file.name, null,
@@ -4047,6 +4105,7 @@
 
     /* rolling returns: one module, four steps, nothing hidden */
     wireDoors();
+    wireHowto();
     yearChips();
     freqChips();
     gateSteps();

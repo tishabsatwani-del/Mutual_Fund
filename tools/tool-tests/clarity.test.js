@@ -124,7 +124,28 @@ function longFile(file) {
   }
   await page.locator('#up-benchmark-head details summary').click();
   await page.waitForTimeout(200);
-  const idx = await page.locator('#up-benchmark-head details .body').innerText();
+  /* The panel opens to a choice now -- Read Instructions or Watch Video --
+     so the text is behind the first button and the recording behind the
+     second. Both media stay bundled with the tool: nothing is fetched. */
+  const pick = await page.locator('#up-benchmark-head .howto-btn').allInnerTexts();
+  ok('it offers the choice of reading or watching',
+     pick.join('|') === 'Read Instructions|Watch Video', pick.join('|'));
+  ok('and neither medium is forced on the reader first',
+     await page.locator('#up-benchmark-head .howto-read').isHidden() &&
+     await page.locator('#up-benchmark-head .howto-video').isHidden());
+  await page.locator('#up-benchmark-head .howto-btn[data-show="video"]').click();
+  await page.waitForTimeout(150);
+  ok('Watch Video reveals the bundled recording, fetched from the tool itself',
+     await page.locator('#up-benchmark-head .howto-video video').isVisible() &&
+     /media\/nse-tri-download\.mp4$/.test(
+       await page.locator('#up-benchmark-head .howto-video video').getAttribute('src')),
+     await page.locator('#up-benchmark-head .howto-video video').getAttribute('src'));
+  await page.locator('#up-benchmark-head .howto-btn[data-show="read"]').click();
+  await page.waitForTimeout(150);
+  ok('and Read Instructions swaps the video away for the text',
+     await page.locator('#up-benchmark-head .howto-video').isHidden() &&
+     await page.locator('#up-benchmark-head .howto-read').isVisible());
+  const idx = await page.locator('#up-benchmark-head details .howto-read').innerText();
   ok('it says where index data comes from', /index provider/i.test(idx));
   ok('it names the two columns needed', /a date/i.test(idx) && /index value on that date/i.test(idx));
   ok('it explains TRI versus a price index', /Total Return Index/.test(idx) && /dividends/.test(idx));
