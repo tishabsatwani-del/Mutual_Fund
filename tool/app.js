@@ -324,8 +324,36 @@
       return;
     }
     if (/\.xlsx?$/.test(name)) {
+      /* A real multi-tab workbook -- a CAS, a portal export -- often opens on
+         a cover page, and reading tab 1 out of that used to hand the reader
+         a hard refusal for a file whose data sat one tab over. So every tab
+         is tried in order, and the first that yields a series (or the
+         many-schemes question, which is a series with a choice on it) is the
+         one read. Only when NO tab holds a table does the refusal stand, and
+         it is tab 1's, with the tab count named. */
       readWorkbook(file).then(function (rows) {
-        finish(P.rowsToSeries(rows), rows);
+        var res = P.rowsToSeries(rows);
+        if (res.ok || res.code === 'MANY_SCHEMES') { finish(res, rows); return null; }
+        return WB.listSheets(file).then(function (names) {
+          var i = 1;
+          function tryNext() {
+            if (i >= names.length) {
+              if (names.length > 1) {
+                res.message = 'None of the ' + names.length + ' sheets in this workbook holds ' +
+                  'a readable table of dates and values. On the first sheet: ' + res.message;
+              }
+              finish(res, rows);
+              return;
+            }
+            var nm = names[i++];
+            return WB.readWorkbook(file, nm).then(function (rows2) {
+              var r2 = P.rowsToSeries(rows2);
+              if (r2.ok || r2.code === 'MANY_SCHEMES') { finish(r2, rows2); return; }
+              return tryNext();
+            }).catch(tryNext);
+          }
+          return tryNext();
+        }).catch(function () { finish(res, rows); });
       }).catch(function (err) {
         onError('That Excel file could not be read here (' + err.message + '). Open it and save it as CSV, then load that.');
       });

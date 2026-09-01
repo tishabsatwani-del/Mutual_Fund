@@ -1080,3 +1080,56 @@ table.data.wide td:first-child, table.data.wide th:first-child { min-width: 9rem
   border-radius: 10px; background: #000; border: 1px solid var(--line);
 }
 .howto-video .hint { margin-top: .45rem; }
+
+/* ---------------------------------------------- market-index results extras */
+.stickybar {
+  position: sticky; top: 0; z-index: 30;
+  display: flex; align-items: center; gap: .7rem; flex-wrap: wrap;
+  margin: 0 0 .8rem; padding: .5rem .8rem;
+  background: var(--surface-2, #10161e); border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.stickybar .sb-name {
+  font-weight: 700; max-width: 40%; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+.stickybar .sb-fact { color: var(--ink-2); font-size: .88rem; }
+.stickybar .printbtn { margin-left: auto; padding: .3rem .7rem; font-size: .82rem; }
+
+svg.rollline { width: 100%; height: auto; display: block; }
+.rl-line   { fill: none; stroke: var(--accent); stroke-width: 1.6; }
+.rl-guide  { stroke: var(--ink-2); stroke-width: 1; stroke-dasharray: 4 4; opacity: .55; }
+.rl-zero   { stroke: var(--ink-2); stroke-width: 1; opacity: .8; }
+.rl-glabel { fill: var(--ink-2); font-size: 11px; }
+.rl-axis   { fill: var(--ink-2); font-size: 11px; }
+
+details.overlapinfo summary, details.teachnotes summary { color: var(--ink-2); }
+.ratioline { margin: .5rem 0 0; }
+table.hmatrix td, table.hmatrix th { white-space: nowrap; }
+
+@media print {
+  .topbar, .doors, .filebox, .pastebox, .btnrow, .printbtn, .ratepresets,
+  #up-doors, .backlink { display: none !important; }
+  .stickybar { position: static; }
+  body { background: #fff; color: #000; }
+  .card, .meaning { break-inside: avoid; border-color: #bbb; }
+}
+
+/* The horizon matrix must not stack on a phone: eight columns of
+   percentages stacked read as one anonymous list. It stays a real table and
+   scrolls sideways inside its .scroll wrapper, headings attached. Scoped to
+   .hmatrix alone — the market-index path's table — so nothing else changes. */
+@media (max-width: 30rem) {
+  table.data.hmatrix { display: table; font-size: .82rem; }
+  table.data.hmatrix thead { display: table-header-group; }
+  table.data.hmatrix tbody { display: table-row-group; }
+  table.data.hmatrix tr, table.data.hmatrix thead tr {
+    display: table-row; padding: 0; border-bottom: 0;
+  }
+  table.data.hmatrix td, table.data.hmatrix th {
+    display: table-cell; margin: 0; padding: .45rem .4rem;
+    border-bottom: 1px solid var(--line);
+    overflow-wrap: normal; word-break: normal; white-space: nowrap;
+  }
+  table.data.hmatrix th { font-size: .66rem; letter-spacing: .03em; }
+}

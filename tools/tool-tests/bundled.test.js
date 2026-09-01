@@ -106,10 +106,19 @@ function pretty(iso) {
     const spread = await page.locator('#r-out table.spread').first().locator('td').allInnerTexts();
     ok('a 10% series measures 10% across every percentile',
        spread.every(v => v.trim() === '10.0%'), spread.join('|'));
-    ok('and the horizon comparison shows a zero spread at every length',
+    /* The index path's horizon table is the extended matrix now: percentile
+       bands instead of a Spread column. On a 10% constant series every
+       return cell of every row must read 10.0%. */
+    ok('and the horizon matrix shows identical worst and best at every length',
        await (async () => {
-         const t = (await page.locator('#r-out table.spread').nth(1).innerText()).replace(/\s+/g, ' ');
-         return /1 year/.test(t) && /Spread/i.test(t) && !/[1-9]\d*\.\d points/.test(t);
+         const rows = page.locator('#r-out table.hmatrix tbody tr');
+         const n = await rows.count();
+         if (n < 2) return false;
+         for (let i = 0; i < n; i++) {
+           const tds = await rows.nth(i).locator('td').allInnerTexts();
+           if (tds[1].trim() !== '10.0%' || tds[5].trim() !== '10.0%') return false;
+         }
+         return true;
        })());
     ok('positive and negative shares are shown', /Made money/i.test(out) && /Lost money/i.test(out));
     ok('the distribution chart is drawn', (await page.locator('#r-out svg').count()) >= 1);

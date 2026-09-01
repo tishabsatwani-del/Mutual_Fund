@@ -383,6 +383,22 @@ execFileSync('python3', [path.join(__dirname, 'fixtures', 'make_upload_fixtures.
   ok('and it points at the door the file belongs to',
      /card 1/.test(wrongB) && /Primary Investment Data/.test(wrongB), wrongB);
 
+  /* ============================================= a workbook that opens on a cover */
+  section('A multi-tab workbook is read from the tab that holds the data');
+  await open('index');
+  await page.setInputFiles('#bm-file', f('cas-multitab.xlsx'));
+  await page.waitForTimeout(4000);
+  const multitab = await boxText('bm-drop');
+  ok('the cover page does not defeat the workbook',
+     (await page.locator('#bm-drop.loaded').count()) === 1, multitab);
+  ok('the data was found on the later tab, whole',
+     /[\d,]+ rows read/.test(multitab) && /01-Jan-2014 to 01-Jan-2025/.test(multitab), multitab);
+  await page.click('#r-run');
+  await page.waitForTimeout(2000);
+  ok('and an 11% workbook measures 11% a year',
+     /Median Rolling Return 11\.0%/.test(flat(await page.locator('#r-out').innerText())),
+     (flat(await page.locator('#r-out').innerText())).match(/Median Rolling Return[^A-Z]{0,20}/));
+
   /* ================================================== what was removed, gone */
   section('The empty dropdown is gone');
   await open('index');

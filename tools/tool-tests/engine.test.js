@@ -1035,6 +1035,38 @@ eq('one row has no gap to measure', E.medianGapDays([{ t: 0, v: 1 }]), null);
 eq('and no series, none either', E.medianGapDays(null), null);
 
 
+
+section('Percentile bands and downside deviation — closed-form');
+{
+  var ten = [];
+  for (var pv = 1; pv <= 10; pv++) ten.push(pv);
+  var dsc = E.rollingReturns ? null : null; /* describe is internal; reach it through rollingReturns? no — test the exported surface */
+  /* describe() is not exported; its p10/p90 reach the screen through
+     rollingReturns().stats, so build a series whose window returns are known
+     and read the stats. A 12%-constant series gives p10 = p90 = 12%. */
+  var steady10 = (function () {
+    var out = [], t = Date.UTC(2010, 0, 1), t0 = t, end = Date.UTC(2025, 0, 1);
+    while (t <= end) {
+      out.push({ t: t, v: 100 * Math.pow(1.12, (t - t0) / 86400000 / 365.2425) });
+      t += 86400000;
+    }
+    return out;
+  })();
+  var r10 = E.rollingReturns(steady10, 5);
+  ok('a constant-growth series has flat percentile bands',
+     r10.ok && Math.abs(r10.stats.p10 - 0.12) < 5e-4 && Math.abs(r10.stats.p90 - 0.12) < 5e-4,
+     r10.ok ? 'p10 ' + r10.stats.p10 + ' p90 ' + r10.stats.p90 : r10.message);
+  ok('and the bands sit inside min and max',
+     r10.stats.min <= r10.stats.p10 && r10.stats.p10 <= r10.stats.median &&
+     r10.stats.median <= r10.stats.p90 && r10.stats.p90 <= r10.stats.max);
+
+  close('downside deviation of [-10%,0,10%,20%] below a 5% mark',
+        E.downsideDeviation([-0.10, 0, 0.10, 0.20], 0.05),
+        Math.sqrt((0.15 * 0.15 + 0.05 * 0.05) / 4), 1e-12);
+  eq('one value has no deviation to measure', E.downsideDeviation([0.1], 0.05), null);
+  close('all values above the mark measure zero',
+        E.downsideDeviation([0.10, 0.12, 0.14], 0.05), 0, 1e-12);
+}
 console.log('\n' + passed + ' passed, ' + failed.length + ' failed');
 if (failed.length) {
   console.log('\nFAILED:\n  ' + failed.join('\n  '));

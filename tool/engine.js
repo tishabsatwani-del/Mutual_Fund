@@ -319,8 +319,10 @@
       max: sorted[n - 1],
       mean: sum / n,
       median: median(sorted),
+      p10: quantile(sorted, 0.10),
       p25: quantile(sorted, 0.25),
       p75: quantile(sorted, 0.75),
+      p90: quantile(sorted, 0.90),
       positiveShare: pos / n,
       negativeShare: (n - pos) / n,
       /* Sample standard deviation, n-1, which is what "volatility" means
@@ -329,6 +331,21 @@
        * as "this never moved", which is a different and much stronger claim. */
       stdev: stdevOf(sorted, sum / n)
     };
+  }
+
+  /* The Sortino denominator: root-mean-square of shortfalls below a minimum
+   * acceptable return, over ALL observations (windows at or above the mark
+   * contribute zero, not nothing). No default mark -- the caller supplies it,
+   * because assuming a risk-free rate would be inventing a number. */
+  function downsideDeviation(values, mar) {
+    var n = values.length;
+    if (n < 2 || !isFinite(mar)) return null;
+    var acc = 0;
+    for (var i = 0; i < n; i++) {
+      var short = values[i] - mar;
+      if (short < 0) acc += short * short;
+    }
+    return Math.sqrt(acc / n);
   }
 
   function stdevOf(values, mean) {
@@ -719,6 +736,7 @@
     sipGrowthFactor: sipGrowthFactor,
     projectGoal: projectGoal,
     maxDrawdown: maxDrawdown, combineEqualWeighted: combineEqualWeighted,
+    downsideDeviation: downsideDeviation,
     maxHorizon: maxHorizon, FREQUENCY: FREQUENCY, rangeOverlap: rangeOverlap,
     medianGapDays: medianGapDays,
     compareRolling: compareRolling,

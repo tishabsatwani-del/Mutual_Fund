@@ -129,6 +129,25 @@ try:
     for c in ws2['A']:
         c.number_format = 'DD-MMM-YYYY'
     wb2.save(os.path.join(OUT, 'amc-three-schemes.xlsx'))
+
+    # and a CAS-style workbook whose FIRST sheet is a cover page: the data
+    # lives on tab three, which is where CAMS and KFintech actually put it.
+    wb3 = Workbook()
+    cover = wb3.active
+    cover.title = 'Cover'
+    cover.append(['Consolidated Account Statement'])
+    cover.append(['Prepared for the unit holder'])
+    summary = wb3.create_sheet('Summary')
+    summary.append(['This statement summarises holdings as on date'])
+    data = wb3.create_sheet('NAV History')
+    data.append(['Date', 'NAV'])
+    v = 25.0
+    for d in days(2014, 2025):
+        data.append([d, round(v, 4)])
+        v *= (1.11) ** (1 / 365.2425)
+    for c in data['A']:
+        c.number_format = 'DD-MMM-YYYY'
+    wb3.save(os.path.join(OUT, 'cas-multitab.xlsx'))
 except ImportError:
     print('openpyxl missing: the two .xlsx fixtures were not written', file=sys.stderr)
 

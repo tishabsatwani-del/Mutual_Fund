@@ -1463,15 +1463,15 @@
      * advice about a shape there is no second point to make. */
     var thin = s.count < 3;
 
-    if (!thin && spanYears < years + 3) {
-      html += notice('bad',
-        '<strong>Read this range with suspicion.</strong> This data covers ' + spanYears.toFixed(1) +
+    var suspicion = (!thin && spanYears < years + 3)
+      ? '<strong>Read this range with suspicion.</strong> This data covers ' + spanYears.toFixed(1) +
         ' years and you have asked for ' + years + '-year windows, so every window here begins inside a ' +
         'band of about ' + Math.max(0, spanYears - years).toFixed(1) + ' years. They are not independent ' +
         'stretches of market &mdash; they are one stretch measured over and over with its edges moved a ' +
         'little. Three years of spare history is roughly the least it takes for windows to begin in ' +
-        'genuinely different markets. Shorten the window, or load a longer history.');
-    }
+        'genuinely different markets. Shorten the window, or load a longer history.'
+      : '';
+    if (suspicion && !o.indexPath) html += notice('bad', suspicion);
 
     /* ------------------------------------------------ how much is really here
      *
@@ -1487,14 +1487,34 @@
      * is computed from the independent figure and never from s.count.
      */
     var independent = Math.floor(spanYears / years);
-    if (!thin && independent < 12) {
-      html += '<p class="density"><span class="density-badge">Low data density</span> ' +
-        'These ' + s.count.toLocaleString() + ' windows overlap. Laid side by side without ' +
+    var densityText = (!thin && independent < 12)
+      ? 'These ' + s.count.toLocaleString() + ' windows overlap. Laid side by side without ' +
         'touching, this history holds <strong>' + independent +
         (independent === 1 ? ' non-overlapping ' + years + '-year period' :
                              ' non-overlapping ' + years + '-year periods') + '</strong> \u2014 ' +
         spanYears.toFixed(1) + ' years divided by ' + years + '. Read the range below as the shape ' +
-        'of that much market and no more.</p>';
+        'of that much market and no more.'
+      : '';
+    if (densityText && !o.indexPath) {
+      html += '<p class="density"><span class="density-badge">Low data density</span> ' +
+        densityText + '</p>';
+    }
+    /* The reviewer's UX point, taken for the market-index path: overlap is
+       real and stays said, but rolling windows are MEANT to overlap, and two
+       warning slabs above the first number read as "this data is broken".
+       The same sentences now live one tap away, under a heading that says
+       what they are about, with the load-bearing count still visible on it. */
+    if ((suspicion || densityText) && o.indexPath) {
+      html += '<details class="explain overlapinfo"><summary>Understanding window overlap' +
+        ' \u2014 ' + s.count.toLocaleString() + ' windows, ' + independent +
+        ' non-overlapping</summary><div class="body">' +
+        (suspicion ? '<p>' + suspicion + '</p>' : '') +
+        (densityText ? '<p>' + densityText + '</p>' : '') +
+        '<p>Overlap is a property of rolling analysis itself, not a fault in this file: ' +
+        'consecutive windows share almost all their days by design. It matters only when ' +
+        'the window count is read as a count of independent observations \u2014 which is ' +
+        'why the non-overlapping figure is printed beside every large one.</p>' +
+        '</div></details>';
     }
 
     /* The hero, at that length. The old one read "Median 15-year return ...
@@ -1522,6 +1542,18 @@
         'case and no best case here, because there is nothing to be in the middle of. Choose a ' +
         'shorter holding period to see a distribution.</div></div>';
     } else {
+      /* The reviewer's scroll-fatigue point: by the bottom of this screen the
+         reader has forgotten what was asked at the top. A slim bar restates
+         it and stays put while the results scroll under it \u2014 and carries the
+         one action a finished analysis invites, printing it (a print is also
+         how a phone saves a PDF). Market-index path only. */
+      if (o.indexPath) {
+        html += '<div class="stickybar"><span class="sb-name">' + esc(meta.name) + '</span>' +
+          '<span class="sb-fact">' + years + 'y &middot; median ' + pct(s.median) +
+          ' &middot; worst ' + pct(s.min) + '</span>' +
+          '<button class="secondary printbtn" type="button" data-always-on="yes">' +
+          'Print / save PDF</button></div>';
+      }
       html += '<div class="result"><div class="label">Median ' + years + '-year return, % a year</div>' +
         '<div class="value">' + pct(s.median) + '</div>' +
         '<div class="sub">' + esc(meta.name) + ' \u00b7 the middle of ' + s.count.toLocaleString() +
@@ -1602,28 +1634,37 @@
         years: years,
         caption: 'Each bar counts the ' + years + '-year periods that ended in that range'
       }) + '</div>';
+
+      /* The histogram says how often; this says when. Index path only. */
+      if (o.indexPath) html += rollLineChart(r.pairs, years, s);
     }
 
     html += summaryCard(r, s, series, years, below, compareSeries, compareName, calc, o.indexPath);
 
     /* Both paths: the horizon table is about the data itself, not about any
-       comparison, and the fund path's reader needs it just as much. */
-    if (!thin) html += horizonSpreadCard(series, years, calc);
+       comparison. The index path's version carries the wider matrix — the
+       percentile bands and the below-zero / beat-target shares per horizon. */
+    if (!thin) {
+      html += horizonSpreadCard(series, years, calc,
+                                o.indexPath ? { extended: true, key: key } : null);
+    }
 
     html += worstIsNotWorstCard(series, s, years);
     /* "The only difference between them was the day they started" needs two
        of them. With one window the best start and the worst start are the
        same day, and the card printed that spread as 0.0%. */
     if (s.count > 1) html += startDateCard(r, years);
-    html += drawdownCard(series, years);
-    html += rateCheckCard(key, years, r.values);
+    html += drawdownCard(series, years, o.indexPath);
+    html += rateCheckCard(key, years, r.values, o.indexPath);
 
     if (compareSeries) {
       html += comparisonCards(series, compareSeries, years, meta.name, compareName,
-                              compareMeta, calc);
+                              compareMeta, calc, o.indexPath);
     }
 
-    html += '<div class="meaning"><h3>What this means</h3>' +
+    if (o.indexPath) html += reflectCard(years, series, key);
+
+    var meanings = '<div class="meaning"><h3>What this means</h3>' +
       '<p>Someone who invested at the worst possible moment in this data and held for ' + years +
       ' years earned <strong>' + pct(s.min) + ' a year</strong>. Someone who started at the best moment ' +
       'earned <strong>' + pct(s.max) + '</strong>. Same market, same holding period — the only difference ' +
@@ -1632,7 +1673,7 @@
       ' ended below zero. That count depends on the dates this file happens to cover, so read it as ' +
       'a count of what is in front of you, not as a property of the fund.</p></div>';
 
-    html += '<div class="meaning"><h3>What it does not mean</h3><ul class="points">' +
+    meanings += '<div class="meaning"><h3>What it does not mean</h3><ul class="points">' +
       '<li><strong>Not a forecast.</strong> This is what already happened, over the dates in this ' +
       'file and no others. Nothing here claims the next ' + years + ' years will land inside it.</li>' +
       '<li><strong>Not independent samples.</strong> The windows overlap \u2014 ' +
@@ -1641,7 +1682,15 @@
       'starting days, not a result anybody actually had.</li>' +
       '</ul></div>';
 
-    html += trapsCard(years);
+    meanings += trapsCard(years);
+
+    /* Index path: the closing education folds to one line, open on a tap.
+       Nothing is removed — the reviewer's complaint was the scroll, not the
+       sentences — and opening them is one tap for whoever wants them. */
+    html += o.indexPath
+      ? '<details class="explain teachnotes"><summary>What these figures mean — and what ' +
+        'they do not</summary><div class="body">' + meanings + '</div></details>'
+      : meanings;
 
     html += '<details class="explain"><summary>See the numbers as a table</summary><div class="body"><div class="scroll">' +
       '<table class="data"><thead><tr><th>Return range</th><th>Periods</th><th>Share</th></tr></thead><tbody>' +
@@ -1961,7 +2010,12 @@
    * that in this particular data it does not, which is just as much worth
    * knowing. Every row is the same arithmetic as the headline, at a different
    * length. */
-  function horizonSpreadCard(series, chosenYears, calc) {
+  /* The per-horizon window values, kept so the Beat-your-target column can
+     recompute live when the reader edits the rate box below the table. */
+  var HORIZON_DATA = {};
+
+  function horizonSpreadCard(series, chosenYears, calc, xopts) {
+    var x = xopts || {};
     var spanYears = (series[series.length - 1].t - series[0].t) / (365.2425 * 86400000);
     var horizons = A.HORIZONS.slice();
     var m = E.maxHorizon ? E.maxHorizon(series) : null;
@@ -1973,32 +2027,77 @@
       if (h > spanYears) return;
       var r = E.rollingReturns(series, h, calc);
       if (!r.ok || r.stats.count < 3) return;
-      rows.push({ h: h, s: r.stats });
+      rows.push({ h: h, s: r.stats, values: r.values });
     });
     if (rows.length < 2) return '';
 
+    if (!x.extended) {
+      return '<div class="card"><h2>The same data, held for longer</h2>' +
+        '<p class="hint" style="margin:0 0 .8rem">Every row is every holding period of that ' +
+        'length in this data — the same arithmetic as above, at other lengths. Read the ' +
+        'Worst column downwards.</p>' +
+        '<div class="scroll"><table class="data spread">' +
+        '<caption>Annualised return, % a year, by holding period</caption>' +
+        '<thead><tr><th>Held for</th><th>Worst</th><th>Median</th><th>Best</th>' +
+        '<th>Spread</th></tr></thead><tbody>' +
+        rows.map(function (row) {
+          var em = row.h === chosenYears;
+          return '<tr' + (em ? ' class="now"' : '') + '><td>' + row.h +
+            (row.h === 1 ? ' year' : ' years') + (em ? ' ← chosen' : '') + '</td>' +
+            '<td>' + pct(row.s.min) + '</td><td>' + pct(row.s.median) + '</td>' +
+            '<td>' + pct(row.s.max) + '</td>' +
+            '<td>' + pct(row.s.max - row.s.min) + '</td></tr>';
+        }).join('') +
+        '</tbody></table></div>' +
+        '<div class="meaning"><h3>What this means</h3>' +
+        '<p>Each figure describes the periods of that length inside this one file. Where the ' +
+        'Worst column rises as the holding period grows, longer holds narrowed the range of ' +
+        'outcomes <em>in this data</em>; that is a description of these dates, not a law, and ' +
+        'not a promise about the next period of any length.</p></div></div>';
+    }
+
+    /* The reviewer's matrix, without the word they used for it: these are
+       shares of past windows, never odds. The Beat-your-target column follows
+       the rate box live, so the whole matrix answers the reader's own number
+       rather than one this tool picked. */
+    HORIZON_DATA[x.key || 'rolling'] = rows.map(function (row) {
+      return { h: row.h, values: row.values };
+    });
+    var startRate = 0.07;
     return '<div class="card"><h2>The same data, held for longer</h2>' +
       '<p class="hint" style="margin:0 0 .8rem">Every row is every holding period of that ' +
-      'length in this data — the same arithmetic as above, at other lengths. Read the ' +
-      'Worst column downwards.</p>' +
-      '<div class="scroll"><table class="data spread">' +
+      'length in this data — the same arithmetic as above, at other lengths. The 10th and ' +
+      '90th columns are the outer tenths: 8 of every 10 windows of that length ended between ' +
+      'them. <strong>Ended below zero</strong> and <strong>Beat your target</strong> are ' +
+      'shares of past windows, not odds — and the target column follows the rate you set ' +
+      'in the box below.</p>' +
+      '<div class="scroll"><table class="data spread hmatrix">' +
       '<caption>Annualised return, % a year, by holding period</caption>' +
-      '<thead><tr><th>Held for</th><th>Worst</th><th>Median</th><th>Best</th>' +
-      '<th>Spread</th></tr></thead><tbody>' +
+      '<thead><tr><th>Held for</th><th>Worst</th><th>10th pct</th><th>Median</th>' +
+      '<th>90th pct</th><th>Best</th><th>Ended below zero</th>' +
+      '<th>Beat your target</th></tr></thead><tbody>' +
       rows.map(function (row) {
         var em = row.h === chosenYears;
+        var belowZero = countBelow(row.values);
+        var beat = E.shareAbove(row.values, startRate);
         return '<tr' + (em ? ' class="now"' : '') + '><td>' + row.h +
           (row.h === 1 ? ' year' : ' years') + (em ? ' ← chosen' : '') + '</td>' +
-          '<td>' + pct(row.s.min) + '</td><td>' + pct(row.s.median) + '</td>' +
+          '<td>' + pct(row.s.min) + '</td><td>' + pct(row.s.p10) + '</td>' +
+          '<td>' + pct(row.s.median) + '</td><td>' + pct(row.s.p90) + '</td>' +
           '<td>' + pct(row.s.max) + '</td>' +
-          '<td>' + pct(row.s.max - row.s.min) + '</td></tr>';
+          '<td>' + pct(belowZero / row.s.count, 0) + '</td>' +
+          '<td data-beat-h="' + row.h + '" data-key="' + esc(x.key || 'rolling') + '">' +
+          (beat.ok ? pct(beat.share, 0) : '—') + '</td></tr>';
       }).join('') +
       '</tbody></table></div>' +
+      '<p class="hint" style="margin:.5rem 0 0">Longer horizons hold fewer windows, and all ' +
+      'of them overlap; each row describes only the periods of that length inside this one ' +
+      'file.</p>' +
       '<div class="meaning"><h3>What this means</h3>' +
-      '<p>Each figure describes the periods of that length inside this one file. Where the ' +
-      'Worst column rises as the holding period grows, longer holds narrowed the range of ' +
-      'outcomes <em>in this data</em>; that is a description of these dates, not a law, and ' +
-      'not a promise about the next period of any length.</p></div></div>';
+      '<p>Where the Worst column rises and the gap between the 10th and 90th columns narrows ' +
+      'as the holding period grows, longer holds narrowed the range of outcomes <em>in this ' +
+      'data</em>; that is a description of these dates, not a law, and not a promise about ' +
+      'the next period of any length.</p></div></div>';
   }
 
   /* The worst window in a file is only the worst of the years the file covers.
@@ -2049,13 +2148,33 @@
   }
 
   /* A return says what was earned. This says what had to be sat through. */
-  function drawdownCard(series, years) {
+  function drawdownCard(series, years, indexPath) {
     var dd = E.maxDrawdown(series);
     if (!dd.ok || dd.depth === 0) return '';
-    var html = '<div class="card"><h2>The worst fall along the way</h2><div class="stats">' +
+    var html = '<div class="card"><h2>The worst fall along the way' +
+      (indexPath ? ' (peak to trough)' : '') + '</h2>' +
+      /* The reviewer's confusion, answered where it arises: this figure and
+         the Minimum Rolling Return above it measure two different things, and
+         a card that does not say so invites reading one as the other. The
+         triplet — depth, fall, recovery — is here because a fall that
+         recovers in a month and one that takes three years are different
+         experiences hiding behind the same percentage. */
+      (indexPath
+        ? '<p class="hint" style="margin:0 0 .8rem">This is the deepest ' +
+          '<strong>peak-to-trough fall in the daily value itself</strong>, anywhere in the ' +
+          'selected stretch — a different measurement from the Minimum Rolling Return above, ' +
+          'which is the start-to-end result of the worst full ' + years + '-year window. A ' +
+          'value can fall steeply inside a window that still ends positive.</p>'
+        : '') +
+      '<div class="stats">' +
       stat('Deepest fall', pct(dd.depth)) +
-      stat('It began', fmtDate(dd.from.t)) +
-      stat('It bottomed', fmtDate(dd.to.t)) +
+      (indexPath
+        ? stat('The fall took', dd.fallDays != null ? Math.round(dd.fallDays / 30) + ' months' : '—') +
+          stat('Recovery took', dd.recoveryDays != null
+            ? Math.round(dd.recoveryDays / 30) + ' months' : 'not yet in this data') +
+          stat('It began', fmtDate(dd.from.t))
+        : stat('It began', fmtDate(dd.from.t)) +
+          stat('It bottomed', fmtDate(dd.to.t))) +
       stat('Back to the old high', dd.recoveredOn ? fmtDate(dd.recoveredOn) : 'not yet in this data') +
       '</div>';
     html += '<div class="meaning"><h3>What this means</h3>';
@@ -2098,9 +2217,43 @@
   /* The reader names the rate. The screen reports arithmetic on the data above
    * and nothing else -- no product, no promise, no comparison anybody has to
    * take on trust. */
-  function rateCheckCard(key, years, values) {
+  /* Excess over the reader's own mark, per unit of spread. The official
+     Sharpe and Sortino ratios divide excess over a RISK-FREE rate; this tool
+     does not know today's risk-free rate and will not invent one, so the
+     reference here is the target the reader typed, and the labels say
+     "-style" because they are that and not the textbook figure. */
+  function ratioLine(values, rate) {
+    if (!values || values.length < 2 || !isFinite(rate)) return '';
+    var mean = 0;
+    for (var i = 0; i < values.length; i++) mean += values[i];
+    mean /= values.length;
+    var acc = 0;
+    for (var j = 0; j < values.length; j++) {
+      var d = values[j] - mean;
+      acc += d * d;
+    }
+    var sd = Math.sqrt(acc / (values.length - 1));
+    var ddv = E.downsideDeviation(values, rate);
+    var bits = [];
+    if (sd > 0) bits.push('per unit of volatility (Sharpe-style): <strong>' +
+      ((mean - rate) / sd).toFixed(2) + '</strong>');
+    if (ddv != null) {
+      bits.push(ddv === 0
+        ? 'no window fell below it, so downside deviation is zero (Sortino-style: not defined)'
+        : 'per unit of downside deviation below it (Sortino-style): <strong>' +
+          ((mean - rate) / ddv).toFixed(2) + '</strong>');
+    }
+    if (!bits.length) return '';
+    return 'Average excess over your target, ' + bits.join(' · ') +
+      '. Positive means the average window cleared your target; the size says by how much ' +
+      'relative to how unevenly the windows landed. The official Sharpe and Sortino ratios ' +
+      'use a risk-free rate this tool does not know; your target stands in for it here.';
+  }
+
+  function rateCheckCard(key, years, values, indexPath) {
     var start = 0.07;
     var res = E.shareAbove(values, start);
+    var ratios = indexPath ? ratioLine(values, start) : '';
     return '<div class="card"><h2>How often did it beat a rate you choose?</h2>' +
       '<p class="hint" style="margin:0 0 .8rem">Type your own target \u2014 the return you need, ' +
       'a deposit rate you could get instead, your own guess at inflation plus a margin \u2014 ' +
@@ -2121,6 +2274,10 @@
       '<div class="result" style="margin:.6rem 0 0"><div class="label">Periods that beat it</div>' +
       '<div class="value" id="rateout-' + key + '">' + pct(res.share, 0) + '</div>' +
       '<div class="sub" id="ratesub-' + key + '">' + rateSentence(res, start, years) + '</div></div>' +
+      (indexPath
+        ? '<p class="hint ratioline" id="ratio-' + key + '" data-key="' + key + '">' +
+          ratios + '</p>'
+        : '') +
       '<div class="meaning"><h3>Read this carefully</h3>' +
       '<p>You chose that rate, so this is arithmetic on the data above and nothing more. It is not a ' +
       'comparison with any particular product, and it says nothing about what a deposit, a bond or any ' +
@@ -2139,10 +2296,165 @@
       'future odds.';
   }
 
+  /* ================================================= WHICH KIND OF THING IS IT
+   *
+   * A corporate bond fund measured against Nifty 50 TRI produces a gap that
+   * mostly measures the asset classes, not the fund -- and a reader who does
+   * not know that walks away convinced a debt fund is a terrible investment
+   * because it "lost" to equities by six points a year. The names usually say
+   * which class each side is, so when they say two different things, the
+   * screen says so before any gap is printed. Read from the names only, and
+   * said to be: a name can lie, and the note says what to do when it does. */
+  var CLASS_WORDS = [
+    ['debt', /\b(bond|debt|gilt|g[\s-]?sec|liquid|overnight|money\s*market|ultra\s*short|low\s*duration|short\s*duration|medium\s*duration|long\s*duration|dynamic\s*bond|corporate\s*bond|credit\s*risk|banking\s*(&|and)\s*psu|floater|floating\s*rate|treasury|arbitrage|savings\s*fund|income\s*fund|fixed\s*income|crisil\s*composite)\b/i],
+    ['gold', /\b(gold|silver|commodit)\w*\b/i],
+    ['equity', /\b(nifty|sensex|equity|flexi[\s-]?cap|multi[\s-]?cap|large[\s-]?cap|mid[\s-]?cap|small[\s-]?cap|elss|bluechip|blue[\s-]?chip|focused|value\s*fund|contra|dividend\s*yield|next\s*50|midcap|smallcap|opportunities)\b/i]
+  ];
+
+  function assetClassOf(name) {
+    var n = String(name || '');
+    for (var i = 0; i < CLASS_WORDS.length; i++) {
+      if (CLASS_WORDS[i][1].test(n)) return CLASS_WORDS[i][0];
+    }
+    return null;
+  }
+
+  function classMismatchNote(name, compareName) {
+    var a = assetClassOf(name), b = assetClassOf(compareName);
+    if (!a || !b || a === b) return '';
+    /* The debt-against-equity pairing gets the author's own sentence: a
+       neutral statement of what each class has historically done, so the
+       reader stops before concluding a bond fund "failed" against Nifty. */
+    var pair = [a, b].sort().join('+');
+    if (pair === 'debt+equity') {
+      var debtSide = a === 'debt' ? name : compareName;
+      var eqSide = a === 'debt' ? compareName : name;
+      return notice('warn',
+        '<strong>Notice: you are comparing a fixed-income (debt) fund with an equity ' +
+        'index.</strong> Read from the names, <strong>' + esc(debtSide) + '</strong> is the ' +
+        'fixed-income side and <strong>' + esc(eqSide) + '</strong> the equity side. Equity ' +
+        'indices have historically shown higher long-term growth alongside significantly ' +
+        'higher short-term volatility, so the gap below mostly measures the difference ' +
+        'between the asset classes, not the quality of the fund. A like-for-like benchmark ' +
+        '— for a debt fund, a bond or debt index, its TRI where one is offered — would say ' +
+        'more. If the names have misled this note, ignore it.');
+    }
+    var SAY = { debt: 'a debt / fixed-income holding', equity: 'an equity holding or index',
+                gold: 'a gold or commodity holding' };
+    return notice('warn',
+      '<strong>These look like different asset classes.</strong> Read from the names, ' +
+      '<strong>' + esc(name) + '</strong> reads as ' + SAY[a] + ' and <strong>' +
+      esc(compareName) + '</strong> as ' + SAY[b] + '. Their risk and return live on ' +
+      'different scales, so the gap below mostly measures the difference between the ' +
+      'classes, not the quality of the fund — a like-for-like benchmark would say more. ' +
+      'If the names have misled this note, ignore it.');
+  }
+
+  /* =================================== EVERY WINDOW, IN START-DATE ORDER
+   *
+   * The histogram says how often each outcome happened; this says WHEN. Each
+   * point is one window's annualised return, plotted at the date the window
+   * began, with the middle and the outer tenths drawn across it -- so the
+   * narrowing (or not) of outcomes is visible as a shape, not asserted.
+   */
+  function rollLineChart(pairs, years, s) {
+    if (!pairs || pairs.length < 3) return '';
+    var W = 640, H = 240, padL = 8, padR = 68, padT = 12, padB = 26;
+    var t0 = pairs[0].t, t1 = pairs[pairs.length - 1].t;
+    if (t1 <= t0) return '';
+    var lo = Math.min(s.min, 0), hi = Math.max(s.max, 0);
+    var span = hi - lo || 1;
+    lo -= span * 0.06; hi += span * 0.06; span = hi - lo;
+    function x(t) { return padL + (t - t0) / (t1 - t0) * (W - padL - padR); }
+    function y(v) { return padT + (hi - v) / span * (H - padT - padB); }
+    /* Thin to at most ~700 points: a phone does not need 3,000 line segments
+       to draw the same shape. Every k-th point keeps the ends. */
+    var step = Math.max(1, Math.ceil(pairs.length / 700));
+    var pts = [];
+    for (var i = 0; i < pairs.length; i += step) {
+      pts.push(x(pairs[i].t).toFixed(1) + ',' + y(pairs[i].r).toFixed(1));
+    }
+    var last = pairs[pairs.length - 1];
+    pts.push(x(last.t).toFixed(1) + ',' + y(last.r).toFixed(1));
+
+    /* The three guide labels overlap when the percentiles nearly coincide —
+       a flat series puts all three on one pixel — so the label positions are
+       pushed apart before drawing, while each line stays at its true level. */
+    var guides = [
+      { v: s.p90, label: '90th ' + pct(s.p90) },
+      { v: s.median, label: 'median ' + pct(s.median) },
+      { v: s.p10, label: '10th ' + pct(s.p10) }
+    ];
+    guides.forEach(function (g) { g.ly = y(g.v); });
+    guides.sort(function (a, b) { return a.ly - b.ly; });
+    for (var gi = 1; gi < guides.length; gi++) {
+      if (guides[gi].ly - guides[gi - 1].ly < 13) guides[gi].ly = guides[gi - 1].ly + 13;
+    }
+    var guideSvg = guides.map(function (g) {
+      var yy = y(g.v).toFixed(1);
+      return '<line x1="' + padL + '" y1="' + yy + '" x2="' + (W - padR) + '" y2="' + yy +
+        '" class="rl-guide"/><text x="' + (W - padR + 5) + '" y="' + g.ly.toFixed(1) +
+        '" class="rl-glabel" dominant-baseline="middle">' + esc(g.label) + '</text>';
+    }).join('');
+    var zero = (0 >= lo && 0 <= hi)
+      ? '<line x1="' + padL + '" y1="' + y(0).toFixed(1) + '" x2="' + (W - padR) + '" y2="' +
+        y(0).toFixed(1) + '" class="rl-zero"/>' : '';
+
+    return '<div class="card"><h2>Every window, in start-date order</h2>' +
+      '<p class="hint" style="margin:0 0 .6rem">Each point is the annualised return of one ' +
+      years + '-year holding period, plotted at the date it began. The lines mark the middle ' +
+      'and the outer tenths: 8 of every 10 windows ended between the 10th and 90th lines.</p>' +
+      '<svg class="rollline" viewBox="0 0 ' + W + ' ' + H + '" role="img" ' +
+      'aria-label="Rolling ' + years + '-year returns by start date">' +
+      zero + guideSvg +
+      '<polyline class="rl-line" points="' + pts.join(' ') + '"/>' +
+      '<text x="' + padL + '" y="' + (H - 8) + '" class="rl-axis">' + fmtDate(t0) + '</text>' +
+      '<text x="' + (W - padR) + '" y="' + (H - 8) + '" class="rl-axis" text-anchor="end">' +
+      fmtDate(t1) + '</text>' +
+      '</svg>' +
+      '<p class="hint" style="margin:.5rem 0 0">Neighbouring points share almost all their ' +
+      'days, which is why the line moves smoothly — these are overlapping windows, not ' +
+      'independent results.</p></div>';
+  }
+
+  /* ========================================= THREE QUESTIONS, NOT ONE VERDICT
+   *
+   * The one thing this screen may not do is advise. What it can do is put the
+   * measured numbers inside the questions only the reader can answer, so the
+   * decision stays theirs and the arithmetic stays this tool's.
+   */
+  function reflectCard(years, series, key) {
+    var dd = E.maxDrawdown(series);
+    var months = dd.ok && dd.to
+      ? Math.round((dd.fallDays + (dd.recoveryDays || 0)) / 30) : null;
+    return '<div class="card"><h2>Three questions only you can answer</h2>' +
+      '<p class="hint" style="margin:0 0 .8rem">This tool measures; it does not advise. ' +
+      'These are the questions the measurements exist to inform.</p>' +
+      '<ol class="insights reflectlist">' +
+      '<li><span class="ins-h">Horizon</span><span class="ins-b">The figures above describe ' +
+      years + '-year holding periods. Is the money you are thinking of actually free for ' +
+      years + (years === 1 ? ' year' : ' years') + ' — no planned purchase, fee or ' +
+      'commitment inside that window?</span></li>' +
+      '<li><span class="ins-h">Falls</span><span class="ins-b">' +
+      (dd.ok && dd.to
+        ? 'The deepest fall in this data was <strong>' + pct(dd.depth) + '</strong>' +
+          (months ? ', and the round trip from peak to recovery took about <strong>' + months +
+            ' months</strong>' : ', not yet recovered by the end of this data') +
+          '. If that stretch began the month after you invested, could you — in money and ' +
+          'in nerve — stay to the end of it?'
+        : 'This data shows no fall, which says more about the dates it covers than about the ' +
+          'future. Could you hold through a fall this file has simply never seen?') +
+      '</span></li>' +
+      '<li><span class="ins-h">Target</span><span class="ins-b">The rate box above holds your ' +
+      'own required rate. Did enough of the past periods clear it for this record to fit the ' +
+      'plan you are funding — and is that judgement yours, not this page’s?</span></li>' +
+      '</ol></div>';
+  }
+
   /* Every window both series can cover, paired by start date. One end-to-end
    * number can be an accident of where it started; how often one led the other
    * cannot. */
-  function comparisonCards(series, compareSeries, years, name, compareName, compareMeta, calc) {
+  function comparisonCards(series, compareSeries, years, name, compareName, compareMeta, calc, indexPath) {
     /* The frequency has to reach here, or this card measures a different set
        of windows from the summary above it. Same defect as windowed(): the
        options argument was simply not passed. */
@@ -2151,21 +2463,36 @@
       return '<div class="card">' + notice('bad', esc(c.message)) + '</div>';
     }
     var f = c.fund, b = c.bench;
+    /* With a Difference column when the market-index path asks for it: the
+       reader stops doing the subtraction in their head, and the sign is
+       explicit instead of inferred. */
+    var delta = indexPath
+      ? function (label, a, bb) {
+          var d = a - bb;
+          return '<tr><td>' + esc(label) + '</td><td>' + pct(a) + '</td><td>' + pct(bb) +
+            '</td><td>' + A.signedPct(d) + '</td></tr>';
+        }
+      : null;
+    var rowFn = delta || cmp;
     var html = '<div class="card"><h2>Against ' + esc(compareName) + '</h2>' +
+      (indexPath ? classMismatchNote(name, compareName) : '') +
       '<div class="result" style="margin:0 0 1rem"><div class="label">Periods where ' +
       esc(name) + ' came out ahead</div><div class="value">' + pct(c.fundAheadShare, 0) + '</div>' +
       '<div class="sub">' + c.fundAhead.toLocaleString() + ' of ' + c.pairs.toLocaleString() +
       ' matched ' + years + '-year periods, ' + fmtDate(c.from) + ' to ' + fmtDate(c.to) + '</div></div>' +
       '<div class="scroll"><table class="data"><thead><tr><th>Over ' + years + ' years</th><th>' +
-      esc(name) + '</th><th>' + esc(compareName) + '</th></tr></thead><tbody>' +
-      cmp('Worst period', f.min, b.min) +
-      cmp('25th percentile', f.p25, b.p25) +
-      cmp('Median period', f.median, b.median) +
-      cmp('75th percentile', f.p75, b.p75) +
-      cmp('Best period', f.max, b.max) +
-      cmp('Periods that made money', f.positiveShare, b.positiveShare) +
+      esc(name) + '</th><th>' + esc(compareName) + '</th>' +
+      (indexPath ? '<th>Difference</th>' : '') + '</tr></thead><tbody>' +
+      rowFn('Worst period', f.min, b.min) +
+      rowFn('25th percentile', f.p25, b.p25) +
+      rowFn('Median period', f.median, b.median) +
+      rowFn('75th percentile', f.p75, b.p75) +
+      rowFn('Best period', f.max, b.max) +
+      (indexPath && f.stdev != null && b.stdev != null
+        ? rowFn('Volatility (std deviation)', f.stdev, b.stdev) : '') +
+      rowFn('Periods that made money', f.positiveShare, b.positiveShare) +
       '<tr><td>Periods compared</td><td>' + c.pairs.toLocaleString() + '</td><td>' +
-      c.pairs.toLocaleString() + '</td></tr>' +
+      c.pairs.toLocaleString() + '</td>' + (indexPath ? '<td>—</td>' : '') + '</tr>' +
       '</tbody></table></div>' +
       '<div class="meaning"><h3>What this means</h3>' +
       '<p>Only periods that both sets of data cover are compared, so neither is judged on dates the ' +
@@ -3049,17 +3376,21 @@
     if (R.source !== 'index' || !R.series || !E.rangeOverlap) { slot.innerHTML = ''; return; }
     var against = compareSeries();
     if (!against || !against.series || !against.series.length) { slot.innerHTML = ''; return; }
+    /* Said at load time, not only in the results: by the time the gap is on
+       screen the wrong conclusion has already been drawn once. */
+    var mismatch = classMismatchNote(R.name || '', against.name || '');
     var o = E.rangeOverlap(R.series, against.series);
     var lines = 'Primary Investment: ' + fmtDate(o.aFrom) + ' to ' + fmtDate(o.aTo) +
                 ' | Benchmark Index: ' + fmtDate(o.bFrom) + ' to ' + fmtDate(o.bTo) + '.';
     if (!o.ok) {
-      slot.innerHTML = notice('bad', '<strong>These two files share no dates.</strong> ' + lines +
+      slot.innerHTML = mismatch +
+        notice('bad', '<strong>These two files share no dates.</strong> ' + lines +
         ' There is not one day both of them cover, so no rolling return comparison can be made ' +
         'from them.');
       return;
     }
-    if (o.full) { slot.innerHTML = ''; return; }
-    slot.innerHTML = notice('warn', lines +
+    if (o.full) { slot.innerHTML = mismatch; return; }
+    slot.innerHTML = mismatch + notice('warn', lines +
       ' <br>Note: Rolling return comparisons will automatically be restricted to the overlapping ' +
       'period (' + fmtDate(o.from) + ' to ' + fmtDate(o.to) + ', ' + o.years.toFixed(1) +
       ' years). ' + droppedPhrase(o));
@@ -4105,6 +4436,22 @@
       if (!res.ok) { out.textContent = '—'; sub.textContent = 'Enter a rate.'; return; }
       out.textContent = pct(res.share, 0);
       sub.textContent = rateSentence(res, rate, years);
+      /* The rate box drives more than its own card: the Sharpe/Sortino-style
+         line and the horizon matrix's Beat-your-target column both answer
+         the same number, so they follow it. */
+      var ratio = document.getElementById('ratio-' + key);
+      if (ratio) ratio.innerHTML = ratioLine(values, rate);
+      (HORIZON_DATA[key] || []).forEach(function (row) {
+        var cell = document.querySelector('[data-beat-h="' + row.h + '"][data-key="' + key + '"]');
+        if (!cell) return;
+        var share = E.shareAbove(row.values, rate);
+        cell.textContent = share.ok ? pct(share.share, 0) : '—';
+      });
+    });
+    /* Print is how a phone saves a PDF; the button only exists on the
+       market-index results. */
+    document.addEventListener('click', function (ev) {
+      if (ev.target && ev.target.closest && ev.target.closest('.printbtn')) window.print();
     });
   }
 

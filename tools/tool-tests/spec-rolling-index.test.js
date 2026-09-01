@@ -340,7 +340,9 @@ function textValueFile(file) {
      /Outperformance Rate vs Benchmark 100\.0% of total windows N\/A/.test(out),
      (out.match(/Outperformance Rate vs Benchmark[^A-Z]{0,50}/) || [''])[0]);
 
-  const insights = await page.locator('#r-out ol.insights > li').allInnerTexts();
+  /* :not(.reflectlist): the self-reflection card reuses the insight styling
+     but is its own list, not one of the specification's five. */
+  const insights = await page.locator('#r-out ol.insights:not(.reflectlist) > li').allInnerTexts();
   ok('there are exactly five insights', insights.length === 5, String(insights.length));
   ok('1 · Outperformance Consistency, in the specification’s sentence',
      /^Outperformance Consistency/.test(flat(insights[0])) &&
@@ -378,9 +380,9 @@ function textValueFile(file) {
      /Outperformance Rate vs Benchmark Not measurable without a benchmark/.test(alone),
      (alone.match(/Outperformance Rate vs Benchmark[^A-Z]{0,60}/) || [''])[0]);
   ok('and the three benchmark insights say so rather than going missing',
-     (await page.locator('#r-out ol.insights > li').count()) === 5 &&
+     (await page.locator('#r-out ol.insights:not(.reflectlist) > li').count()) === 5 &&
      /Not measurable without benchmark index data/.test(alone),
-     String(await page.locator('#r-out ol.insights > li').count()));
+     String(await page.locator('#r-out ol.insights:not(.reflectlist) > li').count()));
 
   /* ============================== SECTION 7.5, NEUTRALITY VERIFICATION */
   section('Section 7 · Neutrality Verification');
@@ -1088,6 +1090,135 @@ function textValueFile(file) {
      fundOut.slice(0, 400));
   ok('and the horizon comparison reaches this path too',
      /The same data, held for longer/.test(fundOut));
+
+
+  /* ================== THE SEPTEMBER REVIEW: the market-index path, revisited */
+  section('Different asset classes are named before the gap is read');
+  {
+    /* A corporate bond fund against Nifty 50 TRI: the reported flow. */
+    const bondFund = navFile(TMP + '/acme-corporate-bond-fund-nav.csv', 0.07, 2015, 2025, 100);
+    await openIndexPath();
+    await page.setInputFiles('#bm-file', bondFund);
+    await page.waitForTimeout(1500);
+    await page.setInputFiles('#cmp-file', benchTRI);
+    await page.waitForTimeout(1500);
+    const note = flat(await page.locator('#r-overlap-note').innerText());
+    ok('the mismatch is said at load time, before any result',
+       /Notice: you are comparing a fixed-income \(debt\) fund with an equity index/i.test(note),
+       note.slice(0, 240));
+    ok('and states the classes\u2019 own record, with the way out',
+       /higher long-term growth alongside significantly higher short-term volatility/.test(note) &&
+       /like-for-like/i.test(note) && /Read from the names/i.test(note), note.slice(0, 400));
+    await page.locator('#r-years .chip[data-years="5"]').click();
+    await page.waitForTimeout(250);
+    await page.click('#r-run');
+    await page.waitForTimeout(2200);
+    ok('the comparison card repeats the warning beside the gap',
+       /fixed-income \(debt\) fund with an equity index/i.test(flat(await page.locator('#r-out').innerText())));
+    ok('and the comparison table carries a Difference column',
+       /difference/i.test(await page.locator('#r-out').innerText()));
+  }
+
+  section('A same-class or unnamed pairing is not nagged');
+  await openIndexPath();
+  await page.setInputFiles('#bm-file', primary);
+  await page.waitForTimeout(1500);
+  await page.setInputFiles('#cmp-file', benchTRI);
+  await page.waitForTimeout(1500);
+  ok('no class warning appears when the names do not establish two classes',
+     !/asset class/i.test(flat(await page.locator('#r-overlap-note').innerText())));
+
+  section('The results carry the chart, the matrix, the ratios and the questions');
+  await page.locator('#r-years .chip[data-years="3"]').click();
+  await page.waitForTimeout(250);
+  await page.click('#r-run');
+  await page.waitForTimeout(2200);
+  const rev = flat(await page.locator('#r-out').innerText());
+  ok('the rolling line chart is drawn, with its percentile guides',
+     (await page.locator('#r-out svg.rollline').count()) === 1 &&
+     /Every window, in start-date order/.test(rev) &&
+     /8 of every 10 windows ended between/.test(rev));
+  ok('the horizon matrix carries the bands and the shares',
+     /10th pct/i.test(rev) && /90th pct/i.test(rev) &&
+     /Ended below zero/i.test(rev) && /Beat your target/i.test(rev));
+  ok('and never calls a share of the past the odds',
+     !/\bodds of\b/i.test(rev), (rev.match(/.{0,40}odds of.{0,40}/i) || [''])[0]);
+  ok('the sticky bar restates what was asked, and offers print',
+     await page.locator('#r-out .stickybar').isVisible() &&
+     await page.locator('#r-out .printbtn').isVisible());
+  ok('the Sharpe-style and Sortino-style figures sit under the rate box, named as style',
+     /Sharpe-style/.test(rev) && /Sortino-style/.test(rev) &&
+     /risk-free rate this tool does not know/.test(rev));
+  ok('the three self-reflection questions are asked, not answered',
+     (await page.locator('#r-out .reflectlist > li').count()) === 3 &&
+     /Three questions only you can answer/.test(rev));
+
+  /* The matrix's target column follows the reader's own rate. */
+  await page.fill('#rate-rolling', '99');
+  await page.waitForTimeout(300);
+  ok('raising the target to 99% empties the Beat-your-target column',
+     await (async () => {
+       const cells = await page.locator('[data-beat-h]').allInnerTexts();
+       return cells.length >= 2 && cells.every(c => c.trim() === '0%');
+     })());
+  ok('and the ratio line follows the same number',
+     /Sharpe-style/.test(flat(await page.locator('#ratio-rolling').innerText())));
+
+  section('Overlap is explained on request, not shouted');
+  await openIndexPath();
+  await page.setInputFiles('#bm-file', bench);   /* 7 years, 5-year windows: tight */
+  await page.waitForTimeout(1500);
+  await page.locator('#r-years .chip[data-years="5"]').click();
+  await page.waitForTimeout(250);
+  await page.click('#r-run');
+  await page.waitForTimeout(2000);
+  ok('the suspicion text is not a red slab above the first number',
+     !(await page.locator('#r-out > .notice.bad').count()) ||
+     !/Read this range with suspicion/.test(flat(await page.locator('#r-out > .notice.bad').first().innerText())));
+  ok('it lives in a collapsible that names the counts on its one visible line',
+     (await page.locator('#r-out details.overlapinfo').count()) === 1 &&
+     /Understanding window overlap/.test(await page.locator('#r-out details.overlapinfo summary').innerText()));
+  await page.locator('#r-out details.overlapinfo summary').click();
+  await page.waitForTimeout(150);
+  ok('and opening it gives every sentence the slab used to hold',
+     /Read this range with suspicion/.test(flat(await page.locator('#r-out details.overlapinfo').innerText())) &&
+     /non-overlapping/.test(flat(await page.locator('#r-out details.overlapinfo').innerText())));
+  ok('the closing education folds to one line the same way',
+     (await page.locator('#r-out details.teachnotes').count()) === 1 &&
+     !/Not a forecast\./.test(flat(await page.locator('#r-out').innerText())));
+
+  section('The worst fall names what it measures, in three figures');
+  {
+    /* Constant growth has no fall, so this needs a real dip: up, 30% down
+       over ~6 months, then a recovery and on upward. */
+    const dip = (() => {
+      const L = ['Date,NAV'];
+      let v = 100, t = Date.UTC(2016, 0, 1);
+      const fallFrom = Date.UTC(2020, 0, 1), fallTo = Date.UTC(2020, 6, 1);
+      while (t <= Date.UTC(2025, 0, 1)) {
+        L.push(new Date(t).toISOString().slice(0, 10) + ',' + v.toFixed(4));
+        if (t >= fallFrom && t < fallTo) v *= Math.pow(0.70, 1 / 182);
+        else v *= Math.pow(1.12, 1 / 365.2425);
+        t += 86400000;
+      }
+      fs.writeFileSync(TMP + '/spec-dip-nav.csv', L.join('\n'));
+      return TMP + '/spec-dip-nav.csv';
+    })();
+    await openIndexPath();
+    await page.setInputFiles('#bm-file', dip);
+    await page.waitForTimeout(1500);
+    await page.locator('#r-years .chip[data-years="3"]').click();
+    await page.waitForTimeout(250);
+    await page.click('#r-run');
+    await page.waitForTimeout(2200);
+    const fall = flat(await page.locator('#r-out').innerText());
+    ok('the card is titled peak to trough',
+       /The worst fall along the way \(peak to trough\)/.test(fall));
+    ok('and says outright it is not the worst rolling window',
+       /a different measurement from the Minimum Rolling Return/.test(fall));
+    ok('depth, fall time and recovery time stand as a triplet',
+       /Deepest fall/i.test(fall) && /The fall took/i.test(fall) && /Recovery took/i.test(fall));
+  }
 
   ok('no script errors in the whole run', errors.length === 0, errors.slice(0, 3).join(' | '));
 
