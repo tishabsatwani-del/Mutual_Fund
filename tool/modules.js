@@ -1538,18 +1538,21 @@
         '</div>';
     }
 
-    /* Sections 5's two blocks, in the order the specification lists them, and
-       only on the path the specification covers. */
+    /* Section 5's two blocks, in the order the specification lists them --
+       on BOTH paths now. The fund path analyses one fund on its own, so its
+       table has one measured column and its insights are the five that need
+       no benchmark; where a figure would need one, the text names the Market
+       index path instead of pretending the number exists. */
     var paired = null;
-    if (o.indexPath) {
-      if (compareSeries) {
-        var cmp = E.compareRolling(series, compareSeries, years, calc);
-        if (cmp.ok) paired = cmp;
-      }
-      html += statisticalSummary(r, years, paired, compareName, calc,
-                                 compareSeries ? (compareMeta || null) : null);
-      html += factualInsights(r, years, paired, compareName);
+    if (compareSeries) {
+      var cmp = E.compareRolling(series, compareSeries, years, calc);
+      if (cmp.ok) paired = cmp;
     }
+    html += statisticalSummary(r, years, paired, compareName, calc,
+                               compareSeries ? (compareMeta || null) : null,
+                               o.indexPath ? 'index' : 'fund');
+    html += factualInsights(r, years, paired, compareName,
+                            o.indexPath ? 'index' : 'fund');
 
     /* Worst to best across the quartiles, in that order. An average put at the
      * top of a screen becomes the number people remember, and it hides the
@@ -1603,7 +1606,9 @@
 
     html += summaryCard(r, s, series, years, below, compareSeries, compareName, calc, o.indexPath);
 
-    if (o.indexPath && !thin) html += horizonSpreadCard(series, years, calc);
+    /* Both paths: the horizon table is about the data itself, not about any
+       comparison, and the fund path's reader needs it just as much. */
+    if (!thin) html += horizonSpreadCard(series, years, calc);
 
     html += worstIsNotWorstCard(series, s, years);
     /* "The only difference between them was the day they started" needs two
@@ -1664,8 +1669,9 @@
    * the two were measured over different stretches of history is the exact
    * mistake this table is meant to stop, so it is not offered as an option.
    */
-  function statisticalSummary(r, years, paired, compareName, calc, compareMeta) {
+  function statisticalSummary(r, years, paired, compareName, calc, compareMeta, mode) {
     var have = !!paired;
+    var fundPath = mode === 'fund';
     var f = have ? paired.fund : r.stats;
     var b = have ? paired.bench : null;
     var fVals = have ? paired.fundValues : r.values;
@@ -1690,38 +1696,61 @@
 
     var none = have ? null : '<span class="nodata">No benchmark index data loaded</span>';
 
+    /* On the fund path there is no benchmark column to leave empty: the path
+       has no comparison at all, so the table carries the one measured column
+       and nothing pretends a second one is waiting. */
+    function row1(label, a) {
+      return '<tr><td>' + esc(label) + '</td><td>' + cell(a) + '</td></tr>';
+    }
+    var body = fundPath
+      ? row1('Total Rolling Windows Analysed', obs(f.count)) +
+        row1('Average Rolling Return (Mean)', pct(f.mean)) +
+        row1('Median Rolling Return', pct(f.median)) +
+        row1('Maximum Return (Best Window)', pct(f.max)) +
+        row1('Minimum Return (Worst Window)', pct(f.min)) +
+        row1('Return Volatility (Std Deviation)',
+             f.stdev == null ? 'not measurable on one window' : pct(f.stdev)) +
+        row1('Negative Return Probability', negCell(fNeg, f.count))
+      : row('Total Rolling Windows Analysed', obs(f.count), have ? obs(b.count) : none) +
+        row('Average Rolling Return (Mean)', pct(f.mean), have ? pct(b.mean) : none) +
+        row('Median Rolling Return', pct(f.median), have ? pct(b.median) : none) +
+        row('Maximum Return (Best Window)', pct(f.max), have ? pct(b.max) : none) +
+        row('Minimum Return (Worst Window)', pct(f.min), have ? pct(b.min) : none) +
+        /* Volatility of the RETURNS, not of the prices: the spread of the
+           window figures around their own mean. With one window there is no
+           spread to measure and describe() returns null rather than zero. */
+        row('Return Volatility (Std Deviation)',
+            f.stdev == null ? 'not measurable on one window' : pct(f.stdev),
+            have ? (b.stdev == null ? 'not measurable on one window' : pct(b.stdev)) : none) +
+        row('Negative Return Probability', negCell(fNeg, f.count),
+            have ? negCell(bNeg, b.count) : none) +
+        row('Outperformance Rate vs Benchmark',
+            have ? pct(paired.fundAheadShare, 1) + ' of total windows'
+                 : '<span class="nodata">Not measurable without a benchmark</span>',
+            have ? 'N/A' : none);
+
     var html = '<div class="card"><h2>Statistical summary</h2>' +
       '<p class="hint" style="margin:0 0 .8rem">' +
-      (have
-        ? 'Both columns are measured over the same ' + f.count.toLocaleString() +
-          ' windows &mdash; the ones whose start dates appear in both files &mdash; so every row ' +
-          'compares like with like. Windows outside that shared stretch are not counted on either ' +
-          'side.'
-        : 'Only the Primary Investment column can be filled in. Load a benchmark index file in ' +
-          'card 2 and the second column, and the outperformance row, become measurable.') +
-      '</p><div class="scroll"><table class="data summary3">' +
+      (fundPath
+        ? 'Every figure is measured over the same ' + f.count.toLocaleString() +
+          ' rolling windows of this fund’s own history. To set these against an index, use ' +
+          'the Market index path: the fund in card 1, the index in card 2.'
+        : (have
+          ? 'Both columns are measured over the same ' + f.count.toLocaleString() +
+            ' windows &mdash; the ones whose start dates appear in both files &mdash; so every row ' +
+            'compares like with like. Windows outside that shared stretch are not counted on either ' +
+            'side.'
+          : 'Only the Primary Investment column can be filled in. Load a benchmark index file in ' +
+            'card 2 and the second column, and the outperformance row, become measurable.')) +
+      '</p><div class="scroll"><table class="data' + (fundPath ? '' : ' summary3') + '">' +
       '<caption>Annualised ' + years + '-year rolling returns, ' +
       esc((E.FREQUENCY[calc.frequency] || E.FREQUENCY.daily).label.toLowerCase()) +
       ' start dates</caption>' +
-      '<thead><tr><th>Performance Metric</th><th>Primary Investment</th>' +
-      '<th>Benchmark Index</th></tr></thead><tbody>' +
-      row('Total Rolling Windows Analysed', obs(f.count), have ? obs(b.count) : none) +
-      row('Average Rolling Return (Mean)', pct(f.mean), have ? pct(b.mean) : none) +
-      row('Median Rolling Return', pct(f.median), have ? pct(b.median) : none) +
-      row('Maximum Return (Best Window)', pct(f.max), have ? pct(b.max) : none) +
-      row('Minimum Return (Worst Window)', pct(f.min), have ? pct(b.min) : none) +
-      /* Volatility of the RETURNS, not of the prices: the spread of the
-         window figures around their own mean. With one window there is no
-         spread to measure and describe() returns null rather than zero. */
-      row('Return Volatility (Std Deviation)',
-          f.stdev == null ? 'not measurable on one window' : pct(f.stdev),
-          have ? (b.stdev == null ? 'not measurable on one window' : pct(b.stdev)) : none) +
-      row('Negative Return Probability', negCell(fNeg, f.count),
-          have ? negCell(bNeg, b.count) : none) +
-      row('Outperformance Rate vs Benchmark',
-          have ? pct(paired.fundAheadShare, 1) + ' of total windows'
-               : '<span class="nodata">Not measurable without a benchmark</span>',
-          have ? 'N/A' : none) +
+      (fundPath
+        ? '<thead><tr><th>Performance Metric</th><th>This Fund</th></tr></thead><tbody>'
+        : '<thead><tr><th>Performance Metric</th><th>Primary Investment</th>' +
+          '<th>Benchmark Index</th></tr></thead><tbody>') +
+      body +
       '</tbody></table></div>' +
       '<div class="meaning"><h3>How to read this table</h3>' +
       '<p>Every figure is a description of the dates in these files. None of them is a ' +
@@ -1755,15 +1784,38 @@
    * sentence here cannot be checked against a number on this screen, it does
    * not belong. Nothing here says whether any of it is good.
    */
-  function factualInsights(r, years, paired, compareName) {
+  function factualInsights(r, years, paired, compareName, mode) {
     var have = !!paired;
+    var fundPath = mode === 'fund';
     var f = have ? paired.fund : r.stats;
     var fVals = have ? paired.fundValues : r.values;
     var loss = countBelow(fVals);
     var total = f.count;
     var items = [];
 
-    if (have) {
+    /* The fund path has no benchmark by design, so its five statements are
+       the five this data can actually support -- none of them a row of
+       "not measurable" apologising for a column that was never offered. */
+    if (fundPath) {
+      items.push(['Return Range &amp; Distribution',
+        'Historical ' + years + '-Year rolling returns ranged from ' + pct(f.min) + ' to ' +
+        pct(f.max) + ', indicating an overall return variance spread of ' +
+        pct(f.max - f.min) + '.']);
+      items.push(['Central Tendency',
+        'The median ' + years + '-Year rolling return was ' + pct(f.median) +
+        ' a year, against a mean of ' + pct(f.mean) +
+        '. When the two differ, a few unusual windows are pulling the mean away from the middle.']);
+      items.push(['Middle Half of Outcomes',
+        'Half of all ' + years + '-Year windows returned between ' + pct(f.p25) + ' and ' +
+        pct(f.p75) + ' a year. A quarter fell below that band, and a quarter came in above it.']);
+      items.push(['Capital Loss Frequency',
+        'In ' + loss.toLocaleString() + ' out of ' + total.toLocaleString() + ' rolling periods (' +
+        pct(total ? loss / total : 0, 1) + '), the investment recorded a negative return over a ' +
+        years + '-Year holding period.']);
+      items.push(['Weakest Window on Record',
+        'The weakest ' + years + '-Year window in this data returned ' + pct(f.min) +
+        ' a year. To set that against an index, use the Market index path.']);
+    } else if (have) {
       items.push(['Outperformance Consistency',
         'Over the selected ' + years + '-Year rolling windows, the investment outperformed the ' +
         'benchmark in ' + pct(paired.fundAheadShare, 1) + ' of all instances (' +
@@ -1789,15 +1841,17 @@
         '. Without a benchmark there is nothing to set that against.']);
     }
 
-    items.push(['Return Range &amp; Distribution',
-      'Historical ' + years + '-Year rolling returns ranged from ' + pct(f.min) + ' to ' +
-      pct(f.max) + ', indicating an overall return variance spread of ' +
-      pct(f.max - f.min) + '.']);
+    if (!fundPath) {
+      items.push(['Return Range &amp; Distribution',
+        'Historical ' + years + '-Year rolling returns ranged from ' + pct(f.min) + ' to ' +
+        pct(f.max) + ', indicating an overall return variance spread of ' +
+        pct(f.max - f.min) + '.']);
 
-    items.push(['Capital Loss Probability',
-      'In ' + loss.toLocaleString() + ' out of ' + total.toLocaleString() + ' rolling periods (' +
-      pct(total ? loss / total : 0, 1) + '), the investment recorded a negative return over a ' +
-      years + '-Year holding period.']);
+      items.push(['Capital Loss Probability',
+        'In ' + loss.toLocaleString() + ' out of ' + total.toLocaleString() + ' rolling periods (' +
+        pct(total ? loss / total : 0, 1) + '), the investment recorded a negative return over a ' +
+        years + '-Year holding period.']);
+    }
 
     return '<div class="card"><h2>Factual Data Insights</h2>' +
       '<p class="hint" style="margin:0 0 .8rem">Five statements, each one checkable against the ' +
@@ -1837,17 +1891,14 @@
      * which is what had to be sat through rather than what was earned. */
     var dd = E.maxDrawdown(series);
 
-    /* Section 6's copy guide governs the market-index path. "Success rate" and
-       "downside risk" are both named prohibited there, and the objection is a
-       fair one: a rate of windows that ended above zero is not success, and the
-       worst window is not the risk. The replacements say what is counted. */
-    var SAY = indexPath
-      ? { above: 'Windows ending above zero',
-          out:   'Outperformance Frequency (%)',
-          worst: 'Minimum Rolling Return' }
-      : { above: 'Historical success rate',
-          out:   'Benchmark outperformance rate',
-          worst: 'Historical downside risk' };
+    /* Section 6's copy guide, now on BOTH paths. "Success rate" and "downside
+       risk" were the fund path's old labels, and the objection to them is not
+       path-specific: a rate of windows that ended above zero is not success,
+       and the worst window is not the risk. The replacements say what is
+       counted, wherever it is counted. */
+    var SAY = { above: 'Windows ending above zero',
+                out:   'Outperformance Frequency (%)',
+                worst: 'Minimum Rolling Return' };
 
     var rows = [
       [SAY.above, pct(success, 0),
@@ -1864,9 +1915,11 @@
         : [SAY.out, 'not measured', esc(c.message)]);
     } else {
       rows.push([SAY.out, 'not measured',
-                 'No benchmark is loaded. Load one into ' +
-                 (indexPath ? 'card 2, Benchmark Index Data,' : 'step 4') +
-                 ' and this becomes a rate.']);
+                 indexPath
+                   ? 'No benchmark is loaded. Load one into card 2, Benchmark Index Data, ' +
+                     'and this becomes a rate.'
+                   : 'This path analyses the fund on its own. To measure it against an index, ' +
+                     'use the Market index path: the fund in card 1, the index in card 2.']);
     }
 
     rows.push([SAY.worst, pct(s.min),

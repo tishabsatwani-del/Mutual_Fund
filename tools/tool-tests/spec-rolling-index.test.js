@@ -1073,12 +1073,21 @@ function textValueFile(file) {
   await page.click('#r-run');
   await page.waitForTimeout(1500);
   const fundOut = flat(await page.locator('#r-out').innerText());
-  ok('the fund path gets no statistical summary table',
-     (await page.locator('#r-out .summary3').count()) === 0);
-  ok('nor the five insights',
-     (await page.locator('#r-out ol.insights').count()) === 0);
-  ok('and it keeps the wording it had',
-     /Historical success rate/.test(fundOut), fundOut.slice(0, 400));
+  /* The fund path now carries the full analysis too -- its own single-column
+     statistical summary (no benchmark column: the path offers no comparison),
+     five insights this data can actually support, and the approved labels
+     everywhere. "Historical success rate" is gone from both paths. */
+  ok('the fund path gets its own statistical summary, one measured column',
+     /Statistical summary/.test(fundOut) && /This Fund/i.test(fundOut) &&
+     (await page.locator('#r-out .summary3').count()) === 0, fundOut.slice(0, 300));
+  ok('and its five insights, none of them an apology for a missing benchmark',
+     (await page.locator('#r-out ol.insights li').count()) === 5 &&
+     !/Not measurable without benchmark/i.test(fundOut));
+  ok('with the approved labels, not the old success-rate wording',
+     /Windows ending above zero/.test(fundOut) && !/Historical success rate/.test(fundOut),
+     fundOut.slice(0, 400));
+  ok('and the horizon comparison reaches this path too',
+     /The same data, held for longer/.test(fundOut));
 
   ok('no script errors in the whole run', errors.length === 0, errors.slice(0, 3).join(' | '));
 
