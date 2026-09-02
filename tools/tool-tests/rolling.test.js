@@ -63,6 +63,13 @@ function plainFile(file, rate, fromY, toY, start = 100) {
     });
   });
   const page = await ctx.newPage();
+
+/* The scheme list folds to the chosen fund once one is picked; a test that
+   goes back to the search box opens it again first, the way a reader would. */
+  async function unfoldPicker(wrapId) {
+    const btn = page.locator('#' + wrapId + ' [data-unfold]');
+    if (await btn.count()) { await btn.click(); await page.waitForTimeout(200); }
+  }
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
@@ -117,12 +124,13 @@ function plainFile(file, rate, fromY, toY, start = 100) {
   ok('and step 3 is ticked accordingly',
      (await page.locator('#step-hold').getAttribute('data-done')) === 'yes');
 
-  ok('the upload area says how much history each length wants',
-     /3\+ years of historical data for\s+1-Year rolling calculations, 5\+ years for 3-Year calculations, and 7\+ years for\s+comprehensive 5-Year statistical analysis/
-       .test((await page.locator('.helper-span').innerText()).replace(/\s+/g, ' ')) ||
-     /3\+ years .*1-Year .*5\+ years for 3-Year .*7\+ years for comprehensive 5-Year/
-       .test((await page.locator('.helper-span').innerText()).replace(/\s+/g, ' ')),
-     await page.locator('.helper-span').innerText());
+  /* One rule, stated once, at step 3: N+3. The step-1 helper that gave a
+     different threshold for each length is gone. */
+  ok('step 3 states the one recommended-history rule',
+     /A window of N years wants at least N\+3 years of history/
+       .test((await page.locator('#r-history-rule').innerText()).replace(/\s+/g, ' ')),
+     await page.locator('#r-history-rule').innerText());
+  ok('and it is stated nowhere else', (await page.locator('.helper-span').count()) === 0);
 
   section('Controls stay visible but inert until there is data');
   ok('dates start disabled rather than hidden',
@@ -162,6 +170,8 @@ function plainFile(file, rate, fromY, toY, start = 100) {
      await page.locator('#r-scheme-list .hit.combined').innerText());
   ok('the picker warns that Direct and Regular differ',
      /Direct and Regular/.test(await page.locator('#r-scheme-wrap').innerText()));
+
+  await unfoldPicker('r-scheme-wrap');
 
   await page.fill('#r-scheme-q', 'alpha fund - direct');
   await page.waitForTimeout(300);
@@ -224,6 +234,7 @@ function plainFile(file, rate, fromY, toY, start = 100) {
      (await page.locator('#r-out .result .value').first().innerText()).trim() === '14.0%');
 
   section('Changing the scheme changes the answer');
+  await unfoldPicker('r-scheme-wrap');
   await page.fill('#r-scheme-q', 'regular');
   await page.waitForTimeout(300);
   await page.locator('#r-scheme-list .hit').first().click();
@@ -233,6 +244,7 @@ function plainFile(file, rate, fromY, toY, start = 100) {
      await page.locator('#r-out .result .value').first().innerText());
 
   section('The period controls actually narrow the analysis');
+  await unfoldPicker('r-scheme-wrap');
   await page.fill('#r-scheme-q', 'direct');
   await page.waitForTimeout(300);
   await page.locator('#r-scheme-list .hit').first().click();
@@ -248,10 +260,10 @@ function plainFile(file, rate, fromY, toY, start = 100) {
      (await page.locator('#r-start').inputValue()) === '2010-01-01');
 
   section('The holding period re-runs immediately');
-  await page.locator('#r-years .chip', { hasText: '10 years' }).click();
+  await page.locator('#r-years .chip[data-years=\"10\"]').click();
   await page.waitForTimeout(800);
   ok('switching to ten years re-measures', /10 years/.test(await page.locator('#r-out').innerText()));
-  await page.locator('#r-years .chip', { hasText: '5 years' }).click();
+  await page.locator('#r-years .chip[data-years=\"5\"]').click();
   await page.waitForTimeout(800);
 
   /* --------------------------------------------------------- the insight */
@@ -293,6 +305,7 @@ function plainFile(file, rate, fromY, toY, start = 100) {
      (await page.locator('#r-out').innerText()).trim() === '');
   await page.setInputFiles('#bm-file', bulk);
   await page.waitForTimeout(1500);
+  await unfoldPicker('r-scheme-wrap');
   await page.fill('#r-scheme-q', 'alpha fund - direct');
   await page.waitForTimeout(300);
   await page.locator('#r-scheme-list .hit').first().click();

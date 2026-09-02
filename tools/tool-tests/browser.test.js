@@ -562,11 +562,11 @@ fs.mkdirSync(TMP + '/shots', { recursive: true });
   ok('the date warning survived the move', /05-Aug-2026/.test(sheetText));
   ok('the Google Sheets line survived the move', /Google Sheets and it works there too/.test(sheetText));
   const href = await page.locator('#view-sheet a.download').getAttribute('href');
-  ok('the download points at a file beside the tool', href === 'XIRR-Calculator-4.xlsx', href);
-  ok('and the download says what the file does not do',
-     /100% Standalone & Private \(\.xlsx\): Functions completely offline with zero external server connections/
-       .test((await page.locator('.privacy-badge').innerText()).replace(/\s+/g, ' ')),
-     await page.locator('.privacy-badge').innerText());
+  /* One version string: the file name carries the tool's own version. */
+  ok('the download points at a file beside the tool, named with the version',
+     href === 'XIRR-Calculator-' + (await page.locator('#ver').innerText()).trim() + '.xlsx', href);
+  ok('and the marketing badge is gone from the page',
+     (await page.locator('.privacy-badge').count()) === 0 && !/100% Standalone/.test(sheetText));
   const dl = await page.request.get(new URL(href, BASE_URL).href);
   ok('the file is actually served', dl.status() === 200, 'status ' + dl.status());
   ok('it is served as a spreadsheet, not a web page',
@@ -668,7 +668,7 @@ fs.mkdirSync(TMP + '/shots', { recursive: true });
     const facts = await page.locator('#view-about .data').first().innerText();
     ok('and the build states what it actually does, in checkable rows',
        /Requests to any other site\s*\n?\s*none/.test(facts) &&
-       /Third-party code, fonts or analytics\s*\n?\s*none/.test(facts) &&
+       /Other sites\s*\n?\s*no requests to any other site; everything the page needs is served from this address/.test(facts) &&
        /What is sent anywhere\s*\n?\s*nothing/.test(facts), facts);
 
     /* the claim, verified rather than asserted: nothing left the origin at all */

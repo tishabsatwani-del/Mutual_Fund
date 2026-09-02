@@ -109,6 +109,27 @@
 
   function fullYear(y) { return y >= 100 ? y : (y < 70 ? 2000 + y : 1900 + y); }
 
+  /* An Excel serial -- 43831 is 1 January 2020 -- arrives when a sheet's date
+     cells were never given a date format, or a CSV was written from one. Read
+     only where the column's own heading says it holds dates: a column of
+     five-digit index values would otherwise become a column of dates. */
+  var SERIAL_MIN = 20000, SERIAL_MAX = 80000;   /* 1954 to 2119 */
+  function serialOf(raw) {
+    var s = String(raw == null ? '' : raw).trim();
+    if (!/^\d{5}(\.0+)?$/.test(s)) return null;
+    var n = parseInt(s, 10);
+    return n >= SERIAL_MIN && n <= SERIAL_MAX ? n : null;
+  }
+  function serialToParts(raw) {
+    var n = serialOf(raw);
+    if (n === null) return null;
+    var d = new Date((n - 25569) * 86400000);
+    return { y: d.getUTCFullYear(), m: d.getUTCMonth() + 1, d: d.getUTCDate() };
+  }
+  function readDate(raw, dayFirst, serial) {
+    return toTimestamp(serial ? serialToParts(raw) : parseDateParts(raw, dayFirst));
+  }
+
   function toTimestamp(p) {
     if (!p) return NaN;
     if (p.m < 1 || p.m > 12 || p.d < 1 || p.d > 31) return NaN;
@@ -196,17 +217,19 @@
     var need = Math.min(2, probe.length);
     var out = [];
     for (var c = 0; c < width; c++) {
-      var filled = 0, dates = 0, numbers = 0, positive = 0;
+      var filled = 0, dates = 0, numbers = 0, positive = 0, serials = 0;
       for (var r = 0; r < probe.length; r++) {
         var cell = probe[r] ? probe[r][c] : null;
         if (cell == null || String(cell).trim() === '') continue;
         filled++;
         if (!isNaN(toTimestamp(parseDateParts(cell, true)))) { dates++; continue; }
+        if (serialOf(cell) !== null) serials++;
         var n = parseNumber(cell);
         if (isFinite(n)) { numbers++; if (n > 0) positive++; }
       }
       out.push({
         index: c, filled: filled, dates: dates, numbers: numbers, positive: positive,
+        isSerials: filled >= need && serials >= filled * 0.6,
         isDates: filled >= need && dates >= filled * 0.6,
         /* Prices are positive. A column of positive numbers is a candidate; a
            column that is 40% negative is a change or a points move. */
@@ -245,6 +268,18 @@
                 : 50 + col.index;      /* no opinion: leftmost date column */
       if (score < bestDate) { bestDate = score; dateCol = col.index; }
     });
+    /* No column of dates, but a column of Excel serials under a heading that
+       says "date": read the serials. Only under such a heading. */
+    var serialDates = false;
+    if (dateCol === -1 && lower) {
+      prof.forEach(function (col) {
+        if (!col.isSerials || dateCol !== -1) return;
+        var h = heading(col.index);
+        if (DATE_HEADERS.indexOf(h) !== -1 || /date|as on|as at/.test(h)) {
+          dateCol = col.index; serialDates = true;
+        }
+      });
+    }
 
     /* ---- the value column */
     var valueCol = -1, bestValue = 1e9;
@@ -264,7 +299,7 @@
       if (score < bestValue) { bestValue = score; valueCol = col.index; }
     });
 
-    return { dateCol: dateCol, valueCol: valueCol };
+    return { dateCol: dateCol, valueCol: valueCol, serialDates: serialDates };
   }
 
   /* Where the headings actually are.
@@ -544,6 +579,44 @@
                message: NOT_NUMERIC_COPY };
     }
 
+    /* 5. Signed amounts are payments, not prices. A NAV never goes below
+          zero; a statement of money in and money out does, on every
+          withdrawal. Tested on the column that would have been read as the
+          value, so an index export's "change" column cannot trip it. */
+    var negatives = 0, seenAmt = 0;
+    for (var g = 0; g < body.length && g < 400; g++) {
+      var cell5 = String(body[g][cols.valueCol] == null ? '' : body[g][cols.valueCol]).trim();
+      if (!cell5) continue;
+      var num5 = parseNumber(cell5);
+      if (!isFinite(num5)) continue;
+      seenAmt++;
+      if (num5 < 0 || /^\(.*\)$/.test(cell5)) negatives++;
+    }
+    if (seenAmt >= 3 && negatives >= Math.max(2, Math.ceil(seenAmt * 0.15))) {
+      return { ok: false, code: 'TRADEBOOK',
+               detected: [header && header[cols.valueCol]
+                 ? String(header[cols.valueCol]).trim() + ' (signed amounts)'
+                 : 'signed amounts in column ' + (cols.valueCol + 1)],
+               message: TRADEBOOK_COPY };
+    }
+
+    /* 6. Several amounts on one date, with no scheme column to explain
+          them, is a statement too: a price file has one value per date. */
+    if (pickSchemeColumn(header, body) === -1 && body.length >= 6) {
+      var seenDates = {}, dup = 0, dated = 0;
+      for (var q = 0; q < body.length && q < 400; q++) {
+        var dcell = String(body[q][cols.dateCol] == null ? '' : body[q][cols.dateCol]).trim();
+        if (!dcell) continue;
+        dated++;
+        if (seenDates[dcell]) dup++; else seenDates[dcell] = true;
+      }
+      if (dated >= 6 && dup >= Math.ceil(dated * 0.5)) {
+        return { ok: false, code: 'TRADEBOOK',
+                 detected: ['several amounts on one date'],
+                 message: TRADEBOOK_COPY };
+      }
+    }
+
     return { ok: true, header: header, dateCol: cols.dateCol, valueCol: cols.valueCol };
   }
 
@@ -579,11 +652,13 @@
     'Open the statement in Excel or your fund house’s portal and download the same history as ' +
     'CSV or Excel, or copy the two columns and paste them in.';
 
-  /* Section 3 of the specification, transcribed. */
+  /* A statement of the reader's own payments -- a tradebook, a CAS, a
+     transaction log -- is the right file on the wrong screen, and is told
+     so in those words. */
   var TRADEBOOK_COPY =
-    'The uploaded file contains trade logs or transaction records instead of historical ' +
-    'NAV/Index values. Expected Schema: Date and NAV / Value. Detected Schema: Transaction ' +
-    'fields (Buy/Sell, Order Type). Please re-upload a valid daily NAV or Index CSV file.';
+    'This looks like a statement of your own payments. Rolling returns need the fund\u2019s ' +
+    'price history \u2014 a date and the NAV or index value on that date. Check my portfolio ' +
+    'is the screen for this file.';
 
   /* Section 3's red banner is written for a tradebook. A column of text under a
      NAV heading is a different fault and gets its own sentence, because "this
@@ -623,7 +698,7 @@
     for (var i = 0; i < body.length; i++) {
       var name = String(body[i][schemeCol] == null ? '' : body[i][schemeCol]).trim();
       if (!name) continue;
-      var t = toTimestamp(parseDateParts(body[i][cols.dateCol], dayFirst));
+      var t = readDate(body[i][cols.dateCol], dayFirst, cols.serialDates);
       var v = parseNumber(body[i][cols.valueCol]);
       if (isNaN(t) || !isFinite(v) || v <= 0) continue;
       if (!found[name]) { found[name] = { name: name, rows: 0, first: t, last: t }; order.push(name); }
@@ -709,7 +784,7 @@
       var row = body[i];
       var rawDate = row[cols.dateCol], rawValue = row[cols.valueCol];
       if ((rawDate == null || rawDate === '') && (rawValue == null || rawValue === '')) { skipped.blank++; continue; }
-      var t = toTimestamp(parseDateParts(rawDate, dayFirstInfo.dayFirst));
+      var t = readDate(rawDate, dayFirstInfo.dayFirst, cols.serialDates);
       if (isNaN(t)) { skipped.badDate++; note(examples, i, header, rawDate, 'date not understood'); continue; }
       var v = parseNumber(rawValue);
       if (!isFinite(v) || v <= 0) { skipped.badValue++; note(examples, i, header, rawValue, 'value missing, zero or negative'); continue; }

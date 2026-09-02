@@ -2,6 +2,7 @@
 import re
 import sys
 import zipfile
+from pathlib import Path
 
 from openpyxl import load_workbook
 
@@ -224,13 +225,34 @@ for tab in ("Start here", "About"):
               for r, c in blocks),
           str([(r, sheet.row_dimensions[r].height, len(c.value)) for r, c in blocks]))
 
-BADGE = ("\U0001F512 100% Standalone & Private (.xlsx): Functions completely offline "
-         "with zero external server connections.")
-for tab in ("Start here", "About"):
-    sheet = wb[tab]
-    check(f"the privacy badge is on {tab}",
-          any(c.value == BADGE for r in sheet.iter_rows() for c in r),
-          tab)
+# The marketing badge ("100% Standalone & Private ...") was removed after an
+# external audit. It must not come back anywhere in the workbook; the About tab
+# says the same thing in a plain sentence instead.
+BADGE_MARK = "Standalone & Private"
+where = [f"{ws.title}!{c.coordinate}" for ws in wb.worksheets
+         for r in ws.iter_rows() for c in r
+         if isinstance(c.value, str) and BADGE_MARK in c.value]
+check("the privacy badge appears nowhere in the workbook", not where, ", ".join(where))
+about = wb["About"]
+about_text = [c.value for r in about.iter_rows() for c in r if isinstance(c.value, str)]
+check("the About tab says plainly that it connects to nothing",
+      "It works with no internet connection, and nothing in it connects to anything."
+      in about_text)
+
+# ONE version string. The site declares it in tool/app.js and the workbook's
+# About tab must carry the same one, so the two can never drift apart.
+def site_version(fallback="2.1"):
+    app_js = Path(__file__).resolve().parents[2] / "tool" / "app.js"
+    try:
+        m = re.search(r"var\s+VERSION\s*=\s*['\"]([^'\"]+)['\"]", app_js.read_text(encoding="utf-8"))
+    except OSError:
+        m = None
+    return m.group(1) if m else fallback
+
+SITE_VERSION = site_version()
+check(f"the About tab names the site's version ({SITE_VERSION})",
+      f"Where You Stand \u2014 XIRR Calculator, version {SITE_VERSION}" in about_text,
+      str([t for t in about_text if "version" in t]))
 
 # forbidden functions, anywhere in the workbook
 ALLOWED = {"XIRR", "IF", "IFERROR", "DATE", "EDATE", "TODAY", "COUNT", "COUNTA",

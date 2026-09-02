@@ -461,13 +461,16 @@ button.link {
    narrow left column and let "in total · no clock in it" wrap to three lines
    on the right. Under 480px the pair stacks: label and figure on one line,
    the gloss on the next. */
+/* The rule that stacked every table cell on a phone is gone. It was written
+   for two-column tables and broke five others: a window table of 525 rows
+   became 125,000px of page, and "22.1% / 9.3% / +12.8%" lost the headings
+   that said which was the fund. Every table is columns at every width now;
+   one that is genuinely too wide scrolls inside .scroll, headings attached. */
+.data td .qsub { display: block; margin-top: .15rem; }
 @media (max-width: 30rem) {
-  .data, .data tbody, .data tr, .data td { display: block; width: auto; }
-  .data tr { padding: .6rem 0; border-bottom: 1px solid var(--line); }
-  .data tr:last-child { border-bottom: 0; }
-  .data td { border: 0; padding: 0; }
-  .data td + td { margin-top: .25rem; color: var(--ink-2); }
-  .data td .qsub { display: block; margin-top: .15rem; }
+  table.data { font-size: .84rem; }
+  table.data th, table.data td { padding: .4rem .3rem; }
+  table.data th { font-size: .66rem; letter-spacing: .03em; }
 }
 
 .stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: .5rem; margin: .9rem 0; }
@@ -945,6 +948,14 @@ footer.foot p { margin: 0 0 .5rem; }
 .skip:focus { left: 0; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 
+/* A long press on a phone used to select a word and raise the browser's
+   Copy / Share bar over the figure being read. Nothing here is selectable
+   now except the places a reader types or pastes into. */
+html, body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+input, textarea, select, [contenteditable] {
+  -webkit-user-select: text; user-select: text; -webkit-touch-callout: default;
+}
+
 /* Review v4 §4: what the book explains gets a pointer of six words or fewer,
    not a paragraph. It reads as a marginal note, not as a heading. */
 .pointer {
@@ -1106,19 +1117,29 @@ table.data.wide td:first-child, table.data.wide th:first-child { min-width: 9rem
 .howto-video .hint { margin-top: .45rem; }
 
 /* ---------------------------------------------- market-index results extras */
-.stickybar {
-  position: sticky; top: 0; z-index: 30;
+/* The one-line restatement of what was asked. It used to stick to the top
+   of the screen, where it hid the app bar and, at some scroll positions,
+   appeared twice. It sits in flow now, once, directly above the tab row. */
+.resulthead {
+  position: static;
   display: flex; align-items: center; gap: .7rem; flex-wrap: wrap;
-  margin: 0 0 .8rem; padding: .5rem .8rem;
+  margin: 0 0 .4rem; padding: .5rem .8rem;
   background: var(--surface-2, #10161e); border: 1px solid var(--line);
   border-radius: 10px;
 }
-.stickybar .sb-name {
-  font-weight: 700; max-width: 40%; overflow: hidden;
-  text-overflow: ellipsis; white-space: nowrap;
+.resulthead .sb-name { font-weight: 700; min-width: 0; overflow-wrap: anywhere; }
+.resulthead .sb-fact { color: var(--ink-2); font-size: .88rem; }
+/* Save as PDF: at the right end of the tab row, and again at the foot. */
+.ixtabs .pdfbtn { flex: 0 0 auto; margin-left: auto; padding: .45rem .7rem; font-size: .82rem; }
+.pdfrow { display: flex; justify-content: flex-end; gap: .6rem; margin: 1rem 0 0; flex-wrap: wrap; }
+.pdfrow .pdfnote { flex: 1 1 100%; margin: 0; text-align: right; }
+button.pdfbtn[data-busy="yes"] { position: relative; padding-right: 2.2rem; }
+button.pdfbtn[data-busy="yes"]::after {
+  content: ""; position: absolute; right: .7rem; top: 50%; width: .9rem; height: .9rem;
+  margin-top: -.45rem; border-radius: 50%;
+  border: 2px solid var(--line-strong); border-top-color: var(--accent);
+  animation: spin .8s linear infinite;
 }
-.stickybar .sb-fact { color: var(--ink-2); font-size: .88rem; }
-.stickybar .printbtn { margin-left: auto; padding: .3rem .7rem; font-size: .82rem; }
 
 svg.rollline { width: 100%; height: auto; display: block; }
 .rl-line   { fill: none; stroke: var(--accent); stroke-width: 1.6; }
@@ -1128,6 +1149,83 @@ svg.rollline { width: 100%; height: auto; display: block; }
 .rl-axis   { fill: var(--ink-2); font-size: 11px; }
 
 details.overlapinfo summary, details.teachnotes summary { color: var(--ink-2); }
+
+/* Every window, one per row, inside its own box that scrolls, with a thumb
+   wide enough to drag and a header that stays put. 525 rows in flow made
+   the page 125,000px long on a phone, whose scrollbar cannot be grabbed. */
+.winbox {
+  max-height: 65vh; overflow-y: auto; overflow-x: auto;
+  border: 1px solid var(--line); border-radius: 8px;
+  scrollbar-width: auto; scrollbar-color: var(--accent) var(--surface-2);
+}
+.winbox::-webkit-scrollbar { width: 14px; height: 14px; }
+.winbox::-webkit-scrollbar-track { background: var(--surface-2); border-radius: 8px; }
+.winbox::-webkit-scrollbar-thumb {
+  background: var(--accent); border-radius: 8px; border: 3px solid var(--surface-2);
+}
+.winbox table.data { margin: 0; }
+.winbox table.data thead th {
+  position: sticky; top: 0; z-index: 2; background: var(--surface);
+  box-shadow: 0 1px 0 var(--line);
+}
+.winbox table.data th, .winbox table.data td {
+  white-space: nowrap; padding: .38rem .5rem; line-height: 1.3; font-variant-numeric: tabular-nums;
+}
+.winbox table.data tr[data-year-first="yes"] td { border-top: 1px solid var(--line-strong); }
+.yearchips { display: flex; flex-wrap: wrap; gap: .35rem; margin: 0 0 .6rem; }
+.yearchips .chip { min-height: 36px; padding: .25rem .6rem; font-size: .82rem; }
+.winrow { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; margin: .6rem 0 0; }
+.totop {
+  position: fixed; right: 1rem; bottom: 1.2rem; z-index: 40;
+  min-height: 44px; padding: .5rem .9rem; border-radius: 999px;
+  background: var(--accent); color: var(--accent-ink); border: 0; font: inherit; font-weight: 700;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .35); cursor: pointer;
+}
+.totop[hidden] { display: none; }
+
+/* The scheme picker, folded to the chosen line once a fund is picked. */
+#r-scheme-wrap[data-folded="yes"] .field,
+#r-scheme-wrap[data-folded="yes"] .picker,
+#r-scheme-wrap[data-folded="yes"] > p.hint:not(.pickedline),
+#cmp-scheme-wrap[data-folded="yes"] .field,
+#cmp-scheme-wrap[data-folded="yes"] .picker,
+#cmp-scheme-wrap[data-folded="yes"] > p.hint:not(.pickedline) { display: none; }
+.pickedline { margin: .4rem 0 0; }
+.waitline {
+  margin: .8rem 0 0; padding: .6rem .9rem; border: 1px dashed var(--line-strong);
+  border-radius: 10px; color: var(--ink-2);
+}
+.formula sup { font-size: .75em; }
+
+/* Item 23: the five quartile figures as tiles with the label above each,
+   three and two on a phone. A five-column table clipped at "TOP QU…" and
+   then stacked the values with no labels at all. */
+.qgrid { display: grid; grid-template-columns: repeat(6, 1fr); gap: .5rem; margin: .4rem 0 .6rem; }
+.qtile {
+  grid-column: span 2; background: var(--surface-3); border: 1px solid var(--line);
+  border-radius: 10px; padding: .6rem .5rem; text-align: center;
+}
+.qtile .k { display: block; font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.qtile .v { display: block; font-size: 1.15rem; font-weight: 700; font-variant-numeric: tabular-nums; margin-top: .15rem; }
+.qtile.mid .v { color: var(--accent); }
+.qtile:nth-child(4) { grid-column: 2 / span 2; }
+.qtile:nth-child(5) { grid-column: 4 / span 2; }
+@media (min-width: 40rem) {
+  .qgrid { grid-template-columns: repeat(5, 1fr); }
+  .qtile, .qtile:nth-child(4), .qtile:nth-child(5) { grid-column: auto; }
+}
+
+/* Item 27: a table wider than the phone keeps its first column in view and
+   fades at its right edge, so the reader can see there is more. */
+.scroll.fade { position: relative; }
+.scroll.fade::after {
+  content: ""; position: absolute; top: 0; right: 0; bottom: 0; width: 1.6rem;
+  pointer-events: none;
+  background: linear-gradient(to right, rgba(0, 0, 0, 0), var(--surface));
+}
+table.data.stickyfirst th:first-child, table.data.stickyfirst td:first-child {
+  position: sticky; left: 0; z-index: 1; background: var(--surface);
+}
 .ratioline { margin: .5rem 0 0; }
 table.hmatrix td, table.hmatrix th { white-space: nowrap; }
 
@@ -1188,19 +1286,14 @@ svg.fanchart { width: 100%; height: auto; display: block; }
   .ixpanel-h { display: none; }
 }
 
-.scopenote, .feenote {
-  border: 1px solid var(--line); border-left: 3px solid var(--series-3);
-  border-radius: 8px; background: var(--surface-2);
-  padding: .65rem .9rem; margin: .8rem 0; font-size: .88rem; color: var(--ink-2);
-}
 .notice.info { border-color: var(--series-3); }
 .notice.info .ic { color: var(--series-3); }
 .notice.info .hint { margin: .5rem 0 0; }
 
 @media print {
-  .topbar, .doors, .filebox, .pastebox, .btnrow, .printbtn, .ratepresets,
+  .topbar, .doors, .filebox, .pastebox, .btnrow, .printbtn, .pdfbtn, .pdfrow, .totop,
+  .yearchips, .wincsv, .ratepresets,
   #up-doors, .backlink { display: none !important; }
-  .stickybar { position: static; }
   body { background: #fff; color: #000; }
   .card, .meaning { break-inside: avoid; border-color: #bbb; }
 }

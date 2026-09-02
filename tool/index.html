@@ -6,7 +6,7 @@
 <title>Where You Stand</title>
 <meta name="description" content="Measure what your own money actually earned, see what the number means, and work out what it would take to reach your goal. Runs entirely in your browser.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231f4e5f'/%3E%3Cpath d='M7 22.5 13 15l4.5 4.5L25 9.5' fill='none' stroke='%23ffffff' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="styles.css?v=20260901h">
+<link rel="stylesheet" href="styles.css?v=20260902a">
 </head>
 <body data-view="home">
 <a class="skip" href="#main">Skip to content</a>
@@ -45,13 +45,13 @@
     </button>
     <button class="tile" data-go="rolling" data-source="index">
       <span class="tile-step">Compare</span>
-      <h2>Rolling returns: a market index</h2>
-      <p>What a market actually delivered across every historical starting point, not one flattering stretch.</p>
+      <h2>Rolling returns: a fund against its index</h2>
+      <p>Load a fund&rsquo;s NAV history and its benchmark&rsquo;s total return index, and see how often the fund led across every holding period, not one flattering stretch.</p>
     </button>
     <button class="tile" data-go="rolling" data-source="fund">
       <span class="tile-step">Examine</span>
-      <h2>Rolling returns: my own fund</h2>
-      <p>Put any fund through the same test, and against its benchmark. No built-in list to go stale.</p>
+      <h2>Rolling returns: one fund or index on its own</h2>
+      <p>Put a single fund or index through every historical starting point. No built-in list to go stale.</p>
     </button>
   </div>
 
@@ -268,7 +268,7 @@
         <label for="g-step">Raise the monthly amount each year by (%)</label>
         <input type="number" id="g-step" aria-describedby="g-step-bad" value="0" min="0" max="25" step="1" inputmode="decimal">
         <p class="hint refuse" id="g-step-bad" hidden></p>
-        <p class="hint">Most people's income rises. Nothing says the instalment has to stay still.</p>
+        <p class="hint">Type the yearly rise you expect, or leave it at zero.</p>
       </div>
     </div>
     <button class="primary" type="button" id="g-calc">Show me where I land</button>
@@ -287,8 +287,8 @@
   <div class="card step" id="step-source">
     <h2><span class="stepno">1</span> What do you want to analyse?</h2>
     <div class="chips" id="r-source" role="radiogroup" aria-label="What to analyse">
-      <button class="chip" type="button" role="radio" data-source="index" aria-checked="false">A market index</button>
-      <button class="chip" type="button" role="radio" data-source="fund" aria-checked="false">My own fund</button>
+      <button class="chip" type="button" role="radio" data-source="index" aria-checked="false">A fund against its benchmark index</button>
+      <button class="chip" type="button" role="radio" data-source="fund" aria-checked="false">One fund or index on its own</button>
     </div>
     <p class="hint" id="r-source-prompt">Pick one of the two above to begin. The rest of this screen
     unlocks once you do.</p>
@@ -322,8 +322,8 @@
             </svg>
           </span>
           <span class="door-n">1</span>
-          <span class="door-t">Primary Investment Data</span>
-          <span class="door-s" id="door-a-status">Upload File</span>
+          <span class="door-t">The fund&rsquo;s NAV history</span>
+          <span class="door-s" id="door-a-status">Choose a file</span>
         </button>
         <button class="door" type="button" id="door-b" aria-expanded="false"
                 aria-controls="up-benchmark-head" data-door="b">
@@ -336,22 +336,19 @@
             </svg>
           </span>
           <span class="door-n">2</span>
-          <span class="door-t">Benchmark Index Data (TRI)</span>
-          <span class="door-s" id="door-b-status">Choose a File</span>
+          <span class="door-t">The benchmark index (TRI)</span>
+          <span class="door-s" id="door-b-status">Choose a file</span>
         </button>
       </div>
       <div class="grid2 upcards" id="up-cards">
       <div class="upcard" id="up-primary">
-        <h3>1. Primary Investment Data (NAV)</h3>
-        <p class="upcard-desc">Upload Mutual Fund Daily NAV history, Consolidated Account
-        Statement (CAS), or your Broker&rsquo;s historical Portfolio Value series.</p>
-        <p class="upcard-cols">Accepted columns: <code>Date</code> &middot; <code>NAV / Value</code></p>
-        <p class="upcard-rule"><strong>Rule:</strong> Do NOT upload Tradebooks, Order Histories,
-        or Buy/Sell Transaction Logs.</p>
+        <h3>1. The fund&rsquo;s NAV history file</h3>
+        <p class="upcard-desc">NAV is the fund&rsquo;s price per unit on a given day. A file of
+        those, day by day, is all this needs.</p>
         <!-- Every fact below was verified on a phone against amfiindia.com,
              on camera, on 1 September 2026 — including both failure modes. -->
         <details class="explain">
-          <summary>How to download NAV history from AMFI</summary>
+          <summary>Where do I get my fund&rsquo;s NAV file?</summary>
           <div class="body howto">
             <p class="howto-lede">Read the steps, or watch the same download done on a phone
             &mdash; whichever suits you.</p>
@@ -364,7 +361,8 @@
             <div class="howto-video" hidden>
               <video controls playsinline preload="none" src="media/amfi-nav-download.mp4"></video>
               <p class="hint">A real download from amfiindia.com, recorded on a phone &mdash;
-              including what a failed attempt looks like and how it was fixed. 1 minute.</p>
+              including what a failed attempt looks like and how it was fixed. 1 minute.
+              The AMFI site may look different from this recording.</p>
             </div>
             <div class="howto-read" hidden>
             <p>On <strong>amfiindia.com</strong>: NAV &rarr; <strong>NAV History</strong> &rarr;
@@ -427,11 +425,10 @@
           <label class="fieldlabel" for="f-paste-text">Copy the date column and the NAV column, and paste them here</label>
           <textarea id="f-paste-text" rows="6" spellcheck="false"
                     placeholder="01-Jan-2020&#9;45.1234&#10;02-Jan-2020&#9;45.2210"></textarea>
+          <p class="hint">A numeric date such as 01-02-2020 is read day first, as 1 February 2020. Write
+          01-Feb-2020 or 2020-02-01 to be certain.</p>
           <div class="btnrow"><button class="secondary" type="button" id="f-paste-read">Read these rows</button></div>
         </div>
-        <p class="hint helper-span">&#128161; Upload at least 3+ years of historical data for
-        1-Year rolling calculations, 5+ years for 3-Year calculations, and 7+ years for
-        comprehensive 5-Year statistical analysis.</p>
       </div>
 
       <details class="explain">
@@ -448,7 +445,8 @@
           <div class="howto-video" hidden>
             <video controls playsinline preload="none" src="media/amfi-nav-download.mp4"></video>
             <p class="hint">A real NAV download from amfiindia.com, recorded on a phone &mdash;
-            including what a failed attempt looks like and how it was fixed. 1 minute.</p>
+            including what a failed attempt looks like and how it was fixed. 1 minute.
+            The AMFI site may look different from this recording.</p>
           </div>
           <div class="howto-read" hidden>
           <p>On amfiindia.com: NAV &rarr; NAV History &rarr; &ldquo;Historical NAV for a
@@ -509,7 +507,10 @@
     <p class="steperror" id="r-hold-error" role="alert" hidden></p>
     <p class="spanwarn" id="r-span-warn" aria-live="polite" hidden></p>
     <p class="hint">Every possible start date within the stretch above is measured over this length.</p>
-    <!-- Section 4's rolling frequency. Market-index path only. -->
+    <!-- The one recommended-history rule, stated here and nowhere else. -->
+    <p class="hint" id="r-history-rule">A window of N years wants at least N+3 years of history, so
+    that start dates spread across three different market conditions.</p>
+    <!-- The rolling frequency, on both paths. -->
     <div id="r-freq-wrap" hidden style="margin-top:1.2rem">
       <span class="fieldlabel" id="r-freq-label">Rolling frequency</span>
       <div class="chips" id="r-freq" role="radiogroup" aria-labelledby="r-freq-label"></div>
@@ -529,12 +530,10 @@
          names this door and says what belongs behind it. The fund path keeps
          the plain benchmark field it has always had. -->
     <div class="upcard" id="up-benchmark-head" hidden>
-      <h3>2. Benchmark Index Data (TRI)</h3>
-      <p class="upcard-desc">Upload historical daily values for a Total Return Index
-      (e.g., Nifty 50 TRI, Nifty Midcap 150 TRI, Sensex TRI).</p>
-      <p class="upcard-cols">Accepted columns: <code>Date</code> &middot; <code>Index Value</code></p>
-      <p class="upcard-rule"><strong>Rule:</strong> Always use Total Return Index (TRI) data rather
-      than Price Return Index (PRI).</p>
+      <h3>2. The benchmark index (TRI)</h3>
+      <p class="upcard-desc">The daily values of a Total Return Index &mdash; Nifty 50 TRI, Nifty
+      Midcap 150 TRI, Sensex TRI. A TRI counts dividends; a price index does not, and reads lower,
+      so use the total return version.</p>
       <!-- Moved here from Card A, whose subject it is not. Every word of it is
            about where a TRI file comes from, and it was sitting under the door
            that says do not put an index file in this one. -->
@@ -554,7 +553,8 @@
             <div class="howto-video" hidden>
               <video controls playsinline preload="none" src="media/nse-tri-download.mp4"></video>
               <p class="hint">A real TRI download from niftyindices.com, recorded on a phone
-              &mdash; including the 1-year limit and how to work inside it. 1 minute.</p>
+              &mdash; including the 1-year limit and how to work inside it. 1 minute.
+              The NSE site may look different from this recording.</p>
             </div>
             <div class="howto-read" hidden>
             <p>Download it from the index provider’s own site — for Indian equity indices that is
@@ -608,10 +608,8 @@
     <p style="margin:0 0 .4rem;color:var(--ink-2)">Use this when you want a permanent record you can add to
     over the years, or when you would rather not type into a web page at all. It works with no internet
     connection once downloaded.</p>
-    <a class="btn download" href="XIRR-Calculator-4.xlsx" download="XIRR-Calculator-4.xlsx">Download the sheet</a>
+    <a class="btn download" id="sheetlink" href="XIRR-Calculator-2.1.xlsx" download="XIRR-Calculator-2.1.xlsx">Download the sheet</a>
     <p class="filenote">Excel file (.xlsx)</p>
-    <p class="privacy-badge">&#128274; 100% Standalone &amp; Private (.xlsx): Functions completely
-    offline with zero external server connections.</p>
     <p class="appnote">On a phone you will need a free spreadsheet app, such as
     Google Sheets, to open it.</p>
   </div>
@@ -665,8 +663,8 @@
     The sheet is a record you keep and add to. <button class="link" data-go="portfolio">Check my
     portfolio</button> is quicker for a one-off look, handles withdrawals across several funds at once,
     and explains what the number means as it goes.</p>
-    <p style="margin:0;color:var(--ink-2)">The sheet's version number and build date are on its
-    <strong>About</strong> tab — spreadsheet version <span id="sheetver">1.2</span>, separate from the tool’s own version.</p>
+    <p style="margin:0;color:var(--ink-2)">The sheet carries the same version number as this tool,
+    <span id="sheetver">2.1</span>, on its <strong>About</strong> tab, and the file name carries it too.</p>
   </div>
 </section>
 
@@ -698,19 +696,31 @@
   <div class="card">
     <h2>Rolling returns</h2>
     <p>A window starts at every single observation in the file. It ends on the same calendar date
-    a chosen number of years later. If the market was shut that day, the most recent earlier price
-    is used, but only within seven days — beyond that the window is dropped rather than stretched,
-    because stretching quietly measures a different holding period than the one you asked for.</p>
-    <p>Each window is annualised as the compound rate that links its two ends. An average of yearly
-    returns is a different statistic and is never reported here in its place.</p>
+    a chosen number of years later. If the market was shut that day, the nearest earlier trading
+    day is used, but only within seven days — beyond that the window is dropped rather than
+    stretched, because stretching quietly measures a different holding period than the one you
+    asked for.</p>
+    <p>Each window is annualised as the compound rate that links its two ends: divide the end
+    value by the start value, raise the result to the power of the year length divided by the
+    number of days between the two dates, then subtract 1. On the fund-against-index screen the
+    year length is 365.25 days, so a leap day does not shorten a window; elsewhere it is 365. An
+    average of yearly returns is a different statistic and is never reported here in its place.</p>
+    <p><strong>How two files are joined.</strong> The fund and its index are joined on the exact
+    calendar date. Where one file has a date the other lacks — one market shut, the other open —
+    that file&rsquo;s last earlier value is carried onto the date, never a later one and never
+    before the file begins; the results page says how many dates were carried. Windows are then
+    measured on that shared calendar with the seven-day rule above, and only dates both files
+    cover are used.</p>
   </div>
 
   <div class="card">
     <h2>Goal projections</h2>
-    <p>The monthly rate is the twelfth root of the annual rate, not the annual rate divided by
-    twelve. Dividing by twelve overstates the outcome, and across twenty years the overstatement
-    is not small. Instalments are treated as paid at the start of each month, which is how a
-    mandate actually runs, and a step-up is applied once every twelve months.</p>
+    <p>The yearly return is converted to a monthly rate so that twelve months compound to exactly
+    the yearly figure, not divided by twelve. This is why the result here is a little lower than
+    most app calculators for the same inputs. Dividing by twelve overstates the outcome, and
+    across twenty years the overstatement is not small. Instalments are treated as paid at the
+    start of each month, which is how a mandate actually runs, and a step-up is applied once
+    every twelve months.</p>
     <p>Every projection uses a return you typed in. It is an assumption, not a forecast, and
     nothing here should be read as a promise about the future.</p>
   </div>
@@ -745,7 +755,7 @@
       <tr><td>Password-protected statements</td><td>not read; there is no decryption here</td></tr>
       <tr><td>Index history shipped inside this page</td><td>none</td></tr>
       <tr><td>Requests to any other site</td><td>none, at any point</td></tr>
-      <tr><td>Third-party code, fonts or analytics</td><td>none</td></tr>
+      <tr><td>Other sites</td><td>no requests to any other site; everything the page needs is served from this address</td></tr>
       <tr><td>What is sent anywhere</td><td>nothing</td></tr>
       <tr><td>What the figures leave out</td><td>tax and exit load</td></tr>
     </tbody></table></div>
@@ -783,17 +793,19 @@
 
 </main>
 
-<script src="v3/deck.js?v=20260901h"></script>
-<script src="../sim/format.js?v=20260901h"></script>
-<script src="../sim/workbook.js?v=20260901h"></script>
-<script src="engine.js?v=20260901h"></script>
-<script src="parse.js?v=20260901h"></script>
+<script src="v3/deck.js?v=20260902a"></script>
+<script src="../sim/format.js?v=20260902a"></script>
+<script src="../sim/workbook.js?v=20260902a"></script>
+<script src="engine.js?v=20260902a"></script>
+<script src="parse.js?v=20260902a"></script>
 <!-- The one door reader, shared with the v3 screens. It needs parse.js and
      schemes.js before it, and format.js is already above. -->
-<script src="../sim/schemes.js?v=20260901h"></script>
-<script src="../sim/upload.js?v=20260901h"></script>
-<script src="provider.js?v=20260901h"></script>
-<script src="app.js?v=20260901h"></script>
-<script src="modules.js?v=20260901h"></script>
+<script src="../sim/schemes.js?v=20260902a"></script>
+<script src="../sim/upload.js?v=20260902a"></script>
+<script src="provider.js?v=20260902a"></script>
+<script src="app.js?v=20260902a"></script>
+<script src="dates.js?v=20260902a"></script>
+<script src="pdf.js?v=20260902a"></script>
+<script src="modules.js?v=20260902a"></script>
 </body>
 </html>

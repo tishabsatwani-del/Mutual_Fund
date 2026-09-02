@@ -8,8 +8,10 @@
   'use strict';
 
   var E = window.PRCEngine, P = window.PRCParse;
-  var VERSION = '2.0';
-  var SHEET_VERSION = '1.4';
+  /* ONE version, for the site, the workbook's About tab and the workbook's
+     file name alike. The build script under tools/xirr reads it from here. */
+  var VERSION = '2.1';
+  var SHEET_VERSION = VERSION;
   var HORIZONS = [1, 3, 5, 7, 10];
 
   /* ------------------------------------------------------------ formatting */

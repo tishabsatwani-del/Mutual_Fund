@@ -1,4 +1,7 @@
-"""Build XIRR Calculator v1.0.xlsx exactly to the Part A brief.
+"""Build the XIRR Calculator workbook exactly to the Part A brief.
+
+The version string is read from tool/app.js (``var VERSION = 'x.y';``) so the
+site and the workbook can never disagree about which version this is.
 
 Allowed functions only: XIRR, IF, IFERROR, DATE, EDATE, TODAY, COUNT, COUNTA,
 OFFSET, SUM, TEXT.  No dynamic arrays, no macros, no COUNTIF (not on the list) --
@@ -6,7 +9,9 @@ the two row counts the status line needs come from a hidden Calc tab, which the
 brief explicitly permits.
 """
 import datetime as dt
+import re
 import sys
+from pathlib import Path
 
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Protection, Side
@@ -16,8 +21,25 @@ from openpyxl.workbook.defined_name import DefinedName
 
 OUT = sys.argv[1]
 
-VERSION = "1.5"
-BUILT = "31-Aug-2026"
+
+def site_version(fallback="2.1"):
+    """The one version string, read from tool/app.js at build time.
+
+    The site declares ``var VERSION = '2.1';`` in tool/app.js. The workbook's
+    About tab and its file name carry the same string, so there is exactly one
+    place to bump. If the file or the declaration cannot be found, fall back
+    rather than fail the build.
+    """
+    app_js = Path(__file__).resolve().parents[2] / "tool" / "app.js"
+    try:
+        m = re.search(r"var\s+VERSION\s*=\s*['\"]([^'\"]+)['\"]", app_js.read_text(encoding="utf-8"))
+    except OSError:
+        m = None
+    return m.group(1) if m else fallback
+
+
+VERSION = site_version()
+BUILT = "02-Sep-2026"
 
 FIRST_ROW, LAST_ROW = 8, 507
 HEAD_ROW = 7
@@ -55,13 +77,6 @@ LABEL_FONT = Font(name="Calibri", size=12, bold=True)
 UNLOCKED = Protection(locked=False)
 THIN = Side(style="thin", color="FFBFBFBF")
 CELL_BORDER = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
-
-PRIVACY_BADGE = (
-    "\U0001F512 100% Standalone & Private (.xlsx): Functions completely offline "
-    "with zero external server connections."
-)
-BADGE_FONT = Font(name="Calibri", size=12, bold=True, color="FF1F4E5F")
-BADGE_FILL = PatternFill("solid", fgColor="FFEAF3F6")
 
 INSTRUCTION = (
     "Type in the cream cells only \u2014 everything else is worked out for you. "
@@ -264,9 +279,11 @@ lines = [
     "3. On the My investments tab, enter one row for every payment you made: the "
     "date, then Money in or Money out from the dropdown, then the amount as a "
     "plain positive number.",
+    # A note on step 3, on its own unnumbered row, so step 4 starts a row of
+    # its own rather than running on inside the same cell.
     "Dates are shown as dd-mmm-yyyy. If a date you typed reads back as a different "
     "day, your computer is set to American dates; retype it and check it reads the "
-    "way you meant. "
+    "way you meant.",
     "4. In the last row, enter today's date, choose Worth today, and type what the "
     "holding is worth right now. Your XIRR appears at the top of that tab.",
     "5. On the Plan my goal tab, enter what you are aiming for, what you already "
@@ -282,15 +299,6 @@ for i, text in enumerate(lines):
     # rows of text need two rows of height, or wrap_text hides the second half
     # rather than showing it.
     start.row_dimensions[2 + i * 2].height = 16 * (1 + len(text) // 88)
-
-# The one thing about this file a reader cannot check by opening it: that it
-# talks to nothing. Said at the top of the first tab, where it is read before
-# anything is typed rather than found later on the About tab.
-badge = start.cell(row=2 + len(lines) * 2, column=2, value=PRIVACY_BADGE)
-badge.font = BADGE_FONT
-badge.fill = BADGE_FILL
-badge.alignment = Alignment(wrap_text=True, vertical="center")
-start.row_dimensions[2 + len(lines) * 2].height = 32
 protect(start)
 
 # ----------------------------------------------------------- My investments
@@ -610,8 +618,8 @@ about = wb.create_sheet("About")
 about.column_dimensions["A"].width = 3
 about.column_dimensions["B"].width = 92
 about_lines = [
-    f"XIRR Calculator, version {VERSION}",
-    PRIVACY_BADGE,
+    f"Where You Stand \u2014 XIRR Calculator, version {VERSION}",
+    "It works with no internet connection, and nothing in it connects to anything.",
     f"Built {BUILT}",
     "This is an educational tool for readers. The figure it produces is before "
     "exit load and before tax, and it is not investment advice.",
@@ -624,9 +632,7 @@ about_lines = [
 ]
 for i, text in enumerate(about_lines):
     cell = about.cell(row=2 + i * 2, column=2, value=text)
-    cell.font = BADGE_FONT if i == 1 else (BODY_BOLD if i == 0 else BODY)
-    if i == 1:
-        cell.fill = BADGE_FILL
+    cell.font = BODY_BOLD if i == 0 else BODY
     cell.alignment = Alignment(wrap_text=True, vertical="top")
     # Height from the text's own length, for the same reason as Start here:
     # a fixed 30 points cut the three-line entries off after two.

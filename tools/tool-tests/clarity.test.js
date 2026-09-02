@@ -88,11 +88,11 @@ function longFile(file) {
   ok('the opening choice stands, and nothing is slid onto the reader',
      (await page.locator('#r-years .chip[aria-checked="true"]').allInnerTexts()).join('|') === '3 years',
      (await page.locator('#r-years .chip[aria-checked="true"]').allInnerTexts()).join('|'));
-  /* A three-year file for three-year windows is thin -- 5+ is what the step-1
-     helper text asks for -- so it warns, and lets the run happen. */
+  /* A three-year file for three-year windows is thin -- the one rule, N+3,
+     wants six -- so it warns, and lets the run happen. */
   ok('and a file thinner than the recommendation says so before anything is run',
      !(await page.locator('#r-span-warn').isHidden()) &&
-     /5\+ years is the recommended amount of history/
+     /a 3-year window wants at least 6/
        .test(await page.locator('#r-span-warn').innerText()),
      await page.locator('#r-span-warn').innerText());
 

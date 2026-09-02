@@ -774,10 +774,10 @@ section('The schema gatekeeper: a tradebook is not a price series');
   ok('and the columns that gave it away are named',
      trade.detected.indexOf('Order ID') !== -1 && trade.detected.indexOf('Quantity') !== -1,
      JSON.stringify(trade.detected));
-  ok('with the specification’s own sentence',
-     /trade logs or transaction records instead of historical NAV\/Index values/
-       .test(trade.message) &&
-     /Expected Schema: Date and NAV \/ Value/.test(trade.message), trade.message);
+  /* The audit's words: the right file on the wrong screen, and which screen. */
+  ok('in words that name the screen the file belongs to',
+     /statement of your own payments/.test(trade.message) &&
+     /Check my portfolio is the screen for this file/.test(trade.message), trade.message);
 
   /* AMFI-style files carry no header at all, so headings cannot be the only
      test: a column of BUY/SELL is a tradebook whatever it is called. */
@@ -1161,6 +1161,129 @@ section('compareRolling on the calendar join');
   close('the fund side still measures 7% a year', cj.fund.median, 0.07, 2e-3);
   close('and the index side 10%', cj.bench.median, 0.10, 2e-3);
   eq('the fund is never ahead of a faster index', cj.fundAhead, 0);
+}
+
+
+/* ============================ The audit's launch test and edge cases (F, T1) */
+section('T1: the deepest fall is found anywhere in the stretch, not only near the start');
+{
+  /* Six years of daily growth at 12%, a 35% crash in month 8 that recovers
+     over a year, and a shallower 14% dip in year 5. The routine has to
+     report the 35% one, dated where it happened. */
+  var series = [], v = 100, t = d(2019, 8, 1);
+  var day = 0;
+  while (t <= d(2024, 8, 30)) {
+    var factor = Math.pow(1.12, 1 / 365.2425);
+    if (day >= 200 && day < 230) factor = Math.pow(0.65, 1 / 30);          /* the crash */
+    else if (day >= 230 && day < 590) factor = Math.pow(1 / 0.65, 1 / 360); /* the climb back */
+    else if (day >= 1500 && day < 1530) factor = Math.pow(0.86, 1 / 30);    /* the later dip */
+    else if (day >= 1530 && day < 1700) factor = Math.pow(1 / 0.86, 1 / 170);
+    v *= factor; series.push({ t: t, v: v }); t += 86400000; day++;
+  }
+  var dd = E.maxDrawdown(series);
+  ok('the drawdown routine succeeds', dd.ok);
+  close('and reports the 35% fall, not the later 14% one', dd.depth, -0.35, 0.01);
+  ok('dated at the crash, eight months in',
+     dd.from && Math.abs((dd.from.t - d(2019, 8, 1)) / 86400000 - 200) < 3,
+     dd.from && new Date(dd.from.t).toISOString());
+  ok('with a trough thirty days later',
+     dd.to && Math.abs((dd.to.t - dd.from.t) / 86400000 - 30) < 3);
+  /* The later dip is still the deepest if the stretch is cut to start after
+     the crash -- the scan is over whatever it is handed. */
+  var later = series.filter(function (p) { return p.t > d(2021, 1, 1); });
+  var dd2 = E.maxDrawdown(later);
+  close('and a stretch that starts after the crash reports the 14% dip', dd2.depth, -0.14, 0.01);
+}
+
+section('F: rows that must not become prices');
+{
+  var rows = [['Date', 'NAV']];
+  var t2 = d(2020, 1, 1);
+  for (var i = 0; i < 40; i++) {
+    var val = i === 10 ? '' : i === 20 ? '0' : (100 + i).toFixed(2);
+    rows.push([new Date(t2 + i * 86400000).toISOString().slice(0, 10), val]);
+  }
+  var res = P.rowsToSeries(rows);
+  ok('a blank NAV row and a zero NAV row are dropped, the rest read',
+     res.ok && res.series.length === 38, res.ok ? res.series.length : res.message);
+  var comma = P.rowsToSeries([['Date', 'NAV'], ['01-Jan-2020', '1,234.56'], ['02-Jan-2020', '1,240.10'],
+                              ['03-Jan-2020', '1,251.00']]);
+  ok('comma-formatted values read as numbers',
+     comma.ok && Math.abs(comma.series[0].v - 1234.56) < 1e-9, comma.ok ? comma.series[0].v : comma.message);
+  var closeCol = P.rowsToSeries([['Date', 'Open', 'High', 'Low', 'Close'],
+                                 ['01-Jan-2020', '1', '2', '0.5', '1000.5'],
+                                 ['02-Jan-2020', '1', '2', '0.5', '1001.5'],
+                                 ['03-Jan-2020', '1', '2', '0.5', '1002.5']]);
+  ok('an index file whose value column is "Close" reads the Close column',
+     closeCol.ok && Math.abs(closeCol.series[2].v - 1002.5) < 1e-9,
+     closeCol.ok ? closeCol.series[2].v : closeCol.message);
+  var serial = P.rowsToSeries([['Date', 'NAV'], ['43831', '10'], ['43832', '10.1'], ['43833', '10.2']]);
+  ok('Excel serial dates read as dates (43831 is 1 Jan 2020)',
+     serial.ok && serial.series[0].t === d(2020, 1, 1),
+     serial.ok ? new Date(serial.series[0].t).toISOString() : serial.message);
+}
+
+section('F: a weekly index file joined to a daily NAV file');
+{
+  var fund = [], bench = [], tt = d(2018, 1, 1), fv = 100, bv = 1000, n = 0;
+  while (tt <= d(2024, 1, 1)) {
+    fund.push({ t: tt, v: fv });
+    if (n % 7 === 0) bench.push({ t: tt, v: bv });
+    fv *= Math.pow(1.08, 1 / 365.2425); bv *= Math.pow(1.11, 1 / 365.2425); tt += 86400000; n++;
+  }
+  var c = E.compareRolling(fund, bench, 3, { join: 'calendar', dayBasis: 365.25 });
+  ok('the comparison succeeds', c.ok, c.message);
+  ok('the weekly file is carried forward onto the daily calendar, six days in seven',
+     c.filledBench > c.pairs * 0.8 && c.filledFund === 0, c.filledFund + '/' + c.filledBench);
+  close('the index still measures 11% a year', c.bench.median, 0.11, 3e-3);
+}
+
+section('F: statements are refused by the schema gate');
+{
+  var cas = [['Date', 'Transaction', 'Amount', 'Units'],
+             ['01-Jan-2020', 'Purchase', '5000', '100.1'], ['01-Feb-2020', 'Purchase', '5000', '98.2'],
+             ['01-Mar-2020', 'Purchase', '5000', '110.3'], ['15-Mar-2020', 'Redemption', '2000', '40.0'],
+             ['01-Apr-2020', 'Purchase', '5000', '95.0'], ['01-May-2020', 'Purchase', '5000', '90.1']];
+  var g = P.checkSchema(cas);
+  ok('a CAS with a transaction-type column is refused', !g.ok && g.code === 'TRADEBOOK', JSON.stringify(g));
+  ok('in the audit’s words', /statement of your own payments/.test(g.message) &&
+     /Check my portfolio/.test(g.message), g.message);
+  var signed = [['Date', 'Amount'], ['01-Jan-2020', '5000'], ['01-Feb-2020', '5000'], ['01-Mar-2020', '-2000'],
+                ['01-Apr-2020', '5000'], ['01-May-2020', '-1000'], ['01-Jun-2020', '5000']];
+  var g2 = P.checkSchema(signed);
+  ok('signed amounts are refused', !g2.ok && g2.code === 'TRADEBOOK', JSON.stringify(g2));
+  var several = [['Date', 'Amount'], ['01-Jan-2020', '5000'], ['01-Jan-2020', '3000'], ['01-Feb-2020', '5000'],
+                 ['01-Feb-2020', '2000'], ['01-Mar-2020', '5000'], ['01-Mar-2020', '4000']];
+  var g3 = P.checkSchema(several);
+  ok('several amounts on one date, with no scheme column, are refused',
+     !g3.ok && g3.code === 'TRADEBOOK', JSON.stringify(g3));
+  var nav = [['Date', 'NAV']];
+  for (var k = 0; k < 12; k++) nav.push([new Date(d(2020, 1, 1) + k * 86400000).toISOString().slice(0, 10), (10 + k / 10).toFixed(2)]);
+  ok('a plain NAV file still passes', P.checkSchema(nav).ok);
+  var bulk = [['Scheme Name', 'Date', 'NAV'], ['Fund A', '01-Jan-2020', '10'], ['Fund B', '01-Jan-2020', '20'],
+              ['Fund A', '02-Jan-2020', '10.1'], ['Fund B', '02-Jan-2020', '20.2'],
+              ['Fund A', '03-Jan-2020', '10.2'], ['Fund B', '03-Jan-2020', '20.4']];
+  ok('a many-scheme file, with its scheme column, is not mistaken for a statement', P.checkSchema(bulk).ok,
+     JSON.stringify(P.checkSchema(bulk)));
+}
+
+section('F: Plan my goal at its edges');
+{
+  var base = { target: 1000000, currentValue: 400000, monthlySip: 10000, years: 15, annualRate: 0.10,
+               annualStepUpRate: 0 };
+  var over = E.projectGoal(Object.assign({}, base, { target: 100000 }));
+  ok('a goal below what is already held is on track with a surplus, not a negative shortfall',
+     over.ok && over.onTrack && over.gap === 0 && over.surplus > 0 && over.extraMonthly === 0);
+  var zero = E.projectGoal(Object.assign({}, base, { annualRate: 0, target: 5000000 }));
+  ok('a 0% return does not divide by zero', zero.ok && isFinite(zero.projected) && isFinite(zero.extraMonthly),
+     JSON.stringify(zero));
+  close('at 0% the projection is simply what is paid in', zero.projected, 400000 + 10000 * 12 * 15, 1);
+  var noYears = E.projectGoal(Object.assign({}, base, { years: 0 }));
+  ok('years left of zero is refused, not computed', !noYears.ok, JSON.stringify(noYears));
+  var stepped = E.projectGoal(Object.assign({}, base, { annualStepUpRate: 0.10, target: 10000000 }));
+  ok('with a step-up the extra each month is smaller than without it',
+     stepped.ok && stepped.extraMonthly > 0 &&
+     stepped.extraMonthly < E.projectGoal(Object.assign({}, base, { target: 10000000 })).extraMonthly);
 }
 
 console.log('\n' + passed + ' passed, ' + failed.length + ' failed');

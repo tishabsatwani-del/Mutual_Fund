@@ -150,7 +150,7 @@ execFileSync('python3', [path.join(__dirname, 'fixtures', 'make_upload_fixtures.
 
   /* ------------------------------------------------- the wrong-door refusal
      The report this section answers: "When I uploaded the Nifty 50 file in
-     the Primary Investment Data section, the system accepted it." It must
+     the the fund’s NAV history section, the system accepted it." It must
      not. The file is a date and a value like any NAV file, so only the words
      inside it can say it is an index -- and they do. */
   section('An index file at the Primary Investment door is turned away');
@@ -165,7 +165,7 @@ execFileSync('python3', [path.join(__dirname, 'fixtures', 'make_upload_fixtures.
   ok('with the words that gave it away',
      /Total Returns Index|Nifty/.test(wrongA), wrongA);
   ok('and it points at the door the file belongs to',
-     /card 2/.test(wrongA) && /Benchmark Index Data/.test(wrongA), wrongA);
+     /card 2/.test(wrongA) && /the benchmark index/.test(wrongA), wrongA);
   ok('nothing was loaded from it', await page.locator('#r-run').isDisabled());
 
   /* ================================================= Excel, with a preamble */
@@ -260,7 +260,8 @@ execFileSync('python3', [path.join(__dirname, 'fixtures', 'make_upload_fixtures.
   await page.setInputFiles('#bm-file', f('zerodha-tradebook.csv'));
   await page.waitForTimeout(2000);
   const tb = flat(await page.locator('#bm-status').innerText());
-  ok('it is named as a trade log', /trade logs or transaction records/.test(tb), tb);
+  ok('it is named as a statement of the reader’s own payments',
+     /statement of your own payments/.test(tb) && /Check my portfolio/.test(tb), tb);
   ok('and the columns that gave it away are listed, snake_case and all',
      /trade_date/.test(tb) && /trade_type/.test(tb) &&
      /quantity/.test(tb) && /order_id/.test(tb), tb);
@@ -382,7 +383,7 @@ execFileSync('python3', [path.join(__dirname, 'fixtures', 'make_upload_fixtures.
      })(), flat(await page.locator('#cmp-status').innerText()));
 
   /* The other half of the same report: "when I uploaded portfolio data in
-     the Benchmark Index Data section, it also accepted it." */
+     the the benchmark index section, it also accepted it." */
   section('A fund NAV file at the Benchmark Index door is turned away');
   await page.setInputFiles('#cmp-file', f('amfi-alpha-nav.csv'));
   await page.waitForTimeout(2500);
@@ -393,7 +394,7 @@ execFileSync('python3', [path.join(__dirname, 'fixtures', 'make_upload_fixtures.
   ok('with the words that gave it away',
      /Net Asset Value|Direct\/Regular plan|Scheme/i.test(wrongB), wrongB);
   ok('and it points at the door the file belongs to',
-     /card 1/.test(wrongB) && /Primary Investment Data/.test(wrongB), wrongB);
+     /card 1/.test(wrongB) && /the fund’s NAV history/.test(wrongB), wrongB);
 
   /* ============================================= a workbook that opens on a cover */
   section('A multi-tab workbook is read from the tab that holds the data');

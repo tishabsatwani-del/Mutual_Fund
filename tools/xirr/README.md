@@ -6,7 +6,7 @@ carry only one printed address.
 
 | What | Where |
 |---|---|
-| The file readers download | `tool/XIRR-Calculator-4.xlsx` (`tool/XIRR-Calculator.xlsx` is kept as an identical copy, so any link already in circulation still resolves) |
+| The file readers download | `tool/XIRR-Calculator-<VERSION>.xlsx` (currently `tool/XIRR-Calculator-2.1.xlsx`). `tool/XIRR-Calculator-4.xlsx` and `tool/XIRR-Calculator.xlsx` are kept as identical copies, so any link already in circulation still resolves |
 | The screen that offers it | the **sheet** view in `tool/index.html` |
 | The old separate page | `xirr/index.html`, now a redirect to the tool |
 
@@ -24,13 +24,32 @@ carry only one printed address.
 ```
 pip install openpyxl segno            # and: apt-get install libreoffice-calc
 python3 tools/xirr/build_xlsx.py       /tmp/raw.xlsx
-python3 tools/xirr/harden.py           /tmp/raw.xlsx tool/XIRR-Calculator-4.xlsx
-cp                                     tool/XIRR-Calculator-4.xlsx tool/XIRR-Calculator.xlsx
-python3 tools/xirr/verify_structure.py tool/XIRR-Calculator-4.xlsx
-python3 tools/xirr/acceptance_tests.py tool/XIRR-Calculator-4.xlsx
-python3 tools/xirr/goal_acceptance.py  tool/XIRR-Calculator-4.xlsx
-python3 tools/xirr/holdings_acceptance.py tool/XIRR-Calculator-4.xlsx
+python3 tools/xirr/harden.py           /tmp/raw.xlsx tool/XIRR-Calculator-2.1.xlsx
+cp tool/XIRR-Calculator-2.1.xlsx tool/XIRR-Calculator-4.xlsx
+cp tool/XIRR-Calculator-2.1.xlsx tool/XIRR-Calculator.xlsx
+python3 tools/xirr/verify_structure.py tool/XIRR-Calculator-2.1.xlsx
+python3 tools/xirr/acceptance_tests.py tool/XIRR-Calculator-2.1.xlsx
+python3 tools/xirr/goal_acceptance.py  tool/XIRR-Calculator-2.1.xlsx
+python3 tools/xirr/holdings_acceptance.py tool/XIRR-Calculator-2.1.xlsx
 ```
+
+## One version string
+
+The site's version lives in `tool/app.js` as `var VERSION = '2.1';` and that is
+the only place it is set. `build_xlsx.py` reads it with a regex at build time
+(falling back to `2.1` if the declaration cannot be found) and puts it in two
+places: the About tab's first line, "Where You Stand — XIRR Calculator,
+version 2.1", and the output file name, `XIRR-Calculator-2.1.xlsx`.
+`verify_structure.py` asserts the shipped About tab carries the same string as
+`app.js`. Only the build date (`BUILT` in `build_xlsx.py`) is set by hand.
+
+The versioned file is then copied to `tool/XIRR-Calculator-4.xlsx` and
+`tool/XIRR-Calculator.xlsx`, unchanged, because both names are already in
+circulation and must keep resolving. All three files are byte-identical.
+
+The workbook carries no "100% Standalone & Private" badge. It was removed after
+an external audit and `verify_structure.py` fails if it reappears anywhere. The
+About tab says the same thing in one plain sentence instead.
 
 **Do not skip `harden.py`.** A workbook straight out of openpyxl carries
 formulas with no stored results. Excel recalculates on open and is fine, but the
@@ -74,8 +93,12 @@ Run it after any change to the tab.
 
 ## Replacing it with a new version
 
-1. Rebuild as above, overwriting `tool/XIRR-Calculator.xlsx` — keep the filename.
-2. Bump the version and build date on the workbook's **About** tab.
+1. Bump `var VERSION` in `tool/app.js` and `BUILT` in `build_xlsx.py`. The
+   About tab and the file name follow from those; do not edit them by hand.
+2. Rebuild as above. The output is `tool/XIRR-Calculator-<VERSION>.xlsx`; copy
+   it over `tool/XIRR-Calculator-4.xlsx` and `tool/XIRR-Calculator.xlsx` so the
+   old names keep resolving, and point the download link in `tool/index.html`
+   at the new versioned name.
 3. Update the `102 KB` note in the sheet view of `tool/index.html` if the size moved.
 4. Commit to `main`. The printed address does not change, which is the whole
    point of the reader landing on a page rather than on a file.

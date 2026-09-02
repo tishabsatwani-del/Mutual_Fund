@@ -21,7 +21,7 @@ spreadsheet, which is why there is no separate download page any more —
 | `modules.js` | The screens: portfolio, goal, rolling returns, spreadsheet. |
 | `provider.js` | The seam for automatic fund lookup. No provider wired in; the contract is documented in the file. |
 | `data/benchmarks.json` | Bundled index history. Empty in 1.0 — see `data/README.md`. |
-| `XIRR-Calculator.xlsx` | The downloadable spreadsheet, offered from the **sheet** view. Built by `tools/xirr/` — see that README. |
+| `XIRR-Calculator-2.1.xlsx` | The downloadable spreadsheet, offered from the **sheet** view and named with the tool's version (`XIRR-Calculator-4.xlsx` and `XIRR-Calculator.xlsx` are identical copies kept for links already in circulation). Built by `tools/xirr/` — see that README. |
 | `qr-portfolio-reality-check.svg` | Print artwork for the address in the book. |
 
 `engine.js` and `parse.js` are deliberately free of browser APIs so the same code

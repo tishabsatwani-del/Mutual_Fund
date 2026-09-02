@@ -119,29 +119,30 @@ function textValueFile(file) {
   await openIndexPath();
 
   const cardA = flat(await page.locator('#up-primary').innerText());
-  ok('Card A carries the approved header',
-     /^1\. Primary Investment Data \(NAV\)/.test(cardA), cardA.slice(0, 80));
+  /* The audit replaced the specification's card copy: a CAS is a transaction
+     statement and a portfolio value series is not a price history, so the
+     card asks for the one file it can use, in the single-file path's words. */
+  ok('Card A carries its header',
+     /^1\. The fund’s NAV history file/.test(cardA), cardA.slice(0, 80));
   ok('Card A says what may go in it',
-     /Upload Mutual Fund Daily NAV history, Consolidated Account Statement \(CAS\), or your Broker.s historical Portfolio Value series\./.test(cardA),
+     /NAV is the fund’s price per unit on a given day\. A file of those, day by day, is all this needs\./.test(cardA),
      cardA.slice(0, 260));
-  ok('Card A names its accepted columns',
-     /Accepted columns: Date · NAV \/ Value/.test(cardA), cardA);
-  ok('Card A carries the rule, in the words the specification uses',
-     /Rule: Do NOT upload Tradebooks, Order Histories, or Buy\/Sell Transaction Logs\./.test(cardA),
-     cardA);
+  ok('and no longer offers a CAS or a portfolio value series',
+     !/Consolidated Account Statement|Portfolio Value/.test(cardA), cardA.slice(0, 200));
+  ok('nor a Rule line or an Accepted columns line',
+     !/Rule:/.test(cardA) && !/Accepted columns/.test(cardA), cardA.slice(0, 200));
   ok('and its file picker is labelled for the file it wants',
-     /Primary Investment Data file/.test(cardA), cardA);
+     /The fund’s NAV history file/.test(cardA), cardA);
 
   const cardB = flat(await page.locator('#up-benchmark-head').innerText());
-  ok('Card B carries the approved header',
-     /^2\. Benchmark Index Data \(TRI\)/.test(cardB), cardB.slice(0, 80));
+  ok('Card B carries its header',
+     /^2\. The benchmark index \(TRI\)/.test(cardB), cardB.slice(0, 80));
   ok('Card B says what may go in it',
-     /Upload historical daily values for a Total Return Index \(e\.g\., Nifty 50 TRI, Nifty Midcap 150 TRI, Sensex TRI\)\./.test(cardB),
+     /The daily values of a Total Return Index — Nifty 50 TRI, Nifty Midcap 150 TRI, Sensex TRI\./.test(cardB),
      cardB);
-  ok('Card B names its accepted columns',
-     /Accepted columns: Date · Index Value/.test(cardB), cardB);
-  ok('Card B carries the TRI rule',
-     /Rule: Always use Total Return Index \(TRI\) data rather than Price Return Index \(PRI\)\./.test(cardB),
+  ok('and no Accepted columns line either', !/Accepted columns/.test(cardB), cardB.slice(0, 200));
+  ok('Card B carries the TRI guidance',
+     /A TRI counts dividends; a price index does not, and reads lower, so use the total return version\./.test(cardB),
      cardB);
 
   /* ================================== SECTION 7.1, TRADEBOOK REJECTION TEST */
@@ -153,12 +154,11 @@ function textValueFile(file) {
      require scrolling. */
   const refusal = flat(await page.locator('#bm-status').innerText());
   ok('a tradebook at Card A is refused',
-     /trade logs or transaction records instead of historical NAV\/Index values/.test(refusal),
-     refusal.slice(0, 200));
-  ok('and the refusal states both schemas, as the specification words it',
-     /Expected Schema: Date and NAV \/ Value\./.test(refusal) &&
-     /Detected Schema: Transaction fields \(Buy\/Sell, Order Type\)\./.test(refusal) &&
-     /Please re-upload a valid daily NAV or Index CSV file\./.test(refusal), refusal);
+     /statement of your own payments/.test(refusal), refusal.slice(0, 200));
+  ok('and the refusal names the screen the file belongs to, and the columns that gave it away',
+     /Rolling returns need the fund’s price history/.test(refusal) &&
+     /Check my portfolio is the screen for this file/.test(refusal) &&
+     /columns found in this file/.test(refusal), refusal);
   ok('and it names the columns it actually found, so the reader can act on it',
      /Trade Type/.test(refusal) && /Quantity/.test(refusal) && /Order ID/.test(refusal),
      refusal);
@@ -184,7 +184,7 @@ function textValueFile(file) {
   await page.waitForTimeout(1200);
   const refusalB = flat(await page.locator('#cmp-status').innerText());
   ok('a tradebook at Card B is refused too',
-     /trade logs or transaction records/.test(refusalB), refusalB.slice(0, 160));
+     /statement of your own payments/.test(refusalB), refusalB.slice(0, 160));
   ok('and no benchmark was adopted from it',
      (await page.locator('#r-compare').inputValue()) === 'none',
      await page.locator('#r-compare').inputValue());
@@ -212,13 +212,13 @@ function textValueFile(file) {
   ok('two files that only partly overlap raise the amber warning',
      (await page.locator('#r-overlap-note .notice.warn').count()) === 1, amber.slice(0, 200));
   ok('it states both ranges, primary first',
-     /Primary Investment: 01-Jan-2015 to 01-Jan-2025 \| Benchmark Index: 01-Jan-2018 to 01-Jan-2025\./.test(amber),
+     /Fund: 01-Jan-2015 to 01-Jan-2025 \| Index: 01-Jan-2018 to 01-Jan-2025\./.test(amber),
      amber);
   ok('and says the comparison will be restricted to what they share',
      /Note: Rolling return comparisons will automatically be restricted to the overlapping period \(01-Jan-2018 to 01-Jan-2025, 7\.0 years\)\./.test(amber),
      amber);
   ok('and says which file lost history, and how much',
-     /Outside that period, 3\.0 years of the Primary Investment data is not used\./.test(amber),
+     /Outside that period, 3\.0 years of the fund data is not used\./.test(amber),
      amber);
 
   await page.click('#r-run');
@@ -276,13 +276,13 @@ function textValueFile(file) {
   section('Section 4 · rolling frequency thins start dates and nothing else');
   const freq = await page.locator('#r-freq .chip').allInnerTexts();
   ok('all three frequencies are offered, in the specification’s order',
-     freq.join('|') === 'Daily — Recommended (shifts by 1 trading day)|Weekly (7 days)|Monthly (1 calendar month)',
+     freq.join('|') === 'Daily (every start date)|Weekly (7 days)|Monthly (1 calendar month)',
      freq.join('|'));
   ok('and daily is the one chosen to begin with',
      (await page.locator('#r-freq .chip[aria-checked="true"]').innerText())
        .indexOf('Daily') === 0);
 
-  await page.locator('#r-years .chip', { hasText: '5 years' }).first().click();
+  await page.locator('#r-years .chip[data-years=\"5\"]').click();
   await page.waitForTimeout(250);
   await page.click('#r-run');
   await page.waitForTimeout(1400);
@@ -315,7 +315,7 @@ function textValueFile(file) {
   await page.waitForTimeout(1600);
   await page.setInputFiles('#cmp-file', benchLong);
   await page.waitForTimeout(1600);
-  await page.locator('#r-years .chip', { hasText: '3 years' }).first().click();
+  await page.locator('#r-years .chip[data-years=\"3\"]').click();
   await page.waitForTimeout(250);
   await page.click('#r-run');
   await page.waitForTimeout(1600);
@@ -331,14 +331,17 @@ function textValueFile(file) {
   const metrics = await page.locator('#r-out .summary3 tbody td:first-child').allInnerTexts();
   /* The specification's eight rows, then the two ratio rows the September
      review added to this table (item 3). */
-  ok('and the eight rows, in the specification’s order, then Sharpe and Sortino',
+  /* Eight rows. The Sharpe and Sortino rows are gone (their denominator was
+     the spread of window returns, not the asset's volatility, so they were
+     not Sharpe ratios), and the spread row is named as the spread. */
+  ok('and the eight rows, in the specification’s order, with the spread named as the spread',
      metrics.join('|') === [
        'Total Rolling Windows Analysed', 'Average Rolling Return (Mean)', 'Median Rolling Return',
        'Maximum Return (Best Window)', 'Minimum Return (Worst Window)',
-       'Return Volatility (Std Deviation)', 'Negative Return Frequency (Historical)',
-       'Outperformance Rate vs Benchmark', 'Sharpe Ratio (vs your target)',
-       'Sortino Ratio (vs your target)'].join('|'),
+       'Spread of window returns (std dev)', 'Negative Return Frequency (Historical)',
+       'Outperformance Rate vs Benchmark'].join('|'),
      metrics.join('|'));
+  ok('and no row is called Sharpe or Sortino', !/Sharpe|Sortino/.test(metrics.join('|')));
   ok('windows are counted as Observations',
      /Total Rolling Windows Analysed [\d,]+ Observations [\d,]+ Observations/.test(out), out.slice(0, 400));
   /* 14% and 10%, compounded daily, over every window. Both columns are known. */
@@ -346,8 +349,8 @@ function textValueFile(file) {
      /Average Rolling Return \(Mean\) 14\.0% 10\.0%/.test(out),
      (out.match(/Average Rolling Return \(Mean\)[^A-Z]{0,30}/) || [''])[0]);
   ok('a constant-growth series has no spread between its windows',
-     /Return Volatility \(Std Deviation\) 0\.0% 0\.0%/.test(out),
-     (out.match(/Return Volatility[^A-Z]{0,40}/) || [''])[0]);
+     /Spread of window returns \(std dev\) 0\.0% 0\.0%/.test(out),
+     (out.match(/Spread of window returns[^A-Z]{0,40}/) || [''])[0]);
   ok('nothing ended below zero, and it is counted in windows',
      /Negative Return Frequency \(Historical\) 0\.0% \(0 Windows\) 0\.0% \(0 Windows\)/.test(out),
      (out.match(/Negative Return Frequency[^A-Z()]{0,60}/) || [''])[0]);
@@ -355,30 +358,18 @@ function textValueFile(file) {
      /Outperformance Rate vs Benchmark 100\.0% of total windows N\/A/.test(out),
      (out.match(/Outperformance Rate vs Benchmark[^A-Z]{0,50}/) || [''])[0]);
 
-  /* :not(.reflectlist): the self-reflection card reuses the insight styling
-     but is its own list, not one of the specification's five. */
-  const insights = await page.locator('#r-out ol.insights:not(.reflectlist) > li').allInnerTexts();
-  ok('there are exactly five insights', insights.length === 5, String(insights.length));
-  ok('1 · Outperformance Consistency, in the specification’s sentence',
-     /^Outperformance Consistency/.test(flat(insights[0])) &&
-     /Over the selected 3-Year rolling windows, the investment outperformed the benchmark in 100\.0% of all instances \([\d,]+ out of [\d,]+ rolling periods\)\./.test(flat(insights[0])),
-     flat(insights[0]));
-  ok('2 · Excess Return Profile, with the spread signed',
-     /^Excess Return Profile \(Alpha Spread\)/.test(flat(insights[1])) &&
-     /The investment generated an average annual return spread of \+4\.0% relative to the benchmark over 3-Year horizons\./.test(flat(insights[1])),
-     flat(insights[1]));
-  ok('3 · Downside Resilience, both weakest windows',
-     /^Downside Resilience/.test(flat(insights[2])) &&
-     /During the weakest 3-Year market window, the investment recorded a return of 14\.0%, compared to 10\.0% for the benchmark\./.test(flat(insights[2])),
-     flat(insights[2]));
-  ok('4 · Return Range & Distribution, with the spread',
-     /^Return Range & Distribution/.test(flat(insights[3])) &&
-     /Historical 3-Year rolling returns ranged from 14\.0% to 14\.0%, indicating an overall return variance spread of 0\.0%\./.test(flat(insights[3])),
-     flat(insights[3]));
-  ok('5 · Capital Loss Frequency, as a count and a share',
-     /^Capital Loss Frequency/.test(flat(insights[4])) &&
-     /In 0 out of [\d,]+ rolling periods \(0\.0%\), the investment recorded a negative return over a 3-Year holding period\./.test(flat(insights[4])),
-     flat(insights[4]));
+  /* The Factual Data Insights card is gone: its five statements repeated the
+     three-rates card and the four-measurements card, in a register the tool
+     does not use anywhere else. Each figure has one home per tab now. */
+  ok('there is no Factual Data Insights card',
+     (await page.locator('#r-out ol.insights:not(.reflectlist)').count()) === 0 &&
+     !/Factual Data Insights|Alpha Spread|Downside Resilience|Central Tendency/.test(out),
+     (out.match(/.{0,40}(Factual Data Insights|Alpha Spread).{0,40}/) || [''])[0]);
+  ok('nor a Dataset Scope Note or a Data Standard Note',
+     !/Dataset Scope Note|Data Standard Note/.test(out));
+  ok('and the outperformance figure appears once on the comparison tab, not five times',
+     (out.match(/100\.0% of total windows/g) || []).length === 1,
+     String((out.match(/100\.0% of total windows/g) || []).length));
 
   /* and with no benchmark at all, the table still stands and says why */
   await openIndexPath();
@@ -394,10 +385,8 @@ function textValueFile(file) {
   ok('the outperformance row does not invent a rate',
      /Outperformance Rate vs Benchmark Not measurable without a benchmark/.test(alone),
      (alone.match(/Outperformance Rate vs Benchmark[^A-Z]{0,60}/) || [''])[0]);
-  ok('and the three benchmark insights say so rather than going missing',
-     (await page.locator('#r-out ol.insights:not(.reflectlist) > li').count()) === 5 &&
-     /Not measurable without benchmark index data/.test(alone),
-     String(await page.locator('#r-out ol.insights:not(.reflectlist) > li').count()));
+  ok('and no insights card appears in their place either',
+     (await page.locator('#r-out ol.insights:not(.reflectlist)').count()) === 0);
 
   /* ============================== SECTION 7.5, NEUTRALITY VERIFICATION */
   section('Section 7 · Neutrality Verification');
@@ -447,15 +436,14 @@ function textValueFile(file) {
        (screen.match(new RegExp('.{0,60}' + re.source + '.{0,60}', 'i')) || [''])[0]);
   });
   ok('and it says outright that it recommends nothing',
-     /Nothing on this card is a recommendation to buy, hold, sell or switch/.test(screen),
+     /Nothing here is a recommendation to buy, hold, sell or switch/.test(screen),
      'the disclaimer is missing');
 
   /* Section 6's approved column, each one actually on the screen. */
-  [['Primary Investment Data (NAV)', 'Card A header'],
-   ['Benchmark Index Data (TRI)',    'Card B header'],
+  [['The fund’s NAV history file',   'Card A header'],
+   ['The benchmark index (TRI)',     'Card B header'],
    ['Outperformance Frequency (%)',  'the outperformance metric'],
    ['Minimum Rolling Return',        'the downside metric'],
-   ['Factual Data Insights',         'the insights header'],
    ['Calculate Rolling Returns',     'the call to action']
   ].forEach(([phrase, what]) => {
     ok(what + ' uses the approved wording', screen.indexOf(phrase) !== -1,
@@ -528,8 +516,8 @@ function textValueFile(file) {
      !/These 1 windows overlap/i.test(one) &&
      !/Read the range below/i.test(one),
      (one.match(/.{0,60}(this range|1 windows|range below).{0,60}/i) || [''])[0]);
-  ok('and says outright that it is not a range',
-     /This is a measurement, not a range/.test(one), one.slice(0, 400));
+  ok('and says outright that it is not a distribution',
+     /One measurement, not a distribution/.test(one), one.slice(0, 400));
   ok('the quartile table is replaced rather than filled with one number five times',
      (await page.locator('#r-out table.spread').count()) === 0 &&
      /There is no range at this length/.test(one), one.slice(0, 400));
@@ -539,8 +527,8 @@ function textValueFile(file) {
   ok('and best-start against worst-start is not offered, being the same day',
      !/Would it still look this way if you had started elsewhere/.test(one));
   ok('while the volatility row says it cannot be measured on one window',
-     /Return Volatility \(Std Deviation\) not measurable on one window/.test(one),
-     (one.match(/Return Volatility[^A-Z]{0,50}/) || [''])[0]);
+     /Spread of window returns \(std dev\) not measurable on one window/.test(one),
+     (one.match(/Spread of window returns[^A-Z]{0,50}/) || [''])[0]);
 
   section('The comparison card reports, it does not grade');
   await openIndexPath();
@@ -767,10 +755,10 @@ function textValueFile(file) {
      Math.abs(doorBox.aTop - doorBox.bTop) < 2 && doorBox.bLeft >= doorBox.aRight - 1,
      JSON.stringify(doorBox));
   ok('each door names its file and what to do about it',
-     /Primary Investment Data/.test(await page.locator('#door-a').innerText()) &&
-     /Upload File/.test(await page.locator('#door-a').innerText()) &&
-     /Benchmark Index Data \(TRI\)/.test(await page.locator('#door-b').innerText()) &&
-     /Choose a File/.test(await page.locator('#door-b').innerText()),
+     /The fund’s NAV history/.test(await page.locator('#door-a').innerText()) &&
+     /Choose a file/.test(await page.locator('#door-a').innerText()) &&
+     /The benchmark index \(TRI\)/.test(await page.locator('#door-b').innerText()) &&
+     /Choose a file/.test(await page.locator('#door-b').innerText()),
      flat(await page.locator('#up-doors').innerText()));
   ok('and neither card is taking up the screen until it is asked for',
      await page.locator('#up-primary').isHidden() &&
@@ -786,15 +774,14 @@ function textValueFile(file) {
      (await page.locator('#door-b').getAttribute('aria-expanded')) === 'false');
   const openA = flat(await page.locator('#up-primary').innerText());
   ok('with every word of the card, not a summary of it',
-     /Upload Mutual Fund Daily NAV history/.test(openA) &&
-     /Accepted columns/.test(openA) &&
-     /Rule: Do NOT upload Tradebooks/.test(openA) &&
+     /NAV is the fund’s price per unit on a given day/.test(openA) &&
+     /Where do I get my fund’s NAV file/.test(openA) &&
      /Choose a file/.test(openA), openA.slice(0, 220));
   /* The door carries the short name; the card, opened to be READ, carries
      the complete one -- which is also where the specification's approved
      header lives now that the tile is shorter. */
   ok('and the opened card carries its full approved title',
-     /1\. Primary Investment Data \(NAV\)/.test(openA), openA.slice(0, 120));
+     /1\. The fund’s NAV history file/.test(openA), openA.slice(0, 120));
 
   await page.click('#door-b');
   await page.waitForTimeout(300);
@@ -802,7 +789,7 @@ function textValueFile(file) {
      await page.locator('#up-benchmark-head').isVisible() &&
      await page.locator('#up-primary').isHidden());
   ok('and card 2 is whole too',
-     /Upload historical daily values for a Total Return Index/
+     /The daily values of a Total Return Index/
        .test(flat(await page.locator('#up-benchmark-head').innerText())),
      flat(await page.locator('#up-benchmark-head').innerText()).slice(0, 200));
 
@@ -823,7 +810,7 @@ function textValueFile(file) {
      await page.locator('#door-a-status').innerText());
   ok('while the other still says what it wants',
      (await page.locator('#door-b').getAttribute('data-state')) === null &&
-     /Choose a File/.test(await page.locator('#door-b-status').innerText()));
+     /Choose a file/.test(await page.locator('#door-b-status').innerText()));
 
   await page.click('#door-b');
   await page.waitForTimeout(250);
@@ -834,7 +821,7 @@ function textValueFile(file) {
      /Not added/.test(await page.locator('#door-b-status').innerText()),
      await page.locator('#door-b-status').innerText());
   ok('and the reason is still in the open card, where it was refused',
-     /trade logs or transaction records/.test(flat(await page.locator('#cmp-status').innerText())),
+     /statement of your own payments/.test(flat(await page.locator('#cmp-status').innerText())),
      flat(await page.locator('#cmp-status').innerText()).slice(0, 120));
 
   await page.setInputFiles('#cmp-file', benchTRI);
@@ -963,7 +950,7 @@ function textValueFile(file) {
   await page.waitForTimeout(1500);
   const sparseOut = flat(await page.locator('#r-out').innerText());
   ok('the results own their thinness in words',
-     /The only \d+ 5-year periods in this data/i.test(sparseOut) ||
+     /The only (two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|\d+) 5-year periods in this data/i.test(sparseOut) ||
      /The only 5-year period in this data/i.test(sparseOut), sparseOut.slice(0, 400));
   ok('with the plural the right way round',
      !/\d+ 5-year period ,|\d+ 5-year period in/i.test(sparseOut), sparseOut.slice(0, 300));
@@ -975,7 +962,7 @@ function textValueFile(file) {
   await page.waitForTimeout(2000);
   ok('a daily file gets all three steps back',
      (await page.locator('#r-freq .chip:disabled').count()) === 0 &&
-     /Recommended/.test((await page.locator('#r-freq .chip').allInnerTexts())[0]));
+     /every start date/.test((await page.locator('#r-freq .chip').allInnerTexts())[0]));
 
   /* ================================ THE FOUR PILLARS, FIRST THING ON SCREEN */
   section('Every result opens with what it is');
@@ -1020,8 +1007,11 @@ function textValueFile(file) {
      /3 years ← chosen/.test(hz), hz.slice(0, 300));
   ok('and on a constant-growth file every horizon reads 14%',
      (hz.match(/14\.0%/g) || []).length >= 9, String((hz.match(/14\.0%/g) || []).length));
-  ok('the label now says what the count is, with the fraction kept',
-     /Independent \(Non-Overlapping\) 3-Year Horizons 3\.3 Periods/i.test(flat(await page.locator('#r-out').innerText())) &&
+  /* Whole windows only: 10 years of history holds three 3-year periods,
+     not 3.3 of them. */
+  ok('the label says what the count is, as a whole number',
+     /Independent \(Non-Overlapping\) 3-Year Horizons:? 3 Periods/i.test(flat(await page.locator('#r-out').innerText())) &&
+     !/\d\.\d Periods/i.test(flat(await page.locator('#r-out').innerText())) &&
      /Total Rolling Sample Windows [\d,]+ \(Daily Shifts\)/i.test(flat(await page.locator('#r-out').innerText())),
      flat(await page.locator('#r-out').innerText()).slice(0, 900));
 
@@ -1082,8 +1072,9 @@ function textValueFile(file) {
   await page.waitForTimeout(300);
   ok('no Card B header appears on the fund path',
      await page.locator('#up-benchmark-head').isHidden());
-  ok('no rolling frequency appears on the fund path',
-     await page.locator('#r-freq-wrap').isHidden());
+  /* Steps 1-3 are the same controls on both paths now. */
+  ok('the rolling frequency is offered on the fund path too',
+     await page.locator('#r-freq-wrap').isVisible());
   await page.setInputFiles('#f-file', navFile(TMP + '/spec-fund.csv', 0.14, 2015, 2025, 100));
   await page.waitForTimeout(1600);
   const fundChips = await page.locator('#r-years .chip').allInnerTexts();
@@ -1099,8 +1090,8 @@ function textValueFile(file) {
   ok('the fund path gets its own statistical summary, one measured column',
      /Statistical summary/.test(fundOut) && /This Fund/i.test(fundOut) &&
      (await page.locator('#r-out .summary3').count()) === 0, fundOut.slice(0, 300));
-  ok('and its five insights, none of them an apology for a missing benchmark',
-     (await page.locator('#r-out ol.insights li').count()) === 5 &&
+  ok('and no insights card, on this path either',
+     (await page.locator('#r-out ol.insights:not(.reflectlist)').count()) === 0 &&
      !/Not measurable without benchmark/i.test(fundOut));
   ok('with the approved labels, not the old success-rate wording',
      /Windows ending above zero/.test(fundOut) && !/Historical success rate/.test(fundOut),
@@ -1139,42 +1130,24 @@ function textValueFile(file) {
     ok('the comparison panel repeats the notice beside the gap',
        /Notice: Asset Class Context/i.test(gapOut) &&
        (await page.locator('#r-out .ixpanel[data-panel="bench"] .notice.info').count()) === 1);
-    ok('and the comparison table carries a Difference column',
-       /difference/i.test(gapOut));
+    ok('and the comparison table carries a Gap column',
+       /\bgap\b/i.test(await page.locator('#r-out .ixpanel[data-panel="bench"] table.stickyfirst thead').last().innerText()));
 
-    /* Item 12: the fee note, verbatim, under the benchmark comparison table. */
-    const fee = flat(await page.locator('#r-out .feenote').innerText());
-    ok('the data-standard note sits under the comparison table, verbatim',
-       fee === 'Data Standard Note: Fund NAVs reflect net performance after Total Expense Ratio (TER) deductions. Index TRI values represent gross market performance without expense deductions, transaction costs, or cash drag.',
-       fee);
-    ok('and it is in the benchmark panel, after the Against table',
-       await page.evaluate(() => {
-         const note = document.querySelector('#r-out .feenote');
-         const table = note && note.closest('.card') && note.closest('.card').querySelector('table.data');
-         return !!(note && table && note.closest('.ixpanel').dataset.panel === 'bench' &&
-                   (table.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING));
-       }));
-
-    /* Item 15: the scope note, verbatim, on the first panel. */
-    const scope = flat(await page.locator('#r-out .scopenote').innerText());
-    ok('the dataset scope note is on the summary panel, verbatim',
-       scope === 'Dataset Scope Note: This analysis reflects historical performance exclusively for the selected scheme and benchmark. It does not account for category-wide peer distributions or schemes that were merged, renamed, or liquidated during this timeframe.' &&
-       await page.evaluate(() => document.querySelector('#r-out .scopenote').closest('.ixpanel').dataset.panel === 'summary'),
-       scope);
-
-    /* Item 11: the two counts, relabelled, with the fractional horizon count. */
+    /* The audit (September, second pass) removed the Data Standard Note and
+       the Dataset Scope Note as two of seven disclaimers on one page, made
+       the independent-period count a whole number, and deleted the Sharpe
+       and Sortino rows whose denominator was not the asset's volatility. */
+    ok('the data-standard note and the scope note are gone',
+       (await page.locator('#r-out .feenote, #r-out .scopenote').count()) === 0 &&
+       !/Data Standard Note|Dataset Scope Note/.test(gapOut));
     ok('the window count is labelled as sample windows with the shift frequency',
-       /Total Rolling Sample Windows 1,827 \(Daily Shifts\)/i.test(gapOut), gapOut.slice(0, 900));
-    ok('and the independent count is a fraction of periods, not a floor',
-       /Independent \(Non-Overlapping\) 5-Year Horizons 2\.0 Periods/i.test(gapOut));
-
-    /* Item 3: Sharpe and Sortino as rows in both comparison tables. */
-    ok('Sharpe and Sortino are rows of the statistical summary and the Against table',
-       (await page.locator('#r-out table.summary3 td[data-ratio="sharpe"]').count()) === 2 &&
-       (await page.locator('#r-out table.summary3 td[data-ratio="sortino"]').count()) === 2 &&
-       (await page.locator('#r-out .card table.data td[data-ratio-delta]').count()) === 2);
-    ok('on a flat series the ratios are said to be undefined, not printed as a huge number',
-       (await page.locator('#r-out td[data-ratio="sharpe"][data-side="bench"]').first().innerText()).trim() === 'not defined');
+       /Total Rolling Sample Windows:? 1,827 \(Daily Shifts\)/i.test(gapOut), gapOut.slice(0, 900));
+    ok('and the independent count is a whole number of periods',
+       /Independent \(Non-Overlapping\) 5-Year Horizons:? 2 Periods/i.test(gapOut) &&
+       !/\d\.\d Periods/i.test(gapOut));
+    ok('no Sharpe or Sortino row remains in either comparison table',
+       (await page.locator('#r-out td[data-ratio], #r-out td[data-ratio-delta]').count()) === 0 &&
+       !/Sharpe|Sortino/.test(gapOut));
 
     /* Item 5: the side-by-side characteristic matrix, fund | benchmark | delta. */
     const matrixRows = await page.locator('#r-out table.charmatrix tbody tr').allInnerTexts();

@@ -180,6 +180,15 @@
       if (isFinite(probeAmt) && probeAmt < 0) signed = true;
     }
 
+    /* A price history is refused HERE, before any question is asked of the
+       reader. It used to reach the "which words mean money out" step first,
+       so a NAV file had the reader classifying six ISINs before being told
+       the file was the wrong kind. */
+    if (!signed && !o.direction && priceShaped(header, body, dateCol, amountCol, dayFirst)) {
+      return { ok: false, ask: null, kind: 'prices', rows: [], skipped: 0, code: 'PRICES',
+               header: header, message: MESSAGES.pricesNotPayments };
+    }
+
     var typeCol = -1, words = null, dirMap = null;
     if (!signed) {
       var found = typeColumn(header, body, width, dateCol, amountCol, fundCol);
@@ -585,6 +594,28 @@
    * anybody's own payments looks like that. */
   var PRICE_HEADERS = /\bnav\b|net\s*asset|\bprice\b|\bclose\b|\bclosing\b|repurchase/i;
 
+  /* The same test as looksLikePrices, on the raw rows, for use before the
+     ledger exists: a price heading on the amount column, or hundreds of rows
+     of unsigned amounts one to four days apart. */
+  function priceShaped(header, body, dateCol, amountCol, dayFirst) {
+    if (header && amountCol >= 0) {
+      var name = String(header[amountCol] == null ? '' : header[amountCol]).trim();
+      if (name && PRICE_HEADERS.test(name)) return true;
+    }
+    if (body.length < 30 || dateCol < 0) return false;
+    var times = [];
+    for (var i = 0; i < body.length; i++) {
+      var t = dateOf(body[i][dateCol], dayFirst);
+      if (isFinite(t)) times.push(t);
+    }
+    if (times.length < 30) return false;
+    times.sort(function (a, b) { return a - b; });
+    var gaps = [];
+    for (var j = 1; j < times.length; j++) gaps.push((times[j] - times[j - 1]) / MS_DAY);
+    gaps.sort(function (a, b) { return a - b; });
+    return gaps[Math.floor(gaps.length / 2)] <= 4;
+  }
+
   function looksLikePrices(ledger) {
     if (ledger.header && ledger.amountCol >= 0) {
       var name = String(ledger.header[ledger.amountCol] == null
@@ -648,6 +679,7 @@
     if (holdings.ok) return holdings;
 
     var ledger = ledgerRows(input, options);
+    if (ledger.code === 'PRICES') return ledger;
     if (ledger.ok || ledger.ask) {
       /* A NAV history is a date column beside a money column, which is exactly
        * what a transaction statement is, and the ledger reader will take it

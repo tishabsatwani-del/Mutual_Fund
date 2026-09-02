@@ -113,11 +113,11 @@ function pretty(iso) {
     ok('it makes no forecast claim', /nothing in it forecasts/.test(out));
 
     ok('rolling statistics are calculated automatically', /Median 5-year return/i.test(out), out.slice(0, 160));
-    /* .first(): a second .spread table now compares horizons side by side,
-       and its rows carry labels and spreads, not just percentiles. */
-    const spread = await page.locator('#r-out table.spread').first().locator('td').allInnerTexts();
+    /* The five quartile figures are tiles now (label above figure), not a
+       five-column table. */
+    const spread = await page.locator('#r-out .qgrid .qtile .v').allInnerTexts();
     ok('a 10% series measures 10% across every percentile',
-       spread.every(v => v.trim() === '10.0%'), spread.join('|'));
+       spread.length === 5 && spread.every(v => v.trim() === '10.0%'), spread.join('|'));
     /* The index path's horizon table is the extended matrix now: percentile
        bands instead of a Spread column. On a 10% constant series every
        return cell of every row must read 10.0%. */

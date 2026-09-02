@@ -608,6 +608,7 @@
       '<p>It is before exit load and before tax, and it compares with nothing — not the fund’s ' +
       'own return, not another investor’s.</p></div>';
 
+    html += pdfFoot('portfolio', 'My portfolio');
     $('#pf-out').innerHTML = html;
   }
 
@@ -759,13 +760,11 @@
      * reader what to expect, and that is not its job. */
     html += realReturnCard(rate);
 
+    /* One line. The two-numbers card above already explains absolute against
+       annualised; a second full explanation trained the reader to skip both. */
     html += '<div class="meaning"><h3>What this means</h3>' +
-      '<p>Your money grew at about <strong>' + pct(rate) + ' a year</strong>, taking into account the date ' +
-      'every rupee went in and came out. Money you invested early had longer to work than money you ' +
-      'invested last month, and this number already accounts for that.</p>' +
-      '<p>Your total gain of ' + esc(A.signedPct(abs)) + ' is <em>not</em> a yearly figure. Spread across ' +
-      years.toFixed(1) + ' years, it works out at the ' + pct(rate) + ' above.</p>' +
-      '</div>';
+      '<p>Your money grew at about <strong>' + pct(rate) + ' a year</strong>, counting the date ' +
+      'every rupee went in and came out.</p></div>';
 
     html += '<div class="meaning"><h3>What it does not mean</h3><ul class="points">' +
       '<li><strong>Not the fund\u2019s return.</strong> A fund can publish a strong number while ' +
@@ -773,17 +772,18 @@
       'fund; this one describes you.</li>' +
       '<li><strong>Not comparable to anything.</strong> Not the fund\u2019s own return, not another ' +
       'investor\u2019s, not your other holding \u2014 each ran on a different set of dates.</li>' +
-      '<li><strong>Before exit load and before tax.</strong> On an equity fund held for years, plan ' +
-      'on roughly a point a year less once tax is paid, and more than that if you sell early.</li>' +
+      '<li><strong>Before exit load and before tax.</strong> Plan on less once tax is paid, and ' +
+      'less again if you sell early.</li>' +
       '</ul></div>';
 
     html += disagreeCard();
 
     html += '<div class="meaning"><h3>What to look at next</h3>' +
-      '<p>A return means little without a period and a comparison. Use <button class="link" data-go="history">' +
-      'Understand market history</button> to see the range this kind of market has actually delivered over ' +
-      'the same length of time, and <button class="link" data-go="goal">Plan my goal</button> to see whether ' +
-      'this rate gets you where you are going.</p></div>';
+      '<p>A return means little without a period and a comparison. Use <button class="link" ' +
+      'data-go="rolling" data-source="fund">Rolling returns: one fund or index on its own</button> ' +
+      'to see the range this kind of market has actually delivered over the same length of time, ' +
+      'and <button class="link" data-go="goal">Plan my goal</button> to see whether this rate gets ' +
+      'you where you are going.</p></div>';
 
     html += '</div>';
 
@@ -791,6 +791,7 @@
        the reader has to go and switch on after doing the work of valuing each
        fund. The control stays, and turning it off still turns it off. */
     if ($('#pf-group').value === 'on' || PF.schemes) html += byLabel(flows, rate);
+    html += pdfFoot('portfolio', 'My portfolio');
     out.innerHTML = html;
     wireRealReturn(rate);
   }
@@ -982,7 +983,7 @@
    * These could, so they are the book's, and what stays is a pointer of six
    * words or fewer. */
   function disagreeCard() {
-    return '<p class="hint pointer">Chapter 13, the five checks.</p>';
+    return '<p class="hint pointer">Explained in the book\u2019s returns chapter.</p>';
   }
 
   function byLabel(flows, portfolioRate) {
@@ -1306,9 +1307,18 @@
       html += '<p style="margin:0 0 .8rem">Nothing more is required on these assumptions. The scenarios below ' +
         'show what happens if you do more anyway.</p>';
     } else {
+      /* The figure closes the gap only if it rises with the rest of the
+         instalment. Printed flat, a reader who adds a flat amount closes
+         about half the gap and finds out at the end. */
       html += '<div class="result" style="margin:0 0 1rem"><div class="label">Additional monthly investment needed</div>' +
-        '<div class="value small">' + money(plan.extraMonthly) + ' a month</div>' +
-        '<div class="sub">On top of the ' + money(input.monthlySip) + ' a month you already invest</div></div>';
+        '<div class="value small">' + money(plan.extraMonthly) +
+        (input.annualStepUpRate > 0 ? ' a month now' : ' a month, every month') + '</div>' +
+        '<div class="sub">' +
+        (input.annualStepUpRate > 0
+          ? 'Rising ' + pct(input.annualStepUpRate, 0) + ' a year with the rest of your ' +
+            'instalment, on top of the ' + money(input.monthlySip) + ' a month you already invest'
+          : 'On top of the ' + money(input.monthlySip) + ' a month you already invest') +
+        '</div></div>';
     }
 
     /* Four fixed rows told a reader what ₹2,000 more a month would do. They
@@ -1415,6 +1425,7 @@
       'than the same years late. Treat this as an illustration of arithmetic, not a forecast.</p>' +
       '</div>';
 
+    html += pdfFoot('goal', name);
     out.innerHTML = html;
     wireScenario(input, plan);
   }
@@ -1426,16 +1437,11 @@
   /* The length the page opens on. See R.years for why this exists. */
   var DEFAULT_YEARS = 3;
 
-  /* How much history a window of this length wants behind it before its range
-   * is worth reading. The step-1 helper text states this as 3+ years for
-   * 1-year windows, 5+ for 3-year and 7+ for 5-year, which is length + 2, and
-   * this is the function that keeps the warning honest to that promise.
-   *
-   * The result card carries a STRICTER test of its own (length + 3, the book's
-   * rule) which refuses to be quiet about a range built from one stretch of
-   * market. That one is a judgement about the numbers; this one is a warning
-   * about the file, and they are deliberately not the same threshold. */
-  function recommendedYears(years) { return years + 2; }
+  /* How much history a window of this length wants behind it: the one rule,
+   * stated at step 3 and applied everywhere else -- N+3, so that start dates
+   * spread across three different market conditions. There used to be three
+   * different thresholds for this one idea. */
+  function recommendedYears(years) { return years + 3; }
 
   function renderRolling(series, years, meta, compareSeries, compareName, prefix, compareMeta, opts) {
     var o = opts || {};
@@ -1508,23 +1514,20 @@
      * raw count on the same file is over two thousand, which is why the badge
      * is computed from the independent figure and never from s.count.
      */
+    /* Only whole windows can stand side by side, so this is a whole number
+       on both paths: 7 years of history holds one non-overlapping 5-year
+       period, not 1.4 of them. */
     var independent = Math.floor(spanYears / years);
-    /* The market-index path prints the span divided by the window length as
-       it is, to one decimal: 6.9 years of history holds 1.4 five-year
-       horizons, and rounding that down to 1 threw away the fraction the
-       reader most needs to see. The fund path keeps the whole number. */
-    var independentText = o.indexPath ? (spanYears / years).toFixed(1) : String(independent);
+    var independentText = String(independent);
     var sampleLabel = 'Total Rolling Sample Windows';
     var sampleValue = s.count.toLocaleString() + ' (' + freqLabel + ' Shifts)';
     var horizonLabel = 'Independent (Non-Overlapping) ' + years + '-Year Horizons';
-    var horizonValue = independentText + ' Periods';
+    var horizonValue = independentText + (independent === 1 ? ' Period' : ' Periods');
     var densityText = (!thin && independent < 12)
-      ? 'These ' + s.count.toLocaleString() + ' windows overlap. Laid side by side without ' +
-        'touching, this history holds <strong>' + independentText +
-        (independent === 1 && !o.indexPath ? ' non-overlapping ' + years + '-year period' :
-                             ' non-overlapping ' + years + '-year periods') + '</strong> \u2014 ' +
-        spanYears.toFixed(1) + ' years divided by ' + years + '. Read the range below as the shape ' +
-        'of that much market and no more.'
+      ? 'These ' + s.count.toLocaleString() + ' windows overlap. Only <strong>' + independentText +
+        ' non-overlapping ' + years + '-year period' + (independent === 1 ? '' : 's') +
+        '</strong> ' + (independent === 1 ? 'fits' : 'fit') + ' inside ' + spanYears.toFixed(1) +
+        ' years of history. Read the range below as the shape of that much market and no more.'
       : '';
     if (densityText && !o.indexPath) {
       html += '<p class="density"><span class="density-badge">Low data density</span> ' +
@@ -1559,14 +1562,16 @@
      * So at this length the screen states the one measurement it has, and
      * says outright that there is no distribution to read. */
     if (thin) {
+      /* "The only 2 7-year periods" read as "27-year". The count is a word. */
       add('summary', '<div class="result"><div class="label">' +
         (s.count === 1 ? 'The only ' + years + '-year period in this data'
-                       : 'The only ' + s.count + ' ' + years + '-year periods in this data') +
+                       : 'The only ' + countWord(s.count) + ' ' + years + '-year periods in this data') +
         ', % a year</div>' +
         '<div class="value">' + (s.count === 1 ? pct(r.values[0]) : pct(s.min) + ' to ' + pct(s.max)) +
         '</div>' +
         '<div class="sub">' + esc(meta.name) + ' \u00b7 ' + fmtDate(r.worst.t) + ' to ' +
-        fmtDate(r.best.endT) + '. <strong>This is a measurement, not a range.</strong> A ' + years +
+        fmtDate(r.best.endT) + '. <strong>' + (s.count === 1 ? 'One measurement'
+          : capitalise(countWord(s.count)) + ' measurements') + ', not a distribution.</strong> A ' + years +
         '-year window needs ' + years + ' years of history behind it, and this file holds ' +
         spanYears.toFixed(1) + ' \u2014 so ' + (s.count === 1 ? 'only one such period exists'
           : 'only ' + s.count + ' such periods exist') + ' in it. There is no median, no worst ' +
@@ -1578,12 +1583,13 @@
          it and stays put while the results scroll under it \u2014 and carries the
          one action a finished analysis invites, printing it (a print is also
          how a phone saves a PDF). Market-index path only. */
+      /* Once, in flow, directly above the tab row. It used to be sticky, and
+         a 150px card stuck over the app bar is what the audit's first item
+         was about. The Save as PDF button lives on the tab row instead. */
       if (o.indexPath) {
-        html += '<div class="stickybar"><span class="sb-name">' + esc(meta.name) + '</span>' +
+        html += '<div class="resulthead"><span class="sb-name">' + esc(meta.name) + '</span>' +
           '<span class="sb-fact">' + years + 'y &middot; median ' + pct(s.median) +
-          ' &middot; worst ' + pct(s.min) + '</span>' +
-          '<button class="secondary printbtn" type="button" data-always-on="yes">' +
-          'Print / save PDF</button></div>';
+          ' &middot; worst ' + pct(s.min) + '</span></div>';
       }
       add('summary', '<div class="result"><div class="label">Median ' + years + '-year return, % a year</div>' +
         '<div class="value">' + pct(s.median) + '</div>' +
@@ -1601,16 +1607,6 @@
           ? stat(sampleLabel, sampleValue) + stat(horizonLabel, horizonValue)
           : stat('Non-overlapping periods, at most', String(independent))) +
         '</div>');
-    }
-
-    /* The market-index path says, before any comparison, exactly what this
-       page is and is not a record of. Two files, and nothing about the
-       category those files sit in. */
-    if (o.indexPath) {
-      add('summary', '<p class="scopenote"><strong>Dataset Scope Note:</strong> This analysis ' +
-        'reflects historical performance exclusively for the selected scheme and benchmark. It ' +
-        'does not account for category-wide peer distributions or schemes that were merged, ' +
-        'renamed, or liquidated during this timeframe.</p>');
     }
 
     /* Section 5's two blocks, in the order the specification lists them --
@@ -1632,8 +1628,6 @@
         statisticalSummary(r, years, paired, compareName, calc,
                            compareSeries ? (compareMeta || null) : null,
                            o.indexPath ? 'index' : 'fund', key));
-    add('summary', factualInsights(r, years, paired, compareName,
-                                   o.indexPath ? 'index' : 'fund'));
 
     /* Worst to best across the quartiles, in that order. An average put at the
      * top of a screen becomes the number people remember, and it hides the
@@ -1652,33 +1646,33 @@
         }).join('') +
         '</tbody></table></div>' +
         '<div class="meaning"><h3>What to do about it</h3>' +
-        '<p>Choose a shorter holding period in step 3, or load a longer history. Every extra year ' +
-        'of history adds a year of start dates at this length; the file needs roughly ' +
-        (years + 3) + ' years before ' + years + '-year windows begin in genuinely different ' +
-        'markets, and it has ' + spanYears.toFixed(1) + '.</p></div></div>');
+        '<p>Choose a shorter holding period in step 3, or load a longer history. A window of ' +
+        years + ' years wants at least ' + (years + 3) + ' years of history, and this file has ' +
+        spanYears.toFixed(1) + '.</p></div></div>');
     } else {
     add('risk', '<div class="card"><h2>The range, not the average</h2>' +
       '<p class="hint" style="margin:0 0 .8rem"><strong>Read the worst figure first.</strong> It is what ' +
       'this market did over your holding period at its most unkind, and nobody tells you in advance ' +
       'which stretch you are walking into. Read the average last, and never on its own &mdash; on its ' +
       'own it is one more single number, which is the very thing this page exists to replace.</p>' +
-      '<div class="scroll"><table class="data spread">' +
-      '<caption>Annualised return, % a year, over every ' + years + '-year holding period</caption>' +
-      '<thead><tr>' +
-      '<th>Worst</th><th>Bottom quarter</th><th>Median</th><th>Top quarter</th><th>Best</th>' +
-      '</tr></thead><tbody><tr>' +
-      '<td>' + pct(s.min) + '</td><td>' + pct(s.p25) + '</td><td><strong>' + pct(s.median) +
-      '</strong></td><td>' + pct(s.p75) + '</td><td>' + pct(s.max) + '</td>' +
-      '</tr></tbody></table></div>' +
+      /* Five tiles, label above figure. A five-column table clipped its
+         headings at "TOP QU\u2026" on a phone and then lost them altogether. */
+      '<p class="hint" style="margin:0 0 .2rem">Annualised return, % a year, over every ' + years +
+      '-year holding period</p>' +
+      '<div class="qgrid" role="list">' +
+      qtile('Worst', s.min) + qtile('Bottom quarter', s.p25) + qtile('Median', s.median, true) +
+      qtile('Top quarter', s.p75) + qtile('Best', s.max) +
+      '</div>' +
       '<p class="hint" style="margin:.5rem 0 1rem">A quarter of periods fell below ' +
       pct(s.p25) + ', and a quarter came in above ' + pct(s.p75) + '. The spread is what decided ' +
       'what any one investor actually got.</p>' +
       '<div class="stats">' +
       stat('Holding periods measured', s.count.toLocaleString()) +
       /* Counts, not shares. A share reads as a property of the fund when it is
-       * really a property of the dates this file happens to start and end on. */
+       * really a property of the dates this file happens to start and end on.
+       * Below zero only: above zero is its complement, and was a second tile
+       * saying the same thing. */
       stat('Ended below zero', below.toLocaleString() + ' of ' + s.count.toLocaleString()) +
-      stat('Ended above zero', (s.count - below).toLocaleString() + ' of ' + s.count.toLocaleString()) +
       '</div>' +
       /* The market-index path draws its own histogram: the fund in one hue,
          the benchmark (when one is loaded, over the paired windows) in a
@@ -1718,6 +1712,9 @@
     if (s.count > 1) add('risk', startDateCard(r, years));
     add('risk', drawdownCard(series, years, o.indexPath, s.min));
     add('risk', rateCheckCard(key, years, r.values, o.indexPath));
+    /* Directly under the rate box it refers to. It sat on the Summary tab,
+       where "the rate box above" pointed at nothing. */
+    if (o.indexPath) add('risk', reflectCard(years, series, key));
 
     if (compareSeries) {
       add('bench', comparisonCards(series, compareSeries, years, meta.name, compareName,
@@ -1725,11 +1722,9 @@
     } else if (o.indexPath) {
       add('bench', '<div class="card"><h2>Benchmark comparison</h2><p class="hint" ' +
         'style="margin:0">No benchmark index is loaded. Load a Total Return Index (TRI) file ' +
-        'into card 2, Benchmark Index Data, and this panel fills with the side-by-side ' +
+        'into card 2, the benchmark index (TRI), and this panel fills with the side-by-side ' +
         'comparison over the windows both files cover.</p></div>');
     }
-
-    if (o.indexPath) add('summary', reflectCard(years, series, key));
 
     var meanings = '<div class="meaning"><h3>What this means</h3>' +
       '<p>Someone who invested at the worst possible moment in this data and held for ' + years +
@@ -1743,7 +1738,7 @@
     meanings += '<div class="meaning"><h3>What it does not mean</h3><ul class="points">' +
       '<li><strong>Not a forecast.</strong> This is what already happened, over the dates in this ' +
       'file and no others. Nothing here claims the next ' + years + ' years will land inside it.</li>' +
-      '<li><strong>Not independent samples.</strong> The windows overlap \u2014 ' +
+      '<li><strong>Not independent samples.</strong> The windows overlap \u2014 only ' +
       independentText + ' of them could stand side by side without touching.</li>' +
       '<li><strong>Not anyone\u2019s experience.</strong> The median is the middle of many possible ' +
       'starting days, not a result anybody actually had.</li>' +
@@ -1755,19 +1750,21 @@
        Nothing is removed — the reviewer's complaint was the scroll, not the
        sentences — and opening them is one tap for whoever wants them. */
     add('summary', o.indexPath
-      ? '<details class="explain teachnotes"><summary>What these figures mean — and what ' +
-        'they do not</summary><div class="body">' + meanings + '</div></details>'
+      ? '<details class="explain teachnotes"><summary>What these figures are not</summary>' +
+        '<div class="body">' + meanings + '</div></details>'
       : meanings);
 
     var binTable = '<div class="scroll">' +
-      '<table class="data"><thead><tr><th>Return range</th><th>Periods</th><th>Share</th></tr></thead><tbody>' +
+      '<table class="data bins"><thead><tr><th>Return range</th><th>Periods</th><th>Share</th></tr></thead><tbody>' +
       E.histogram(r.values).map(function (b) {
         return '<tr><td>' + esc(binText(b)) + '</td><td>' + b.count + '</td><td>' +
           pct(b.count / r.values.length, 0) + '</td></tr>';
       }).join('') + '</tbody></table></div>';
-    var matchNote = '<p style="margin-top:.7rem">Windows are matched on calendar dates, with up to seven days of ' +
-      'tolerance when a market was shut. Periods falling inside a longer gap in the data are left out ' +
-      'rather than stretched.</p>';
+    /* The matching rule and the join rule are stated once, in How the
+       numbers work; this points there instead of restating either. */
+    var matchNote = '<p class="hint" style="margin-top:.7rem">How windows are matched on the ' +
+      'calendar, and how two files are joined, is set out in ' +
+      '<button class="link" type="button" data-go="method">How the numbers work</button>.</p>';
     if (!o.indexPath) {
       html += '<details class="explain"><summary>See the numbers as a table</summary><div class="body">' +
         binTable + matchNote + '</div></details>';
@@ -1776,18 +1773,31 @@
 
     /* The market-index path's fourth panel: every figure on the page as a
        table, and every window as a row, with the arithmetic that made them
-       written out. */
+       written out -- the exponent as an exponent, and in words. */
+    var basis = calc.dayBasis || E.DEFAULT_DAY_BASIS || 365;
     add('data', '<div class="card"><h2>The numbers as a table</h2>' +
       '<p class="hint" style="margin:0 0 .8rem">How many ' + years + '-year windows ended in ' +
-      'each range.</p>' + binTable + matchNote +
-      '<p>Each window’s figure is CAGR = (NAV<sub>end</sub> / NAV<sub>start</sub>)' +
-      '<sup>365.25 / (Date<sub>end</sub> − Date<sub>start</sub>)</sup> − 1, with the ' +
-      'day count taken from the two calendar dates themselves' +
-      (paired ? '; the two files are joined on the calendar date (YYYY-MM-DD), and a date one ' +
-                'file lacks is filled from that file’s last earlier value' : '') + '.</p>' +
+      'each range.</p>' + binTable +
+      '<p class="formula">Each window\u2019s figure is (NAV<sub>end</sub> \u00f7 NAV<sub>start</sub>)' +
+      '<sup>' + basis + ' \u00f7 days</sup> \u2212 1: divide the end value by the start value, raise ' +
+      'the result to the power of ' + basis + ' divided by the number of days between the two ' +
+      'dates, then subtract 1. The day count is taken from the two calendar dates themselves, on ' +
+      'a ' + basis + '-day year.</p>' + matchNote +
       '</div>' + windowTable(r.pairs, years, paired ? paired.matched : null, meta.name, compareName));
 
-    return '<div class="ixpath">' + html + tabbedPanels(PANEL, !!compareSeries) + '</div>';
+    return '<div class="ixpath">' + html + tabbedPanels(PANEL, !!compareSeries, meta.name) + '</div>';
+  }
+
+  /* One to twelve as a word, so "the only 2 7-year periods" cannot read as
+     "27-year". Larger counts are digits, where no such collision exists. */
+  var COUNT_WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine',
+                     'ten', 'eleven', 'twelve'];
+  function countWord(n) { return n >= 0 && n < COUNT_WORDS.length ? COUNT_WORDS[n] : String(n); }
+  function capitalise(w) { return w.charAt(0).toUpperCase() + w.slice(1); }
+
+  function qtile(label, v, mid) {
+    return '<div class="qtile' + (mid ? ' mid' : '') + '" role="listitem"><span class="k">' +
+      label + '</span><span class="v">' + pct(v) + '</span></div>';
   }
 
   /* The four panels, with a tab bar that folds them to one at a time on a
@@ -1797,42 +1807,133 @@
     ['summary', 'Summary & Context'], ['risk', 'Risk & Return'],
     ['bench', 'Benchmark Comparison'], ['data', 'Data Table']
   ];
-  function tabbedPanels(panels, haveBench) {
+  function tabbedPanels(panels, haveBench, name) {
     var bar = '<div class="ixtabs" role="tablist" aria-label="Results">' +
       IX_TABS.map(function (t, i) {
         return '<button type="button" class="ixtab' + (i === 0 ? ' on' : '') + '" role="tab" ' +
           'data-panel="' + t[0] + '" aria-selected="' + (i === 0 ? 'true' : 'false') +
           '" data-always-on="yes">' + t[1] + '</button>';
-      }).join('') + '</div>';
+      }).join('') + pdfButton('rolling', name) + '</div>';
     var body = IX_TABS.map(function (t, i) {
       return '<section class="ixpanel' + (i === 0 ? ' on' : '') + '" data-panel="' + t[0] +
         '" role="tabpanel"><h2 class="ixpanel-h">' + t[1] + '</h2>' + panels[t[0]] + '</section>';
     }).join('');
-    return bar + body;
+    return bar + body + pdfFoot('rolling', name) +
+      '<button class="totop" type="button" data-always-on="yes" hidden aria-label="Back to the ' +
+      'result tabs">\u2191 Top</button>';
+  }
+
+  /* SAVE AS PDF. Built in the browser by tool/pdf.js and downloaded as a
+     file -- window.print() opened the system print sheet, where "Save as
+     PDF" hides behind a printer choice, and printed the dark theme as black
+     pages. data-pdf names which screen is being saved; the handler in
+     wireRateChecks picks up the root from that. */
+  function pdfButton(which, name) {
+    return '<button class="secondary pdfbtn" type="button" data-always-on="yes" data-pdf="' +
+      which + '" data-name="' + esc(name || '') + '">Save as PDF</button>';
+  }
+  function pdfFoot(which, name) {
+    return '<div class="pdfrow">' + pdfButton(which, name) +
+      '<p class="hint pdfnote" aria-live="polite"></p></div>';
   }
 
   /* Every window as a row: start, end, the fund's figure and, when a
      benchmark is loaded, the benchmark's over the same dates. Folded shut,
      because a daily file has thousands of them. */
+  /* Four true columns -- Start, End, Fund, Index -- inside a box of its own
+     that scrolls (65% of the screen, header pinned, a thumb wide enough to
+     drag), with a row of year chips that jump the box to that year, a Top
+     button that returns to the tab row, and the rows as a CSV. Still folded
+     shut by default. It used to render in flow, four lines per window, 525
+     windows: 125,000px of page on a phone whose scrollbar cannot be grabbed. */
+  var WINDOW_ROWS = {};
   function windowTable(pairs, years, matched, name, compareName) {
     if (!pairs || !pairs.length) return '';
     var byT = {};
     if (matched) matched.forEach(function (m) { byT[m.t] = m.bench; });
+    var lastYear = null, yearList = [];
     var rows = pairs.map(function (p) {
-      return '<tr><td>' + fmtDate(p.t) + '</td><td>' + fmtDate(p.endT) + '</td><td>' +
-        pct(p.r) + '</td>' +
-        (matched ? '<td>' + (byT[p.t] == null ? '—' : pct(byT[p.t])) + '</td>' : '') +
+      var y = new Date(p.t).getUTCFullYear();
+      var first = y !== lastYear;
+      if (first) { yearList.push(y); lastYear = y; }
+      return '<tr data-year="' + y + '"' + (first ? ' data-year-first="yes"' : '') + '><td>' +
+        fmtDate(p.t) + '</td><td>' + fmtDate(p.endT) + '</td><td>' + pct(p.r) + '</td>' +
+        (matched ? '<td>' + (byT[p.t] == null ? '\u2014' : pct(byT[p.t])) + '</td>' : '') +
         '</tr>';
     });
+    WINDOW_ROWS.rolling = { pairs: pairs, byT: matched ? byT : null, years: years,
+                            name: name, compareName: compareName };
     return '<details class="explain windowlist"><summary>Every ' + years + '-year window, one per row (' +
-      pairs.length.toLocaleString() + ')</summary><div class="body"><div class="scroll">' +
-      '<table class="data"><thead><tr><th>Window starts</th><th>Window ends</th>' +
-      '<th><span class="legend-dot fund"></span>' + esc(name) + '</th>' +
-      (matched ? '<th><span class="legend-dot bench"></span>' + esc(compareName) + '</th>' : '') +
+      pairs.length.toLocaleString() + ')</summary><div class="body">' +
+      (yearList.length > 1
+        ? '<div class="yearchips" role="group" aria-label="Jump to a year">' +
+          yearList.map(function (y) {
+            return '<button class="chip" type="button" data-jump-year="' + y +
+              '" data-always-on="yes">' + y + '</button>';
+          }).join('') + '</div>'
+        : '') +
+      '<div class="winbox" id="winbox-rolling" tabindex="0">' +
+      '<table class="data"><thead><tr><th>Start</th><th>End</th>' +
+      '<th><span class="legend-dot fund"></span>Fund</th>' +
+      (matched ? '<th><span class="legend-dot bench"></span>Index</th>' : '') +
       '</tr></thead><tbody>' + rows.join('') + '</tbody></table></div>' +
-      (matched ? '<p class="hint" style="margin:.6rem 0 0">A dash means the benchmark file ' +
+      '<div class="winrow">' +
+      '<button class="secondary wincsv" type="button" data-always-on="yes" data-win="rolling">' +
+      'Download these rows as CSV</button>' +
+      '<span class="hint" style="margin:0">Fund: ' + esc(name) +
+      (matched ? ' \u00b7 Index: ' + esc(compareName) : '') + '</span></div>' +
+      (matched ? '<p class="hint" style="margin:.6rem 0 0">A dash means the index file ' +
         'does not cover that window, so nothing is compared there.</p>' : '') +
       '</div></details>';
+  }
+
+  /* The same rows for the PDF's text pages: every window, one per row. */
+  function windowAppendix(key) {
+    var w = WINDOW_ROWS[key];
+    if (!w) return null;
+    var cols = ['Window starts', 'Window ends', 'Fund: ' + w.name + ' (% a year)'];
+    if (w.byT) cols.push('Index: ' + w.compareName + ' (% a year)');
+    return {
+      title: 'Every ' + w.years + '-year window, one per row (' + w.pairs.length.toLocaleString() + ')',
+      columns: cols,
+      widths: w.byT ? [40, 40, 53, 53] : [46, 46, 94],
+      rows: w.pairs.map(function (p) {
+        var row = [fmtDate(p.t), fmtDate(p.endT), pct(p.r)];
+        if (w.byT) row.push(w.byT[p.t] == null ? '\u2014' : pct(w.byT[p.t]));
+        return row;
+      })
+    };
+  }
+
+  /* The same rows as a file. */
+  function windowCsv(key) {
+    var w = WINDOW_ROWS[key];
+    if (!w) return null;
+    var head = ['Window starts', 'Window ends', w.name + ' (% a year)'];
+    if (w.byT) head.push(w.compareName + ' (% a year)');
+    var lines = [head.map(csvCell).join(',')];
+    w.pairs.forEach(function (p) {
+      var row = [isoOf(p.t), isoOf(p.endT), (p.r * 100).toFixed(2)];
+      if (w.byT) row.push(w.byT[p.t] == null ? '' : (w.byT[p.t] * 100).toFixed(2));
+      lines.push(row.map(csvCell).join(','));
+    });
+    return lines.join('\r\n');
+  }
+  function csvCell(v) {
+    var t = String(v == null ? '' : v);
+    return /[",\r\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
+  }
+  function fileSlug(name) {
+    return String(name || 'results').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+      .slice(0, 40) || 'results';
+  }
+  function downloadText(text, filename, mime) {
+    var blob = new Blob([text], { type: mime || 'text/plain' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
   }
 
   /* ===================================== SECTION 5, THE STATISTICAL SUMMARY
@@ -1887,7 +1988,7 @@
         row1('Median Rolling Return', pct(f.median)) +
         row1('Maximum Return (Best Window)', pct(f.max)) +
         row1('Minimum Return (Worst Window)', pct(f.min)) +
-        row1('Return Volatility (Std Deviation)',
+        row1('Spread of window returns (std dev)',
              f.stdev == null ? 'not measurable on one window' : pct(f.stdev)) +
         row1('Negative Return Frequency (Historical)', negCell(fNeg, f.count))
       : row('Total Rolling Windows Analysed', obs(f.count), have ? obs(b.count) : none) +
@@ -1898,7 +1999,11 @@
         /* Volatility of the RETURNS, not of the prices: the spread of the
            window figures around their own mean. With one window there is no
            spread to measure and describe() returns null rather than zero. */
-        row('Return Volatility (Std Deviation)',
+        /* "Spread of window returns", because the comparison card carries a
+           different quantity -- the value's own annualised volatility -- and
+           the two must not share a name. This one is the standard deviation
+           of the overlapping window figures around their own mean. */
+        row('Spread of window returns (std dev)',
             f.stdev == null ? 'not measurable on one window' : pct(f.stdev),
             have ? (b.stdev == null ? 'not measurable on one window' : pct(b.stdev)) : none) +
         /* "Probability" was the specification's word, and it is the wrong one:
@@ -1910,28 +2015,27 @@
         row('Outperformance Rate vs Benchmark',
             have ? pct(paired.fundAheadShare, 1) + ' of total windows'
                  : '<span class="nodata">Not measurable without a benchmark</span>',
-            have ? 'N/A' : none) +
-        /* Market-index path only: the two ratios, in the table itself and
-           against the reader's own target (7% to begin with; the rate box on
-           the Risk & Return panel moves them). Marked so the box can find
-           them. The fund path's table is left as it was. */
-        (fundPath ? '' : ratioRows(fVals, have ? paired.benchValues : null, 0.07, key, none));
+            have ? 'N/A' : none);
+    /* The Sharpe and Sortino rows are gone. Their denominator was the spread
+       of overlapping window returns, not the asset's volatility, so the
+       figure printed as "Sharpe" ran to 9 -- and a mislabelled number is not
+       rescued by a footnote admitting the substitution. */
 
     var html = '<div class="card"><h2>Statistical summary</h2>' +
       '<p class="hint" style="margin:0 0 .8rem">' +
       (fundPath
         ? 'Every figure is measured over the same ' + f.count.toLocaleString() +
-          ' rolling windows of this fund’s own history. To set these against an index, use ' +
-          'the Market index path: the fund in card 1, the index in card 2.'
+          ' rolling windows of this fund\u2019s own history. To set these against an index, use ' +
+          '\u201cA fund against its benchmark index\u201d: the fund in card 1, the index in card 2.'
         : (have
           ? 'Both columns are measured over the same ' + f.count.toLocaleString() +
-            ' windows &mdash; the two files joined on the calendar date (YYYY-MM-DD), so each ' +
-            'window starts and ends on the same day in both &mdash; and every row ' +
-            'compares like with like. Windows outside that shared stretch are not counted on either ' +
-            'side.' + carriedPhrase(paired)
-          : 'Only the Primary Investment column can be filled in. Load a benchmark index file in ' +
+            ' windows, joined as set out in How the numbers work, and every row compares like ' +
+            'with like. Windows outside the shared stretch are not counted on either side.' +
+            carriedPhrase(paired)
+          : 'Only the fund column can be filled in. Load a benchmark index file in ' +
             'card 2 and the second column, and the outperformance row, become measurable.')) +
-      '</p><div class="scroll"><table class="data' + (fundPath ? '' : ' summary3') + '">' +
+      '</p><div class="scroll' + (fundPath ? '' : ' fade') + '"><table class="data' +
+      (fundPath ? '' : ' summary3 stickyfirst') + '">' +
       '<caption>Annualised ' + years + '-year rolling returns, ' +
       esc((E.FREQUENCY[calc.frequency] || E.FREQUENCY.daily).label.toLowerCase()) +
       ' start dates</caption>' +
@@ -1956,7 +2060,7 @@
       (have && compareMeta && compareMeta.kind == null
         ? '<p><strong>It has not been established whether the benchmark counts dividends.</strong> ' +
           'If it does not, the outperformance row overstates the gap by roughly the market\u2019s ' +
-          'dividend yield. Say which it is on card 2, Benchmark Index Data.</p>' : '') +
+          'dividend yield. Say which it is on card 2, the benchmark index.</p>' : '') +
       '</div></div>';
     return html;
   }
@@ -1965,97 +2069,6 @@
     var n = 0;
     for (var i = 0; i < values.length; i++) if (values[i] < 0) n++;
     return n;
-  }
-
-  /* ==================================== SECTION 5, THE FACTUAL DATA INSIGHTS
-   *
-   * Five numbered statements, each one a sentence the reader could have
-   * written themselves from the table above. That is the whole test: if a
-   * sentence here cannot be checked against a number on this screen, it does
-   * not belong. Nothing here says whether any of it is good.
-   */
-  function factualInsights(r, years, paired, compareName, mode) {
-    var have = !!paired;
-    var fundPath = mode === 'fund';
-    var f = have ? paired.fund : r.stats;
-    var fVals = have ? paired.fundValues : r.values;
-    var loss = countBelow(fVals);
-    var total = f.count;
-    var items = [];
-
-    /* The fund path has no benchmark by design, so its five statements are
-       the five this data can actually support -- none of them a row of
-       "not measurable" apologising for a column that was never offered. */
-    if (fundPath) {
-      items.push(['Return Range &amp; Distribution',
-        'Historical ' + years + '-Year rolling returns ranged from ' + pct(f.min) + ' to ' +
-        pct(f.max) + ', indicating an overall return variance spread of ' +
-        pct(f.max - f.min) + '.']);
-      items.push(['Central Tendency',
-        'The median ' + years + '-Year rolling return was ' + pct(f.median) +
-        ' a year, against a mean of ' + pct(f.mean) +
-        '. When the two differ, a few unusual windows are pulling the mean away from the middle.']);
-      items.push(['Middle Half of Outcomes',
-        'Half of all ' + years + '-Year windows returned between ' + pct(f.p25) + ' and ' +
-        pct(f.p75) + ' a year. A quarter fell below that band, and a quarter came in above it.']);
-      items.push(['Capital Loss Frequency',
-        'In ' + loss.toLocaleString() + ' out of ' + total.toLocaleString() + ' rolling periods (' +
-        pct(total ? loss / total : 0, 1) + '), the investment recorded a negative return over a ' +
-        years + '-Year holding period.']);
-      items.push(['Weakest Window on Record',
-        'The weakest ' + years + '-Year window in this data returned ' + pct(f.min) +
-        ' a year. To set that against an index, use the Market index path.']);
-    } else if (have) {
-      items.push(['Outperformance Consistency',
-        'Over the selected ' + years + '-Year rolling windows, the investment outperformed the ' +
-        'benchmark in ' + pct(paired.fundAheadShare, 1) + ' of all instances (' +
-        paired.fundAhead.toLocaleString() + ' out of ' + paired.pairs.toLocaleString() +
-        ' rolling periods).']);
-
-      var alpha = f.mean - paired.bench.mean;
-      items.push(['Excess Return Profile (Alpha Spread)',
-        'The investment generated an average annual return spread of ' +
-        A.signedPct(alpha) + ' relative to the benchmark over ' + years + '-Year horizons.']);
-
-      items.push(['Downside Resilience',
-        'During the weakest ' + years + '-Year market window, the investment recorded a return ' +
-        'of ' + pct(f.min) + ', compared to ' + pct(paired.bench.min) + ' for the benchmark.']);
-    } else {
-      items.push(['Outperformance Consistency',
-        'Not measurable. No benchmark index data is loaded, so there is nothing to have ' +
-        'outperformed. Load a Total Return Index file into card 2, Benchmark Index Data.']);
-      items.push(['Excess Return Profile (Alpha Spread)',
-        'Not measurable without benchmark index data.']);
-      items.push(['Downside Resilience',
-        'The weakest ' + years + '-Year window in this data returned ' + pct(f.min) +
-        '. Without a benchmark there is nothing to set that against.']);
-    }
-
-    if (!fundPath) {
-      items.push(['Return Range &amp; Distribution',
-        'Historical ' + years + '-Year rolling returns ranged from ' + pct(f.min) + ' to ' +
-        pct(f.max) + ', indicating an overall return variance spread of ' +
-        pct(f.max - f.min) + '.']);
-
-      items.push(['Capital Loss Frequency',
-        'In ' + loss.toLocaleString() + ' out of ' + total.toLocaleString() + ' rolling periods (' +
-        pct(total ? loss / total : 0, 1) + '), the investment recorded a negative return over a ' +
-        years + '-Year holding period.']);
-    }
-
-    return '<div class="card"><h2>Factual Data Insights</h2>' +
-      '<p class="hint" style="margin:0 0 .8rem">Five statements, each one checkable against the ' +
-      'table above. None of them says whether any of it is good.</p>' +
-      '<ol class="insights">' +
-      items.map(function (it) {
-        return '<li><span class="ins-h">' + it[0] + '</span><span class="ins-b">' + it[1] +
-               '</span></li>';
-      }).join('') +
-      '</ol>' +
-      '<div class="meaning"><h3>What these are not</h3>' +
-      '<p>These are descriptions of what this data did, not advice about what to do. Whether any ' +
-      'of it suits you depends on your goal, your horizon, what else you own and what you can sit ' +
-      'through &mdash; none of which this tool knows.</p></div></div>';
   }
 
   /* ------------------------------------------------------------- the summary
@@ -2106,10 +2119,10 @@
     } else {
       rows.push([SAY.out, 'not measured',
                  indexPath
-                   ? 'No benchmark is loaded. Load one into card 2, Benchmark Index Data, ' +
+                   ? 'No benchmark is loaded. Load one into card 2, the benchmark index, ' +
                      'and this becomes a rate.'
-                   : 'This path analyses the fund on its own. To measure it against an index, ' +
-                     'use the Market index path: the fund in card 1, the index in card 2.']);
+                   : 'This path analyses one fund or index on its own. To set it against an ' +
+                     'index, use \u201cA fund against its benchmark index\u201d.']);
     }
 
     rows.push([SAY.worst, pct(s.min),
@@ -2127,15 +2140,7 @@
         return '<tr><td>' + esc(row[0]) + '</td><td><strong>' + esc(row[1]) + '</strong></td><td>' +
           row[2] + '</td></tr>';
       }).join('') +
-      '</tbody></table></div>' +
-      '<div class="meaning"><h3>What these three rates are not</h3>' +
-      '<p><strong>Past historical consistency does not guarantee future results.</strong> A high ' +
-      'figure on any of these rows is a description of the dates in this file and no others. It ' +
-      'is not a probability, because the future is not drawn from this file, and the windows ' +
-      'counted here overlap, so they are not independent samples of anything.</p>' +
-      '<p>Nothing on this card is a recommendation to buy, hold, sell or switch. Whether any of it ' +
-      'suits you depends on your goal, your horizon, what else you own and what you can sit ' +
-      'through &mdash; none of which this tool knows.</p></div></div>';
+      '</tbody></table></div></div>';
   }
 
   /* ============================= THE SPREAD, ACROSS HOLDING PERIODS
@@ -2373,7 +2378,7 @@
    * example. All of it could have been written before the reader arrived, so
    * all of it is the book's. Section 4 gives this pointer verbatim. */
   function trapsCard(years) {
-    return '<p class="hint pointer">Chapter 13, Section 2, the traps.</p>';
+    return '<p class="hint pointer">Explained in the book\u2019s returns chapter.</p>';
   }
 
   function startDateCard(r, years) {
@@ -2483,112 +2488,6 @@
   /* The reader names the rate. The screen reports arithmetic on the data above
    * and nothing else -- no product, no promise, no comparison anybody has to
    * take on trust. */
-  /* Excess over the reader's own mark, per unit of spread. The official
-     Sharpe and Sortino ratios divide excess over a RISK-FREE rate; this tool
-     does not know today's risk-free rate and will not invent one, so the
-     reference here is the target the reader typed, and the labels say
-     "-style" because they are that and not the textbook figure. */
-  function ratioLine(values, rate) {
-    if (!values || values.length < 2 || !isFinite(rate)) return '';
-    var mean = 0;
-    for (var i = 0; i < values.length; i++) mean += values[i];
-    mean /= values.length;
-    var acc = 0;
-    for (var j = 0; j < values.length; j++) {
-      var d = values[j] - mean;
-      acc += d * d;
-    }
-    var sd = Math.sqrt(acc / (values.length - 1));
-    var ddv = E.downsideDeviation(values, rate);
-    var bits = [];
-    if (sd > 0) bits.push('per unit of volatility (Sharpe-style): <strong>' +
-      ((mean - rate) / sd).toFixed(2) + '</strong>');
-    if (ddv != null) {
-      bits.push(ddv === 0
-        ? 'no window fell below it, so downside deviation is zero (Sortino-style: not defined)'
-        : 'per unit of downside deviation below it (Sortino-style): <strong>' +
-          ((mean - rate) / ddv).toFixed(2) + '</strong>');
-    }
-    if (!bits.length) return '';
-    return 'Average excess over your target, ' + bits.join(' · ') +
-      '. Positive means the average window cleared your target; the size says by how much ' +
-      'relative to how unevenly the windows landed. The official Sharpe and Sortino ratios ' +
-      'use a risk-free rate this tool does not know; your target stands in for it here.';
-  }
-
-  /* The same two ratios as numbers, for a table cell. null where the
-     spread that divides them is zero or there are too few windows. */
-  function ratioPair(values, rate) {
-    if (!values || values.length < 2 || !isFinite(rate)) return { sharpe: null, sortino: null };
-    var mean = 0;
-    for (var i = 0; i < values.length; i++) mean += values[i];
-    mean /= values.length;
-    var acc = 0;
-    for (var j = 0; j < values.length; j++) { var d = values[j] - mean; acc += d * d; }
-    var sd = Math.sqrt(acc / (values.length - 1));
-    var ddv = E.downsideDeviation(values, rate);
-    /* A spread below a millionth of a percentage point is rounding noise on
-       a flat series, and dividing by it prints a seven-digit ratio. */
-    var EPS = 1e-8;
-    return {
-      sharpe: sd > EPS ? (mean - rate) / sd : null,
-      sortino: ddv != null && ddv > EPS ? (mean - rate) / ddv : null
-    };
-  }
-
-  /* The window values behind every ratio cell on the page, by key, so the
-     rate box can recompute the cells when the target changes. */
-  var RATIO_DATA = {};
-
-  function ratioText(v) { return v == null ? 'not defined' : v.toFixed(2); }
-
-  function ratioCell(which, side, key, v) {
-    return '<td data-ratio="' + which + '" data-side="' + side + '" data-key="' + esc(key || '') +
-      '">' + ratioText(v) + '</td>';
-  }
-
-  /* Two table rows -- Sharpe and Sortino against the reader's target -- for
-     a three-column table (label, fund, benchmark). The benchmark cell shows
-     the no-benchmark marker when there is none. */
-  function ratioRows(fVals, bVals, rate, key, none) {
-    RATIO_DATA[key || 'rolling'] = { fund: fVals, bench: bVals || null };
-    var f = ratioPair(fVals, rate), b = bVals ? ratioPair(bVals, rate) : null;
-    return '<tr><td>Sharpe Ratio (vs your target)</td>' + ratioCell('sharpe', 'fund', key, f.sharpe) +
-      (b ? ratioCell('sharpe', 'bench', key, b.sharpe) : '<td>' + none + '</td>') + '</tr>' +
-      '<tr><td>Sortino Ratio (vs your target)</td>' + ratioCell('sortino', 'fund', key, f.sortino) +
-      (b ? ratioCell('sortino', 'bench', key, b.sortino) : '<td>' + none + '</td>') + '</tr>';
-  }
-
-  /* The same two rows for a table that also carries a Difference column. */
-  function ratioRowsDelta(fVals, bVals, rate, key) {
-    var f = ratioPair(fVals, rate), b = ratioPair(bVals, rate);
-    function delta(a, c) {
-      return '<td data-ratio-delta="1">' + (a == null || c == null ? '—' :
-        (a - c >= 0 ? '+' : '') + (a - c).toFixed(2)) + '</td>';
-    }
-    return '<tr><td>Sharpe Ratio (vs your target)</td>' + ratioCell('sharpe', 'fund', key, f.sharpe) +
-      ratioCell('sharpe', 'bench', key, b.sharpe) + delta(f.sharpe, b.sharpe) + '</tr>' +
-      '<tr><td>Sortino Ratio (vs your target)</td>' + ratioCell('sortino', 'fund', key, f.sortino) +
-      ratioCell('sortino', 'bench', key, b.sortino) + delta(f.sortino, b.sortino) + '</tr>';
-  }
-
-  /* Recompute every ratio cell that carries this key, after the target moved. */
-  function refreshRatioCells(key, rate) {
-    var data = RATIO_DATA[key];
-    if (!data) return;
-    var f = ratioPair(data.fund, rate), b = data.bench ? ratioPair(data.bench, rate) : null;
-    $$('[data-ratio][data-key="' + key + '"]').forEach(function (cell) {
-      var side = cell.dataset.side === 'bench' ? b : f;
-      if (!side) return;
-      cell.textContent = ratioText(side[cell.dataset.ratio]);
-      var next = cell.nextElementSibling;
-      if (cell.dataset.side === 'bench' && next && next.dataset.ratioDelta) {
-        var a = f[cell.dataset.ratio], c = b ? b[cell.dataset.ratio] : null;
-        next.textContent = a == null || c == null ? '—' : (a - c >= 0 ? '+' : '') + (a - c).toFixed(2);
-      }
-    });
-  }
-
   /* How many dates each file had filled in from its previous value when the
      two were joined on the calendar. Said only when it happened. */
   function carriedPhrase(paired) {
@@ -2596,15 +2495,14 @@
     var fa = paired.filledFund || 0, fb = paired.filledBench || 0;
     if (!fa && !fb) return ' Every date in the shared stretch appears in both files; nothing was filled in.';
     return ' Where one file had a date the other lacked, the missing value was carried forward ' +
-      'from that file’s previous date: ' + fa.toLocaleString() + (fa === 1 ? ' date' : ' dates') +
-      ' in the Primary Investment file and ' + fb.toLocaleString() + (fb === 1 ? ' date' : ' dates') +
-      ' in the Benchmark Index file.';
+      'from that file\u2019s previous date: ' + fa.toLocaleString() + (fa === 1 ? ' date' : ' dates') +
+      ' in the fund file and ' + fb.toLocaleString() + (fb === 1 ? ' date' : ' dates') +
+      ' in the index file.';
   }
 
   function rateCheckCard(key, years, values, indexPath) {
     var start = 0.07;
     var res = E.shareAbove(values, start);
-    var ratios = indexPath ? ratioLine(values, start) : '';
     return '<div class="card"><h2>How often did it beat a rate you choose?</h2>' +
       '<p class="hint" style="margin:0 0 .8rem">Type your own target \u2014 the return you need, ' +
       'a deposit rate you could get instead, your own guess at inflation plus a margin \u2014 ' +
@@ -2617,6 +2515,8 @@
         return '<button class="chip" type="button" data-rate="' + r + '">' + r + '%</button>';
       }).join('') +
       '</div>' +
+      '<p class="hint" style="margin:.3rem 0 .6rem">Starting points only, not the tool\u2019s ' +
+      'view.</p>' +
       '<div class="field" style="max-width:16rem">' +
       '<label for="rate-' + key + '">Rate to compare against, % a year</label>' +
       '<input type="number" id="rate-' + key + '" class="ratecheck" data-key="' + key +
@@ -2625,10 +2525,7 @@
       '<div class="result" style="margin:.6rem 0 0"><div class="label">Periods that beat it</div>' +
       '<div class="value" id="rateout-' + key + '">' + pct(res.share, 0) + '</div>' +
       '<div class="sub" id="ratesub-' + key + '">' + rateSentence(res, start, years) + '</div></div>' +
-      (indexPath
-        ? '<p class="hint ratioline" id="ratio-' + key + '" data-key="' + key + '">' +
-          ratios + '</p>'
-        : '') +
+
       '<div class="meaning"><h3>Read this carefully</h3>' +
       '<p>You chose that rate, so this is arithmetic on the data above and nothing more. It is not a ' +
       'comparison with any particular product, and it says nothing about what a deposit, a bond or any ' +
@@ -2965,39 +2862,32 @@
         }
       : null;
     var rowFn = delta || cmp;
-    var fundHead = (indexPath ? '<span class="legend-dot fund"></span>' : '') + esc(name);
-    var benchHead = (indexPath ? '<span class="legend-dot bench"></span>' : '') + esc(compareName);
+    /* Short headers that survive 360px -- the names are in the card title
+       and the line under the table, so the columns can afford to be words. */
+    var fundHead = indexPath ? '<span class="legend-dot fund"></span>Fund' : esc(name);
+    var benchHead = indexPath ? '<span class="legend-dot bench"></span>Index' : esc(compareName);
     var html = (indexPath ? characteristicMatrix(series, compareSeries, c, name, compareName) : '') +
       '<div class="card"><h2>Against ' + esc(compareName) + '</h2>' +
       '<div class="result" style="margin:0 0 1rem"><div class="label">Periods where ' +
       esc(name) + ' came out ahead</div><div class="value">' + pct(c.fundAheadShare, 0) + '</div>' +
       '<div class="sub">' + c.fundAhead.toLocaleString() + ' of ' + c.pairs.toLocaleString() +
       ' matched ' + years + '-year periods, ' + fmtDate(c.from) + ' to ' + fmtDate(c.to) + '</div></div>' +
-      '<div class="scroll"><table class="data"><thead><tr><th>Over ' + years + ' years</th><th>' +
+      '<div class="scroll' + (indexPath ? ' fade' : '') + '"><table class="data' +
+      (indexPath ? ' stickyfirst' : '') + '"><thead><tr><th>Over ' + years + ' years</th><th>' +
       fundHead + '</th><th>' + benchHead + '</th>' +
-      (indexPath ? '<th>Difference</th>' : '') + '</tr></thead><tbody>' +
+      (indexPath ? '<th>Gap</th>' : '') + '</tr></thead><tbody>' +
       rowFn('Worst period', f.min, b.min) +
       rowFn('25th percentile', f.p25, b.p25) +
       rowFn('Median period', f.median, b.median) +
       rowFn('75th percentile', f.p75, b.p75) +
       rowFn('Best period', f.max, b.max) +
       (indexPath && f.stdev != null && b.stdev != null
-        ? rowFn('Volatility (std deviation)', f.stdev, b.stdev) : '') +
+        ? rowFn('Spread of window returns (std dev)', f.stdev, b.stdev) : '') +
       rowFn('Periods that made money', f.positiveShare, b.positiveShare) +
-      /* The two ratios in the table itself, against the reader's target
-         from the rate box, and refreshed when that target moves. */
-      (indexPath ? ratioRowsDelta(c.fundValues, c.benchValues, 0.07, key) : '') +
       '<tr><td>Periods compared</td><td>' + c.pairs.toLocaleString() + '</td><td>' +
       c.pairs.toLocaleString() + '</td>' + (indexPath ? '<td>—</td>' : '') + '</tr>' +
       '</tbody></table></div>' +
-      (indexPath
-        ? '<p class="feenote"><strong>Data Standard Note:</strong> Fund NAVs reflect net ' +
-          'performance after Total Expense Ratio (TER) deductions. Index TRI values represent ' +
-          'gross market performance without expense deductions, transaction costs, or cash drag.</p>' +
-          '<p class="hint" style="margin:.3rem 0 0">Sharpe and Sortino here divide the average ' +
-          'excess over the target in the rate box by the spread of the windows (all of it, and ' +
-          'the downside only); the official ratios use a risk-free rate this tool does not know.</p>'
-        : '') +
+
       '<div class="meaning"><h3>What this means</h3>' +
       '<p>Only periods that both sets of data cover are compared, so neither is judged on dates the ' +
       'other never saw.' + (indexPath ? carriedPhrase(c) : '') + ' The gap in the median is ' +
@@ -3032,7 +2922,7 @@
       (compareMeta && compareMeta.kind == null
         ? '<p><strong>Whether this index counts dividends has not been established.</strong> If it ' +
           'is a price index, every figure above overstates the gap by roughly the market\u2019s ' +
-          'dividend yield. Open card 2, Benchmark Index Data, and say which it is — this line ' +
+          'dividend yield. Open card 2, the benchmark index, and say which it is — this line ' +
           'will then say what follows from it.</p>'
         : '') +
       '<p>A benchmark carries no costs, holds no cash and makes no decisions; a fund does all three. ' +
@@ -3062,8 +2952,8 @@
       'volatility and drawdown come from the daily value itself.</p>' +
       '<div class="scroll"><table class="data charmatrix">' +
       '<caption>Asset characteristics, fund against benchmark</caption>' +
-      '<thead><tr><th>Characteristic</th><th><span class="legend-dot fund"></span>' + esc(name) +
-      '</th><th><span class="legend-dot bench"></span>' + esc(compareName) + '</th><th>Delta</th></tr></thead>' +
+      '<thead><tr><th>Characteristic</th><th><span class="legend-dot fund"></span>Fund</th>' +
+      '<th><span class="legend-dot bench"></span>Index</th><th>Gap</th></tr></thead>' +
       '<tbody>' +
       row('Median Return (% a year)', c.fund.median, c.bench.median, pct) +
       row('Worst Window (% a year)', c.fund.min, c.bench.min, pct) +
@@ -3073,9 +2963,10 @@
       row('Positive Window Ratio', c.fund.positiveShare, c.bench.positiveShare,
           function (v) { return pct(v, 0); }) +
       '</tbody></table></div>' +
-      '<p class="hint" style="margin:.5rem 0 0">Delta is the first column minus the second, in ' +
-      'percentage points. A wider volatility or a deeper drawdown on one side is a property of ' +
-      'that asset over these dates, not a verdict on either.</p></div>';
+      '<p class="hint" style="margin:.5rem 0 0">Fund: ' + esc(name) + ' \u00b7 Index: ' +
+      esc(compareName) + '. Gap is fund minus index, in percentage points. A wider volatility ' +
+      'or a deeper drawdown on one side is a property of that asset over these dates, not a ' +
+      'verdict on either.</p></div>';
   }
 
   /* Four plain judgements, each with the rule that produced it written out, so
@@ -3201,8 +3092,9 @@
      * everything it adds appears only there. The fund path keeps exactly the
      * screen it had. */
     var onIndex = source === 'index';
+    /* Steps 1-3 are the same controls on both paths now. */
     var freq = $('#r-freq-wrap');
-    if (freq) freq.hidden = !onIndex;
+    if (freq) freq.hidden = !source;
     placeBenchmarkCard(onIndex);
     if (!onIndex) {
       var ov = $('#r-overlap-note');
@@ -3283,6 +3175,13 @@
      * cannot wrap, naming what will be analysed, and carrying the reader to
      * step 2 when tapped, which was the other thing they asked for by name. */
     if (!LOADED.a) { host.innerHTML = ''; return; }
+    /* The comparison cannot run on one file, so the green line waits for the
+       second. It used to say ready the moment card 1 was filled. */
+    if (R.source === 'index' && !LOADED.b) {
+      host.innerHTML = '<p class="hint waitline" id="up-waiting">Waiting for the benchmark ' +
+        'index file \u2014 card 2.</p>';
+      return;
+    }
 
     host.innerHTML =
       '<button class="readyline" type="button" id="up-ready">' +
@@ -3486,11 +3385,17 @@
       if (!mine) { el.value = (id === 'r-start' ? lo : hi); if (v && R.datesTouched) reset = true; }
     });
     $('#r-all').disabled = false;
-    $('#r-run').disabled = false;
+    updateAllBtn();
     var spanYears = (last - first) / (365.2425 * 86400000);
+    /* Floored, never rounded up: 4.997 years must not read "5.0" beside a
+       5-year chip that has just been disabled. */
     $('#r-range').textContent = 'Data available: ' + fmtDate(first) + ' to ' + fmtDate(last) +
-      ' \u2014 ' + spanYears.toFixed(1) + ' years, ' + series.length.toLocaleString() +
+      ' \u2014 ' + floor1(spanYears) + ' years, ' + series.length.toLocaleString() +
       ' observations.';
+    /* Whatever the previous file left in the results area -- a refusal, a
+       block -- is about that file, not this one. */
+    if (!R.ran) $('#r-out').innerHTML = '';
+    holdError(null);
     /* Rebuilt, not just re-measured: the Max History chip is worth a different
        number of years for every file, so it cannot be drawn once at start-up
        -- and the frequency chips read the file's own cadence, so neither can
@@ -3499,6 +3404,7 @@
     freqChips();
     limitYears(selectedSpanYears());
     updateWindowNote();
+    runGate();
     $('#step-period').dataset.done = 'yes';
     /* Steps 2, 3 and 4 are held at half opacity until there is something to
      * analyse. gateSteps was called at init and from setSource -- both BEFORE
@@ -3574,8 +3480,9 @@
     R.series = null; R.name = ''; R.meta = null; R.report = null;
     ['r-start', 'r-end'].forEach(function (id) { $('#' + id).disabled = true; $('#' + id).value = ''; });
     $('#r-all').disabled = true;
-    $('#r-run').disabled = true;
+    $('#r-all').hidden = false;
     limitYears(null);
+    runGate();
     $('#step-period').dataset.done = 'no';
     /* The chosen length survives a cleared file -- limitYears has nothing to
        measure it against -- so the step's own tick has to follow the choice,
@@ -3652,7 +3559,7 @@
            root-cause analysis is about readers putting the wrong file in the
            wrong door because the doors were named alike. */
         $('#r-index-upload').innerHTML =
-          '<label class="fieldlabel" for="bm-pick">Primary Investment Data file</label>' +
+          '<label class="fieldlabel" for="bm-pick">The fund\u2019s NAV history file</label>' +
           dropZone('bm', 'Choose a NAV or value history file',
                    'CSV or Excel &middot; a date column and the NAV or value on that date') +
           /* The reason a file was refused belongs against the box, with
@@ -3891,17 +3798,17 @@
         return notice('bad',
           '<strong>This looks like index data, not a fund’s NAV.</strong> It shows ' + found +
           '. This door analyses a single fund’s own NAV history. To measure your fund ' +
-          'against an index, use the <strong>Market index</strong> path: your fund’s NAV in ' +
+          'against an index, use <strong>A fund against its benchmark index</strong>: your fund\u2019s NAV in ' +
           'card 1, the index file in card 2.');
       }
       return notice('bad',
         '<strong>This looks like index data, not your investment data.</strong> It shows ' +
-        found + '. Index history belongs in card 2 — Benchmark Index Data ' +
-        '(TRI). This card takes your own fund’s NAV history, CAS, or portfolio value series.');
+        found + '. Index history belongs in card 2 — the benchmark index ' +
+        '(TRI). This card takes your own fund\u2019s NAV history.');
     }
     return notice('bad',
       '<strong>This looks like fund NAV data, not index data.</strong> It shows ' +
-      found + '. A fund’s NAV history belongs in card 1 — Primary Investment Data (NAV). ' +
+      found + '. A fund\u2019s NAV history belongs in card 1 — the fund\u2019s NAV history. ' +
       'This card takes the benchmark index history itself (for example, Nifty 50 TRI ' +
       'downloaded from niftyindices.com).');
   }
@@ -3923,8 +3830,8 @@
        screen the wrong conclusion has already been drawn once. */
     var mismatch = classMismatchNote(R.name || '', against.name || '', R.series, against.series);
     var o = E.rangeOverlap(R.series, against.series);
-    var lines = 'Primary Investment: ' + fmtDate(o.aFrom) + ' to ' + fmtDate(o.aTo) +
-                ' | Benchmark Index: ' + fmtDate(o.bFrom) + ' to ' + fmtDate(o.bTo) + '.';
+    var lines = 'Fund: ' + fmtDate(o.aFrom) + ' to ' + fmtDate(o.aTo) +
+                ' | Index: ' + fmtDate(o.bFrom) + ' to ' + fmtDate(o.bTo) + '.';
     if (!o.ok) {
       slot.innerHTML = mismatch +
         notice('bad', '<strong>These two files share no dates.</strong> ' + lines +
@@ -3944,8 +3851,8 @@
    * files cost them the other three. */
   function droppedPhrase(o) {
     var bits = [];
-    if (o.lostA >= 0.05) bits.push(o.lostA.toFixed(1) + ' years of the Primary Investment data');
-    if (o.lostB >= 0.05) bits.push(o.lostB.toFixed(1) + ' years of the Benchmark Index data');
+    if (o.lostA >= 0.05) bits.push(o.lostA.toFixed(1) + ' years of the fund data');
+    if (o.lostB >= 0.05) bits.push(o.lostB.toFixed(1) + ' years of the index data');
     if (!bits.length) return '';
     return 'Outside that period, ' + bits.join(' and ') +
       ' ' + (bits.length > 1 ? 'are' : 'is') + ' not used.';
@@ -4034,7 +3941,9 @@
     A.readFile(file, function (res) {
       /* The same wrong-door gate as the index path's two cards: an index file
          here would be analysed under a fund's name. */
-      var refused = schemaRefusal(res.rows) || kindRefusal(res.rows, 'nav', file.name, 'fund');
+      /* Only the schema gate here: this path is one fund OR index on its
+         own, so an index file is not the wrong door. */
+      var refused = schemaRefusal(res.rows);
       if (refused) {
         $('#r-scheme-wrap').hidden = true;
         dropRejected('f', file.name);
@@ -4154,11 +4063,34 @@
             o.setAttribute('aria-selected', 'false');
           });
           btn.setAttribute('aria-selected', 'true');
-          if (btn.dataset.all) { onCombine(); return; }
-          onPick(hits[+btn.dataset.i]);
+          var label = btn.querySelector('.nm') ? btn.querySelector('.nm').textContent : '';
+          if (btn.dataset.all) onCombine(); else onPick(hits[+btn.dataset.i]);
+          /* Once chosen, the six-fund list folds to the one line that
+             matters, with a way to reopen it. It used to stay open, a full
+             screen of scrolling between the choice and step 2. */
+          foldPicker(ids, label);
         });
       });
     }
+  }
+
+  function foldPicker(ids, label) {
+    var wrap = $('#' + ids.wrap);
+    if (!wrap) return;
+    wrap.setAttribute('data-folded', 'yes');
+    var line = wrap.querySelector('.pickedline');
+    if (!line) {
+      line = A.el('p', { 'class': 'hint pickedline' });
+      wrap.insertBefore(line, wrap.firstChild);
+    }
+    line.innerHTML = 'Chosen: <strong>' + esc(label) + '</strong> ' +
+      '<button class="link" type="button" data-unfold="1">Change fund</button>';
+    line.querySelector('[data-unfold]').addEventListener('click', function () {
+      wrap.removeAttribute('data-folded');
+      line.remove();
+      var q = $('#' + ids.q);
+      if (q) q.focus();
+    });
   }
 
   /* Every scheme in the file, rebased and averaged. The name says what it is,
@@ -4520,10 +4452,12 @@
     var span = (R.series[R.series.length - 1].t - R.series[0].t) / (365.2425 * 86400000);
     var want = recommendedYears(R.years);
     if (span >= want) { slot.hidden = true; slot.textContent = ''; return; }
+    /* The rule itself is the line above the chips; this is only its
+       arithmetic on this file. */
     slot.hidden = false;
-    slot.textContent = 'This file covers ' + span.toFixed(1) + ' years. For ' + R.years +
-      '-year windows, ' + want + '+ years is the recommended amount of history. The figures below ' +
-      'will still be worked out, but every window will begin inside a narrow band of dates.';
+    slot.textContent = 'This file covers ' + floor1(span) + ' years; a ' + R.years +
+      '-year window wants at least ' + want + '. The figures will still be worked out, but every ' +
+      'window will begin inside a narrow band of dates.';
   }
 
   function yearChips() {
@@ -4543,7 +4477,7 @@
      * longest whole horizon is 3, which is already on the row. */
     var horizons = A.HORIZONS.slice();
     var extra = null;
-    if (R.source === 'index' && R.series && E.maxHorizon) {
+    if (R.series && E.maxHorizon) {
       var m = E.maxHorizon(R.series);
       if (m !== null && horizons.indexOf(m) === -1) { horizons.push(m); extra = m; }
     }
@@ -4565,7 +4499,8 @@
         holdError(null);
         updateWindowNote();
         spanWarning();
-        if (R.ran) runRolling();
+        runGate();
+        if (R.ran) runRolling(); else if (!R.blockMessage) $('#r-out').innerHTML = '';
       });
       box.appendChild(b);
     });
@@ -4610,8 +4545,9 @@
     }
 
     var order = ['daily', 'weekly', 'monthly'];
+    /* "Recommended" is the one word this tool promises never to use. */
     var says = {
-      daily:   'Daily \u2014 Recommended (shifts by 1 trading day)',
+      daily:   'Daily (every start date)',
       weekly:  'Weekly (7 days)',
       monthly: 'Monthly (1 calendar month)'
     };
@@ -4625,8 +4561,7 @@
          The year chips carry this marker for exactly that reason. */
       b.dataset.infeasible = can[key] ? 'no' : 'yes';
       b.textContent = can[key] ? says[key]
-        : says[key].replace(' \u2014 Recommended', '') +
-          ' \u2014 this file has a value about every ' + Math.round(gap) + ' days';
+        : says[key] + ' \u2014 this file has a value about every ' + Math.round(gap) + ' days';
       b.addEventListener('click', function () {
         if (b.disabled) return;
         R.frequency = key;
@@ -4662,8 +4597,7 @@
       var possible = spanYears == null || h <= spanYears;
       c.dataset.infeasible = possible ? 'no' : 'yes';
       c.disabled = !possible;
-      c.textContent = chipLabel(c, h) +
-        (possible ? '' : ' \u2014 needs ' + h + ' years of data');
+      c.textContent = chipLabel(c, h) + (possible ? '' : shortLabel(h, spanYears));
       if (possible) best = h;
     });
     /* A length the history cannot measure is cleared rather than swapped for
@@ -4686,10 +4620,13 @@
       R.blockMessage = notice('bad',
         (R.source === 'index'
           ? '<strong>Selected holding period (' + wanted + ' Years) requires at least ' + wanted +
-            ' years of historical data. Your file covers ' + ymText(spanYears) + '.</strong> '
-          : '<strong>This history is shorter than the holding period.</strong> It covers ' +
-            spanYears.toFixed(1) + ' years and ' + wanted + '-year windows need ' + wanted +
-            ', so not one full ' + wanted + '-year period fits inside it. ') +
+            ' years of historical data. ' +
+            (coverPhrase(spanYears, wanted) || 'Your file covers ' + ymText(spanYears) + '.') +
+            '</strong> '
+          : '<strong>This history is shorter than the holding period.</strong> ' +
+            (coverPhrase(spanYears, wanted) || 'It covers ' + spanYears.toFixed(1) + ' years and ' +
+             wanted + '-year windows need ' + wanted + ', so not one full ' + wanted +
+             '-year period fits inside it.') + ' ') +
         (best === null
           ? 'Load a longer history.'
           : 'Choose ' + best + (best === 1 ? ' year' : ' years') +
@@ -4698,6 +4635,65 @@
       if (out) out.innerHTML = R.blockMessage;
     }
     spanWarning();
+    runGate();
+  }
+
+  /* A chip the history cannot hold says by how much, in the unit the
+     shortfall is in: "1 day short" when it is a day, years when it is years.
+     A file one day short of five years used to read "needs 5 years of data"
+     under a line saying it covered 5.0. */
+  /* The chosen stretch in calendar days, and the days one window of h
+     years needs from its first date -- real calendar arithmetic, so a file
+     from 03-Sep-2021 to 02-Sep-2026 is one day short of five years, not
+     1.25 days rounded up to two. */
+  function chosenDays(h) {
+    var from = A.isoToTs($('#r-start').value), to = A.isoToTs($('#r-end').value);
+    if (isNaN(from) || isNaN(to) || to <= from) return null;
+    return { covered: Math.round((to - from) / 86400000),
+             needed: Math.round((E.addYears(from, h) - from) / 86400000) };
+  }
+  function shortLabel(h, spanYears) {
+    if (spanYears == null) return ' \u2014 needs ' + h + ' years of data';
+    if (h - spanYears < 1) {
+      var d = chosenDays(h);
+      var days = d ? d.needed - d.covered : Math.ceil((h - spanYears) * 365.2425 - 1e-9);
+      days = Math.max(1, days);
+      return ' \u2014 ' + days.toLocaleString() + (days === 1 ? ' day' : ' days') + ' short';
+    }
+    return ' \u2014 needs ' + h + ' years of data';
+  }
+
+  /* The block, in days, when the shortfall is under a year; null otherwise
+     so the caller says it in years. */
+  function coverPhrase(spanYears, wanted) {
+    if (spanYears == null || wanted - spanYears >= 1) return null;
+    var d = chosenDays(wanted);
+    var covered = d ? d.covered : Math.round(spanYears * 365.2425);
+    var needed = d ? d.needed : Math.round(wanted * 365.2425);
+    return 'It covers ' + covered.toLocaleString() + ' days; one ' + wanted + '-year window needs ' +
+      needed.toLocaleString() + '.';
+  }
+
+  function floor1(v) { return (Math.floor(v * 10 + 1e-9) / 10).toFixed(1); }
+
+  /* Calculate is live only when there is something valid to calculate:
+     a series, a holding period the history can hold, and a stretch of dates.
+     Anything else used to be discovered by tapping it. */
+  function runGate() {
+    var btn = $('#r-run');
+    if (!btn) return;
+    var ok = !!R.series && R.years !== null && selectedSpanYears() !== null;
+    btn.disabled = !ok;
+  }
+
+  /* "Use the full range of this data" has nothing to do when the range
+     already is the full range. */
+  function updateAllBtn() {
+    var b = $('#r-all');
+    if (!b) return;
+    if (!R.series) { b.hidden = false; return; }
+    var lo = isoOf(R.series[0].t), hi = isoOf(R.series[R.series.length - 1].t);
+    b.hidden = $('#r-start').value === lo && $('#r-end').value === hi;
   }
 
   /* 4.9 years of history said as "4 Years, 11 Months", the way the review
@@ -4769,8 +4765,10 @@
       var wholeFile = R.series.length > 1 && from <= R.series[0].t && to >= R.series[R.series.length - 1].t;
       out.innerHTML = notice('bad', R.source === 'index'
         ? '<strong>Selected holding period (' + R.years + ' Years) requires at least ' + R.years +
-          ' years of historical data. ' + (wholeFile ? 'Your file covers ' : 'Your selected dates cover ') +
-          ymText(chosenSpan) + '.</strong> ' +
+          ' years of historical data. ' +
+          (coverPhrase(chosenSpan, R.years) ||
+           (wholeFile ? 'Your file covers ' : 'Your selected dates cover ') + ymText(chosenSpan) + '.') +
+          '</strong> ' +
           (wholeFile ? 'Choose a shorter holding period in step 3, or load a longer history.'
                      : 'Choose a shorter holding period in step 3, or widen the dates in step 2.')
         : '<strong>This stretch is shorter than the holding period.</strong> The dates in step 2 cover ' +
@@ -5001,12 +4999,8 @@
       if (!res.ok) { out.textContent = '—'; sub.textContent = 'Enter a rate.'; return; }
       out.textContent = pct(res.share, 0);
       sub.textContent = rateSentence(res, rate, years);
-      /* The rate box drives more than its own card: the Sharpe/Sortino-style
-         line and the horizon matrix's Beat-your-target column both answer
-         the same number, so they follow it. */
-      var ratio = document.getElementById('ratio-' + key);
-      if (ratio) ratio.innerHTML = ratioLine(values, rate);
-      refreshRatioCells(key, rate);
+      /* The rate box drives more than its own card: the horizon matrix's
+         Beat-your-target column answers the same number, so it follows. */
       (HORIZON_DATA[key] || []).forEach(function (row) {
         var cell = document.querySelector('[data-beat-h="' + row.h + '"][data-key="' + key + '"]');
         if (!cell) return;
@@ -5014,11 +5008,84 @@
         cell.textContent = share.ok ? pct(share.share, 0) : '—';
       });
     });
-    /* Print is how a phone saves a PDF; the button only exists on the
-       market-index results. */
-    document.addEventListener('click', function (ev) {
-      if (ev.target && ev.target.closest && ev.target.closest('.printbtn')) window.print();
+    /* SAVE AS PDF -- built in the browser by tool/pdf.js and downloaded as
+       a file. One handler for the three result screens; the button says
+       which. */
+    var PDF_ROOT = { rolling: '#r-out', portfolio: '#pf-out', goal: '#g-out' };
+    var PDF_TITLE = { rolling: 'Rolling returns', portfolio: 'Check my portfolio', goal: 'Plan my goal' };
+    document.addEventListener('pointerdown', function (ev) {
+      if (ev.target && ev.target.closest && ev.target.closest('.pdfbtn') && window.PRCPdf) {
+        window.PRCPdf.ready();
+      }
     });
+    document.addEventListener('click', function (ev) {
+      var btn = ev.target && ev.target.closest ? ev.target.closest('.pdfbtn') : null;
+      if (!btn || btn.dataset.busy === 'yes') return;
+      var which = btn.dataset.pdf || 'rolling';
+      var root = document.querySelector(PDF_ROOT[which] || '#r-out');
+      var note = btn.parentNode ? btn.parentNode.querySelector('.pdfnote') : null;
+      if (!root) return;
+      if (!window.PRCPdf) {
+        if (note) note.textContent = 'Your browser blocked the download. Use Share \u2192 Print \u2192 Save as PDF.';
+        return;
+      }
+      btn.dataset.busy = 'yes';
+      btn.setAttribute('aria-busy', 'true');
+      if (note) note.textContent = 'Building the PDF\u2026';
+      window.PRCPdf.save({
+        root: root,
+        title: PDF_TITLE[which] + (btn.dataset.name ? ' \u2014 ' + btn.dataset.name : ''),
+        shortName: fileSlug(btn.dataset.name || PDF_TITLE[which]),
+        inputs: null,
+        appendix: which === 'rolling' ? windowAppendix('rolling') : null,
+        footerLine: 'Already happened, not a forecast. Educational tool, not investment advice. ' +
+          'Figures are before tax and exit load.'
+      }).then(function () {
+        if (note) note.textContent = '';
+      }, function (err) {
+        if (note) note.textContent = (err && err.message) ||
+          'Your browser blocked the download. Use Share \u2192 Print \u2192 Save as PDF.';
+      }).then(function () {
+        delete btn.dataset.busy;
+        btn.removeAttribute('aria-busy');
+      });
+    });
+    /* The window table: a year chip jumps its box to that year; the CSV
+       button hands over the rows; Top returns to the tab row once the
+       reader is a screen down. */
+    document.addEventListener('click', function (ev) {
+      var t = ev.target && ev.target.closest ? ev.target : null;
+      if (!t) return;
+      var chip = t.closest('[data-jump-year]');
+      if (chip) {
+        var box = document.getElementById('winbox-rolling');
+        var row = box && box.querySelector('tr[data-year="' + chip.dataset.jumpYear + '"]');
+        if (box && row) {
+          var head = box.querySelector('thead');
+          box.scrollTop = Math.max(0, row.offsetTop - (head ? head.offsetHeight : 0));
+        }
+        return;
+      }
+      var csv = t.closest('.wincsv');
+      if (csv) {
+        var text = windowCsv(csv.dataset.win || 'rolling');
+        var w = WINDOW_ROWS[csv.dataset.win || 'rolling'];
+        if (text) downloadText(text, 'Where-You-Stand-' + fileSlug(w && w.name) + '-windows.csv',
+                               'text/csv');
+        return;
+      }
+      var top = t.closest('.totop');
+      if (top) {
+        var tabs = document.querySelector('#r-out .ixtabs') || document.querySelector('#r-out');
+        if (tabs) tabs.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      }
+    });
+    window.addEventListener('scroll', function () {
+      var b = document.querySelector('#r-out .totop');
+      if (!b) return;
+      var out = document.getElementById('r-out');
+      b.hidden = !(out && window.scrollY > out.offsetTop + window.innerHeight);
+    }, { passive: true });
     /* The four result tabs on the market-index path. The CSS folds the
        panels to one at a time on a phone; here the tap only moves the .on
        marks, and on a wide screen scrolls to the panel's heading. */
@@ -5063,6 +5130,9 @@
   function init() {
     A.initRouter();
     wireRateChecks();
+    /* Every date field reads dd-Mmm-yyyy, like every other date on the
+       page, whatever the phone's own locale would have drawn. */
+    if (window.PRCDates) window.PRCDates.decorate(document);
     fillAbout();
     $('#ver').textContent = A.VERSION;
     if ($('#sheetver')) $('#sheetver').textContent = A.SHEET_VERSION;
@@ -5140,6 +5210,8 @@
         R.datesTouched = true;
         limitYears(selectedSpanYears());
         updateWindowNote();
+        updateAllBtn();
+        runGate();
         if (R.ran) runRolling();
       });
     });
@@ -5150,6 +5222,8 @@
       R.datesTouched = false;
       limitYears(selectedSpanYears());
       updateWindowNote();
+      updateAllBtn();
+      runGate();
       if (R.ran) runRolling();
     });
     $('#r-run').addEventListener('click', runRolling);
