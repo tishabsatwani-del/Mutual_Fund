@@ -6,7 +6,7 @@
 <title>Where You Stand</title>
 <meta name="description" content="Measure what your own money actually earned, see what the number means, and work out what it would take to reach your goal. Runs entirely in your browser.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231f4e5f'/%3E%3Cpath d='M7 22.5 13 15l4.5 4.5L25 9.5' fill='none' stroke='%23ffffff' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="styles.css?v=20260901g">
+<link rel="stylesheet" href="styles.css?v=20260901h">
 </head>
 <body data-view="home">
 <a class="skip" href="#main">Skip to content</a>
@@ -110,8 +110,9 @@
       <button class="secondary" type="button" id="pf-pick">Choose a file</button>
       <p>or drop it here</p>
     </div>
-    <input type="file" id="pf-file" accept=".csv,.txt,.tsv,.xls,.xlsx">
-    <button class="link" type="button" id="pf-paste-open">Paste the columns instead</button>
+    <input type="file" id="pf-file" accept=".csv,.txt,.tsv,.xls,.xlsx,text/csv,text/comma-separated-values,text/plain,text/tab-separated-values,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/octet-stream">
+    <button class="secondary pastebtn" type="button" id="pf-paste-open">Paste the columns instead</button>
+    <p class="hint pastewhy">Opens straight away, with no file picker to wait for.</p>
     <div class="card" id="pf-paste-box" hidden style="margin:.8rem 0 0;background:var(--surface-2)">
       <label class="fieldlabel" for="pf-paste-text">Copy the rows out of your spreadsheet</label>
       <textarea id="pf-paste-text" rows="6" spellcheck="false"
@@ -418,9 +419,10 @@
           <button class="secondary" type="button" id="f-pick">Choose a file</button>
           <p>CSV or Excel &middot; a date column and a NAV column is all it needs</p>
         </div>
-        <input type="file" id="f-file" accept=".csv,.txt,.tsv,.xlsx">
+        <input type="file" id="f-file" accept=".csv,.txt,.tsv,.xls,.xlsx,text/csv,text/comma-separated-values,text/plain,text/tab-separated-values,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/octet-stream">
         <div id="f-status" aria-live="polite"></div>
-        <button class="link" type="button" id="f-paste-open">Or paste the two columns from a spreadsheet</button>
+        <button class="secondary pastebtn" type="button" id="f-paste-open">Paste the two columns instead</button>
+        <p class="hint pastewhy">Opens straight away, with no file picker to wait for.</p>
         <div class="pastebox" id="f-paste-box" hidden>
           <label class="fieldlabel" for="f-paste-text">Copy the date column and the NAV column, and paste them here</label>
           <textarea id="f-paste-text" rows="6" spellcheck="false"
@@ -781,17 +783,17 @@
 
 </main>
 
-<script src="v3/deck.js?v=20260901g"></script>
-<script src="../sim/format.js?v=20260901g"></script>
-<script src="../sim/workbook.js?v=20260901g"></script>
-<script src="engine.js?v=20260901g"></script>
-<script src="parse.js?v=20260901g"></script>
+<script src="v3/deck.js?v=20260901h"></script>
+<script src="../sim/format.js?v=20260901h"></script>
+<script src="../sim/workbook.js?v=20260901h"></script>
+<script src="engine.js?v=20260901h"></script>
+<script src="parse.js?v=20260901h"></script>
 <!-- The one door reader, shared with the v3 screens. It needs parse.js and
      schemes.js before it, and format.js is already above. -->
-<script src="../sim/schemes.js?v=20260901g"></script>
-<script src="../sim/upload.js?v=20260901g"></script>
-<script src="provider.js?v=20260901g"></script>
-<script src="app.js?v=20260901g"></script>
-<script src="modules.js?v=20260901g"></script>
+<script src="../sim/schemes.js?v=20260901h"></script>
+<script src="../sim/upload.js?v=20260901h"></script>
+<script src="provider.js?v=20260901h"></script>
+<script src="app.js?v=20260901h"></script>
+<script src="modules.js?v=20260901h"></script>
 </body>
 </html>

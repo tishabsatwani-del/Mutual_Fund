@@ -493,9 +493,11 @@ execFileSync('python3', [path.join(__dirname, 'fixtures', 'make_upload_fixtures.
        const cs = getComputedStyle(document.querySelector('#bm-pick'), '::after');
        return cs.animationName === 'spin' && parseFloat(cs.width) > 8;
      }));
-  ok('the wait is said in words, not only drawn',
-     /Opening your files… this can take a moment\./.test(
-       flat(await page.locator('#bm-drop .pickwait').innerText())),
+  /* The ring and nothing else: a sentence under the button read as the page
+     explaining a delay it had not caused. */
+  ok('and nothing is written under it about waiting',
+     (await page.locator('.pickwait').count()) === 0 &&
+     !/Opening your files/.test(flat(await page.locator('#bm-drop').innerText())),
      flat(await page.locator('#bm-drop').innerText()));
   ok('and the button keeps its own label',
      flat(await page.locator('#bm-pick').innerText()) === 'Choose a file',
@@ -505,14 +507,13 @@ execFileSync('python3', [path.join(__dirname, 'fixtures', 'make_upload_fixtures.
   await page.waitForTimeout(600);
   ok('a picker dismissed with nothing chosen puts the button back',
      (await page.getAttribute('#bm-pick', 'data-opening')) === null &&
-     (await page.locator('.pickwait').count()) === 0);
+     (await page.locator('#bm-pick[aria-busy]').count()) === 0);
   /* And a file arriving ends it too, whatever the browser reports. */
   await page.locator('#bm-pick').click();
   await page.waitForTimeout(120);
   await page.setInputFiles('#bm-file', f('amfi-alpha-nav.csv'));
   await page.waitForTimeout(2000);
   ok('a file arriving ends the wait',
-     (await page.locator('.pickwait').count()) === 0 &&
      (await page.locator('[data-opening="yes"]').count()) === 0);
 
   /* The fund path and the portfolio door have the same button and the same
@@ -521,22 +522,72 @@ execFileSync('python3', [path.join(__dirname, 'fixtures', 'make_upload_fixtures.
   await page.locator('#f-pick').click();
   await page.waitForTimeout(150);
   ok('the fund path’s door answers the same way',
-     (await page.getAttribute('#f-pick', 'data-opening')) === 'yes' &&
-     (await page.locator('#f-drop .pickwait').count()) === 1);
+     (await page.getAttribute('#f-pick', 'data-opening')) === 'yes');
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await page.waitForTimeout(600);
-  ok('and puts itself back', (await page.locator('.pickwait').count()) === 0);
+  ok('and puts itself back',
+     (await page.locator('[data-opening="yes"]').count()) === 0);
 
   await page.goto(BASE_URL + '#portfolio', { waitUntil: 'networkidle' });
   await page.waitForTimeout(400);
   await page.locator('#pf-pick').click();
   await page.waitForTimeout(150);
   ok('so does the portfolio door',
-     (await page.getAttribute('#pf-pick', 'data-opening')) === 'yes' &&
-     (await page.locator('#pf-drop .pickwait').count()) === 1);
+     (await page.getAttribute('#pf-pick', 'data-opening')) === 'yes');
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await page.waitForTimeout(600);
-  ok('and puts itself back too', (await page.locator('.pickwait').count()) === 0);
+  ok('and puts itself back too',
+     (await page.locator('[data-opening="yes"]').count()) === 0);
+
+  /* ============================== the way in that needs no file app at all */
+  section('Pasting is offered as an equal way in, not a footnote');
+  await open('index');
+  await openCard('a');
+  const pasteBtn = page.locator('#bm-paste-open');
+  ok('the paste control is a button beside the box, not a small link',
+     (await pasteBtn.getAttribute('class')).split(/\s+/).includes('pastebtn') &&
+     /Paste the two columns instead/.test(flat(await pasteBtn.innerText())),
+     await pasteBtn.getAttribute('class'));
+  ok('it takes the full width, like the door above it',
+     await page.evaluate(() => {
+       const b = document.querySelector('#bm-paste-open');
+       const box = document.querySelector('#bm-drop');
+       return Math.abs(b.getBoundingClientRect().width - box.getBoundingClientRect().width) < 2;
+     }));
+  ok('and says why it is worth using, on a phone',
+     /Opens straight away, with no file picker to wait for\./
+       .test(flat(await page.locator('#bm-paste-open + .pastewhy').innerText())));
+  ok('the paste box still opens and still reads rows',
+     await (async () => {
+       await pasteBtn.click();
+       await page.waitForTimeout(250);
+       await page.fill('#bm-paste-text', '01-Jan-2020\t100\n01-Jan-2021\t110\n01-Jan-2022\t121\n01-Jan-2023\t133');
+       await page.click('#bm-paste-read');
+       await page.waitForTimeout(1200);
+       return /rows read|File added/i.test(await boxText('bm-drop'));
+     })(), await boxText('bm-drop'));
+  /* On a wide screen the phone-only reason is not drawn. */
+  await page.setViewportSize({ width: 1100, height: 900 });
+  await page.waitForTimeout(200);
+  ok('the phone-only reason is not shown on a wide screen',
+     await page.locator('.pastewhy').first().isHidden());
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(200);
+
+  /* The picker is asked for the media types a phone actually stamps on these
+     files, so nothing a reader can see is greyed out and untappable. */
+  section('The phone’s file app is not asked to grey out the reader’s own file');
+  await open('index');
+  await openCard('a');
+  const accepts = await page.evaluate(() =>
+    Array.from(document.querySelectorAll('input[type=file]')).map(i => i.getAttribute('accept')));
+  ok('every door accepts the extensions, their media types, and the untyped case',
+     accepts.length > 0 && accepts.every(a => a &&
+       /\.csv/.test(a) && /\.xlsx/.test(a) &&
+       a.includes('text/csv') &&
+       a.includes('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') &&
+       a.includes('application/octet-stream')),
+     accepts.join(' || '));
 
   /* ================================================================= reset */
   section('Start again puts every box back');

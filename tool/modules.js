@@ -3715,7 +3715,7 @@
     return '<div class="filebox" id="' + prefix + '-drop" tabindex="0" role="button" ' +
              'aria-label="' + esc(aria) + '">' + dropIdleHtml(prefix, alwaysOn) + '</div>' +
            '<input type="file" id="' + prefix + '-file"' + alwaysOn +
-             ' accept=".csv,.txt,.tsv,.xlsx">';
+             ' accept="' + A.FILE_ACCEPT + '">';
   }
 
   function dropIdleHtml(prefix, alwaysOn) {
@@ -3802,8 +3802,11 @@
    * path a file does, so there is no second reader to keep honest. */
   function pasteHtml(prefix) {
     var on = prefix === 'cmp' ? ' data-always-on="yes"' : '';
-    return '<button class="link" type="button" id="' + prefix + '-paste-open"' + on + '>' +
-           'Or paste the two columns from a spreadsheet</button>' +
+    /* Not a small link under the box any more. The phone's own file app can
+       take seconds to appear and nothing on a web page can hurry it, so the
+       way in that needs no file app is offered as an equal, not a footnote. */
+    return '<button class="secondary pastebtn" type="button" id="' + prefix + '-paste-open"' + on + '>' +
+           'Paste the two columns instead</button>' + '<p class="hint pastewhy">Opens straight away, with no file picker to wait for.</p>' +
            '<div class="pastebox" id="' + prefix + '-paste-box" hidden>' +
              '<label class="fieldlabel" for="' + prefix + '-paste-text">' +
              'Copy the date column and the value column, and paste them here</label>' +

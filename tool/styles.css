@@ -871,9 +871,13 @@ button[data-opening="yes"]::after {
 @media (prefers-reduced-motion: reduce) {
   button[data-opening="yes"]::after { animation: none; }
 }
-.pickwait {
-  margin: .55rem 0 0; font-size: .9rem; color: var(--ink-2);
-}
+/* The other way in. A phone's file app can take seconds to open and no page
+   can hurry it; pasting the two columns needs no file app at all, so it is
+   offered as a second full-width way in rather than a link in the margin.
+   The reason is said only where it applies -- on a phone. */
+.pastebtn { width: 100%; margin: .7rem 0 0; }
+.pastewhy { margin: .35rem 0 0; text-align: center; }
+@media (min-width: 45rem) { .pastewhy { display: none; } }
 
 /* The third way in. Folded away, because most readers have a file. */
 .pastebox {

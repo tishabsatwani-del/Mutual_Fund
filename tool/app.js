@@ -421,6 +421,20 @@
    * seen even when the dialog opens at once, and a backstop timer so a
    * browser that reports neither never leaves it turning.
    */
+  /* WHAT THE PICKER IS ASKED FOR
+   *
+   * A phone's file app greys out anything outside this list, and it types a
+   * file by whatever its downloader wrote -- an AMFI CSV routinely arrives as
+   * application/octet-stream, and a reader who can see their file but cannot
+   * tap it has no way to know why. So the list names the extensions, the
+   * media types those extensions actually carry, AND the untyped case, which
+   * between them leave nothing selectable-looking but untappable.
+   *
+   * It is not a validator and never was: what the file turns out to hold is
+   * read and judged after it arrives, and a wrong file is refused there in
+   * words. This only decides what the phone lets a finger reach. */
+  var FILE_ACCEPT = '.csv,.txt,.tsv,.xls,.xlsx,text/csv,text/comma-separated-values,text/plain,text/tab-separated-values,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/octet-stream';
+
   var PICK_WAIT_MS = 400, PICK_GIVE_UP_MS = 25000;
   var activePick = null;
 
@@ -429,15 +443,15 @@
 
   /* Called AFTER input.click(), never before: the picker request is the only
      thing in the tapped task, and the waiting state is drawn in the next one.
-     Nothing this function does can sit between the tap and the picker. */
+     Nothing this function does can sit between the tap and the picker.
+     The state is the turning ring and aria-busy, and nothing more: a
+     sentence underneath was read as the page explaining a delay it had not
+     caused, which made the wait feel longer than the ring alone does. */
   function pickBusy(btn) {
     if (!btn || btn.dataset.opening === 'yes') return;
     pickDone();
     btn.dataset.opening = 'yes';
     btn.setAttribute('aria-busy', 'true');
-    var said = el('p', { 'class': 'pickwait', role: 'status',
-                          text: 'Opening your files\u2026 this can take a moment.' });
-    if (btn.parentNode) btn.parentNode.insertBefore(said, btn.nextSibling);
     var started = Date.now(), ended = false;
     var giveUp = setTimeout(end, PICK_GIVE_UP_MS);
     activePick = end;
@@ -451,7 +465,6 @@
       document.removeEventListener('visibilitychange', shown);
       delete btn.dataset.opening;
       btn.removeAttribute('aria-busy');
-      if (said.parentNode) said.parentNode.removeChild(said);
     }
     function soon() { setTimeout(end, Math.max(0, PICK_WAIT_MS - (Date.now() - started))); }
     function back() { soon(); }
@@ -503,6 +516,7 @@
     $: $, $$: $$, el: el, esc: esc, notice: notice, show: show,
     histogramChart: histogramChart, goalChart: goalChart,
     readFile: readFile, wireDrop: wireDrop, pickBusy: pickBusy, pickDone: pickDone,
+    FILE_ACCEPT: FILE_ACCEPT,
     initRouter: initRouter
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
