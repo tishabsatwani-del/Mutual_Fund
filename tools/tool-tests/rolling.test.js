@@ -312,9 +312,11 @@ function plainFile(file, rate, fromY, toY, start = 100) {
   /* The index path says this with the go-ahead now: "Ready to analyse" as a
      control that carries the reader to step 2, rather than as a line of text
      under the card. */
-  ok('the fund loads through card 1',
-     /Ready to analyse/.test(await page.locator('#up-ready').innerText()),
-     (await page.locator('#up-ready').innerText()).replace(/\s+/g, ' '));
+  /* With card 1 alone the comparison path waits for the benchmark; the
+     "Ready to analyse" line comes with the second file (audit item 14). */
+  ok('the fund loads through card 1, and the line waits for the benchmark',
+     /Waiting for the benchmark index file/.test(await page.locator('#up-waiting').innerText()),
+     (await page.locator('#up-waiting').innerText()).replace(/\s+/g, ' '));
   ok('and the door it came through shows what it holds',
      (await page.locator('#door-a').getAttribute('data-state')) === 'loaded');
 

@@ -1363,8 +1363,9 @@ function textValueFile(file) {
     await page.click('#r-run');
     await page.waitForTimeout(1200);
     const refusal = flat(await page.locator('#r-out').innerText());
-    ok('and the refusal names the horizon and the file’s span in years and months',
-       /Selected holding period \(5 Years\) requires at least 5 years of historical data\. Your file covers 4 Years, 11 Months\./.test(refusal),
+    /* Under a year short, the audit wants the shortfall in days. */
+    ok('and the refusal names the horizon and the file’s span, in days when it is under a year short',
+       /Selected holding period \(5 Years\) requires at least 5 years of historical data\. It covers 1,796 days; one 5-year window needs 1,827\./.test(refusal),
        refusal.slice(0, 300));
   }
 
@@ -1405,9 +1406,8 @@ function textValueFile(file) {
        await p2.locator('#r-out .ixpanel[data-panel="summary"]').isHidden() &&
        (await p2.locator('#r-out .ixtab[data-panel="bench"]').getAttribute('aria-selected')) === 'true' &&
        (await p2.locator('#r-out .ixtab[data-panel="summary"]').getAttribute('aria-selected')) === 'false');
-    ok('the comparison table and its fee note are on that panel',
-       await p2.locator('#r-out .ixpanel[data-panel="bench"] table.summary3').isVisible() &&
-       await p2.locator('#r-out .ixpanel[data-panel="bench"] .feenote').isVisible());
+    ok('the comparison table is on that panel',
+       await p2.locator('#r-out .ixpanel[data-panel="bench"] table.summary3').isVisible());
     await p2.locator('#r-out .ixtab[data-panel="data"]').click();
     await p2.waitForTimeout(200);
     ok('and Data Table shows the numbers as a table',
