@@ -427,6 +427,9 @@
   /* A file arriving ends the wait too, whatever the browser reports. */
   function pickDone() { if (activePick) activePick(); }
 
+  /* Called AFTER input.click(), never before: the picker request is the only
+     thing in the tapped task, and the waiting state is drawn in the next one.
+     Nothing this function does can sit between the tap and the picker. */
   function pickBusy(btn) {
     if (!btn || btn.dataset.opening === 'yes') return;
     pickDone();
@@ -460,7 +463,13 @@
 
   function wireDrop(dropId, inputId, pickId, handler) {
     var drop = $('#' + dropId), input = $('#' + inputId), pick = $('#' + pickId);
-    function open() { pickBusy($('#' + pickId)); input.click(); }
+    function open() {
+      /* The request first, with nothing before it. */
+      input.click();
+      /* The button is looked up here rather than captured: the box redraws
+         itself when a file is read, and the old button is gone by then. */
+      setTimeout(function () { pickBusy($('#' + pickId)); }, 0);
+    }
     pick.addEventListener('click', function (e) { e.stopPropagation(); open(); });
     drop.addEventListener('click', open);
     drop.addEventListener('keydown', function (e) {

@@ -138,7 +138,10 @@
 
     /* The picker can take a second or two to appear; the button says so the
        moment it is tapped rather than looking dead. See A.pickBusy. */
-    function openPicker() { A.pickBusy(pick); input.click(); }
+    function openPicker() {
+      input.click();
+      setTimeout(function () { A.pickBusy(pick); }, 0);
+    }
     pick.addEventListener('click', openPicker);
     if (drop) {
       drop.addEventListener('click', function (e) { if (e.target === drop) openPicker(); });
