@@ -473,7 +473,7 @@ function plainFile(file, rate, fromY, toY, start = 100) {
   const thinOut = (await page.locator('#r-out').innerText()).replace(/\s+/g, ' ');
   ok('one window is stated as a measurement, not summarised as a range',
      /The only 3-year period in this data/i.test(thinOut) &&
-     /This is a measurement, not a range/i.test(thinOut), thinOut.slice(0, 240));
+     /One measurement, not a distribution/i.test(thinOut), thinOut.slice(0, 240));
   ok('and no badge invites the reader to read a range that is not there',
      !/Low data density/i.test(thinOut) && !/Read the range below/i.test(thinOut),
      (thinOut.match(/.{0,50}(data density|range below).{0,50}/i) || [''])[0]);
@@ -497,7 +497,7 @@ function plainFile(file, rate, fromY, toY, start = 100) {
 
   ok('a file thinner than the recommendation warns rather than refusing',
      !(await page.locator('#r-span-warn').isHidden()) &&
-     /5\+ years is the recommended amount of history/
+     /a 3-year window wants at least 6/
        .test(await page.locator('#r-span-warn').innerText()),
      await page.locator('#r-span-warn').innerText());
   await page.click('#r-run');
@@ -522,14 +522,10 @@ function plainFile(file, rate, fromY, toY, start = 100) {
      (await page.locator('#r-years .chip[aria-checked="true"]').count()) === 0,
      String(await page.locator('#r-years .chip[aria-checked="true"]').count()));
 
-  /* And with nothing chosen, pressing the button used to do nothing whatsoever:
-     it cleared the output and returned. */
-  await page.click('#r-run');
-  await page.waitForTimeout(500);
-  ok('pressing the button with nothing chosen says exactly what is missing',
-     (await page.locator('#r-hold-error').innerText()).trim() ===
-       'Please select a holding period to continue',
-     await page.locator('#r-hold-error').innerText());
+  /* With nothing chosen the button is disabled rather than erroring after
+     the tap (audit item 13); the block above already says what is missing. */
+  ok('with nothing chosen, Calculate is disabled rather than erroring after the tap',
+     await page.locator('#r-run').isDisabled());
   ok('and the step itself is marked, not the button at the bottom of the page',
      (await page.locator('#step-hold').getAttribute('data-error')) === 'yes');
 
