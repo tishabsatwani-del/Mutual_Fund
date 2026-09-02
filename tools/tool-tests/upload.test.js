@@ -474,6 +474,70 @@ execFileSync('python3', [path.join(__dirname, 'fixtures', 'make_upload_fixtures.
   ok('the pasted rows are accepted',
      (await page.locator('#f-drop.loaded').count()) === 1, await boxText('f-drop'));
 
+  /* ============================================ the tap answers immediately */
+  /* The phone's own file app takes a second or two to appear, and for that
+     second or two nothing on the page used to change -- so the button read as
+     broken and got tapped again. Nothing here can hurry the phone; the page
+     answers the tap while it waits. The picker never opens in this browser,
+     which is exactly the state being tested. */
+  section('The Choose a file button answers the tap while the picker opens');
+  await open('index');
+  await openCard('a');
+  await page.locator('#bm-pick').click();
+  await page.waitForTimeout(150);
+  ok('the button says it is busy the moment it is tapped',
+     (await page.getAttribute('#bm-pick', 'data-opening')) === 'yes' &&
+     (await page.getAttribute('#bm-pick', 'aria-busy')) === 'true');
+  ok('and a turning ring is drawn on it',
+     await page.evaluate(() => {
+       const cs = getComputedStyle(document.querySelector('#bm-pick'), '::after');
+       return cs.animationName === 'spin' && parseFloat(cs.width) > 8;
+     }));
+  ok('the wait is said in words, not only drawn',
+     /Opening your files… this can take a moment\./.test(
+       flat(await page.locator('#bm-drop .pickwait').innerText())),
+     flat(await page.locator('#bm-drop').innerText()));
+  ok('and the button keeps its own label',
+     flat(await page.locator('#bm-pick').innerText()) === 'Choose a file',
+     flat(await page.locator('#bm-pick').innerText()));
+  /* The picker closing without a file: the window gets its focus back. */
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await page.waitForTimeout(600);
+  ok('a picker dismissed with nothing chosen puts the button back',
+     (await page.getAttribute('#bm-pick', 'data-opening')) === null &&
+     (await page.locator('.pickwait').count()) === 0);
+  /* And a file arriving ends it too, whatever the browser reports. */
+  await page.locator('#bm-pick').click();
+  await page.waitForTimeout(120);
+  await page.setInputFiles('#bm-file', f('amfi-alpha-nav.csv'));
+  await page.waitForTimeout(2000);
+  ok('a file arriving ends the wait',
+     (await page.locator('.pickwait').count()) === 0 &&
+     (await page.locator('[data-opening="yes"]').count()) === 0);
+
+  /* The fund path and the portfolio door have the same button and the same
+     wait behind it. */
+  await open('fund');
+  await page.locator('#f-pick').click();
+  await page.waitForTimeout(150);
+  ok('the fund path’s door answers the same way',
+     (await page.getAttribute('#f-pick', 'data-opening')) === 'yes' &&
+     (await page.locator('#f-drop .pickwait').count()) === 1);
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await page.waitForTimeout(600);
+  ok('and puts itself back', (await page.locator('.pickwait').count()) === 0);
+
+  await page.goto(BASE_URL + '#portfolio', { waitUntil: 'networkidle' });
+  await page.waitForTimeout(400);
+  await page.locator('#pf-pick').click();
+  await page.waitForTimeout(150);
+  ok('so does the portfolio door',
+     (await page.getAttribute('#pf-pick', 'data-opening')) === 'yes' &&
+     (await page.locator('#pf-drop .pickwait').count()) === 1);
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await page.waitForTimeout(600);
+  ok('and puts itself back too', (await page.locator('.pickwait').count()) === 0);
+
   /* ================================================================= reset */
   section('Start again puts every box back');
   await open('index');

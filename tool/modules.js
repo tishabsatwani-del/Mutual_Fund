@@ -136,11 +136,14 @@
     var pick = $('#pf-pick'), input = $('#pf-file'), drop = $('#pf-drop');
     if (!pick || !input) return;
 
-    pick.addEventListener('click', function () { input.click(); });
+    /* The picker can take a second or two to appear; the button says so the
+       moment it is tapped rather than looking dead. See A.pickBusy. */
+    function openPicker() { A.pickBusy(pick); input.click(); }
+    pick.addEventListener('click', openPicker);
     if (drop) {
-      drop.addEventListener('click', function (e) { if (e.target === drop) input.click(); });
+      drop.addEventListener('click', function (e) { if (e.target === drop) openPicker(); });
       drop.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); }
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPicker(); }
       });
       /* dragenter and dragleave fire again for every child the pointer
          crosses, so the highlight is counted in and out rather than toggled. */
@@ -158,6 +161,7 @@
       });
     }
     input.addEventListener('change', function (e) {
+      A.pickDone();
       var files = Array.prototype.slice.call(e.target.files || []);
       if (files.length) takeFile(files[0]);
     });

@@ -406,9 +406,61 @@
   function readWorkbook(file) { return WB.readWorkbook(file); }
 
 
+  /* THE PICKER TAKES A MOMENT, AND THE PAGE SAYS SO
+   *
+   * input.click() hands the request to the browser, which hands it to the
+   * phone, which opens its own file app -- and on a phone that can take two
+   * or three seconds. Nothing on the page changed while it happened, so a
+   * reader who tapped once had no way to tell the tap from a dead button,
+   * and tapped again.
+   *
+   * The page cannot make the phone faster. It can answer the tap
+   * immediately: the button turns and says it is opening, until the picker
+   * comes back -- which is the moment this window regains focus, becomes
+   * visible again, or a file arrives. A minimum of 400ms so the answer is
+   * seen even when the dialog opens at once, and a backstop timer so a
+   * browser that reports neither never leaves it turning.
+   */
+  var PICK_WAIT_MS = 400, PICK_GIVE_UP_MS = 25000;
+  var activePick = null;
+
+  /* A file arriving ends the wait too, whatever the browser reports. */
+  function pickDone() { if (activePick) activePick(); }
+
+  function pickBusy(btn) {
+    if (!btn || btn.dataset.opening === 'yes') return;
+    pickDone();
+    btn.dataset.opening = 'yes';
+    btn.setAttribute('aria-busy', 'true');
+    var said = el('p', { 'class': 'pickwait', role: 'status',
+                          text: 'Opening your files\u2026 this can take a moment.' });
+    if (btn.parentNode) btn.parentNode.insertBefore(said, btn.nextSibling);
+    var started = Date.now(), ended = false;
+    var giveUp = setTimeout(end, PICK_GIVE_UP_MS);
+    activePick = end;
+
+    function end() {
+      if (ended) return;
+      ended = true;
+      if (activePick === end) activePick = null;
+      clearTimeout(giveUp);
+      window.removeEventListener('focus', back);
+      document.removeEventListener('visibilitychange', shown);
+      delete btn.dataset.opening;
+      btn.removeAttribute('aria-busy');
+      if (said.parentNode) said.parentNode.removeChild(said);
+    }
+    function soon() { setTimeout(end, Math.max(0, PICK_WAIT_MS - (Date.now() - started))); }
+    function back() { soon(); }
+    function shown() { if (!document.hidden) soon(); }
+    window.addEventListener('focus', back);
+    document.addEventListener('visibilitychange', shown);
+    return end;
+  }
+
   function wireDrop(dropId, inputId, pickId, handler) {
     var drop = $('#' + dropId), input = $('#' + inputId), pick = $('#' + pickId);
-    function open() { input.click(); }
+    function open() { pickBusy($('#' + pickId)); input.click(); }
     pick.addEventListener('click', function (e) { e.stopPropagation(); open(); });
     drop.addEventListener('click', open);
     drop.addEventListener('keydown', function (e) {
@@ -424,6 +476,7 @@
       if (e.dataTransfer.files && e.dataTransfer.files[0]) handler(e.dataTransfer.files[0]);
     });
     input.addEventListener('change', function () {
+      pickDone();
       var chosen = input.files[0];
       /* Cleared so that choosing the SAME file again fires change again. A
          reader who fixes their spreadsheet and re-picks it otherwise gets
@@ -440,6 +493,7 @@
     fmtDate: fmtDate, fmtYears: fmtYears, isoToday: isoToday, isoToTs: isoToTs,
     $: $, $$: $$, el: el, esc: esc, notice: notice, show: show,
     histogramChart: histogramChart, goalChart: goalChart,
-    readFile: readFile, wireDrop: wireDrop, initRouter: initRouter
+    readFile: readFile, wireDrop: wireDrop, pickBusy: pickBusy, pickDone: pickDone,
+    initRouter: initRouter
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
