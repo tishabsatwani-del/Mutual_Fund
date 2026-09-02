@@ -597,6 +597,7 @@ function plainFile(file, rate, fromY, toY, start = 100) {
      alive. The picker lives outside the folding cards, so no door needs
      reopening between picks. */
   async function gapFor(i) {
+    await unfoldPicker('r-scheme-wrap');
     await page.locator('#r-scheme-list .hit').nth(i).click();
     await page.waitForTimeout(900);
     if (i === 0) { /* the composite resets the holding period with the primary */ }
@@ -611,6 +612,7 @@ function plainFile(file, rate, fromY, toY, start = 100) {
   ok('Alpha at 14% is 3.0 points ahead of the 11% index', (await gapFor(1)) === '+3.0');
   ok('Beta at 8% is 3.0 points behind it', (await gapFor(2)) === '-3.0');
   ok('Gamma at 20% is 9.0 points ahead', (await gapFor(3)) === '+9.0');
+  await unfoldPicker('r-scheme-wrap');
   ok('and switching between them needed no second upload',
      !(await page.locator('#r-scheme-wrap').isHidden()) &&
      (await page.locator('#r-scheme-list .hit').count()) === 4,
@@ -645,6 +647,7 @@ function plainFile(file, rate, fromY, toY, start = 100) {
      !(await page.locator('#r-scheme-wrap').isHidden()) &&
      (await page.locator('#r-scheme-list .hit').count()) === 4,
      String(await page.locator('#r-scheme-list .hit').count()));
+  await unfoldPicker('r-scheme-wrap');
   await page.locator('#r-scheme-list .hit').nth(2).click();
   await page.waitForTimeout(1000);
   /* The scheme's name is on the door and in what gets measured, rather than in
