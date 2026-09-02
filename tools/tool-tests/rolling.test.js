@@ -269,9 +269,8 @@ function plainFile(file, rate, fromY, toY, start = 100) {
   /* --------------------------------------------------------- the insight */
   section('The insight layer survives the restructure');
   out = await page.locator('#r-out').innerText();
-  /* .first(): the fund path now carries the horizon-comparison table too,
-     and that is also a .spread table with its own headings. */
-  const spread = await page.locator('#r-out table.spread').first().locator('th').allInnerTexts();
+  /* The five quartile figures are tiles now, label above figure. */
+  const spread = await page.locator('#r-out .qgrid .qtile .k').allInnerTexts();
   ok('worst to best through the quartiles',
      spread.join('|').toLowerCase() === 'worst|bottom quarter|median|top quarter|best',
      spread.join('|'));

@@ -1202,9 +1202,11 @@ function textValueFile(file) {
        readoutAfter);
 
     /* Item 10: the arithmetic, written out on the data panel. */
-    ok('the data panel writes out CAGR with 365.25 over the calendar-day count',
-       /CAGR = \(NAVend \/ NAVstart\)365\.25 \/ \(Dateend \u2212 Datestart\) \u2212 1/.test(gapOut) &&
-       /joined on the calendar date \(YYYY-MM-DD\)/.test(gapOut));
+    ok('the data panel writes out CAGR with 365.25 over the calendar-day count, exponent and words',
+       (await page.locator('#r-out .formula sup').count()) === 1 &&
+       /\(NAVend \u00f7 NAVstart\)365\.25 \u00f7 days \u2212 1/.test(gapOut) &&
+       /raise the result to the power of 365\.25 divided by the number of days/.test(gapOut) &&
+       !/YYYY-MM-DD/.test(gapOut), (gapOut.match(/.{0,40}NAVend.{0,120}/) || [''])[0]);
   }
 
   section('A same-class or unnamed pairing is not nagged');
@@ -1238,12 +1240,14 @@ function textValueFile(file) {
      /Ended below zero/i.test(rev) && /Beat your target/i.test(rev));
   ok('and never calls a share of the past the odds',
      !/\bodds of\b/i.test(rev), (rev.match(/.{0,40}odds of.{0,40}/i) || [''])[0]);
-  ok('the sticky bar restates what was asked, and offers print',
-     await page.locator('#r-out .stickybar').isVisible() &&
-     await page.locator('#r-out .printbtn').isVisible());
-  ok('the Sharpe-style and Sortino-style figures sit under the rate box, named as style',
-     /Sharpe-style/.test(rev) && /Sortino-style/.test(rev) &&
-     /risk-free rate this tool does not know/.test(rev));
+  /* The audit: the header card is static and appears once, the PDF button
+     sits on the tab row, and the Sharpe-style line is gone with the rows. */
+  ok('the header card restates what was asked, once, in flow',
+     (await page.locator('#r-out .resulthead').count()) === 1 &&
+     (await page.locator('#r-out .stickybar').count()) === 0 &&
+     await page.locator('#r-out .ixtabs .pdfbtn').isVisible());
+  ok('no Sharpe-style or Sortino-style line sits under the rate box',
+     !/Sharpe|Sortino/.test(rev) && (await page.locator('#r-out .ratioline').count()) === 0);
   ok('the three self-reflection questions are asked, not answered',
      (await page.locator('#r-out .reflectlist > li').count()) === 3 &&
      /Three questions only you can answer/.test(rev));
@@ -1256,8 +1260,7 @@ function textValueFile(file) {
        const cells = await page.locator('[data-beat-h]').allInnerTexts();
        return cells.length >= 2 && cells.every(c => c.trim() === '0%');
      })());
-  ok('and the ratio line follows the same number',
-     /Sharpe-style/.test(flat(await page.locator('#ratio-rolling').innerText())));
+  ok('and no ratio line exists to follow it', (await page.locator('#ratio-rolling').count()) === 0);
 
   section('Overlap is explained on request, not shouted');
   await openIndexPath();
