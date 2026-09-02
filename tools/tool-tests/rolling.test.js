@@ -344,8 +344,11 @@ function plainFile(file, rate, fromY, toY, start = 100) {
      /Minimum Rolling Return/.test(out), out.slice(0, 200));
   ok('the outperformance rate is measured once a benchmark is loaded',
      !/Outperformance Frequency \(%\)\s*not measured/.test(out), out.slice(0, 200));
-  ok('and it carries the note that consistency guarantees nothing',
-     /Past historical consistency does not guarantee future results/.test(out));
+  /* The three-rates card's own disclaimer block is gone (one of seven on
+     the page); the orange line at the top carries the not-a-forecast point. */
+  ok('and the page says once, at the top, that this already happened and is not a forecast',
+     /Already happened — not a forecast\. Past rolling returns do not guarantee future performance/.test(out) &&
+     !/What these three rates are not/.test(out));
   ok('no card on this screen tells the reader to buy, sell, switch or hold',
      !/\b(you should|we recommend|consider (buying|selling|switching)|time to (buy|sell|exit))\b/i.test(out),
      (out.match(/.{0,60}(you should|we recommend|consider buying|time to buy).{0,60}/i) || [''])[0]);
