@@ -17,89 +17,113 @@ install — just clone and run.
 
 A self-contained, **mobile-first**, **behaviour-driven** investing simulator.
 Two people invest the same money, in the same market. One chose a **Regular**
-plan (pays ~1%/yr more, but has a *relationship manager / MD* to call when life
-hits). One chose **Direct** (pays nothing extra, but faces every storm alone).
-The fee gap is small and steady. The behaviour gap is enormous. The tool
-dramatises one idea: **the only real variable is who is beside you when it
-falls.**
+plan (a mutual fund distributor, an MFD, invests for her, and the fund pays them
+about 1%/yr out of her money). One chose **Direct** (invests alone, pays no
+commission). The fee gap is certain and computed; the behaviour gap is uncertain
+and measured. The tool dramatises one idea: **the only variable is what holds
+your hand when it falls — a person, a rule, or nothing** — and it never tells
+the reader which door to take. It puts two numbers side by side and lets them
+do the sum.
 
 > **Live link:** `https://tishabsatwani-del.github.io/Mutual_Fund/`
 > *(one-time setup: repo **Settings → Pages → Source = "GitHub Actions"**, then
 > merge to `main` — the included workflow deploys automatically.)*
+>
+> The page is a **gate**: the simulator is stored inside it encrypted and opens
+> with a reader's access code. The readable master is kept outside the repo;
+> `tools/two-doors/` holds the rebuild script and the engine tests
+> (see its README).
 
-**Setup, in order:** pick the **scenario** (crash *or* emergency — two very
-different situations), the **duration** (15 / 20 / 30 years), the **SIP**
-(₹5,000 / ₹10,000 / ₹20,000 / ₹50,000), then the specific event. The crash
-always hits at the **exact midpoint** (30y → year 15, 20y → year 10), stated
-upfront so it's never a surprise.
+**Setup, in order:** pick the **door** (crash *or* emergency), the **duration**
+(10 / 15 / 20 / 25 / 30 years), the **SIP** (₹5,000 / ₹10,000 / ₹20,000 /
+₹25,000 / ₹50,000, or any figure typed from ₹500 to ₹5,00,000), the **fee gap**
+(0.5 / 0.75 / 1.0 / 1.25 points a year; default 1.0), then the specific event.
+A named crash hits at the midpoint of the horizon and the month is printed in
+the maths panel; the "drawn live" crash is drawn from stated ranges.
 
-**Two scenarios, off one engine**
+**Two doors, off one engine**
 
-- **The Crash** — *Live it.* Both wealth lines climb the years (a clear "Year
-  N / 20" progress bar marks the crash ahead). At the midpoint a real, named
-  crash hits — **COVID-19, the 2008 crisis, the 2022 correction, an Iran–USA
-  war, or an India–Pakistan war** — each with a plain-language explanation of
-  what actually happened. Your side goes **silent** (the loss shown at a
-  glance: a big −X% and `₹before ▸ ₹after`); her phone **rings**. Every heavy
-  beat **holds until you tap** — nothing flashes past. You pick one of four
-  behaviours; then one headline (YOU vs FRIEND) and a "See the maths" panel.
-- **The Emergency** — *The money, now.* A **staged, interactive** ordeal:
-  you've quietly built a corpus across three sleeves; then life strikes —
-  **hospitalisation/ICU, a business loss, a pandemic (COVID), or war** — at a
-  **severity you choose** (Manageable / Serious / Devastating). *You* must
-  decide how to raise the cash: redeem everything, take only what you need,
-  sell the fallen fund, or kill the SIP. Then her RM makes the call she can
-  make. Pandemics and wars arrive *with* a market crash.
+- **The Crash** — *Live it.* You **swear an oath** while the screen is green
+  (hold / pause / sell). The market climbs the years on a candlestick chart. At
+  the crash month a real, named crash hits — **COVID-19 2020, the 2008 crisis,
+  the 2022 correction, a war/geopolitical shock shaped on the Kargil scare of
+  1999, or one drawn live** — and your side goes **silent** (a big −X% and
+  `₹before ▸ ₹after`, plus the line explaining why the corpus fell less than the
+  market: the instalments kept buying). One card shows the feed of that week.
+  You pick one of four behaviours, alone; then her MFD's one sentence plays.
+  The finish line shows **three figures**: what you did, what holding would have
+  done on the same plan, and what the Regular friend finished with — the
+  behaviour gap and the fee gap as two separate numbers — with the oath closed
+  in one sentence ("You swore to hold. You sold."), the cost in years of your
+  own SIP, and a "See the maths" panel that prints every rule the engine used.
+- **The Emergency** — *The money, now.* The same kind of oath (where will you
+  take the cash from?), then the corpus you built across three funds; then life
+  strikes — **hospitalisation/ICU, a business loss, a pandemic, or war** — at a
+  **severity you choose**, each printed in rupees on the size screen. You decide
+  how to raise the cash; then her MFD makes her call (liquid first, then the
+  fund that has fallen least). The same three-figure finish. When the need is
+  bigger than everything built, the tool says so; when you redeem everything,
+  the second decision (never going back) is named separately from the first.
 
 **The maths — exact, auditable, never rigged**
 
 - **Correct rates.** Returns are stored so the *effective annual CAGR* is
-  **exactly 12% (Direct) / 11% (Regular)** — the monthly rate is the 12th root,
-  not a naive 1%/month (which would compound to 12.68%). The fee is a
-  multiplicative monthly drag, so Regular's CAGR is exactly 1 point lower on
-  every path.
+  **exactly 12% (Direct) / 12% minus the chosen gap (Regular)** — the monthly
+  rate is the 12th root, not a naive 1%/month. The fee is a multiplicative
+  monthly drag.
 - **Real unit-level accounting** — every month `units = SIP / NAV`, value =
-  `units × NAV` (+ idle cash), with correct start-of-month SIP timing. **XIRR**
+  `units × NAV` (+ idle cash), with start-of-month SIP timing. **XIRR**
   (Newton–Raphson + bisection) and **CAGR** computed from the actual cash flows.
-- **Computed vs assumption.** Every figure is labelled: results (corpus, XIRR,
-  CAGR, fee cost) are **computed live**; only the returns and the
-  drawdown/emergency size are **inputs**. Nothing is invented.
-- **"Run it yourself" — the interactive 10,000-life experiment.** The rigorous
-  Monte Carlo engine (10,000 paths; mean ≈ 12%/yr, vol ≈ 15–18%/yr, fat tails +
-  clustered crashes) staged not as a chart but as a *thing you do*, a choice at
-  every beat: **(1)** try to control one thing about your 20 years — every dial
-  but *your own nerve* is locked; **(2)** *guess* how many in 100 hold through a
-  crash, then meet the real figure (AMFI–CRISIL: ~8 alone, ~21 with a steady
-  hand); **(3)** **pull the lever** STAY vs RUN and watch 10,000 outcomes settle
-  high or low; **(4)** decide, hand shaking, whether to *reach for a steady
-  hand*; **(5)** turn the gap into **years of your life** at a spend you pick;
-  then the line, and the honest **door (~₹X) vs lever (~₹Y, ~1.7×)** seal. Every
-  rupee is computed live; the 8/21 are cited; the "years" uses an on-screen,
-  clearly-illustrative monthly-spend assumption. *(See `BUILD_BRIEF.md` for the
-  spec; this ships the interactive variant of its Section 10.)*
+- **Every rule printed.** A sale happens at the bottom, the worst possible day;
+  "sold, bought back" re-enters the month the market regains its old level;
+  "sold and waited" a year after that; a pause stops instalments at the crash
+  and restarts a year after the market regains its old level, the skipped money
+  waiting in cash and going in together; idle cash earns 4%/yr in a bank — in
+  both doors and in the ten thousand futures. Taxes and exit loads are not
+  modelled; both make every sale worse than shown. Every figure is tagged
+  COMPUTED or ASSUMPTION.
+- **"Run it yourself" — the interactive 10,000-life experiment.** A seeded
+  Monte Carlo (10,000 paths; mean ≈ 12%/yr, vol ≈ 15–18%/yr, fat tails +
+  clustered crashes; the same inputs always give the same lives), staged as a
+  thing you do: **(1)** try to control one thing — every dial but *your own
+  nerve* is locked; **(2)** guess what the average investor earned in funds
+  that delivered 19.1%/yr, then meet the real figure (Axis Mutual Fund's study
+  of its own investors, 2003–2022: 13.8% lump-sum, 15.2% SIP); **(3)** **pull
+  the lever** STAY vs RUN; **(4)** decide whether to reach for a steady hand —
+  which some pay 1%/yr for, some write on a card, some have neither;
+  **(5)** turn the gap into years of your life, in today's money (inflation
+  assumed 6%); then the seal — the door (the fee, both holding) vs the lever.
+  The footnote prints the run rule, the median convention, the SIP and the seed.
+- **"Your two numbers" — the close.** The fee gap over your horizon (certain)
+  beside your nerve gap (the sum of what your own choices cost across the runs
+  you played), the oath-versus-act record ("Three storms. Three oaths to hold.
+  One hold."), one question — who or what stops your hand? — and a reading
+  for each answer that states the arithmetic and stops short of a verdict.
 - **Honest, not rigged** — across paths, Direct can finish **above, equal to,
-  or below** Regular. The tool never claims one door is better — it proves the
-  door was never the point.
+  or below** Regular. In every named crash a pause costs less than the fee gap
+  and a sale costs more: Direct buys you one flinch, a pause, not a sale. The
+  tool never claims one plan is better, and never claims a commission buys a
+  phone call.
 - **Real events (illustrative)** — COVID-19 2020 (~−38%), 2008 GFC (~−60%), the
-  2022 correction (~−18%), an Iran–USA war (~−16%), an India–Pakistan war
-  (~−10%, historically short and shallow). *Based on actual index drawdowns;
-  exact figures vary by index and dates and must be locked against real data
-  before shipping.*
-- **Works offline, no CDN, no backend** — hand-rolled Canvas, instant load.
+  2022 correction (~−18%), a war/geopolitical shock (~−14%, deeper and slower
+  than Kargil 1999 on purpose). *Based on actual index drawdowns; exact figures
+  vary by index and dates.*
+- **Works offline, no CDN, no backend** — hand-rolled Canvas, instant load, a
+  service worker keeps the last good copy for a reader with no signal.
 
 > All outputs are illustrative **ranges of possibility, never predictions or
 > advice.** Educational tool — not investment advice.
-
 
 Try it locally:
 
 ```bash
 python -m http.server 8000    # then open http://localhost:8000
-node tests/test_simulator.js  # verify the engine: ordering, XIRR, MC calibration
+TDOS_MASTER=/path/to/master.html node tools/two-doors/engine.test.js   # verify the engine
 ```
 
-Files: `index.html`, `styles.css`, `app.js` (math engine + cinematic
-experience), `.github/workflows/pages.yml` (auto-deploy).
+Files: `index.html` (the gate + encrypted bundle), `sw.js` (offline cache),
+`voice/` (recorded clips), `tools/two-doors/` (rebuild script, engine tests),
+`.github/workflows/pages.yml` (auto-deploy).
 
 ---
 
