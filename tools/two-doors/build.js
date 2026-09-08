@@ -73,7 +73,14 @@ async function seal(rawMaster, html) {
   const m = gate.match(/(\n\s*var P = )(\{[\s\S]*?\});\n/);
   if (!m) throw new Error('payload `var P = {...};` not found in ' + INDEX);
   const P = JSON.parse(m[2]);
-  const master = fs.readFileSync(masterPath, 'utf8');
+  let master = fs.readFileSync(masterPath, 'utf8');
+  // area 25 — the as-built line, and the build refuses emoji (area 22: inline SVG only).
+  let commit = 'unknown';
+  try { commit = require('child_process').execSync('git rev-parse --short HEAD', { cwd: path.join(__dirname, '..', '..'), stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim(); } catch (e) {}
+  const built = 'as built: ' + new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) + ' · source ' + commit;
+  master = master.split('__AS_BUILT__').join(built);
+  const emoji = master.match(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/gu) || [];
+  if (emoji.length) throw new Error('the master contains emoji (' + emoji.join(' ') + '); the UI uses inline SVG only');
   if (!/Two Doors, One Storm/.test(master) || /var P = \{/.test(master)) throw new Error(masterPath + ' does not look like the readable master');
 
   const got = await unwrap(P, CODE);
@@ -90,7 +97,8 @@ async function seal(rawMaster, html) {
   const k = await subtle.importKey('raw', again.raw, 'AES-GCM', false, ['decrypt']);
   const html = new TextDecoder().decode(await subtle.decrypt({ name: 'AES-GCM', iv: b64(P2.i) }, k, b64(P2.c)));
   if (html !== master) throw new Error('verification failed: the rebuilt bundle differs from the master');
+  fs.writeFileSync(masterPath.replace(/\.html$/, '') + '.built.html', master);   // the exact text that was sealed, beside the master
 
   fs.writeFileSync(INDEX, out);
-  console.log('wrote ' + INDEX + ' — master ' + master.length + ' bytes, payload ' + next.c.length + ' b64 chars, ' + next.w.length + ' code(s) kept');
+  console.log(built + '\nwrote ' + INDEX + ' — master ' + master.length + ' bytes, payload ' + next.c.length + ' b64 chars, ' + next.w.length + ' code(s) kept');
 })().catch((e) => { console.error(e.message || e); process.exit(1); });
