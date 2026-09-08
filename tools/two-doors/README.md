@@ -1,10 +1,10 @@
 # Two Doors, One Storm — build and tests
 
 The live page (`/index.html`) is a **gate**: the simulator's HTML is stored
-inside it encrypted, and opens only with a reader's access code. The readable
-source (the *master*) is deliberately **not** in this repository. Keep two dated
-copies of it in two places (see the audit's T4), and use these scripts to
-publish changes and to prove the engine.
+inside it encrypted, and opens only with a reader's access code (checked on the
+phone; nothing leaves it). The readable source (the *master*) is deliberately
+**not** in this repository. Keep two dated copies of it in two places, and use
+these scripts to publish changes and to prove the engine.
 
 ## Rebuild the published page from the master
 
@@ -15,6 +15,10 @@ TDOS_CODE='<a reader access code>' node tools/two-doors/build.js /path/to/master
 - Unwraps the existing master key with the code you give, re-encrypts the new
   master with that same key and a fresh IV, and writes `index.html`. Every
   other access code keeps working — none needs to be known here.
+- Stamps the as-built line (`as built: <date> · source <commit>`) into the
+  master's maths panels and self-test page, and refuses to build a master that
+  contains emoji (the UI is inline SVG only). The exact stamped text is written
+  beside the master as `<master>.built.html`.
 - Verifies that the rebuilt gate opens and yields the master byte-for-byte
   before writing anything.
 - To add a reader code without touching anything else:
@@ -28,15 +32,24 @@ Then commit `index.html` and merge to `main`; the Pages workflow deploys it.
 TDOS_MASTER=/path/to/master.html node tools/two-doors/engine.test.js
 ```
 
-Covers the reviewer's acceptance test from the September 2026 audit (run C
-reproduces ₹3,04,53,950 / ₹2,63,05,172 / 11.3% / 10.4%), the internal
-identities on every path, the fee-gap selector, the printed behaviour rules
-(sale at the bottom, re-entry months, one idle-cash rate), and edge cases
-E1–E12 (late crash, early crash, oath reversals, cost exceeding the total
-invested, need bigger than the corpus, the sell waterfall, hardest-mode flag,
-seeded futures, the named war anchor and drawn-crash ranges, SIP changes).
+Covers the fourth audit (September 2026): the twenty golden vectors (Appendix
+A, regenerated under the asset-charge fee and decision-time pricing, frozen in
+the master and recomputed by the hidden `#selftest` page), and the relationship
+each developer area states as its test — the fee as a daily charge on assets
+(φ, 10.886% at a 1.00-point gap, g = 0 identical paths), the 0.10-point liquid
+gap, one pause convention in both doors (S × N invested on every path; parked
+beats spent), a steady hand that does not flinch, the tape (no tap = hold
+exactly; sale cost monotonic in depth; trough = the matrix figure; buy-the-dip
+identity; the day-and-drawdown stamp), the exact regain in every storm ×
+horizon × gap, adaptive need rounding (strictly increasing for every SIP and
+horizon), the calm-road fee, the futures' median calm CAGR of 12.0% ± 0.1% at
+the frozen base drift, the dated storms and the bounded drawn crash, the chosen
+emergency backdrop, the copy branches (verdict kind, oath sentence, cost-line
+kind, crash-cost sign, "about the same"), and the build itself (no emoji, no
+real outlet names in the feed, the industry-wide Axis attribution, the tax
+sentence, the sources).
 
-E8/E9 (sound off, no speech engine), E13 (the session record), E14 (360 px
-reflow) and E15 (back from the friend's phone) are browser behaviours; check
-them in the page itself (sound off → every button live at once; sound on →
-live within four seconds; the "Your two numbers" totals match the runs).
+Browser behaviours (the scroll pill, Back mid-tape, the voice note unlocking on
+the caption clock with sound off, the header slot, keyboard focus) are checked
+in the page itself; open it with `#selftest` to see the golden vectors pass on
+any phone, offline.

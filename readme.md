@@ -13,103 +13,100 @@ install — just clone and run.
 
 ---
 
-## 🌐 Live web tool — "Two Doors, One Storm"
+## Live web tool — "Two Doors, One Storm"
 
 A self-contained, **mobile-first**, **behaviour-driven** investing simulator.
 Two people invest the same money, in the same market. One chose a **Regular**
 plan (a mutual fund distributor, an MFD, invests for her, and the fund pays them
-about 1%/yr out of her money). One chose **Direct** (invests alone, pays no
-commission). The fee gap is certain and computed; the behaviour gap is uncertain
-and measured. The tool dramatises one idea: **the only variable is what holds
-your hand when it falls — a person, a rule, or nothing** — and it never tells
-the reader which door to take. It puts two numbers side by side and lets them
-do the sum.
+about 1%/yr out of her money — and here her MFD does the job properly; that is
+the assumption). One chose **Direct** (invests alone, pays no commission). The
+fee gap can be computed; the behaviour gap can only be measured. The tool
+dramatises one idea: **the only variable is what holds your hand when it falls
+— a person, a rule, or nothing** — and it never tells the reader which door to
+take. It puts two numbers side by side and lets them do the sum.
 
 > **Live link:** `https://tishabsatwani-del.github.io/Mutual_Fund/`
-> *(one-time setup: repo **Settings → Pages → Source = "GitHub Actions"**, then
-> merge to `main` — the included workflow deploys automatically.)*
 >
 > The page is a **gate**: the simulator is stored inside it encrypted and opens
-> with a reader's access code. The readable master is kept outside the repo;
-> `tools/two-doors/` holds the rebuild script and the engine tests
-> (see its README).
+> with a reader's access code (the check is client-side; nothing leaves the
+> phone). The readable master is kept outside the repo; `tools/two-doors/`
+> holds the rebuild script and the engine tests (see its README).
 
 **Setup, in order:** pick the **door** (crash *or* emergency), the **duration**
-(10 / 15 / 20 / 25 / 30 years), the **SIP** (₹5,000 / ₹10,000 / ₹20,000 /
-₹25,000 / ₹50,000, or any figure typed from ₹500 to ₹5,00,000), the **fee gap**
-(0.5 / 0.75 / 1.0 / 1.25 points a year; default 1.0), then the specific event.
-A named crash hits at the midpoint of the horizon and the month is printed in
-the maths panel; the "drawn live" crash is drawn from stated ranges.
+(10 / 15 / 20 / 25 / 30 years), the **SIP** (₹5,000 to ₹50,000, or any figure
+typed from ₹500 to ₹5,00,000 — "50k" and "1.5L" work), the **fee gap** (0.5 /
+0.75 / 1.0 / 1.25 / 1.5 points a year; default 1.0 — in 2026 the gap on
+actively managed equity schemes averaged about 1.1–1.2 points and ran from
+under 0.1 to about 2 points scheme by scheme), then the specific event.
 
 **Two doors, off one engine**
 
 - **The Crash** — *Live it.* You **swear an oath** while the screen is green
-  (hold / pause / sell). The market climbs the years on a candlestick chart. At
-  the crash month a real, named crash hits — **COVID-19 2020, the 2008 crisis,
-  the 2022 correction, a war/geopolitical shock shaped on the Kargil scare of
-  1999, or one drawn live** — and your side goes **silent** (a big −X% and
-  `₹before ▸ ₹after`, plus the line explaining why the corpus fell less than the
-  market: the instalments kept buying). One card shows the feed of that week.
-  You pick one of four behaviours, alone; then her MFD's one sentence plays.
-  The finish line shows **three figures**: what you did, what holding would have
-  done on the same plan, and what the Regular friend finished with — the
-  behaviour gap and the fee gap as two separate numbers — with the oath closed
-  in one sentence ("You swore to hold. You sold."), the cost in years of your
-  own SIP, and a "See the maths" panel that prints every rule the engine used.
+  (hold / pause / sell). The market climbs the years; at the midpoint a named
+  storm lands — **COVID-19 2020** (peak 14 Jan 2020, trough 23 Mar 2020,
+  regained 9 Nov 2020), **the 2008 crisis** (8 Jan 2008 → 27 Oct 2008 → 5 Nov
+  2010), **the 2022 correction** (18 Oct 2021 → 17 Jun 2022 → 24 Nov 2022),
+  **the 2026 oil war** (5 Jan 2026 → 2 Apr 2026, −16%; recovery *assumed* —
+  six months on the market had not regained its January level), or **a crash
+  drawn live** (drawn, not history). A **feed** of three to five items from
+  fictional outlets arrives on your phone (a family forward, a BREAKING strip,
+  a broker-app push, a headline; the word SIMULATION is visible). The storm
+  then plays as a **tape** — the fall for about half a minute, the recovery for
+  about twenty seconds — with the buttons live throughout: **Hold, Pause the
+  SIP, Sell everything, Sell half, Buy the dip** (from a six-instalment cash
+  reserve every path holds), **Buy back, Resume**. Every tap is priced at the
+  model's price at that moment and stamped with the day and the drawdown
+  ("you sold at −22%, day 9"). No tap is a hold, named as doing nothing. Only
+  then does a **voice note** from the friend's MFD play — two or three short
+  lines in Hindi with English captions, one script per storm, no skip — and
+  one question follows: *would this have changed what you did?* The finish
+  line shows **three figures** (what you did; what holding would have done on
+  the same plan; what the Regular friend finished with), the oath closed in
+  one sentence, the cost in years of your own SIP, and a "See the maths" panel
+  that prints every tap and every rule.
 - **The Emergency** — *The money, now.* The same kind of oath (where will you
-  take the cash from?), then the corpus you built across three funds; then life
-  strikes — **hospitalisation/ICU, a business loss, a pandemic, or war** — at a
-  **severity you choose**, each printed in rupees on the size screen. You decide
-  how to raise the cash; then her MFD makes her call (liquid first, then the
-  fund that has fallen least). The same three-figure finish. When the need is
-  bigger than everything built, the tool says so; when you redeem everything,
-  the second decision (never going back) is named separately from the first.
+  take the cash from?), the corpus you built across three funds, a severity
+  chosen as a **share of what you built** (about 30% / 55% / 80%, or "let life
+  decide"), a **market backdrop** (calm, or one of the storms; pandemic and war
+  bring their own), then the rupee figure lands as the story beat ("you need,
+  now: ₹X — about 31% of everything you have"). You raise the cash alone;
+  then the MFD's voice note; then the same one question. The steady hand it is
+  measured against **does not flinch** — it takes only the need, liquid first,
+  and never pauses.
 
 **The maths — exact, auditable, never rigged**
 
-- **Correct rates.** Returns are stored so the *effective annual CAGR* is
-  **exactly 12% (Direct) / 12% minus the chosen gap (Regular)** — the monthly
-  rate is the 12th root, not a naive 1%/month. The fee is a multiplicative
-  monthly drag.
+- **The fee is a charge on assets.** Direct grows at exactly 12%/yr (the
+  monthly rate is the 12th root). Regular grows at the same rate and is charged
+  the gap on assets, accrued daily: the monthly factor is
+  `(1 − g/365)^(365/12)`, so a 1.0-point gap gives Regular ≈ 10.9% — the fee
+  costs 1.11 points of return because it is charged on assets that keep
+  growing. Liquid funds carry a 0.10-point gap whatever the equity gap.
 - **Real unit-level accounting** — every month `units = SIP / NAV`, value =
-  `units × NAV` (+ idle cash), with start-of-month SIP timing. **XIRR**
-  (Newton–Raphson + bisection) and **CAGR** computed from the actual cash flows.
-- **Every rule printed.** A sale happens at the bottom, the worst possible day;
-  "sold, bought back" re-enters the month the market regains its old level;
-  "sold and waited" a year after that; a pause stops instalments at the crash
-  and restarts a year after the market regains its old level, the skipped money
-  waiting in cash and going in together; idle cash earns 4%/yr in a bank — in
-  both doors and in the ten thousand futures. Taxes and exit loads are not
-  modelled; both make every sale worse than shown. Every figure is tagged
-  COMPUTED or ASSUMPTION.
-- **"Run it yourself" — the interactive 10,000-life experiment.** A seeded
-  Monte Carlo (10,000 paths; mean ≈ 12%/yr, vol ≈ 15–18%/yr, fat tails +
-  clustered crashes; the same inputs always give the same lives), staged as a
-  thing you do: **(1)** try to control one thing — every dial but *your own
-  nerve* is locked; **(2)** guess what the average investor earned in funds
-  that delivered 19.1%/yr, then meet the real figure (Axis Mutual Fund's study
-  of its own investors, 2003–2022: 13.8% lump-sum, 15.2% SIP); **(3)** **pull
-  the lever** STAY vs RUN; **(4)** decide whether to reach for a steady hand —
-  which some pay 1%/yr for, some write on a card, some have neither;
-  **(5)** turn the gap into years of your life, in today's money (inflation
-  assumed 6%); then the seal — the door (the fee, both holding) vs the lever.
-  The footnote prints the run rule, the median convention, the SIP and the seed.
-- **"Your two numbers" — the close.** The fee gap over your horizon (certain)
-  beside your nerve gap (the sum of what your own choices cost across the runs
-  you played), the oath-versus-act record ("Three storms. Three oaths to hold.
-  One hold."), one question — who or what stops your hand? — and a reading
-  for each answer that states the arithmetic and stops short of a verdict.
-- **Honest, not rigged** — across paths, Direct can finish **above, equal to,
-  or below** Regular. In every named crash a pause costs less than the fee gap
-  and a sale costs more: Direct buys you one flinch, a pause, not a sale. The
-  tool never claims one plan is better, and never claims a commission buys a
-  phone call.
-- **Real events (illustrative)** — COVID-19 2020 (~−38%), 2008 GFC (~−60%), the
-  2022 correction (~−18%), a war/geopolitical shock (~−14%, deeper and slower
-  than Kargil 1999 on purpose). *Based on actual index drawdowns; exact figures
-  vary by index and dates.*
-- **Works offline, no CDN, no backend** — hand-rolled Canvas, instant load, a
-  service worker keeps the last good copy for a reader with no signal.
+  `units × NAV` (+ cash); a tap inside a month is priced at that moment.
+  **XIRR** and **CAGR** are computed from the actual cash flows.
+- **One pause convention.** In both doors paused instalments wait in cash at
+  4% and go in together on resumption; the "spent instead" variant is printed
+  beside it. Idle cash and the reserve earn 4%/yr.
+- **"Run it yourself"** — 10,000 seeded futures, calibrated so the *typical*
+  (median) calm life compounds at 12%: volatility itself costs about 1.3
+  points a year, and the average path is not the typical path. The Axis quiz
+  cites the industry-wide study of Indian equity-fund investors, 2003–2022
+  (19.1% fund / 13.8% lump-sum / 15.2% SIP).
+- **"Your two numbers" — one basis.** The fee on a calm road for your current
+  inputs ("if nothing ever happens") beside your nerve, run by run, for the
+  same inputs; the self-report decides whether the reading points to a person
+  or to a rule with teeth. Never "CERTAIN".
+- **Tax** is left out and the panel says why: it cannot change which door
+  wins, it makes every sale cost a little more — and switching from Regular to
+  Direct is itself a sale.
+- **Self-test.** Open the tool with `#selftest` to recompute twenty golden
+  figures on the phone, offline. The build prints "as built: ‹date› · source
+  ‹commit›" in every maths panel.
+- **No emoji, no CDN, no backend, no heartbeat.** Inline SVG icons; a service
+  worker keeps the last good copy for a reader with no signal; no alarm tones,
+  no red flashing, no screen shake — the tool must never push, so that what it
+  measures is you.
 
 > All outputs are illustrative **ranges of possibility, never predictions or
 > advice.** Educational tool — not investment advice.
@@ -122,7 +119,10 @@ TDOS_MASTER=/path/to/master.html node tools/two-doors/engine.test.js   # verify 
 ```
 
 Files: `index.html` (the gate + encrypted bundle), `sw.js` (offline cache),
-`voice/` (recorded clips), `tools/two-doors/` (rebuild script, engine tests),
+`voice/` (recorded clips; drop the nine voice notes in as `voice/notes/<key>.m4a`
+— keys `covid gfc corr2022 oilwar2026 drawn icu business pandemic war`; until a
+file exists the English captions are read by the device voice),
+`tools/two-doors/` (rebuild script, engine tests),
 `.github/workflows/pages.yml` (auto-deploy).
 
 ---

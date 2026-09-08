@@ -3,7 +3,7 @@
  * copy of the gate and the voice clips serve when there is no signal (a reader
  * on a train). The simulator itself needs nothing from the network once the
  * gate has loaded — everything is computed on the phone. */
-const CACHE = 'tdos-v1';
+const CACHE = 'tdos-v2';
 self.addEventListener('install', (e) => { self.skipWaiting(); });
 self.addEventListener('activate', (e) => {
   e.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim()));

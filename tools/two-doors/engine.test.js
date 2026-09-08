@@ -1,6 +1,8 @@
 #!/usr/bin/env node
-/* "Two Doors, One Storm" — engine tests: the September 2026 audit's acceptance
- * test (Stage 10 §E / §G) and its edge cases E1–E13 (Stage 8).
+/* "Two Doors, One Storm" — engine tests for the fourth audit (September 2026):
+ * the twenty golden vectors (Appendix A, regenerated under the asset-charge
+ * fee and decision-time pricing, then frozen), the relationships each
+ * developer area states as its test, and the edge cases of Stage 8.
  *
  * The published index.html is an encrypted build; the engine is read from the
  * READABLE MASTER, which lives outside the repository on purpose. Point at it:
@@ -33,205 +35,274 @@ function test(name, fn) {
 }
 const near = (a, b, tol, msg) => assert(Math.abs(a - b) <= tol, (msg || '') + ' expected ' + b + ' ± ' + tol + ', got ' + a);
 const finite = (arr) => arr.every((v) => Number.isFinite(v));
+const gap = (g) => E.setFeeGap(g);
 
-console.log('\nReviewer\'s acceptance test (Stage 10 §E / §G)');
-test('run C reproduces ₹3,04,53,950 / ₹2,63,05,172 / 11.3% / 10.4% / CAGR 11.4% / fee ₹41,48,778', () => {
-  E.setFeeGap(0.01);
-  const s = E.runSinglePath(20000, 'corr2022', 25);
-  assert.strictEqual(Math.round(s.direct.hold.final), 30453950);
-  assert.strictEqual(Math.round(s.regular.hold.final), 26305172);
-  assert.strictEqual((s.direct.hold.xirr * 100).toFixed(1), '11.3');
-  assert.strictEqual((s.regular.hold.xirr * 100).toFixed(1), '10.4');
-  assert.strictEqual((s.indexCagr * 100).toFixed(1), '11.4');
-  assert.strictEqual(Math.round(s.feeSavingRupees), 4148778);
-  near(s.directNoCrash - s.direct.hold.final, 3590000, 2000, 'crash itself cost ≈ ₹35.90 L');
-});
-test('run D held figures show as ₹11.96 Cr / ₹10.12 Cr; split is exactly the midpoint', () => {
-  const d = E.runSinglePath(50000, 'gfc', 30);
-  assert.strictEqual((d.direct.hold.final / 1e7).toFixed(2), '11.96');
-  assert.strictEqual((d.regular.hold.final / 1e7).toFixed(2), '10.12');
-  near((d.direct.hold.final + d.regular.hold.final) / 2 / 1e7, 11.04, 0.005);
-});
-test('internal identities hold on every path: you = friend + fee saved − decision cost', () => {
-  for (const ev of ['covid', 'gfc', 'corr2022', 'war']) for (const y of [10, 15, 20, 25, 30]) {
-    const s = E.runSinglePath(10000, ev, y);
-    for (const k of ['hold', 'pause', 'sellBack', 'sellWait']) {
-      const you = s.direct[k].final, cost = s.direct.hold.final - you;
-      near(you, s.regular.hold.final + s.feeSavingRupees - cost, 1e-3, ev + ' ' + y + 'y ' + k);
-    }
-  }
-});
-test('the fee gap is exactly the chosen gap in CAGR terms on the trend path, and the fee saved moves with it (F-44)', () => {
-  let lastFee = Infinity;
-  for (const g of [0.0125, 0.01, 0.0075, 0.005]) {
-    E.setFeeGap(g);
-    const r = E.rates();
-    near(r.regularAnnual, 0.12 - g, 1e-12);
-    near(Math.pow((1 + r.directMonthly) * r.feeFactor, 12) - 1, 0.12 - g, 1e-12, 'fee factor');
-    const N = 240, d = E.buildTrendNav(r.directMonthly, N), q = E.buildTrendNav(r.regularMonthly, N);
-    near(E.cagr(q[0], q[N], 20), E.cagr(d[0], d[N], 20) - g, 1e-9, 'trend gap ' + g);
-    const s = E.runSinglePath(10000, 'covid', 20);
-    assert(s.feeSavingRupees < lastFee, 'a smaller gap saves less'); lastFee = s.feeSavingRupees;
-    assert.strictEqual(s.feeGap, g);
-  }
-  E.setFeeGap(0.01);
+console.log('\nThe twenty golden vectors (Appendix A, regenerated and frozen)');
+test('20 / 20 recompute to the rupee', () => {
+  gap(0.01);
+  const r = E.runGolden();
+  assert.strictEqual(r.length, 20);
+  const bad = r.filter((x) => !x.pass);
+  assert(!bad.length, bad.map((x) => x.name + ': got ' + x.got + ', expected ' + x.expected).join('; '));
 });
 
-console.log('\nThe behaviour rules, as printed (Stage 3 §3.3, F-07, F-11)');
-test('a sale happens at the bottom; "bought back" re-enters the month the market regains its old level', () => {
-  const s = E.runSinglePath(10000, 'gfc', 20);
-  assert.strictEqual(s.direct.sellBack.soldAt, s.navDirect._bottom);
-  assert.strictEqual(s.direct.sellBack.reentry, E.peakRegainMonth(s.navDirect));
-  assert(s.navDirect[s.direct.sellBack.reentry] >= s.navDirect[s.S] - 1e-9, 'regained the prior level');
+console.log('\nArea 1 — the fee is a charge on assets, accrued daily');
+test('φ = (1 − g/365)^(365/12); at g = 1.00 Regular compounds at 10.886% (φ = 0.999164 a month)', () => {
+  gap(0.01); const r = E.rates();
+  near(r.phi, 0.999167, 5e-6); near(r.regularAnnual, 0.10886, 5e-6);
+  near(r.pointsOfReturn, 0.01114, 5e-6, '1.0 point costs 1.11 points of return');
 });
-test('"sold and waited" re-enters WAIT_LAG months after the market healed; a pause restarts PAUSE_LAG months after', () => {
-  const s = E.runSinglePath(10000, 'gfc', 20);
-  assert.strictEqual(s.direct.sellWait.reentry, s.navDirect._healed + E.WAIT_LAG);
-  assert.strictEqual(s.direct.pause.reentry, s.navDirect._healed + E.PAUSE_LAG);
-  assert.strictEqual(s.direct.pause.pauseMonths, s.direct.pause.reentry - s.S);
+test('g = 0 gives φ = 1 and identical paths; g = 1.5 gives an annual factor 0.98511 (Regular ≈ 10.34%)', () => {
+  gap(0); const s0 = E.runSinglePath(10000, 'covid', 20);
+  assert.strictEqual(E.rates().phi, 1); near(s0.feeSavingRupees, 0, 1e-6);
+  for (let t = 0; t <= s0.N; t += 37) near(s0.navRegular[t], s0.navDirect[t], 1e-9);
+  gap(0.015); near(Math.pow(E.rates().phi, 12), 0.98511, 5e-6); near(E.rates().regularAnnual, 0.1033, 5e-4);
+  gap(0.01);
 });
-test('idle cash earns SAVINGS_ANNUAL in the crash door (one rate everywhere)', () => {
-  const N = 240, ev = E.EVENTS.gfc, nav = E.buildEventNav(E.DIRECT_MONTHLY, N, ev, 120);
-  const never = E.simSell(nav, N, 10000, N + 999);          // sold at the bottom, never came back
-  const bottom = nav._bottom;
-  // cash at the bottom = units × NAV + that month's SIP; then SIPs pile in and everything grows at the bank rate
-  let cash = 0; for (let mm = 0; mm < N; mm++) { if (mm > 0) cash *= 1 + E.SAVINGS_MONTHLY; if (mm === bottom) cash += never.value[bottom - 1] / nav[bottom - 1] * nav[bottom]; if (mm >= bottom) cash += 10000; }
-  cash *= 1 + E.SAVINGS_MONTHLY;
-  near(never.final, cash, 1, 'cash grown at the bank rate');
-  assert(never.final > 10000 * (N - bottom), 'more than the instalments alone: interest was paid');
+test('every Regular path is the Direct path × φ per month (storm friend, calm friend, sleeves)', () => {
+  gap(0.01); const s = E.runSinglePath(20000, 'gfc', 25), phi = E.rates().phi;
+  for (let t = 0; t <= s.N; t += 13) near(s.navRegular[t] / s.navDirect[t], Math.pow(phi, t), 1e-12, 'month ' + t);
+  const cal = E.buildTrendNav(E.DIRECT_MONTHLY, 240, phi), cd = E.buildTrendNav(E.DIRECT_MONTHLY, 240, 1);
+  near(cal[240] / cd[240], Math.pow(phi, 240), 1e-12);
+  const liq = E.sleeveNav('liquid', 240, 120, null, E.LIQUID_PHI), liqD = E.sleeveNav('liquid', 240, 120, null, 1);
+  near(liq[240] / liqD[240], Math.pow(E.LIQUID_PHI, 240), 1e-12, 'the liquid sleeve carries the 0.10 gap');
 });
-test('the ten thousand futures use the same idle-cash rate', () => {
-  const N = 120, rng = E.genMarketReturns; void rng;
-  const returns = new Array(N).fill(-0.05);                  // a market that only falls: the panic path sells and sits in cash
-  const nav = E.navFromReturns(returns, N, 1);
-  const p = E.simPolicyPath(nav, N, 1000, E.MC_POLICIES.panic, true);
-  const h = E.simPolicyPath(nav, N, 1000, E.MC_POLICIES.hold, true);
-  assert(p.final > h.final, 'cash beat a market that only fell');
-  assert(p.final > 1000 * N * 0.9, 'the cash was counted');
+test('the fee saved grows with the gap across 0.5 / 0.75 / 1.0 / 1.25 / 1.5', () => {
+  let last = -1;
+  for (const g of [0.005, 0.0075, 0.01, 0.0125, 0.015]) { gap(g); const f = E.runSinglePath(10000, 'covid', 20).feeSavingRupees; assert(f > last); last = f; }
+  gap(0.01);
 });
 
-console.log('\nEdge cases (Stage 8)');
-test('E1 — a crash starting late (month 170 of 180) runs past the horizon: no NaN, cash counted, flagged', () => {
-  const ev = Object.assign({}, E.EVENTS.gfc, { id: 'drawn', hypothetical: true, anchor: 'ranges the real crashes sit in' });
-  const s = E.runSinglePath(5000, 'drawn', 15, { ev, S: 170 });
-  assert.strictEqual(s.S, 170);
-  assert.strictEqual(s.recoveredInTime, false);
-  for (const k of ['hold', 'pause', 'sellBack', 'sellWait']) {
-    assert(finite(s.direct[k].value) && Number.isFinite(s.direct[k].final) && Number.isFinite(s.direct[k].xirr), k + ' finite');
-    assert(s.direct[k].final > 0, k + ' positive');
+console.log('\nArea 2 — the liquid sleeve carries 0.10 points whatever the equity gap');
+test('LIQUID_GAP = 0.001; the emergency fee at gap 1.5 charges the liquid sleeve no more than at gap 0.5', () => {
+  assert.strictEqual(E.LIQUID_GAP, 0.001);
+  gap(0.015); const hi = E.runEmergency(10000, 'icu', 'surgical', 'calm', 20, 'minor');
+  gap(0.005); const lo = E.runEmergency(10000, 'icu', 'surgical', 'calm', 20, 'minor');
+  gap(0.01);
+  const liqHi = hi.friend.sleeveValues.liquid, liqLo = lo.friend.sleeveValues.liquid;
+  near(liqHi, liqLo, 1e-6, 'the liquid sleeve is the same at both equity gaps');
+});
+
+console.log('\nAreas 4–5 — one pause convention; the benchmark does not flinch');
+test('paused instalments are parked and go in together: total invested = S × N on every crash-door path', () => {
+  gap(0.01);
+  for (const ev of ['covid', 'gfc', 'corr2022', 'oilwar2026']) {
+    const s = E.runSinglePath(10000, ev, 20);
+    for (const k of ['hold', 'pause', 'sellBack', 'sellWait']) assert.strictEqual(s.direct[k].invested - s.direct[k].reserve, 10000 * s.N, ev + ' ' + k);
+    assert.strictEqual(s.pauseSpent.invested - s.pauseSpent.reserve, 10000 * s.N - s.pauseSpent.dropped);
+    assert(s.pauseSpent.final < s.direct.pause.final, 'spending the parked money costs more than parking it');
   }
-  assert(s.direct.sellWait.reentry > s.N, 'the re-entry never came');
-  assert(s.direct.sellWait.final >= 5000 * (s.N - s.navDirect._bottom), 'the cash was still counted');
 });
-test('E2 — a crash in the first year: the fee gap dominates the crash cost, and a small cost never gets "frightened seconds"', () => {
-  const s = E.runSinglePath(5000, 'covid', 20, { S: 6 });
-  const cost = s.direct.hold.final - s.direct.sellBack.final, pause = s.direct.hold.final - s.direct.pause.final;
-  assert(Number.isFinite(cost) && cost >= 0, 'finite, non-negative');
-  assert(cost < s.feeSavingRupees, 'fee gap ' + Math.round(s.feeSavingRupees) + ' dominates the sale cost ' + Math.round(cost));
-  assert(pause < s.feeSavingRupees * 0.5, 'the pause cost is well inside the fee gap: ' + Math.round(pause) + ' vs ' + Math.round(s.feeSavingRupees));
-  assert.strictEqual(E.costLineKind(2000, s.direct.sellBack.invested, 5000, 'sellBack'), 'tiny');
-  assert.strictEqual(E.costLineKind(Math.max(0, pause), s.direct.pause.invested, 5000, 'pause'), pause < 15000 ? (pause > 0 ? 'tiny' : 'none') : 'years');
-});
-test('E3 — oath "sell", act "hold" is the honourable reversal, with no penalty framing', () => {
-  const o = E.oathSentence('sell', 'hold');
-  assert.strictEqual(o.text, 'You swore to sell. You held.');
-  assert.strictEqual(o.kind, 'reversed');
-  assert.deepStrictEqual(E.oathSentence('hold', 'sellBack'), { text: 'You swore to hold. You sold.', kind: 'broke' });
-  assert.deepStrictEqual(E.oathSentence('hold', 'pause'), { text: 'You swore to hold. You paused.', kind: 'broke' });
-  assert.deepStrictEqual(E.oathSentence('hold', 'hold'), { text: 'You swore to hold. You held.', kind: 'kept' });
-  assert.deepStrictEqual(E.oathSentence('pause', 'pause'), { text: 'You swore to pause. You paused.', kind: 'kept' });
-});
-test('E4 — oath "hold", act "sell everything", 30 years, ₹50,000: the cost exceeds every rupee put in', () => {
+test('₹50k × 30y through 2008: the pause costs less parked than spent (48 instalments = ₹24 L parked)', () => {
   const s = E.runSinglePath(50000, 'gfc', 30);
-  const cost = s.direct.hold.final - s.direct.sellWait.final;
-  assert(cost > s.direct.sellWait.invested, 'cost ' + cost + ' > invested ' + s.direct.sellWait.invested);
-  assert.strictEqual(E.costLineKind(cost, s.direct.sellWait.invested, 50000, 'sellWait'), 'total');
+  const parked = s.direct.hold.final - s.direct.pause.final, spent = s.direct.hold.final - s.pauseSpent.final;
+  assert(parked < spent); near(s.direct.pause.pauseMonths, s.healed + E.PAUSE_LAG - s.S, 1e-9);
+  assert.strictEqual(s.pauseSpent.dropped, 50000 * Math.round(s.direct.pause.pauseMonths));
 });
-test('E5 — need > corpus (Devastating, mid-fall): the shortfall ending runs, not the precise branch', () => {
-  const em = E.runEmergency(5000, 'business', 'surgical', true, 20, 'severe');
-  assert(em.need > em.corpusAtStrike, 'need ' + em.need + ' > corpus at strike ' + Math.round(em.corpusAtStrike));
-  assert.strictEqual(em.shortfall, true);
-  assert.strictEqual(em.steadyResponse, 'steadyShortfall');
-  assert.strictEqual(em.directSmart.resumeMonth, em.S + 1, 'the SIP starts again next month');
-  assert(em.directSmart.shortfall > 0 && em.you.shortfall > 0);
-  const ok = E.runEmergency(5000, 'business', 'surgical', false, 20, 'minor');
-  assert.strictEqual(ok.shortfall, false);
-  assert.strictEqual(ok.steadyResponse, 'surgical');
-});
-test('E6 — "sell the fallen fund" when it is smaller than the need: the waterfall continues and is recorded', () => {
-  const em = E.runEmergency(10000, 'business', 'sellLosers', false, 20, 'major');
-  const w = em.you.waterfall;
-  assert(w.length >= 2, 'more than one fund was sold');
-  assert.strictEqual(w[0].sleeve, 'midSmall');
-  assert.strictEqual(w[1].sleeve, 'largeCap');
-  near(w.reduce((s, x) => s + x.amount, 0), em.need, 1, 'the waterfall adds up to the need');
-  near(w[0].amount, em.you.sleeveValues.midSmall, 1, 'the fallen fund was exhausted first');
-});
-test('E7 — hardest mode off vs on: the fall lands only when the flag (or a crash-linked event) says so', () => {
-  const off = E.runEmergency(10000, 'business', 'surgical', false, 20, 'major');
-  const on = E.runEmergency(10000, 'business', 'surgical', true, 20, 'major');
-  const war = E.runEmergency(10000, 'war', 'surgical', false, 20, 'major');
-  assert.strictEqual(off.downturn, false); assert.strictEqual(on.downturn, true); assert.strictEqual(war.downturn, true);
-  near(off.corpusAtStrike, off.corpusBefore, 1);
-  assert(on.corpusAtStrike < on.corpusBefore * 0.9, 'the corpus fell in hardest mode');
-});
-test('E10 — the same inputs give the same ten thousand lives (seeded)', () => {
-  const a = E.runLifetimes(10000, 20, 4242, 2000, 400), b = E.runLifetimes(10000, 20, 4242, 2000, 400);
-  assert.strictEqual(a.calm.p50, b.calm.p50); assert.strictEqual(a.panic.p50, b.panic.p50);
-  assert.strictEqual(a.doorGap, b.doorGap); assert.strictEqual(a.crowdGap, b.crowdGap);
-});
-test('E11 — the war storm names its anchor; the drawn crash prints ranges, never a scenario name', () => {
-  assert(E.EVENTS.war.hypothetical && /Kargil/.test(E.EVENTS.war.anchor));
-  const rng = E.mulberry32 ? null : null; void rng;
-  const seq = [0.5, 0.5, 0.5]; let i = 0;
-  const d = E.drawCrash(() => seq[i++ % seq.length]);
-  assert(d.hypothetical && d.anchor === 'ranges the real crashes sit in');
-  assert(d.depth >= E.DRAWN_RANGES.depthMin && d.depth <= E.DRAWN_RANGES.depthMax);
-  assert(d.fallMonths >= E.DRAWN_RANGES.fallMin && d.fallMonths <= E.DRAWN_RANGES.fallMax);
-  assert(d.recoveryMonths >= E.DRAWN_RANGES.recMin && d.recoveryMonths <= E.DRAWN_RANGES.recMax);
-});
-test('E12 — changing the SIP recomputes every rupee figure (need, corpus, fee gap)', () => {
-  const a = E.emergencyNeed(5000, 20, 'major'), b = E.emergencyNeed(50000, 20, 'major');
-  assert(b.need > a.need * 5, 'the need scales with the SIP');
-  const s1 = E.runSinglePath(5000, 'covid', 20), s2 = E.runSinglePath(50000, 'covid', 20);
-  near(s2.feeSavingRupees, s1.feeSavingRupees * 10, 1, 'linear in the SIP');
-});
-
-console.log('\nCopy decisions (F-06, F-09, F-29)');
-test('F-06 — the finish-line branch keys on the action and on whether you finished ahead', () => {
-  assert.strictEqual(E.verdictKind('hold', true, 0.6), 'held');
-  assert.strictEqual(E.verdictKind('sellWait', false, 0.6), 'soldBehind');
-  assert.strictEqual(E.verdictKind('sellBack', true, 0.18), 'soldAhead');
-  assert.strictEqual(E.verdictKind('pause', true, 0.5), 'pausedAhead');
-  assert.strictEqual(E.verdictKind('pause', false, 0.5), 'pausedBehind');
-  assert.strictEqual(E.SHALLOW_DEPTH, 0.25);
-});
-test('F-09 — ₹1.58 Cr thirty years out is about ₹27.5 L today, about 7.6 years of ₹30,000 a month', () => {
-  near(E.todaysMoney(1.58e7, 30), 2750940, 2000);
-  near(E.yearsOfSpending(1.58e7, 30, 30000), 7.6, 0.1);
-  assert.strictEqual(E.INFLATION_ANNUAL, 0.06);
-});
-test('F-29 — the cost line is capped at both ends', () => {
-  assert.strictEqual(E.costLineKind(2000, 900000, 5000, 'sellBack'), 'tiny');
-  assert.strictEqual(E.costLineKind(73739, 900000, 5000, 'pause'), 'years');
-  assert.strictEqual(E.costLineKind(1e7, 900000, 5000, 'sellWait'), 'total');
-  assert.strictEqual(E.costLineKind(0, 900000, 5000, 'hold'), 'none');
-});
-test('F-20 — redeeming everything re-enters after a year; "never went back" is a separate, worse path', () => {
-  const em = E.runEmergency(10000, 'business', 'panic', false, 20, 'major');
-  assert.strictEqual(em.you.resumeMonth, em.S + 1 + 12);
-  assert(em.neverBack && em.neverBack.final < em.you.final, 'never going back is worse');
-  assert.strictEqual(em.neverBack.resumeMonth, Infinity);
-  near(em.you.took, em.need, 1, 'only the need left the investor');
-});
-test('F-08 — the size screen figure equals the engine\'s need, and the mapping is 30 / 55 / 80% of the pre-fall corpus', () => {
-  for (const [id, f] of [['minor', 0.30], ['major', 0.55], ['severe', 0.80]]) {
-    const n = E.emergencyNeed(10000, 20, id), em = E.runEmergency(10000, 'icu', 'surgical', false, 20, id);
-    assert.strictEqual(n.need, em.need);
-    assert.strictEqual(n.fraction, f);
-    near(n.need, Math.max(1e5, Math.round(f * n.corpusBefore / 1e5) * 1e5), 0);
+test('the emergency door parks too: every response invests S × N (cancelled SIP included, as cash)', () => {
+  for (const r of ['surgical', 'sellLosers', 'sipKill', 'panic']) {
+    const e = E.runEmergency(10000, 'icu', r, 'calm', 20, 'major');
+    assert.strictEqual(e.you.invested, 10000 * e.N, r);
+    assert(e.youSpent.final <= e.you.final + 1e-6, r + ': spending the parked money is never better');
   }
 });
+test('steady hand pause = 0: a surgical reader in a calm market matches the steady hand exactly (E2: cost ₹0)', () => {
+  const e = E.runEmergency(1000, 'icu', 'surgical', 'calm', 25, 'severe');
+  near(e.directSmart.final - e.you.final, 0, 1e-6);
+  assert.strictEqual(e.friend.response, 'surgical'); assert.strictEqual(e.directSmart.resumeMonth, e.S + 1);
+});
 
-console.log('\n' + passed + ' passed, ' + failed + ' failed\n');
+console.log('\nArea 6 — decision-time pricing: the tape');
+test('no tap reproduces the hold figures exactly', () => {
+  const s = E.runSinglePath(25000, 'covid', 20, { decisions: [] });
+  assert.strictEqual(s.you.final, s.direct.hold.final); assert(s.you.froze); assert.strictEqual(s.you.log.length, 0);
+});
+test('a sale is priced at the moment: the cost is monotonic in depth and the trough equals the matrix figure', () => {
+  const s = E.runSinglePath(50000, 'gfc', 30), g = s.navDirect._geom;
+  const at = (x) => g.S + g.F * Math.log(1 - x) / Math.log(1 - g.d);
+  const cost = (t) => s.direct.hold.final - E.simDecisions(s.navDirect, s.N, 50000, [{ t, action: 'sell', fraction: 1 }]).final;
+  const c10 = cost(at(0.10)), c25 = cost(at(0.25)), c40 = cost(at(0.40)), cT = cost(s.bottom);
+  assert(c10 < c25 && c25 < c40 && c40 < cT, [c10, c25, c40, cT].join(' < '));
+  near(cT, s.direct.hold.final - s.direct.sellBack.final, 1e-6, 'trough sale = sold at the bottom, bought back at the regain');
+  assert(c10 < s.feeSavingRupees, 'selling at −10% costs less than the fee on this road');
+  assert(cT > s.feeSavingRupees, 'selling at the trough costs more than the fee');
+});
+test('a tap on a month boundary happens before that month\'s instalment; the sale price is nav.at(t)', () => {
+  const s = E.runSinglePath(10000, 'covid', 20);
+  const you = E.simDecisions(s.navDirect, s.N, 10000, [{ t: s.S, action: 'sell', fraction: 1 }]);
+  near(you.log[0].price, s.navDirect.at(s.S), 1e-12); near(you.log[0].unitsBefore, s.direct.hold.unitsAt[s.S - 1], 1e-9);
+  const half = E.simDecisions(s.navDirect, s.N, 10000, [{ t: s.S + 0.5, action: 'sell', fraction: 0.5 }]);
+  near(half.log[0].unitsAfter, half.log[0].unitsBefore / 2, 1e-9); assert(!half.neverBack);
+});
+test('"buy the dip" at the trough with the whole reserve beats hold by reserve × (regain ÷ trough) less the cash growth', () => {
+  const s = E.runSinglePath(20000, 'gfc', 25), R = s.reserve, B = s.bottom;
+  const you = E.simDecisions(s.navDirect, s.N, 20000, [{ t: B, action: 'buyDip', fraction: 1 }]);
+  const grown = R * Math.pow(1 + E.SAVINGS_MONTHLY, B);
+  const expect = grown * s.navDirect.at(s.N) / s.navDirect.at(B) - R * Math.pow(1 + E.SAVINGS_MONTHLY, s.N);
+  near(you.final - s.direct.hold.final, expect, 1e-4);
+  assert.strictEqual(you.invested, s.direct.hold.invested, 'the reserve is counted in every path');
+});
+test('a full sale never bought back re-enters at the regain; a pause never resumed restarts a year after it', () => {
+  const s = E.runSinglePath(10000, 'gfc', 20);
+  const sold = E.simDecisions(s.navDirect, s.N, 10000, [{ t: s.S + 2.5, action: 'sell', fraction: 1 }]);
+  near(sold.reentry, s.healed, 1e-12); assert(!sold.neverBack);
+  const paused = E.simDecisions(s.navDirect, s.N, 10000, [{ t: s.S + 1.25, action: 'pause' }]);
+  near(paused.resumed, s.healed + E.PAUSE_LAG, 1e-12); near(paused.pauseMonths, s.healed + E.PAUSE_LAG - s.S - 1.25, 1e-12);
+});
+test('the live value at a fractional time reflects a sale inside the month', () => {
+  const s = E.runSinglePath(10000, 'covid', 20), t = s.S + 0.4;
+  const you = E.simDecisions(s.navDirect, s.N, 10000, [{ t, action: 'sell', fraction: 1 }], { logAuto: true });
+  const before = E.valueAtTime(you, t - 1e-6), after = E.valueAtTime(you, t + 1e-6);
+  near(after, before, before * 1e-5, 'a sale converts units to cash at the same price');
+  const later = E.valueAtTime(you, t + 0.5);
+  near(later, after * Math.pow(1 + E.SAVINGS_MONTHLY, 0.5), after * 1e-6, 'and then earns the bank rate');
+});
+test('the stamp: "sold at −22%, day N" is drawdown and day, never seconds', () => {
+  const s = E.runSinglePath(10000, 'gfc', 20), g = s.navDirect._geom, t = g.S + g.F * Math.log(0.78) / Math.log(1 - g.d);
+  const you = E.simDecisions(s.navDirect, s.N, 10000, [{ t, action: 'sell', fraction: 1 }]);
+  near(you.log[0].drawdown, 0.22, 1e-9); assert.strictEqual(you.log[0].day, Math.round((t - g.S) * E.monthsBetween('2020-01-01', '2020-01-02') * 0 + (t - g.S) * (365.25 / 12)));
+});
+
+console.log('\nArea 7 — the regain is exact');
+test('in every named storm × horizon the market is back at its peak at H = S + F + R, within 1e-9, and re-entry lands there', () => {
+  for (const ev of ['covid', 'gfc', 'corr2022', 'oilwar2026']) for (const y of [10, 15, 20, 25, 30]) for (const g of [0.005, 0.01, 0.015]) {
+    gap(g); const s = E.runSinglePath(10000, ev, y);
+    const sh = E.stormShape(s.ev);
+    near(s.healed, s.S + sh.fallMonths + sh.recoveryMonths, 1e-9, ev + ' ' + y);
+    near(s.navDirect.at(s.healed) / s.navDirect.at(s.S), 1, 1e-9, ev + ' ' + y + ' regained');
+    if (s.healed <= s.N) { assert.strictEqual(E.peakRegainMonth(s.navDirect), Math.ceil(s.healed - E.EPS)); near(s.direct.sellBack.reentry, s.healed, 1e-12); }
+  }
+  gap(0.01);
+});
+
+console.log('\nArea 8 — need rounding is adaptive and strictly increasing');
+test('Manageable < Serious < Devastating for every SIP in {500…5,00,000} × horizon {10…30}; small SIPs never all ₹1 L', () => {
+  for (const sip of [500, 1000, 3511, 5000, 10000, 50000, 500000]) for (let y = 10; y <= 30; y += 5) {
+    const n = E.emergencyNeed(sip, y, 'minor').needs;
+    assert(n.minor < n.major && n.major < n.severe, sip + ' × ' + y + ': ' + JSON.stringify(n));
+  }
+  const s500 = E.emergencyNeed(500, 10, 'minor');
+  assert(s500.needs.minor <= s500.corpusBefore && s500.needs.major <= s500.corpusBefore, '₹500 × 10y: manageable and serious fit inside the corpus');
+  assert(s500.needs.minor !== 100000 && s500.needs.major !== 100000, 'no ₹1.00 L floor for a ₹41k corpus');
+  const p = E.emergencyNeed(25000, 20, 'minor'); near(p.pct, 0.30, 0.02, 'the printed percentage is of the rounded amount');
+});
+
+console.log('\nArea 9 — two numbers on one basis');
+test('the fee on a calm road is path-independent and close to the fee on any storm road', () => {
+  gap(0.01); const calm = E.feeCalm(50000, 360);
+  for (const ev of ['covid', 'gfc', 'corr2022']) { const s = E.runSinglePath(50000, ev, 30); near(s.feeCalm, calm, 1e-6); assert(Math.abs(s.feeSavingRupees / calm - 1) < 0.35, ev); }
+});
+
+console.log('\nArea 10 — the ten thousand futures compound at 12% in the typical life');
+test('median calm-path CAGR over 30 years = 12.0% ± 0.1% at the frozen base drift (seeds 4242 + 2i + 1)', () => {
+  const med = E.medianPathCagr(E.BASE_DRIFT, 10000, 30, 4242).median;
+  near(med, 0.12, 0.001, 'BASE_DRIFT ' + E.BASE_DRIFT);
+  near(E.BASE_DRIFT, 0.153, 0.003, 'expected ≈ 15.3%');
+});
+test('the futures apply φ as the fee factor', () => { gap(0.0125); near(E.rates().feeFactor, E.phiFor(0.0125), 1e-15); gap(0.01); });
+
+console.log('\nAreas 12–13 — the storms are dated; the drawn crash is bounded');
+test('the four storms carry their dates; the 2026 oil war is unfinished with an assumed 8-month recovery', () => {
+  const ev = E.EVENTS;
+  assert.deepStrictEqual(Object.keys(ev), ['covid', 'gfc', 'corr2022', 'oilwar2026']);
+  near(E.stormShape(ev.covid).fallMonths, 2.27, 0.05); near(E.stormShape(ev.gfc).recoveryMonths, 24.3, 0.2); near(E.stormShape(ev.corr2022).depth, 0.17, 1e-9);
+  assert.strictEqual(ev.oilwar2026.recovery, 'assumed'); assert.strictEqual(ev.oilwar2026.regainDate, null); assert.strictEqual(E.stormShape(ev.oilwar2026).recoveryMonths, 8);
+  assert(E.runSinglePath(10000, 'oilwar2026', 20).recoveryAssumed);
+  assert(!/Kargil.*\d+%/.test(ev.oilwar2026.what), 'no Kargil percentage claim');
+});
+test('10,000 draws: depth ≥ 25%, fall ≥ 2 months, regain = S + F + R, timing after month 36', () => {
+  const rng = E.mulberry32(99);
+  for (let i = 0; i < 10000; i++) {
+    const ev = E.drawCrash(rng);
+    assert(ev.depth >= 0.25 && ev.depth <= 0.55 && ev.fallMonths >= 2 && ev.fallMonths <= 12 && ev.recoveryMonths >= 8 && ev.recoveryMonths <= 29);
+  }
+  const s = E.runSinglePath(10000, 'drawn', 20, { rng: E.mulberry32(7) });
+  assert(s.drawn && s.S >= 36); near(s.healed, s.S + s.ev.fallMonths + s.ev.recoveryMonths, 1e-9);
+});
+
+console.log('\nArea 14 — the emergency backdrop is chosen, never a hidden default');
+test('ICU in a calm market never falls; ICU in COVID lands on the trough with mid/small deeper than large-cap', () => {
+  const calm = E.runEmergency(10000, 'icu', 'sellLosers', 'calm', 20, 'minor');
+  assert(!calm.downturn && calm.backdrop === null); assert.strictEqual(calm.you.fallen.largeCap, 0);
+  const cov = E.runEmergency(10000, 'icu', 'sellLosers', 'covid', 20, 'minor');
+  assert(cov.downturn && cov.backdropId === 'covid'); assert(cov.you.fallen.midSmall > cov.you.fallen.largeCap);
+  assert.strictEqual(cov.you.waterfall[0].sleeve, 'midSmall', '"sell the fallen fund" sells the sleeve that fell most');
+  assert(cov.corpusAtStrike < cov.corpusBefore);
+  const pan = E.runEmergency(10000, 'pandemic', 'surgical', 'calm', 20, 'minor'); assert.strictEqual(pan.backdropId, 'covid', 'pandemic brings its own storm');
+  const war = E.runEmergency(10000, 'war', 'surgical', 'gfc', 20, 'minor'); assert.strictEqual(war.backdropId, 'oilwar2026', 'war brings the 2026 fall');
+});
+
+console.log('\nArea 19 — the copy branches are pure functions');
+test('verdictKind, oathSentence, costLineKind, crashCostKind, ratioPhrase', () => {
+  assert.strictEqual(E.verdictKind('froze', true), 'froze');
+  assert.strictEqual(E.verdictKind('buyDip', true), 'held');
+  assert.strictEqual(E.verdictKind('sellHalf', false), 'soldBehind');
+  assert.strictEqual(E.verdictKind('pause', true), 'pausedAhead');
+  assert.strictEqual(E.oathSentence('hold', 'froze').text, 'You swore to hold. You did nothing.');
+  assert.strictEqual(E.oathSentence('sell', 'hold').kind, 'reversed');
+  assert.strictEqual(E.oathSentence('hold', 'sold').kind, 'broke');
+  assert.strictEqual(E.costLineKind(-5, 1e6, 1e4, 'buyDip'), 'none');
+  assert.strictEqual(E.ratioPhrase(1.05, 1).kind, 'same'); assert.strictEqual(E.ratioPhrase(2, 1).text, '2× more'); assert.strictEqual(E.ratioPhrase(0.4, 1).text, '2.5× less');
+  gap(0.01);
+  const c10 = E.runSinglePath(10000, 'covid', 10), g30 = E.runSinglePath(50000, 'gfc', 30);
+  assert.strictEqual(E.crashCostKind(c10.direct.hold.final - c10.directNoCrash, c10.directNoCrash), 'negative', 'the crash cost something at the midpoint');
+  assert.strictEqual(E.crashCostKind(g30.direct.hold.final - g30.directNoCrash, g30.directNoCrash), 'negative');
+  const early = E.runSinglePath(10000, 'covid', 30, { S: 6 });
+  assert.strictEqual(E.crashCostKind(early.direct.hold.final - early.directNoCrash, early.directNoCrash), 'positive', 'a crash at the very start pays the holder');
+});
+test('sell-wait re-entry can equal the horizon: the engine says "never came back" rather than printing a re-entry', () => {
+  const s = E.runSinglePath(10000, 'gfc', 10, { S: 100 });
+  assert(!s.recoveredInTime); assert(s.direct.sellWait.reentry >= s.N); assert(s.direct.sellWait.neverBack);
+  assert(finite(s.direct.sellWait.value));
+});
+
+console.log('\nStage 8 — edge cases');
+test('linear scaling: every figure of ₹5,00,000 is 10.000 × ₹50,000', () => {
+  const a = E.runSinglePath(50000, 'gfc', 30), b = E.runSinglePath(500000, 'gfc', 30);
+  for (const k of ['hold', 'pause', 'sellBack', 'sellWait']) near(b.direct[k].final / a.direct[k].final, 10, 1e-9, k);
+  near(b.feeSavingRupees / a.feeSavingRupees, 10, 1e-9); near(b.feeCalm / a.feeCalm, 10, 1e-9);
+});
+test('need > corpus (Devastating, in 2008): the shortfall ending runs and the steady hand takes everything', () => {
+  const e = E.runEmergency(2000, 'icu', 'sipKill', 'gfc', 10, 'severe');
+  assert(e.shortfall, 'need ' + e.need + ' vs corpus ' + e.corpusAtStrike); assert.strictEqual(e.steadyResponse, 'steadyShortfall');
+  assert(e.directSmart.shortfall > 0 && e.you.shortfall > 0); assert(finite(e.you.value) && finite(e.friend.value));
+});
+test('"sell the fallen fund" smaller than the need: the waterfall continues and is recorded', () => {
+  const e = E.runEmergency(10000, 'icu', 'sellLosers', 'covid', 20, 'major');
+  assert(!e.shortfall); assert(e.you.waterfall.length >= 2); assert.strictEqual(e.you.waterfall[0].sleeve, 'midSmall'); near(e.you.took, e.need, 1e-6);
+});
+test('redeeming everything re-enters after a year; "never went back" is a separate, worse path', () => {
+  const e = E.runEmergency(10000, 'business', 'panic', 'calm', 20, 'minor');
+  assert(e.neverBack && e.neverBack.final < e.you.final); assert.strictEqual(e.you.resumeMonth, e.S + 13);
+});
+test('a crash starting late runs past the horizon without NaN; the cash is counted', () => {
+  const s = E.runSinglePath(10000, 'gfc', 15, { S: 170 });
+  assert(!s.recoveredInTime); for (const k of ['hold', 'pause', 'sellBack', 'sellWait']) assert(finite(s.direct[k].value) && finite(s.regular[k].value));
+});
+test('the same inputs give the same ten thousand lives (seeded); a changed SIP recomputes every rupee', () => {
+  const a = E.runLifetimes(10000, 20, 4242, 400, 50), b = E.runLifetimes(10000, 20, 4242, 400, 50);
+  assert.strictEqual(a.calm.p50, b.calm.p50); assert.strictEqual(a.doorGap, b.doorGap);
+  near(a.pathCagrMedian, 0.12, 0.02);
+  const n1 = E.emergencyNeed(10000, 20, 'major').need, n2 = E.emergencyNeed(20000, 20, 'major').need; assert(n2 > n1);
+});
+test('the drawn severity draws with weights 50 / 35 / 15', () => {
+  const rng = E.mulberry32(3), c = { minor: 0, major: 0, severe: 0 };
+  for (let i = 0; i < 20000; i++) c[E.drawSeverity(rng)]++;
+  near(c.minor / 20000, 0.50, 0.02); near(c.major / 20000, 0.35, 0.02); near(c.severe / 20000, 0.15, 0.02);
+});
+
+console.log('\nAreas 18, 22, 25 — the build itself');
+test('no emoji anywhere in the master; no real outlet or broker names in the feed; the Axis line is industry-wide', () => {
+  const emoji = html.match(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/gu) || [];
+  assert(!emoji.length, 'emoji found: ' + emoji.join(' '));
+  assert(!/its own investors/.test(html));
+  const feed = html.slice(html.indexOf('const FEED = {'), html.indexOf('const FEED_LOGO'));
+  assert(!/CNBC|NDTV|Zee|ET Now|Moneycontrol|Zerodha|Groww|Bloomberg|Reuters|Times of India|Economic Times|Mint|Upstox|Paytm/i.test(feed), 'a real outlet name in the feed');
+  assert(/SIMULATION|Simulation/.test(html), 'the word SIMULATION must be visible in the feed header');
+  assert(/charged on your assets every day/.test(html));
+  assert(/Switching from Regular to Direct is itself a sale/.test(html));
+  assert(/Cafemutual/.test(html) && /2003–2022/.test(html));
+});
+
+console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed ? 1 : 0);
