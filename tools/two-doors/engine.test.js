@@ -299,7 +299,7 @@ test('no emoji anywhere in the master; no real outlet or broker names in the fee
   const feed = html.slice(html.indexOf('const FEED = {'), html.indexOf('const FEED_LOGO'));
   assert(!/CNBC|NDTV|Zee|ET Now|Moneycontrol|Zerodha|Groww|Bloomberg|Reuters|Times of India|Economic Times|Mint|Upstox|Paytm/i.test(feed), 'a real outlet name in the feed');
   assert(/SIMULATION|Simulation/.test(html), 'the word SIMULATION must be visible in the feed header');
-  assert(/charged on your assets every day/.test(html));
+  assert(/points a year on assets, accrued daily/.test(html));
   assert(/Switching from Regular to Direct is itself a sale/.test(html));
   assert(/Cafemutual/.test(html) && /2003–2022/.test(html));
 });
