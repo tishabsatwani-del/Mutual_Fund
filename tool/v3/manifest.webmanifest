@@ -1,0 +1,18 @@
+{
+  "name": "Where You Stand",
+  "short_name": "Where You Stand",
+  "description": "Run the book's five questions on your own money. Bring your own file. Nothing is fetched and nothing is sent.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F1EFEA",
+  "theme_color": "#F1EFEA",
+  "lang": "en-IN",
+  "categories": ["finance", "education", "utilities"],
+  "icons": [
+    { "src": "icon/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

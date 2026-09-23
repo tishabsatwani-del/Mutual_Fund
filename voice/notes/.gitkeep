@@ -1,0 +1,14 @@
+This folder is where the nine recorded voice notes go — one per storm and one
+per emergency — under exactly these names:
+
+    the storm door      covid  gfc  corr2022  drawn
+    the emergency door  icu  business  pandemic  war  jobloss
+
+The simulator asks for "<name>.m4a" first and "<name>.ogg" second.
+
+Until a file exists here, the device voice reads the English captions on the
+same clock, which is the designed fallback. Dropping a recording in needs no
+code change and no rebuild.
+
+This marker file exists only so the folder itself is kept: git cannot store an
+empty directory.

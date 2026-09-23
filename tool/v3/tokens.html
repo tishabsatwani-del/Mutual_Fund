@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en-IN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Where You Stand — token sheet</title>
+<meta name="description" content="The one-page token sheet of review v4 section 13: colours, type scale, spacing, radii and the number formats, read from the build itself.">
+<link rel="icon" href="icon/icon-192.png">
+<link rel="stylesheet" href="theme.css">
+<style>
+  /* This page is made of the system it documents, so it needs almost nothing
+     of its own. What is here is only for laying specimens out. */
+  .sheet { max-width: 46rem; }
+  .tokens { width: 100%; border-collapse: collapse; }
+  .tokens th, .tokens td { padding: .6rem .5rem; border-bottom: 1px solid var(--rule);
+                           text-align: left; vertical-align: top; }
+  .tokens th { font-family: var(--sans); font-size: var(--label);
+               font-variant-caps: all-small-caps; letter-spacing: .11em;
+               color: var(--muted); font-weight: 400; }
+  .tokens td.n { text-align: right; font-variant-numeric: lining-nums tabular-nums;
+                 white-space: nowrap; }
+  .chip-colour { display: inline-block; width: 2.2rem; height: 1.4rem; border-radius: 3px;
+                 border: 1px solid var(--rule-edge); vertical-align: -.35rem; margin-right: .5rem; }
+  code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .9em; }
+  .pass { color: var(--ink); }
+  .fail { color: var(--marker-ink); font-weight: 600; }
+  .spec { border-top: 1px solid var(--rule); padding-top: .8rem; margin-top: .8rem; }
+  .rules li { margin-bottom: .4rem; }
+  ul.rules { padding-left: 1.1rem; }
+  .swatch-pair { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+  .swatch { padding: .9rem; border-radius: 6px; border: 1px solid var(--rule-edge); }
+  .day-box { background: #F1EFEA; color: #1E2433; }
+  .night-box { background: #12161E; color: #E8E6E1; }
+  @media print { .bar { display: none; } .page { max-width: none; } }
+</style>
+</head>
+<body data-view="tokens">
+
+<header class="bar">
+  <a class="name" href="#">Where You Stand · token sheet</a>
+  <a class="back" href="./" style="text-decoration:none">The tool</a>
+</header>
+
+<main class="page sheet" id="main">
+
+  <section>
+    <h1>Token sheet</h1>
+    <p class="gloss">Review v4 §13's last deliverable. Every value below is read from
+      <code>theme.css</code> and <code>sim/format.js</code> when this page loads, and every contrast
+      ratio is measured here rather than quoted — so the sheet cannot drift from the build it
+      documents. If a value is wrong on this page, it is wrong in the product.</p>
+  </section>
+
+  <div class="section">
+    <h2>Colours</h2>
+    <p class="gloss">Two sheets, following the phone's own day and night setting, with no toggle.
+      Text pairs need 4.5:1; a rule that is the edge of something tappable needs 3:1; a rule that
+      only divides may be quiet. Each token is measured against the ground it actually sits on —
+      the reader's own figures against the composited band by day, button text against ink — because
+      a ratio taken against a colour the pair never meets on screen proves nothing.</p>
+    <div class="scroller"><table class="tokens" id="colours">
+      <thead><tr><th>Token</th><th>Day</th><th class="n">measured</th><th>Night</th><th class="n">measured</th><th>Means</th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+    <div class="swatch-pair" style="margin-top:1rem">
+      <div class="swatch day-box">
+        <p style="font-family:var(--serif);font-size:2rem;margin:0">
+          <span style="background:rgba(255,229,102,.55);padding:0 .1em">11.4%</span></p>
+        <p style="margin:.4rem 0 0;font-size:.85rem;color:#5F6779">The reader, by day: ink on a band.</p>
+      </div>
+      <div class="swatch night-box">
+        <p style="font-family:var(--serif);font-size:2rem;margin:0;color:#F2CF5B">11.4%</p>
+        <p style="margin:.4rem 0 0;font-size:.85rem;color:#9AA1AE">And by night: the marker is the ink.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Type</h2>
+    <p class="gloss">Serif for figures and for the reading sentence; sans for labels and body.
+      Labels in small caps with tracking, never bold. Tabular lining numerals, so columns of rupees
+      align.</p>
+    <div id="type"></div>
+    <p class="gloss spec" id="fontstacks"></p>
+  </div>
+
+  <div class="section">
+    <h2>Spacing, radii and targets</h2>
+    <p class="gloss">Vertical rhythm on an 8-pixel grid. Phone first: 360 the design width, 320 the
+      floor, and no horizontal scroll anywhere.</p>
+    <div class="scroller"><table class="tokens" id="metrics">
+      <thead><tr><th>What</th><th class="n">Value</th><th>Where it is measured</th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+  </div>
+
+  <div class="section">
+    <h2>Numbers</h2>
+    <p class="gloss">§11 is a specification, not a preference. Every figure in the product goes
+      through <code>sim/format.js</code>; nothing is formatted at the point of use. The rows below
+      are that module's live output.</p>
+    <div class="scroller"><table class="tokens" id="numbers">
+      <thead><tr><th>Range</th><th>Headline and in-sentence</th><th>Ledger and tables</th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+    <div class="scroller"><table class="tokens" id="other-formats" style="margin-top:1rem">
+      <thead><tr><th>What</th><th>Form</th><th>Example</th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+    <div class="scroller"><table class="tokens" id="caps" style="margin-top:1rem">
+      <thead><tr><th>Field</th><th class="n">Range</th><th>Out of range</th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+  </div>
+
+  <div class="section">
+    <h2>The rules that are not values</h2>
+    <ul class="rules">
+      <li><b>No red and no green anywhere</b>, the riskometer's colours included. A return is ink or
+        it is marker.</li>
+      <li><b>Marker means "you"</b>, and nothing else is ever this colour. The marker is never a
+        button, because it means <em>you</em>, not <em>press</em>.</li>
+      <li><b>Slate is the comparison series</b> — the index fund's line and its figure — and nothing
+        else.</li>
+      <li><b>Nothing is a gradient and nothing glows.</b> Buttons are ink on paper by day and paper
+        on ink by night.</li>
+      <li><b>No cards inside cards.</b> Exactly two boxed things in the whole product: the ledger and
+        the reading.</li>
+      <li><b>One primary action per screen</b>; every other action is a text link.</li>
+      <li><b>A refusal is set like a reading</b> — serif sentence, hairline, next step — never a red
+        box with an exclamation mark. The tool declining to guess is part of its character, not an
+        error state.</li>
+      <li><b>Never on screen:</b> scientific notation, more than two decimals on a rupee figure, a
+        number wider than its container, or a rupee figure with no ₹.</li>
+      <li><b>States to design, not just the happy one:</b> empty, partly filled, computing, result,
+        refusal (fund too young, gap, no overlap, out-of-range input), and the age guard.</li>
+    </ul>
+  </div>
+
+  <footer class="foot">
+    <p>Generated from the build. <a href="./">The tool</a> · <a href="./#about">About this page</a></p>
+  </footer>
+</main>
+
+<script src="../../sim/format.js"></script>
+<script src="tokens.js"></script>
+</body>
+</html>

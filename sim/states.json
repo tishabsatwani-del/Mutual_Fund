@@ -1,0 +1,129 @@
+{
+  "$comment": [
+    "Where You Stand — the state system.",
+    "",
+    "Every interpretive sentence the product shows is selected by an exact",
+    "arithmetic condition. This file holds those conditions and the copy slot",
+    "each one selects. It carries identifiers and numbers only: no prose lives",
+    "here, and none ever should.",
+    "",
+    "Thresholds signed off by the author, 30 August 2026, as written in the",
+    "review's section 9. They are frozen. Changing one is a decision, not a",
+    "tweak: every sentence in copy.json was written to be true at its own band."
+  ],
+  "version": 3,
+  "signedOff": true,
+  "signedOffOn": "2026-08-30",
+  "thresholds": {
+    "$comment": "Points are percentage points a year unless said otherwise.",
+    "similarPoints": 0.5,
+    "placementLowPercentile": 25,
+    "placementHighPercentile": 75,
+    "comparisonPoints": 1.0,
+    "recentLumpShare": 0.40,
+    "recentLumpMonths": 12,
+    "dripLumpMultiple": 3,
+    "dripGapMonths": 2,
+    "earlySpanDays": 365,
+    "staleAfterDays": 30,
+    "stretchMinWindows": 30,
+    "stretchMinExtraDays": 365
+  },
+
+  "tools": {
+    "myMoneyInThisFund": {
+      "$comment": [
+        "Tool 3. Nine cells: how the reader's own speed compares with the fund's",
+        "over the same dates, crossed with where that stretch sits in the fund's",
+        "whole record. One cell fires. Each carries a sentence and a next step.",
+        "",
+        "Axis one, the gap: the reader's XIRR against the fund's speed over the",
+        "reader's exact dates, at the half-point band.",
+        "Axis two, the placement: the fund's speed over those dates, ranked among",
+        "every window of the same length in days, at the quartiles."
+      ],
+      "gapAxis": [
+        { "id": "LOWER",   "condition": "mine <= fund - 0.5" },
+        { "id": "SIMILAR", "condition": "within 0.5 points either way" },
+        { "id": "HIGHER",  "condition": "mine >= fund + 0.5" }
+      ],
+      "placementAxis": [
+        { "id": "BOTTOM", "condition": "placement <= 25" },
+        { "id": "MIDDLE", "condition": "between 25 and 75" },
+        { "id": "TOP",    "condition": "placement >= 75" }
+      ],
+      "cells": [
+        { "id": "S-CELL-LOWER-BOTTOM",   "gap": "LOWER",   "placement": "BOTTOM", "slot": "POS-CELL-LOWER-BOTTOM",   "nextSlot": "POS-NEXT-LOWER-BOTTOM" },
+        { "id": "S-CELL-LOWER-MIDDLE",   "gap": "LOWER",   "placement": "MIDDLE", "slot": "POS-CELL-LOWER-MIDDLE",   "nextSlot": "POS-NEXT-LOWER-MIDDLE" },
+        { "id": "S-CELL-LOWER-TOP",      "gap": "LOWER",   "placement": "TOP",    "slot": "POS-CELL-LOWER-TOP",      "nextSlot": "POS-NEXT-LOWER-TOP" },
+        { "id": "S-CELL-SIMILAR-BOTTOM", "gap": "SIMILAR", "placement": "BOTTOM", "slot": "POS-CELL-SIMILAR-BOTTOM", "nextSlot": "POS-NEXT-SIMILAR-BOTTOM" },
+        { "id": "S-CELL-SIMILAR-MIDDLE", "gap": "SIMILAR", "placement": "MIDDLE", "slot": "POS-CELL-SIMILAR-MIDDLE", "nextSlot": "POS-NEXT-SIMILAR-MIDDLE" },
+        { "id": "S-CELL-SIMILAR-TOP",    "gap": "SIMILAR", "placement": "TOP",    "slot": "POS-CELL-SIMILAR-TOP",    "nextSlot": "POS-NEXT-SIMILAR-TOP" },
+        { "id": "S-CELL-HIGHER-BOTTOM",  "gap": "HIGHER",  "placement": "BOTTOM", "slot": "POS-CELL-HIGHER-BOTTOM",  "nextSlot": "POS-NEXT-HIGHER-BOTTOM" },
+        { "id": "S-CELL-HIGHER-MIDDLE",  "gap": "HIGHER",  "placement": "MIDDLE", "slot": "POS-CELL-HIGHER-MIDDLE",  "nextSlot": "POS-NEXT-HIGHER-MIDDLE" },
+        { "id": "S-CELL-HIGHER-TOP",     "gap": "HIGHER",  "placement": "TOP",    "slot": "POS-CELL-HIGHER-TOP",     "nextSlot": "POS-NEXT-HIGHER-TOP" }
+      ],
+      "overrides": [
+        {
+          "id": "S-UNDER-A-YEAR", "slot": "POS-UNDER-A-YEAR",
+          "condition": "span < 365 days",
+          "effect": "the yearly rate is withheld; the total is shown; no cell fires"
+        },
+        {
+          "id": "S-WITHDRAWALS", "slot": "POS-WITHDRAWALS",
+          "condition": "any money-out row present",
+          "effect": "printed above the cell, which still fires"
+        }
+      ],
+      "replay": [
+        { "id": "S-REPLAY-BEHIND", "slot": "POS-REPLAY-BEHIND", "condition": "mine <= replay - 1.0" },
+        { "id": "S-REPLAY-CLOSE",  "slot": "POS-REPLAY-CLOSE",  "condition": "within 1.0 point either way" },
+        { "id": "S-REPLAY-AHEAD",  "slot": "POS-REPLAY-AHEAD",  "condition": "mine >= replay + 1.0" }
+      ],
+      "drip": {
+        "$comment": [
+          "The even-drip twin fires only when the reader's own dates carry a",
+          "story: a purchase above three times the median instalment, or a gap",
+          "longer than two months. Purchases only. Otherwise it prints nothing."
+        ],
+        "trigger": { "lumpMultiple": 3, "gapMonths": 2, "purchasesOnly": true },
+        "lines": [
+          { "id": "S-DRIP-HELPED", "slot": "POS-DRIP-HELPED", "condition": "actual >= even-drip" },
+          { "id": "S-DRIP-COST",   "slot": "POS-DRIP-COST",   "condition": "actual < even-drip" }
+        ]
+      },
+      "extra": [
+        {
+          "id": "S-FALLING-MARKET", "slot": "POS-FALLING-MARKET",
+          "condition": "latest NAV below the NAV twelve months earlier"
+        },
+        {
+          "id": "S-RECENT-LUMP", "slot": "POS-RECENT-LUMP",
+          "condition": "a single purchase inside the last 12 months worth 40% or more of all money in"
+        }
+      ]
+    },
+
+    "thisFundsRecord": {
+      "$comment": "Tool 2. One state line on the index-fund comparison, at one point.",
+      "comparison": [
+        { "id": "S-WORST-GENTLER", "slot": "RR-WORST-GENTLER", "condition": "fund worst >= index worst + 1.0" },
+        { "id": "S-WORST-SIMILAR", "slot": "RR-WORST-SIMILAR", "condition": "within 1.0 point either way" },
+        { "id": "S-WORST-HARSHER", "slot": "RR-WORST-HARSHER", "condition": "fund worst <= index worst - 1.0" }
+      ],
+      "guards": [
+        { "id": "S-TOO-YOUNG", "slot": "RR-TOO-YOUNG", "condition": "history shorter than one full window" },
+        { "id": "S-AGE-GUARD", "slot": "RR-AGE-GUARD", "condition": "history shorter than window + 3 years" },
+        { "id": "S-BEFORE-2008", "slot": "RR-BEFORE-2008", "condition": "history begins after mid-2009" }
+      ]
+    }
+  },
+
+  "$slotInventory": [
+    "The eighteen Tool 3 slots the author is writing, in the order the review",
+    "names them: nine cell sentences with their nine next steps, two overrides,",
+    "three replay lines, two drip lines, and the falling-market and recent-lump",
+    "lines. Each is addressable by the id above and by nothing else, so wording",
+    "can change without touching a line of code."
+  ]
+}

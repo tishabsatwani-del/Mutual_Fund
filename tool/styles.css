@@ -1,0 +1,1318 @@
+/* The Portfolio Reality Check — one stylesheet, no external requests.
+ *
+ * Chrome colours are the deep teal carried over from the sheet's download page,
+ * so the two feel like one product. Data marks use their own validated pair,
+ * because a chart colour has a job that a brand colour does not. */
+
+:root {
+  /* One committed dark world, not a light theme with a dark variant. The
+     palette is the author's: deep obsidian ground, electric turquoise as the
+     one accent, cards a shade lighter with a hairline of the accent on them.
+     Every colour below is painted explicitly so the page never borrows a
+     ground from anywhere else. */
+  color-scheme: dark;
+
+  --bg:          #0A0E17;   /* deep obsidian — better than pure black, gives depth */
+  --surface:     #161F30;   /* cards and panels */
+  --surface-2:   #1E2942;   /* inputs, insets, table stripes */
+  --surface-3:   #0E1522;   /* wells, deeper than the ground */
+
+  /* FOUR text roles, not three, and the separation between them is carried by
+     typeface, size and weight -- never by dimness alone. Every ratio below is
+     measured on the CARD (#161F30), which is where text actually sits.
+
+     Pure white was the heading colour and is not any more. On a near-black
+     ground it is the maximum possible glare, and simultaneous contrast makes
+     everything within a few degrees of it read as "dimmed" -- which is why the
+     supporting text looked faint at eleven to one, a ratio better than most
+     black-on-white print. Backing the heading off five percent closes the
+     PERCEIVED gap without touching a single supporting colour. */
+  --ink:         #F2F6FC;   /* headings and figures — 15.2:1 */
+  --ink-2:       #C9D4E3;   /* prose the reader reads — 11.0:1 */
+  /* Supporting prose: glosses, hints, the lines under a heading. It used to
+     share --muted with axis ticks and column headings, which is a CAPTION
+     value -- and prose a reader is meant to read has no business at a caption's
+     contrast. Splitting the role is the fix; brightening everything is not. */
+  /* Both greys were raised on 31 August 2026 at the author's instruction: the
+     supporting text was taking too much effort to read. Raised at the TOKEN, so
+     every grey in the product moves together and none of them drift apart --
+     axis ticks, column headings, glosses, captions and every hint. The hue is
+     unchanged; only the lightness moves. */
+  --ink-3:       #C1C9D3;   /* supporting prose — 9.9:1, was 8.1:1 */
+  --muted:       #A5B0BF;   /* captions, units, axis ticks, column headings and
+                               disabled states — 7.5:1, was 5.3:1.
+                               The supplied #64748B measured 3.47:1 there, which is
+                               under the 4.5 floor, so it is lifted well past it. */
+
+  /* Two grades of ruling, per the review's note taken.
+     A line that only divides may be quiet. A line that is the EDGE of
+     something tappable is an affordance and has to reach 3:1.
+
+     Both were lifted on 31 August 2026 at the author's instruction, alongside
+     the greys, and measuring them first found that one of the two was not a
+     matter of taste at all. --line-strong draws the edge of every input, chip,
+     card and drop zone in this product -- the boundaries WCAG holds to a 3:1
+     floor for non-text components -- and at .34 alpha it composited to 2.53:1
+     on the card and 2.51:1 on the ground. Under the floor everywhere it was
+     used. At .46 it clears it on every ground: 3.54:1 and 3.64:1.
+
+     The divider was 1.42:1, which is a line you have to look for. At .26 it is
+     2.00:1 -- plainly there, and still quiet enough that a row separator does
+     not compete with the row. Alpha rather than a flat colour, so each rule
+     keeps taking its tint from whichever of the three grounds it lies on. */
+  --line:        rgba(0, 242, 254, .26);   /* divider only — 2.00:1 on a card */
+  --line-strong: rgba(0, 242, 254, .46);   /* tappable edge — 3.54:1 on a card */
+  /* Reference values only: these four mirror the v3 sheet's ruling so the two
+     palettes can be compared side by side. Nothing in this stylesheet paints
+     with them, which is why the lift above does not touch them. */
+  --rule-divide-day:   #B7C1D3;   /* 1.58:1 — quiet by intent */
+  --rule-divide-night: #2C3442;   /* 1.45:1 — quiet by intent */
+  --rule-edge-day:     #7D8AA0;   /* 3.04:1 — the edge of something tappable */
+  --rule-edge-night:   #5A6475;   /* 3.03:1 */
+
+  --accent:      #00F2FE;   /* electric turquoise */
+  --accent-2:    #4FACFE;   /* the gradient's other end */
+  --accent-ink:  #04121A;   /* text on a turquoise surface — 15.1:1 */
+  --accent-soft: rgba(0, 242, 254, .10);
+  --emerald:     #05FFC4;
+
+  /* Data marks are a separate job from brand colour, so they are separate
+     tokens. Turquoise and neo-emerald cannot be two lines on one chart:
+     measured against each other they are ΔE 9.8 for normal vision and 1.5 for
+     tritan, which is indistinguishable. So the second series is amber, which
+     separates at ΔE 26 and still belongs to this world. */
+  --series-1:    #22D3EE;   /* the reader's own data */
+  --series-2:    #F0A93B;   /* the comparison */
+  --series-3:    #A78BFA;
+  --good:        #05FFC4;
+  --good-soft:   rgba(5, 255, 196, .10);
+  --critical:    #FF7A6B;
+  /* Amber, for the one state that is neither. A range warning is not a
+     refusal: the two files DO line up, just not over the whole of either, and
+     the analysis runs on the part they share. Coral would read as "rejected".
+     Measured 9.4:1 on the card ground and 8.2:1 on the notice ground. */
+  --warn:        #FFB454;
+
+  --glow:        0 0 24px -6px rgba(0, 242, 254, .55);
+  --shadow:      0 1px 2px rgba(0, 0, 0, .55), 0 10px 30px rgba(0, 0, 0, .45);
+  --radius: 12px;
+  --serif: Georgia, "Times New Roman", serif;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+/* The one place the gradient appears as type: the single most important word
+   in a heading. Everything else stays white. */
+.grad {
+  background: linear-gradient(96deg, var(--accent) 0%, var(--accent-2) 100%);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: var(--accent);
+}
+@supports not (background-clip: text) { .grad { -webkit-text-fill-color: var(--accent); } }
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.55;
+  /* Two soft pools of light, fixed, so the ground has depth without a single
+     extra layer to composite while scrolling. */
+  background-image:
+    radial-gradient(90rem 44rem at 12% -12%, rgba(0, 242, 254, .07), transparent 62%),
+    radial-gradient(70rem 38rem at 96% 6%, rgba(79, 172, 254, .06), transparent 60%);
+  background-attachment: scroll;
+  background-repeat: no-repeat;
+}
+.wrap { max-width: 46rem; margin: 0 auto; padding: 0 1rem 5rem; }
+
+/* ------------------------------------------------------------------ header */
+.topbar {
+  position: sticky; top: 0; z-index: 20;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+}
+/* Review v4 §12.9: the header was two lines of title plus a two-line
+   "← All tools" box on every inner screen, and it ate the top of the phone
+   with the section heading sitting behind it. One line, 48 tall: name left,
+   "All tools" right, and nothing else. */
+.topbar-inner {
+  max-width: 46rem; margin: 0 auto; padding: 0 1rem;
+  min-height: 48px; display: flex; align-items: center; gap: .75rem;
+}
+.brand {
+  font-family: var(--serif); font-size: 1.05rem; font-weight: 700;
+  letter-spacing: -.01em; color: var(--ink); text-decoration: none;
+  margin-right: auto; white-space: nowrap;
+}
+/* "All tools" is the only way back to the four screens, and it was set in the
+   caption grey at .9rem with no ground under it -- the quietest thing in the
+   header, doing the most important job in it. It is a control, so it now looks
+   like one: its own ground, its own edge, and the page's ink on it. */
+.backlink {
+  display: none; align-items: center; white-space: nowrap;
+  background: var(--surface); border: 1px solid var(--line-strong); border-radius: 999px;
+  color: var(--ink); font: inherit; font-size: 1rem; font-weight: 600;
+  letter-spacing: .01em; padding: .4rem .9rem;
+  min-height: 44px; cursor: pointer;
+  transition: border-color .12s ease, background-color .12s ease;
+}
+.backlink:hover, .backlink:focus-visible {
+  border-color: var(--accent); background: var(--surface-2);
+}
+body[data-view="home"] .backlink { display: none !important; }
+.backlink.on { display: inline-flex; }
+
+/* -------------------------------------------------------------------- home */
+.hero { padding: 2.2rem 0 1.4rem; }
+.hero h1 { font-family: var(--serif); font-size: 1.85rem; line-height: 1.2; margin: 0 0 .5rem; letter-spacing: -.015em; }
+.hero p { margin: 0; color: var(--ink-2); font-size: 1.05rem; max-width: 34rem; }
+.tiles { display: grid; gap: .75rem; margin: 1.5rem 0 1rem; }
+@media (min-width: 40rem) { .tiles { grid-template-columns: 1fr 1fr; } }
+.tile {
+  display: block; width: 100%; text-align: left;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 1.05rem 1.1rem; cursor: pointer; font: inherit; color: inherit;
+  box-shadow: var(--shadow); transition: border-color .12s ease, transform .12s ease;
+}
+.tile { position: relative; overflow: hidden; }
+/* A thread of the accent along the top edge, brightening on approach. It is
+   the cheapest way to make a flat dark card read as lit rather than printed. */
+.tile::before {
+  content: ""; position: absolute; inset: 0 0 auto 0; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  opacity: .35; transition: opacity .16s ease;
+}
+.tile:hover { border-color: rgba(0, 242, 254, .55); box-shadow: var(--shadow), 0 0 26px -12px rgba(0, 242, 254, .6); }
+.tile:hover::before { opacity: 1; }
+.tile:active { transform: translateY(1px); }
+/* The eyebrow was the faintest, smallest thing on the whole screen: 11.2px,
+   weight 400, at a caption's contrast. Small, uppercase and letterspaced
+   already says "label" three times over -- it does not need to be faint as
+   well. Weight carries it now, not dimness. */
+.tile-step {
+  font-size: .75rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .09em; color: var(--ink-3);
+}
+.tile h2 { font-family: var(--serif); font-size: 1.15rem; margin: .35rem 0 .4rem; }
+/* 14.7px was the problem here, not the colour. The description sits at 11:1 --
+   higher than most black-on-white body text -- and still read as faint because
+   it was small and, light-on-dark, its strokes render thinner than the same
+   weight would dark-on-light. Size is the lever; the hierarchy is safe because
+   the heading is a different TYPEFACE, not merely a brighter one. */
+.tile p { margin: 0; color: var(--ink-2); font-size: 1rem; letter-spacing: .01em; }
+
+.questions { background:
+    radial-gradient(50rem 18rem at 100% 0%, rgba(5, 255, 196, .07), transparent 65%),
+    var(--surface); }
+.qlist { margin: 0; padding-left: 0; list-style: none; counter-reset: q; }
+.qlist li {
+  counter-increment: q; position: relative;
+  padding: .5rem 0 .5rem 2.4rem; color: var(--ink-2); font-size: .95rem;
+  border-top: 1px solid var(--line);
+}
+.qlist li:first-child { border-top: 0; }
+.qlist li b { color: var(--ink); font-weight: 600; }
+.qlist li::before {
+  content: counter(q); position: absolute; left: 0; top: .55rem;
+  width: 1.6rem; height: 1.6rem; border-radius: 50%;
+  border: 1px solid var(--line-strong); color: var(--accent);
+  font-size: .8rem; font-weight: 700; font-variant-numeric: tabular-nums;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+
+/* ------------------------------------------------------------------- views */
+.view { display: none; }
+.view.on { display: block; }
+.view > h1 {
+  font-family: var(--serif); font-size: 1.5rem; margin: 1.6rem 0 .3rem; letter-spacing: -.01em;
+}
+.view > .lede { margin: 0 0 1.4rem; color: var(--ink-2); }
+
+.card {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 1.1rem; margin-bottom: 1rem;
+  box-shadow: var(--shadow), inset 0 1px 0 rgba(255, 255, 255, .04);
+}
+.card > h2 { font-family: var(--serif); font-size: 1.1rem; margin: 0 0 .8rem; }
+.card > h3 { font-size: .95rem; margin: 1.2rem 0 .5rem; }
+
+/* numbered steps: a reader should see how many decisions there are, and that
+   none of them are hidden from them */
+.card.step > h2 { display: flex; align-items: center; gap: .55rem; }
+.stepno {
+  flex: none; width: 1.6rem; height: 1.6rem; border-radius: 50%;
+  background: var(--accent); color: var(--accent-ink);
+  font-family: var(--sans); font-size: .85rem; font-weight: 700;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.card.step[data-done="yes"] .stepno { background: var(--good); }
+/* A button that will not run and will not say why is the worst control on a
+   screen. When the run is refused for want of a holding period, the step that
+   holds the answer is outlined and says so in the step itself, where the
+   answer is -- not at the bottom of the page beside the button. */
+.card.step[data-error="yes"] { border-color: var(--critical); }
+.card.step[data-error="yes"] .stepno { background: var(--critical); color: var(--accent-ink); }
+.steperror {
+  margin: .55rem 0 0; padding: 16px 20px;
+  border: 1px solid var(--critical); border-radius: 10px;
+  background: var(--surface-2); color: var(--ink);
+  font-size: .9rem; font-weight: 600;
+}
+/* The recommended-length warning: the run is allowed, so this is not the
+   refusal colour. It is the ordinary ruled note, with the ink turned up. */
+.spanwarn {
+  margin: .55rem 0 0; padding: 16px 20px;
+  border: 1px solid var(--line-strong); border-radius: 10px;
+  background: var(--surface-2); color: var(--ink-2); font-size: .88rem;
+}
+.helper-span { margin-top: .55rem; line-height: 1.5; }
+.optional {
+  font-family: var(--sans); font-size: .7rem; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .07em; color: var(--muted); border: 1px solid var(--line-strong);
+  border-radius: 999px; padding: .1rem .45rem;
+}
+.fieldlabel { display: block; font-size: .87rem; font-weight: 600; margin-bottom: .3rem; color: var(--ink); }
+input:disabled, select:disabled, button:disabled {
+  opacity: .55; cursor: not-allowed;
+}
+.chip[aria-checked="true"] {
+  background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600;
+}
+
+/* ------------------------------------------------------------------ inputs */
+.field { margin-bottom: .9rem; }
+.field label { display: block; font-size: .87rem; font-weight: 600; margin-bottom: .3rem; color: var(--ink); }
+/* .hint is used twenty-six times across the markup and only ever had a rule
+   INSIDE a field. Everywhere else it inherited body colour and body size --
+   pure white at 16px, indistinguishable from the text it was meant to support.
+   Twenty-six explanatory lines with no hierarchy at all, in a product whose
+   whole problem was said to be too much dimness. */
+.hint { font-size: .9375rem; color: var(--ink-3); letter-spacing: .01em; }
+.field .hint { font-size: .875rem; color: var(--ink-3); margin-top: .25rem; }
+input[type="text"], input[type="number"], input[type="date"], select {
+  width: 100%; min-height: 44px; padding: .55rem .7rem;
+  /* A well, not another card. On a dark ground an input that shares the card's
+     fill stops looking like somewhere you can type. */
+  background: var(--surface-3); color: var(--ink);
+  border: 1px solid var(--line-strong); border-radius: 9px;
+  font: inherit; font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, .5);
+  transition: border-color .12s ease, box-shadow .12s ease;
+}
+input[type="text"]:hover, input[type="number"]:hover, input[type="date"]:hover, select:hover {
+  border-color: rgba(0, 242, 254, .5);
+}
+input:focus-visible, select:focus-visible, button:focus-visible, .tile:focus-visible, a:focus-visible {
+  outline: 3px solid var(--accent); outline-offset: 2px;
+}
+/* Headings are focused only to move a screen reader along; the ring would
+   otherwise appear around a heading nobody clicked. */
+[tabindex="-1"]:focus { outline: none; }
+.grid2 { display: grid; gap: .9rem; }
+@media (min-width: 34rem) { .grid2 { grid-template-columns: 1fr 1fr; } }
+
+button.primary, .btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: .4rem;
+  min-height: 46px; padding: .6rem 1.1rem;
+  background: linear-gradient(96deg, var(--accent) 0%, var(--accent-2) 130%);
+  color: var(--accent-ink);
+  border: 1px solid var(--accent); border-radius: 9px;
+  font: inherit; font-weight: 600; font-size: 1rem; cursor: pointer; text-decoration: none;
+  box-shadow: var(--glow);
+  transition: transform .1s ease, box-shadow .16s ease, filter .12s ease;
+}
+/* A primary button that cannot be pressed must not look pressable. The shared
+   disabled rule only drops opacity, and this gradient survives that at full
+   strength -- the button still read as the live next step while doing nothing
+   at all, which is the thing this screen was rebuilt to stop. It loses the
+   gradient, the glow and the accent border, and keeps its label readable so it
+   still says what WILL happen once there is something to compute. */
+button.primary:disabled, button.primary:disabled:hover {
+  background: var(--surface-2); color: var(--muted);
+  border-color: var(--line-strong); box-shadow: none; opacity: 1;
+}
+button.primary:hover:not(:disabled), .btn:hover { box-shadow: 0 0 30px -4px rgba(0, 242, 254, .7); }
+button.primary:active, .btn:active { transform: translateY(1px); filter: brightness(.95); }
+button.secondary {
+  min-height: 44px; padding: .5rem .9rem;
+  background: var(--surface); color: var(--ink); border: 1px solid var(--line-strong);
+  border-radius: 9px; font: inherit; font-size: .92rem; cursor: pointer;
+}
+button.secondary:hover { border-color: var(--accent); }
+button.link {
+  background: none; border: none; padding: 0; color: var(--accent);
+  font: inherit; font-size: .9rem; text-decoration: underline; cursor: pointer;
+}
+.btnrow { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+
+/* the spreadsheet download: the one action on its screen, so it takes the width */
+.download { width: 100%; margin: 1.3rem 0 .5rem; font-size: 1.1rem; }
+.filenote { margin: 0 0 .4rem; text-align: center; font-size: .875rem; color: var(--ink-3); }
+.appnote { margin: 0; text-align: center; font-size: .95rem; color: var(--ink-2); }
+
+/* ------------------------------------------------------------- entry table */
+.rows { display: grid; gap: .5rem; }
+/* Review v4 §12.6 and §13: PHONE FIRST. The row is [fields][×] and nothing
+ * else, at every width up to a real table's worth of room.
+ *
+ * What was here before laid five columns out by default and only stacked them
+ * under 33rem. Between that and a desktop the five columns had nowhere to go:
+ * every field crushed to about sixty pixels ("Inv", "Amou", "Whicl", an empty
+ * date box) while the × kept its full 44. Two properties prevent that class of
+ * failure for good -- min-width:0 on the column that must give, and
+ * flex-shrink:0 on the one that must not. */
+.row-head, .entry {
+  display: grid; grid-template-columns: 1fr 44px; gap: .4rem; align-items: start;
+}
+.entry > .c-fields { min-width: 0; display: grid; gap: .4rem; }
+.entry .del { flex-shrink: 0; }
+.row-head { font-size: .75rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; display: none; }
+.entry input, .entry select { min-height: 44px; font-size: .95rem; padding: .45rem .5rem; width: 100%; min-width: 0; }
+.entry .del {
+  min-height: 44px; width: 44px; background: none; border: 1px solid var(--line);
+  border-radius: 8px; color: var(--muted); font-size: 1.1rem; cursor: pointer;
+  align-self: center;
+}
+.entry .del:hover { border-color: var(--critical); color: var(--critical); }
+
+/* §12.5: the native control shows the browser's locale, so the date it holds
+   is echoed in the one form that reads a single way. */
+.date-echo, .amt-echo {
+  display: block; font-size: .78rem; color: var(--muted); margin-top: .2rem;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+.date-echo:empty, .amt-echo:empty { display: none; }
+/* A refusal has to out-rank the class it usually sits beside. `.field .hint`
+   is two selectors and `.refuse` is one, so every field-level refusal in this
+   product has been rendering in the supporting-prose colour instead of the
+   refusal colour -- a message the reader MUST notice, wearing the colour of
+   one they may skip. Older than this pass; found by measuring it. */
+.refuse, .hint.refuse, .field .hint.refuse { color: var(--critical); }
+
+/* The five-column table only where five columns genuinely fit. */
+@media (min-width: 48rem) {
+  .row-head { display: grid; grid-template-columns: 1fr 1.05fr .85fr .95fr 44px; }
+  .entry > .c-fields { grid-template-columns: 1fr 1.05fr .85fr .95fr; align-items: center; }
+  .entry label { display: none; }
+  .c-num { display: none; }
+  .date-echo, .amt-echo { display: none; }
+}
+
+@media (max-width: 47.99rem) {
+  /* the headings are gone at this width, so each field names itself */
+  .entry label {
+    display: block; font-size: .78rem; font-weight: 600; color: var(--ink-2);
+    margin: 0 0 .2rem;
+  }
+  /* No grid-area here. It named an area that the template no longer defines,
+     and an unresolved name still creates an implicit track -- which put the
+     fields back into two columns and crushed them to 59px at 320. */
+  .c-num {
+    display: block;
+    font-size: .72rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--muted); margin-bottom: .3rem;
+  }
+  .entry {
+    padding: .55rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2);
+  }
+}
+
+/* ------------------------------------------------------------------ result */
+.result {
+  position: relative; overflow: hidden;
+  background:
+    radial-gradient(60rem 20rem at 0% 0%, rgba(0, 242, 254, .13), transparent 70%),
+    var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius); padding: 1.3rem 1.15rem; margin-bottom: 1rem;
+  box-shadow: var(--shadow), inset 0 1px 0 rgba(255, 255, 255, .05);
+}
+.result::before {
+  content: ""; position: absolute; inset: 0 0 auto 0; height: 2px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2), transparent);
+}
+.result .label { font-size: .8rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.result .value {
+  font-family: var(--serif); font-size: 2.9rem; line-height: 1.05; font-weight: 700;
+  margin: .25rem 0 .15rem; font-variant-numeric: tabular-nums; letter-spacing: -.025em;
+  /* The headline figure is white. It is deliberately NOT coloured by whether it
+     is positive: the book's whole argument is that a return is not good or bad
+     until five questions have been asked of it, and a green number answers the
+     question before the reader has asked it. */
+  color: var(--ink);
+}
+.result .value.small { font-size: 1.4rem; }
+.result .sub { color: var(--ink-2); font-size: .95rem; }
+
+/* Review v4 §12.8: rupee strings ran off the right edge of the goal result
+   with no wrap and no truncation. The words-for-size rule removes the cause --
+   a headline is now "₹1.26 crore", not fourteen digits -- and these two stop
+   any figure that still would not fit from escaping its card. */
+.result .value, .result .sub, .stat b, .data td {
+  overflow-wrap: anywhere; word-break: normal;
+}
+@media (max-width: 24rem) { .result .value { font-size: 2.2rem; } }
+
+/* Review v4 §12.7: "Two numbers, two different questions" put the gloss in a
+   narrow left column and let "in total · no clock in it" wrap to three lines
+   on the right. Under 480px the pair stacks: label and figure on one line,
+   the gloss on the next. */
+/* The rule that stacked every table cell on a phone is gone. It was written
+   for two-column tables and broke five others: a window table of 525 rows
+   became 125,000px of page, and "22.1% / 9.3% / +12.8%" lost the headings
+   that said which was the fund. Every table is columns at every width now;
+   one that is genuinely too wide scrolls inside .scroll, headings attached. */
+.data td .qsub { display: block; margin-top: .15rem; }
+@media (max-width: 30rem) {
+  table.data { font-size: .84rem; }
+  table.data th, table.data td { padding: .4rem .3rem; }
+  table.data th { font-size: .66rem; letter-spacing: .03em; }
+}
+
+.stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: .5rem; margin: .9rem 0; }
+@media (min-width: 34rem) { .stats { grid-template-columns: repeat(4, 1fr); } }
+.stat {
+  background: var(--surface-3); border: 1px solid var(--line); border-radius: 10px; padding: .7rem .75rem;
+}
+.stat .k { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.stat .v { font-size: 1.15rem; font-weight: 700; font-variant-numeric: tabular-nums; margin-top: .15rem; }
+
+.meaning {
+  border-left: 3px solid transparent;
+  border-image: linear-gradient(180deg, var(--accent), var(--accent-2)) 1;
+  padding: .1rem 0 .1rem .85rem; margin: 1rem 0;
+}
+.meaning h3 { font-size: .8rem; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin: 0 0 .3rem; }
+.meaning p { margin: 0 0 .6rem; color: var(--ink-2); font-size: .95rem; }
+.meaning p:last-child { margin-bottom: 0; }
+
+.notice {
+  display: flex; gap: .6rem; align-items: flex-start;
+  border: 1px solid var(--line-strong); border-radius: 10px;
+  /* 16px top and bottom, 20px each side. At .7rem/.8rem a two-line refusal on a
+     360px phone sat against the rounded corner, and the corner is where the
+     eye is already being pulled by the border colour. */
+  padding: 16px 20px;
+  font-size: .9rem; color: var(--ink-2); background: var(--surface-2); margin: .8rem 0;
+}
+/* The two named data doors on the market-index path. A file goes in one of
+   two places and the consequences of confusing them are silent and total, so
+   each door carries its own number, its own sentence and its own rule rather
+   than a shared paragraph above both. */
+.upcard {
+  border: 1px solid var(--line-strong); border-radius: var(--radius);
+  background: var(--surface); padding: 1rem 1.1rem 1.1rem; margin: 1rem 0;
+}
+.upcard > h3 {
+  margin: 0 0 .35rem; font-size: 1.02rem; font-weight: 700; color: var(--ink);
+  letter-spacing: .01em;
+}
+.upcard-desc { margin: 0 0 .55rem; font-size: .93rem; color: var(--ink-2); }
+.upcard-cols { margin: 0 0 .55rem; font-size: .88rem; color: var(--ink-3); }
+.upcard-cols code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: .86em; padding: .12rem .4rem; border-radius: 5px;
+  background: var(--surface-2); border: 1px solid var(--line); color: var(--ink);
+}
+.upcard-rule {
+  margin: 0; font-size: .9rem; color: var(--ink-2);
+  border-left: 3px solid var(--warn); padding: .35rem 0 .35rem .7rem;
+}
+.upcard-rule strong { color: var(--warn); }
+/* The file label sat directly on the rule line above it, so the two read as
+   one block and the door lost its heading. */
+.upcard .fieldlabel { margin-top: 1.1rem; }
+
+/* The two doors, beside each other above 34rem and stacked below it.
+   Their own margins would double the grid gap, so inside the grid they have
+   none. Top-aligned rather than stretched: the two cards hold different
+   amounts, and stretching left a quarter of the shorter one as empty ruled
+   space, which reads as something missing rather than as a pair. */
+.upcards { margin: 1rem 0; align-items: start; }
+.upcards > .upcard { margin: 0; min-width: 0; }
+/* Long file names must wrap rather than push a column wider than its share. */
+.upcards .fileok-name { overflow-wrap: anywhere; }
+
+/* ============================================== THE TWO DOORS, ON A PHONE
+ *
+ * Two cards cannot sit beside each other on a 390px screen and stay readable:
+ * two columns leave about 116px of text apiece, which is sixteen characters a
+ * line, and "Consolidated Account Statement (CAS)" needs three lines of it.
+ * Stacked, they are two full-height boxes and the second is below the fold.
+ *
+ * So below 34rem the PAIR is what sits side by side -- two compact doors that
+ * fit honestly at that width -- and the card itself opens underneath the one
+ * that was tapped, at full width, with every word of it intact.
+ *
+ * Above 34rem none of this exists: the doors are not drawn and both cards
+ * show, exactly as they did before.
+ */
+.doors { display: none; }
+
+@media (max-width: 33.99rem) {
+  .doors {
+    display: grid; grid-template-columns: 1fr 1fr; gap: .55rem;
+    margin: 1rem 0 0;
+  }
+  .door {
+    display: grid; grid-template-rows: auto auto 1fr auto; gap: .3rem;
+    position: relative; text-align: left;
+    min-height: 8.4rem; padding: .75rem .7rem .7rem;
+    background:
+      linear-gradient(160deg, rgba(255, 255, 255, .045), rgba(255, 255, 255, 0) 55%),
+      var(--surface);
+    border: 1px solid var(--line-strong); border-radius: 14px;
+    color: var(--ink); font: inherit; cursor: pointer;
+    transition: border-color .16s ease, transform .16s ease, background .16s ease;
+  }
+  .door:hover { border-color: var(--accent); }
+  .door:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .door:active { transform: translateY(1px); }
+
+  .door-ic {
+    display: grid; place-items: center;
+    width: 2.1rem; height: 2.1rem; border-radius: 10px;
+    background: var(--surface-2); border: 1px solid var(--line);
+    color: var(--muted);
+  }
+  .door-ic svg { width: 1.15rem; height: 1.15rem; }
+
+  /* The numeral is the card's own number, and it belongs where a reader looks
+     for it: top right, out of the way of the name. */
+  .door-n {
+    position: absolute; top: .6rem; right: .7rem;
+    font-size: .78rem; font-weight: 700; color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .door-t {
+    font-size: .82rem; font-weight: 600; line-height: 1.28; color: var(--ink);
+    align-self: start;
+  }
+  .door-s {
+    font-size: .74rem; line-height: 1.3; color: var(--accent); font-weight: 600;
+    align-self: end;
+    overflow-wrap: anywhere;
+  }
+
+  /* Loaded. The door carries the answer, so both can be checked at a glance
+     without opening either. */
+  .door[data-state="loaded"] { border-color: var(--good); }
+  .door[data-state="loaded"] .door-ic {
+    background: var(--good); border-color: var(--good); color: var(--accent-ink);
+  }
+  .door[data-state="loaded"] .door-s { color: var(--good); }
+  .door[data-state="refused"] { border-color: var(--critical); }
+  .door[data-state="refused"] .door-ic {
+    background: var(--critical); border-color: var(--critical); color: var(--accent-ink);
+  }
+  .door[data-state="refused"] .door-s { color: var(--critical); }
+
+  /* Open. The tapped door is joined to the card below it. */
+  .door[aria-expanded="true"] {
+    border-color: var(--accent); background: var(--surface-2);
+    border-bottom-left-radius: 0; border-bottom-right-radius: 0;
+  }
+  .door[aria-expanded="true"]::after {
+    content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px;
+    background: var(--accent);
+  }
+  .door[aria-expanded="true"] .door-ic { border-color: var(--accent); color: var(--accent); }
+
+  /* With a card open the row is a tab strip, so BOTH doors sit flat on it --
+     one rounded corner beside the panel's square top reads as a seam. Where
+     :has() is not understood the corners stay rounded, which is the small
+     cosmetic difference and nothing else. */
+  .doors:has(.door[aria-expanded="true"]) .door {
+    border-bottom-left-radius: 0; border-bottom-right-radius: 0;
+  }
+
+  /* One card at a time, and only the one whose door is open. :not([hidden])
+     keeps a hidden Card B hidden -- the fund path never draws it. */
+  #up-cards { margin-top: 0; gap: 0; }
+  #up-cards > .upcard { display: none; }
+  #up-cards[data-open="a"] > #up-primary:not([hidden]),
+  #up-cards[data-open="b"] > #up-benchmark-head:not([hidden]) {
+    display: block;
+    border-color: var(--accent);
+    border-top-left-radius: 0; border-top-right-radius: 0;
+    margin-top: -1px;
+  }
+  /* The open card keeps its own full heading. The door carries the short
+     name; the card, once opened to be READ, carries the complete one --
+     "1. Primary Investment Data (NAV)" -- which is also where the
+     specification's approved header lives now that the tile is shorter. */
+}
+
+@media (max-width: 33.99rem) and (prefers-reduced-motion: reduce) {
+  .door { transition: none; }
+}
+
+/* ================================================ THE GO-AHEAD, AS ONE LINE
+ *
+ * The author's instruction, given twice: one single line, premium, not a
+ * plain text line and not a box. A first attempt here was a three-line panel
+ * per file; a second was a two-line bar. This is the line from their own
+ * screenshot, dressed: a slim pill that cannot wrap, naming what will be
+ * analysed, tappable to carry the reader down to step 2.
+ */
+.loadedlist:not(:empty) { margin: .9rem 0 0; }
+
+.readyline {
+  display: flex; flex-wrap: nowrap; align-items: center; gap: .6rem;
+  width: 100%; min-height: 48px;
+  text-align: left; cursor: pointer; font: inherit; color: var(--ink);
+  padding: .35rem .45rem .35rem .5rem;
+  border: 1px solid var(--good); border-radius: 999px;
+  background: linear-gradient(100deg, var(--good-soft), rgba(0, 0, 0, 0) 55%), var(--surface);
+  box-shadow: 0 0 0 3px var(--good-soft);
+  transition: transform .16s ease, border-color .16s ease;
+}
+.readyline:hover { border-color: var(--accent); }
+.readyline:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.readyline:active { transform: translateY(1px); }
+
+.rl-ic {
+  flex: none; display: grid; place-items: center;
+  width: 1.7rem; height: 1.7rem; border-radius: 50%;
+  background: var(--good); color: var(--accent-ink);
+  font-size: .88rem; font-weight: 800; line-height: 1;
+}
+/* One line means one line: the file name gives way, never the sentence. */
+.rl-t {
+  flex: 1 1 auto; min-width: 0;
+  font-size: .95rem; color: var(--ink-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.rl-t strong { color: var(--ink); font-weight: 700; }
+.rl-go {
+  flex: none; margin-left: auto; display: grid; place-items: center;
+  width: 1.9rem; height: 1.9rem; border-radius: 50%;
+  border: 1px solid var(--line-strong); color: var(--accent);
+}
+.rl-go svg { width: 1rem; height: 1rem; }
+.readyline:hover .rl-go { border-color: var(--accent); }
+
+@media (prefers-reduced-motion: reduce) { .readyline { transition: none; } }
+
+}
+
+/* First thing in every result: what follows already happened. The reviewer
+   asked for the past-performance line to be prominent rather than buried in
+   the footer, and they were right. */
+.pastnote {
+  margin: 0 0 1rem; padding: .65rem .9rem;
+  border-left: 3px solid var(--warn); border-radius: 6px;
+  background: var(--surface); font-size: .88rem; color: var(--ink-2); line-height: 1.55;
+}
+.pastnote strong { color: var(--warn); }
+
+/* The chosen holding period's own row in the horizon table. */
+table.data.spread tr.now td { color: var(--accent); font-weight: 700; }
+
+.ratepresets { margin: 0 0 .9rem; }
+
+.notice.bad { border-color: var(--critical); }
+.notice.warn { border-color: var(--warn); }
+.notice .ic { flex: none; font-weight: 700; }
+.notice.bad .ic { color: var(--critical); }
+.notice.warn .ic { color: var(--warn); }
+.notice.ok .ic { color: var(--good); }
+
+table.data { width: 100%; border-collapse: collapse; font-size: .9rem; font-variant-numeric: tabular-nums; }
+/* Section 5's three-column table. The metric names are long and the figures
+   are short, so the first column takes what it needs and the two number
+   columns share what is left evenly -- otherwise "Return Volatility (Std
+   Deviation)" wraps to three lines while two 6-character cells sit in acres
+   of space beside it. */
+table.data.summary3 th:not(:first-child),
+table.data.summary3 td:not(:first-child) { width: 27%; }
+table.data.summary3 td:first-child { color: var(--ink-2); }
+table.data.summary3 td:not(:first-child) { color: var(--ink); font-weight: 600; }
+.nodata { color: var(--muted); font-weight: 400; font-size: .88em; }
+/* This table must NOT stack on a phone.
+ *
+ * The stacking rule above was written for two-column tables, where the
+ * second cell is a gloss on the first and reads fine underneath it. Three
+ * columns stacked produce "14.0%" above "10.0%" with nothing saying which is
+ * the investment and which the benchmark -- and telling those two apart is
+ * the entire reason the table has three columns.
+ *
+ * Unlike the five-column tables that genuinely have no room, this one fits:
+ * a metric name and two short percentages come to about 19rem, inside a
+ * 390px phone with room to spare. So it stays a table, headings attached. */
+@media (max-width: 30rem) {
+  table.data.summary3 { display: table; }
+  table.data.summary3 thead { display: table-header-group; }
+  table.data.summary3 tbody { display: table-row-group; }
+  table.data.summary3 tr,
+  table.data.summary3 thead tr { display: table-row; padding: 0; border-bottom: 0; }
+  table.data.summary3 td, table.data.summary3 th {
+    display: table-cell; margin: 0; padding: .5rem .3rem;
+    border-bottom: 1px solid var(--line);
+  }
+  table.data.summary3 { font-size: .84rem; }
+  table.data.summary3 th { font-size: .68rem; letter-spacing: .03em; }
+  table.data.summary3 td:first-child, table.data.summary3 th:first-child { min-width: 8.2rem; }
+  table.data.summary3 th:not(:first-child),
+  table.data.summary3 td:not(:first-child) { width: 26%; }
+  /* A cell narrow enough to need a break must break BETWEEN words. The page
+     sets overflow-wrap: anywhere for long scheme names, and inherited here it
+     split "Observations" into "Observation" and a lone "s". */
+  table.data.summary3 td, table.data.summary3 th {
+    overflow-wrap: normal; word-break: normal;
+  }
+}
+
+/* The five numbered statements. Numbered by the list itself, so the numbers
+   cannot drift out of step with the items the way hand-typed ones do. */
+ol.insights { margin: 0; padding: 0 0 0 1.4rem; }
+ol.insights li { margin: 0 0 .9rem; padding-left: .25rem; }
+ol.insights li:last-child { margin-bottom: 0; }
+ol.insights li::marker { color: var(--accent); font-weight: 700; }
+.ins-h { display: block; font-weight: 700; color: var(--ink); font-size: .93rem; margin-bottom: .15rem; }
+.ins-b { display: block; color: var(--ink-2); font-size: .93rem; line-height: 1.55; }
+
+table.data th, table.data td { text-align: right; padding: .45rem .4rem; border-bottom: 1px solid var(--line); }
+table.data th:first-child, table.data td:first-child { text-align: left; }
+table.data.spread th, table.data.spread td { text-align: center; white-space: nowrap; }
+table.data.spread th:first-child, table.data.spread td:first-child { text-align: center; }
+.qsub { color: var(--muted); font-size: .82rem; font-weight: 400; }
+details.explain.card { padding: 1.1rem; border-top: 1px solid var(--line); }
+table.data th { font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; }
+.scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+details.explain { margin: .9rem 0 0; border-top: 1px solid var(--line); padding-top: .7rem; }
+details.explain summary { cursor: pointer; font-size: .9rem; font-weight: 600; color: var(--accent); }
+details.explain .body { margin-top: .6rem; color: var(--ink-2); font-size: .93rem; }
+details.explain dl { margin: 0; }
+details.explain dt { font-weight: 700; margin-top: .6rem; font-size: .9rem; color: var(--ink); }
+details.explain dd { margin: .15rem 0 0; }
+
+/* ------------------------------------------------------------------ charts */
+figure.chart { margin: 1rem 0 0; }
+figure.chart figcaption { font-size: .875rem; color: var(--ink-3); margin-bottom: .5rem; }
+.legend { display: flex; flex-wrap: wrap; gap: .9rem; font-size: .85rem; color: var(--ink-2); margin-top: .5rem; }
+.legend .key { display: inline-flex; align-items: center; gap: .35rem; }
+.legend .swatch { width: 12px; height: 12px; border-radius: 3px; flex: none; }
+svg .grid { stroke: var(--line); stroke-width: 1; }
+svg .axis { fill: var(--muted); font-size: 11px; font-family: var(--sans); }
+svg .barlabel { fill: var(--ink-2); font-size: 11px; font-family: var(--sans); font-variant-numeric: tabular-nums; }
+svg .barlabel.gap { fill: var(--ink); font-weight: 700; font-size: 12px; }
+svg .bar { fill: var(--series-1); }
+svg .bar.hot { fill: var(--series-2); }
+svg .zero { stroke: var(--line-strong); stroke-width: 2; }
+
+.filebox {
+  border: 2px dashed var(--line-strong); border-radius: var(--radius);
+  padding: 1.4rem 1rem; text-align: center; background: var(--surface-2);
+}
+.filebox.over { border-color: var(--accent); background: var(--accent-soft); }
+.filebox p { margin: .5rem 0 0; font-size: .9375rem; color: var(--ink-3); }
+input[type="file"] { display: none; }
+
+/* The box answers for itself.
+ *
+ * Choosing a file used to change nothing where the reader was looking: the
+ * only confirmation was a notice further down the page, so the way to find
+ * out whether the file had been taken was to scroll and hope. These three
+ * states put the answer under the cursor that asked the question. */
+.filebox.loaded, .filebox.refused, .filebox.working {
+  border-style: solid; text-align: left;
+  display: flex; flex-wrap: wrap; align-items: center; gap: .75rem 1rem;
+  padding: 1rem;
+}
+.filebox.loaded  { border-color: var(--good); background: var(--surface); }
+.filebox.refused { border-color: var(--critical); background: var(--surface); }
+.filebox.working { border-color: var(--line-strong); background: var(--surface); }
+
+.fileok { display: flex; align-items: flex-start; gap: .7rem; flex: 1 1 12rem; min-width: 0; }
+.fileok-ic {
+  flex: none; display: grid; place-items: center;
+  width: 2rem; height: 2rem; border-radius: 50%;
+  font-size: 1.05rem; font-weight: 700; line-height: 1;
+}
+.filebox.loaded  .fileok-ic { background: var(--good); color: var(--accent-ink); }
+.filebox.refused .fileok-ic { background: var(--critical); color: var(--accent-ink); }
+.filebox.working .fileok-ic { background: var(--surface-2); border: 1px solid var(--line-strong); }
+.fileok-t { display: block; min-width: 0; }
+.fileok-name {
+  display: block; font-size: .97rem; color: var(--ink); line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.fileok-sub { display: block; margin-top: .15rem; font-size: .86rem; color: var(--ink-2); line-height: 1.45; }
+.fileok-sub .ok-word  { color: var(--good); }
+.fileok-sub .bad-word { color: var(--critical); }
+.filebox.loaded > button, .filebox.refused > button, .filebox.working > button { flex: none; margin: 0; }
+
+/* A ring rather than a spinner where motion is switched off: the state is
+   still legible, it simply does not turn. */
+.spin {
+  display: block; width: 1.05rem; height: 1.05rem; border-radius: 50%;
+  border: 2px solid var(--line-strong); border-top-color: var(--accent);
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+
+/* Between the tap and the phone's own file app there are a couple of seconds
+   in which nothing used to change on the page, and a button that does nothing
+   for two seconds reads as broken. The button turns while it waits, and says
+   what it is waiting for. */
+button[data-opening="yes"] {
+  position: relative; padding-right: 2.4rem;
+}
+button[data-opening="yes"]::after {
+  content: ""; position: absolute; right: .85rem; top: 50%;
+  width: 1rem; height: 1rem; margin-top: -.5rem; border-radius: 50%;
+  border: 2px solid var(--line-strong); border-top-color: var(--accent);
+  animation: spin .8s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  button[data-opening="yes"]::after { animation: none; }
+}
+/* The other way in. A phone's file app can take seconds to open and no page
+   can hurry it; pasting the two columns needs no file app at all, so it is
+   offered as a second full-width way in rather than a link in the margin.
+   The reason is said only where it applies -- on a phone. */
+.pastebtn { width: 100%; margin: .7rem 0 0; }
+.pastewhy { margin: .35rem 0 0; text-align: center; }
+@media (min-width: 45rem) { .pastewhy { display: none; } }
+
+/* The third way in. Folded away, because most readers have a file. */
+.pastebox {
+  margin: .7rem 0 0; padding: .9rem; border: 1px solid var(--line-strong);
+  border-radius: var(--radius); background: var(--surface-2);
+}
+.pastebox textarea {
+  width: 100%; box-sizing: border-box; margin-top: .35rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: .86rem; line-height: 1.5;
+  background: var(--bg); color: var(--ink);
+  border: 1px solid var(--line-strong); border-radius: 8px; padding: .6rem .7rem;
+}
+.pastebox textarea:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.pastebox .btnrow { margin: .6rem 0 0; }
+
+/* A file can hold thousands of funds. A native dropdown of that length is a
+   scroll wheel with no search, so the list is filtered as the reader types. */
+.picker { display: grid; gap: .35rem; max-height: 21rem; overflow-y: auto; margin-bottom: .6rem; }
+.picker .hit {
+  display: block; width: 100%; text-align: left; cursor: pointer;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 9px;
+  padding: .6rem .7rem; font: inherit; color: inherit; min-height: 44px;
+}
+.picker .hit:hover, .picker .hit:focus-visible { border-color: var(--accent); }
+.picker .hit[aria-selected="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.picker .hit .nm { display: block; font-weight: 600; font-size: .95rem; line-height: 1.3; }
+.picker .hit .sub { display: block; font-size: .875rem; color: var(--ink-3); margin-top: .15rem; }
+.picker .more { padding: .5rem .2rem; font-size: .85rem; color: var(--muted); }
+
+.chips { display: flex; flex-wrap: wrap; gap: .4rem; }
+/* An UNCHOSEN holding period is a live option, and it has to look like one.
+   On the dark ground it used to take the card's own fill and the body ink,
+   which reads as the same greyed-out state the browser gives a disabled
+   button -- so every length except the chosen one looked unavailable. It is
+   now a proper secondary control: a light ground with near-black text, at
+   16.30:1, which no disabled state in this product ever reaches. */
+.chip {
+  min-height: 44px; padding: .45rem .85rem; border-radius: 999px;
+  border: 1px solid #CBD5E1; background: #F1F5F9;
+  font: inherit; font-size: .92rem; font-weight: 600; color: #0F172A; cursor: pointer;
+}
+.chip[aria-checked="false"]:hover:not(:disabled) { background: #E2E8F0; border-color: #94A3B8; }
+/* A length this history cannot measure is genuinely unavailable, and says so
+   in words on the chip itself. That is the ONE place the faded state belongs. */
+.chip:disabled { background: var(--surface); border-color: var(--line); color: var(--muted);
+                 font-weight: 400; opacity: .55; cursor: not-allowed; }
+.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+
+footer.foot {
+  border-top: 1px solid var(--line); margin-top: 2.5rem; padding-top: 1.2rem;
+  font-size: .875rem; color: var(--ink-3);
+}
+footer.foot p { margin: 0 0 .5rem; }
+.foot-links { display: flex; flex-wrap: wrap; gap: .9rem; margin-bottom: .8rem; }
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+.skip {
+  position: absolute; left: -999px; top: 0; background: var(--accent); color: var(--accent-ink);
+  padding: .6rem 1rem; z-index: 50; border-radius: 0 0 8px 0;
+}
+.skip:focus { left: 0; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* A long press on a phone used to select a word and raise the browser's
+   Copy / Share bar over the figure being read. Nothing here is selectable
+   now except the places a reader types or pastes into. */
+html, body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+input, textarea, select, [contenteditable] {
+  -webkit-user-select: text; user-select: text; -webkit-touch-callout: default;
+}
+
+/* Review v4 §4: what the book explains gets a pointer of six words or fewer,
+   not a paragraph. It reads as a marginal note, not as a heading. */
+.pointer {
+  border-left: 2px solid var(--line-strong); padding-left: .7rem;
+  margin: 1rem 0 0; font-style: italic;
+}
+
+/* Review v4 §12.15: a step that cannot be used yet says so by looking unusable,
+   rather than by a sentence under fields a reader can still type into. */
+.step[data-locked="yes"] { opacity: .5; }
+.step[data-locked="yes"] h2 { opacity: 1; }
+
+/* ------------------------------------------------- the real-return band
+   A label on a subtraction, set beside the subtraction. Never a coloured
+   badge on its own: a badge with no arithmetic next to it is a verdict, and
+   the three bands here are descriptions of a division the reader can check. */
+.bandline { margin: .9rem 0 0; }
+.bandname {
+  font-family: var(--sans); font-size: .95rem; font-weight: 700; color: var(--ink);
+}
+.lookat { margin: .2rem 0 .7rem; padding-left: 1.1rem; color: var(--ink-2); font-size: .95rem; }
+.lookat li { margin-bottom: .45rem; }
+.lookat li:last-child { margin-bottom: 0; }
+
+/* --------------------------------------------------- the scenario levers
+   Four things the reader may move, and the figure moves with them. The
+   assumed RETURN is deliberately not one of them: raising it until the gap
+   closes is not a plan, it is the one lever nobody controls. */
+.scenario { border-top: 1px solid var(--line); margin-top: 1rem; padding-top: 1rem; }
+.lever { margin-bottom: 1rem; }
+.lever label {
+  display: block; font-size: .87rem; font-weight: 600; margin-bottom: .3rem; color: var(--ink);
+}
+.lever output {
+  display: block; margin-top: .3rem;
+  font-size: .95rem; font-weight: 600; color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.lever input[type="range"] {
+  width: 100%; height: 44px; margin: 0; padding: 0;
+  background: none; border: 0; box-shadow: none;
+  accent-color: var(--accent); cursor: pointer;
+}
+#g-scn-reset { margin-top: 1rem; }
+
+/* The one thing about the workbook a reader cannot check by opening it. Said
+   beside the download, where the decision to download is being made. */
+.privacy-badge {
+  margin: .7rem 0 0; padding: 16px 20px;
+  border: 1px solid var(--line-strong); border-radius: 10px;
+  background: var(--surface-2); color: var(--ink);
+  font-size: .88rem; font-weight: 600;
+}
+
+/* ------------------------------------------------- the portfolio door
+   The file is already on the desktop; making them find it through a picker
+   is a step that exists only because the door had one shape. The picker
+   stays: a zone that is only a zone has no keyboard and does not exist on a
+   phone, where most of these readers are. */
+.filebox.dropping { border-color: var(--accent); background: var(--surface-2); }
+.ticks { margin: .7rem 0 .2rem; }
+.tick {
+  display: flex; align-items: baseline; gap: .55rem;
+  padding: .55rem 0; border-top: 1px solid var(--line); cursor: pointer;
+}
+.tick input { width: 1.05rem; height: 1.05rem; flex: none; accent-color: var(--accent); }
+#pf-read-table th { text-align: right; }
+#pf-read-table th:first-child { text-align: left; }
+
+/* A table with five columns of its own inside a 390px phone has no width to
+   give: table-layout hands each cell one word and the row becomes a column,
+   which is what the read-back and the holdings list both did. .scroll is
+   already around them and was doing nothing, because a 100%-wide table never
+   overflows. A floor makes it overflow, so the scroll it is wrapped in works. */
+table.data.wide { min-width: 32rem; }
+table.data.wide td:not(:first-child), table.data.wide th:not(:first-child) { white-space: nowrap; }
+/* Narrow enough that a figure is visible before any scrolling, which is
+   what makes the scroll discoverable at all. */
+table.data.wide td:first-child, table.data.wide th:first-child { min-width: 9rem; }
+
+/* -------------------------------------------------- what was read back
+   Not a table. Five columns inside a 390px phone have no width to give, and
+   both ways out are wrong here: wrapped cells become a column of unlabelled
+   figures, and a sideways scroll puts the figures off the edge — and the
+   figures are the point, because this list exists to be checked against the
+   reader's own statement. */
+.readlist { list-style: none; margin: 0; padding: 0; }
+.readline { padding: .8rem 0; border-top: 1px solid var(--line); }
+.readline:first-child { border-top: 0; }
+.rl-head { display: flex; align-items: baseline; gap: .8rem; }
+.rl-title { flex: 1 1 auto; font-weight: 600; }
+.rl-head .link { flex: none; min-height: 44px; }
+.rl-figs { display: flex; flex-wrap: wrap; gap: .25rem 1.2rem; margin-top: .2rem; }
+.rl-fig b { font-weight: 600; font-variant-numeric: tabular-nums; }
+/* The part of the goal that does not exist yet: hatched, never filled. */
+.swatch.hatched {
+  background: repeating-linear-gradient(45deg,
+    var(--muted) 0 2px, transparent 2px 6px);
+  border: 1px solid var(--muted);
+}
+
+/* -------------------------------------------- how much is really in here
+   A rolling-return count runs to thousands and every window overlaps its
+   neighbours, so the raw count reads as evidence it is not. The badge states
+   how many periods could stand side by side without touching. */
+.density {
+  margin: .8rem 0 0; padding: 16px 20px;
+  border: 1px solid var(--line-strong); border-radius: 10px;
+  background: var(--surface-2); color: var(--ink-2); font-size: .9rem;
+}
+.density-badge {
+  display: inline-block; margin-right: .4rem; padding: .15rem .55rem;
+  border: 1px solid var(--line-strong); border-radius: 999px;
+  background: var(--surface); color: var(--ink);
+  font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em;
+}
+
+/* The core figures, above every word of explanation. A reader who reads
+   nothing else on the screen should still leave with these. */
+.stats.topline { margin: 0 0 1.2rem; }
+.stats.topline .stat { border-color: var(--line-strong); }
+.stats.topline .v { font-size: 1.35rem; }
+
+/* Dense paragraphs read as one block on a phone and get skipped whole. The
+   claim goes in bold at the front of its own line; the qualification follows. */
+.points { margin: 0; padding-left: 1.1rem; color: var(--ink-2); font-size: .95rem; }
+.points li { margin-bottom: .55rem; }
+.points li:last-child { margin-bottom: 0; }
+
+/* ------------------------------------- one valuation per scheme
+   A portfolio XIRR can be had from a single total; a fund's own XIRR needs
+   that fund's own ending, and no total can be split back out across schemes.
+   So the ask is one row per fund, with both ways in: the NAV per unit, or
+   the value itself, depending on which the reader's app shows them. */
+.valrow { padding: .9rem 0; border-top: 1px solid var(--line); }
+.valrow:first-child { border-top: 0; padding-top: 0; }
+.val-name { font-weight: 600; margin-bottom: .5rem; }
+.val-name .qsub { display: block; font-weight: 400; margin-top: .1rem; }
+.val-fields { display: grid; gap: .6rem; grid-template-columns: 1fr; }
+@media (min-width: 26rem) { .val-fields { grid-template-columns: 1fr 1fr; } }
+.val-fields .field { margin: 0; }
+.val-fields .label {
+  display: block; font-size: .78rem; font-weight: 600; margin-bottom: .25rem; color: var(--ink-2);
+}
+
+/* ------------------------------------------------- how-to: read or watch
+   The help panels open to a choice rather than a wall of text: two buttons,
+   and only the chosen medium is drawn. The pressed one stays marked. */
+.howto-lede { margin: 0 0 .55rem; }
+.howto-pick { display: flex; gap: .6rem; flex-wrap: wrap; margin: 0 0 .7rem; }
+.howto-btn[aria-pressed="true"] {
+  border-color: var(--accent); color: var(--accent);
+  background: var(--accent-soft, rgba(5, 255, 196, .08));
+}
+.howto-video video {
+  width: 100%; max-height: 70vh; display: block;
+  border-radius: 10px; background: #000; border: 1px solid var(--line);
+}
+.howto-video .hint { margin-top: .45rem; }
+
+/* ---------------------------------------------- market-index results extras */
+/* The one-line restatement of what was asked. It used to stick to the top
+   of the screen, where it hid the app bar and, at some scroll positions,
+   appeared twice. It sits in flow now, once, directly above the tab row. */
+.resulthead {
+  position: static;
+  display: flex; align-items: center; gap: .7rem; flex-wrap: wrap;
+  margin: 0 0 .4rem; padding: .5rem .8rem;
+  background: var(--surface-2, #10161e); border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.resulthead .sb-name { font-weight: 700; min-width: 0; overflow-wrap: anywhere; }
+.resulthead .sb-fact { color: var(--ink-2); font-size: .88rem; }
+/* Save as PDF: at the right end of the tab row, and again at the foot. */
+.ixtabs .pdfbtn { flex: 0 0 auto; margin-left: auto; padding: .45rem .7rem; font-size: .82rem; }
+.pdfrow { display: flex; justify-content: flex-end; gap: .6rem; margin: 1rem 0 0; flex-wrap: wrap; }
+.pdfrow .pdfnote { flex: 1 1 100%; margin: 0; text-align: right; }
+button.pdfbtn[data-busy="yes"] { position: relative; padding-right: 2.2rem; }
+button.pdfbtn[data-busy="yes"]::after {
+  content: ""; position: absolute; right: .7rem; top: 50%; width: .9rem; height: .9rem;
+  margin-top: -.45rem; border-radius: 50%;
+  border: 2px solid var(--line-strong); border-top-color: var(--accent);
+  animation: spin .8s linear infinite;
+}
+
+svg.rollline { width: 100%; height: auto; display: block; }
+.rl-line   { fill: none; stroke: var(--accent); stroke-width: 1.6; }
+.rl-guide  { stroke: var(--ink-2); stroke-width: 1; stroke-dasharray: 4 4; opacity: .55; }
+.rl-zero   { stroke: var(--ink-2); stroke-width: 1; opacity: .8; }
+.rl-glabel { fill: var(--ink-2); font-size: 11px; }
+.rl-axis   { fill: var(--ink-2); font-size: 11px; }
+
+details.overlapinfo summary, details.teachnotes summary { color: var(--ink-2); }
+
+/* Every window, one per row, inside its own box that scrolls, with a thumb
+   wide enough to drag and a header that stays put. 525 rows in flow made
+   the page 125,000px long on a phone, whose scrollbar cannot be grabbed. */
+.winbox {
+  max-height: 65vh; overflow-y: auto; overflow-x: auto;
+  border: 1px solid var(--line); border-radius: 8px;
+  scrollbar-width: auto; scrollbar-color: var(--accent) var(--surface-2);
+}
+.winbox::-webkit-scrollbar { width: 14px; height: 14px; }
+.winbox::-webkit-scrollbar-track { background: var(--surface-2); border-radius: 8px; }
+.winbox::-webkit-scrollbar-thumb {
+  background: var(--accent); border-radius: 8px; border: 3px solid var(--surface-2);
+}
+.winbox table.data { margin: 0; }
+.winbox table.data thead th {
+  position: sticky; top: 0; z-index: 2; background: var(--surface);
+  box-shadow: 0 1px 0 var(--line);
+}
+.winbox table.data th, .winbox table.data td {
+  white-space: nowrap; padding: .38rem .5rem; line-height: 1.3; font-variant-numeric: tabular-nums;
+}
+.winbox table.data tr[data-year-first="yes"] td { border-top: 1px solid var(--line-strong); }
+.yearchips { display: flex; flex-wrap: wrap; gap: .35rem; margin: 0 0 .6rem; }
+.yearchips .chip { min-height: 36px; padding: .25rem .6rem; font-size: .82rem; }
+.winrow { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; margin: .6rem 0 0; }
+.totop {
+  position: fixed; right: 1rem; bottom: 1.2rem; z-index: 40;
+  min-height: 44px; padding: .5rem .9rem; border-radius: 999px;
+  background: var(--accent); color: var(--accent-ink); border: 0; font: inherit; font-weight: 700;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .35); cursor: pointer;
+}
+.totop[hidden] { display: none; }
+
+/* The scheme picker, folded to the chosen line once a fund is picked. */
+#r-scheme-wrap[data-folded="yes"] .field,
+#r-scheme-wrap[data-folded="yes"] .picker,
+#r-scheme-wrap[data-folded="yes"] > p.hint:not(.pickedline),
+#cmp-scheme-wrap[data-folded="yes"] .field,
+#cmp-scheme-wrap[data-folded="yes"] .picker,
+#cmp-scheme-wrap[data-folded="yes"] > p.hint:not(.pickedline) { display: none; }
+.pickedline { margin: .4rem 0 0; }
+.waitline {
+  margin: .8rem 0 0; padding: .6rem .9rem; border: 1px dashed var(--line-strong);
+  border-radius: 10px; color: var(--ink-2);
+}
+.formula sup { font-size: .75em; }
+
+/* Item 23: the five quartile figures as tiles with the label above each,
+   three and two on a phone. A five-column table clipped at "TOP QU…" and
+   then stacked the values with no labels at all. */
+.qgrid { display: grid; grid-template-columns: repeat(6, 1fr); gap: .5rem; margin: .4rem 0 .6rem; }
+.qtile {
+  grid-column: span 2; background: var(--surface-3); border: 1px solid var(--line);
+  border-radius: 10px; padding: .6rem .5rem; text-align: center;
+}
+.qtile .k { display: block; font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.qtile .v { display: block; font-size: 1.15rem; font-weight: 700; font-variant-numeric: tabular-nums; margin-top: .15rem; }
+.qtile.mid .v { color: var(--accent); }
+.qtile:nth-child(4) { grid-column: 2 / span 2; }
+.qtile:nth-child(5) { grid-column: 4 / span 2; }
+@media (min-width: 40rem) {
+  .qgrid { grid-template-columns: repeat(5, 1fr); }
+  .qtile, .qtile:nth-child(4), .qtile:nth-child(5) { grid-column: auto; }
+}
+
+/* Item 27: a table wider than the phone keeps its first column in view and
+   fades at its right edge, so the reader can see there is more. */
+.scroll.fade { position: relative; }
+.scroll.fade::after {
+  content: ""; position: absolute; top: 0; right: 0; bottom: 0; width: 1.6rem;
+  pointer-events: none;
+  background: linear-gradient(to right, rgba(0, 0, 0, 0), var(--surface));
+}
+table.data.stickyfirst th:first-child, table.data.stickyfirst td:first-child {
+  position: sticky; left: 0; z-index: 1; background: var(--surface);
+}
+.ratioline { margin: .5rem 0 0; }
+table.hmatrix td, table.hmatrix th { white-space: nowrap; }
+
+/* ---- Market-index path only (.ixpath). Nothing below is emitted by the
+   My Own Fund path, so nothing below can change it. ----
+   Two series on one chart need two colours that do not meet: the fund is a
+   bright blue, the index is amber. The fund is always the solid mark, the
+   index always dashed or lighter, so the pair still reads in greyscale. */
+.ixpath { --ix-fund: #00B4D8; --ix-bench: #EE9B00; }
+.ixpath svg .ixbar.fund  { fill: var(--ix-fund); }
+.ixpath svg .ixbar.bench { fill: var(--ix-bench); opacity: .85; }
+.ixpath svg .ix-lossground { fill: var(--critical); opacity: .09; }
+.ixpath svg .ix-zerorule { stroke: var(--critical); stroke-width: 1.2; stroke-dasharray: 3 3; opacity: .8; }
+.ixpath svg .ix-lossword { fill: var(--critical); font-weight: 600; }
+.ixpath .swatch.ix-lossswatch { background: var(--critical); opacity: .25; }
+.ixpath .rl-line { stroke: var(--ix-fund); stroke-width: 1.8; }
+.ixpath .rl-line.bench { stroke: var(--ix-bench); stroke-width: 1.4; stroke-dasharray: 5 4; opacity: .8; }
+
+.legend-dot {
+  display: inline-block; width: .7em; height: .7em; border-radius: 50%;
+  margin-right: .35em; vertical-align: -.02em; flex: none;
+}
+.legend-dot.fund  { background: var(--ix-fund, #00B4D8); }
+.legend-dot.bench { background: var(--ix-bench, #EE9B00); }
+
+/* fan chart: 10th to 90th percentile band, median line, one dot per horizon */
+svg.fanchart { width: 100%; height: auto; display: block; }
+.fan-band.fund { fill: var(--ix-fund); opacity: .18; stroke: none; }
+.fan-line.fund { fill: none; stroke: var(--ix-fund); stroke-width: 2; }
+.fan-line.bench { fill: none; stroke: var(--ix-bench); stroke-width: 1.5; stroke-dasharray: 5 4; opacity: .85; }
+.fan-edge.bench { fill: none; stroke: var(--ix-bench); stroke-width: 1; stroke-dasharray: 2 4; opacity: .55; }
+.fan-dot.fund { fill: var(--ix-fund); stroke: var(--surface); stroke-width: 1.5; }
+.fan-dot.fund.now { stroke: var(--ink); stroke-width: 2; }
+.fan-hit { fill: transparent; cursor: pointer; }
+.fan-hit:focus-visible { outline: none; stroke: var(--accent); stroke-width: 2; }
+.fan-readout { margin: .4rem 0 0; min-height: 1.4em; font-variant-numeric: tabular-nums; }
+
+/* tabbed results. Every panel is in the page; on a phone only the chosen one
+   shows, on a wide screen the row is a jump bar and all four stay open. */
+.ixtabs {
+  display: flex; gap: .4rem; flex-wrap: wrap; margin: 1rem 0 .4rem;
+  position: sticky; top: 0; z-index: 4; padding: .5rem 0;
+  background: var(--bg, #0B1220);
+}
+.ixtab {
+  flex: 1 1 auto; padding: .5rem .7rem; font-size: .84rem; font-weight: 600;
+  border: 1px solid var(--line-strong); border-radius: 999px;
+  background: var(--surface-2); color: var(--ink-2); cursor: pointer;
+}
+.ixtab.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.ixtab:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.ixpanel-h {
+  font-family: var(--serif); font-size: 1.25rem; margin: 1.6rem 0 .2rem;
+  padding-bottom: .3rem; border-bottom: 1px solid var(--line);
+}
+@media (max-width: 45rem) {
+  .ixpanel:not(.on) { display: none; }
+  .ixpanel-h { display: none; }
+}
+
+.notice.info { border-color: var(--series-3); }
+.notice.info .ic { color: var(--series-3); }
+.notice.info .hint { margin: .5rem 0 0; }
+
+@media print {
+  .topbar, .doors, .filebox, .pastebox, .btnrow, .printbtn, .pdfbtn, .pdfrow, .totop,
+  .yearchips, .wincsv, .ratepresets,
+  #up-doors, .backlink { display: none !important; }
+  body { background: #fff; color: #000; }
+  .card, .meaning { break-inside: avoid; border-color: #bbb; }
+}
+
+/* The horizon matrix must not stack on a phone: eight columns of
+   percentages stacked read as one anonymous list. It stays a real table and
+   scrolls sideways inside its .scroll wrapper, headings attached. Scoped to
+   .hmatrix alone — the market-index path's table — so nothing else changes. */
+@media (max-width: 30rem) {
+  table.data.hmatrix { display: table; font-size: .82rem; }
+  table.data.hmatrix thead { display: table-header-group; }
+  table.data.hmatrix tbody { display: table-row-group; }
+  table.data.hmatrix tr, table.data.hmatrix thead tr {
+    display: table-row; padding: 0; border-bottom: 0;
+  }
+  table.data.hmatrix td, table.data.hmatrix th {
+    display: table-cell; margin: 0; padding: .45rem .4rem;
+    border-bottom: 1px solid var(--line);
+    overflow-wrap: normal; word-break: normal; white-space: nowrap;
+  }
+  table.data.hmatrix th { font-size: .66rem; letter-spacing: .03em; }
+}
