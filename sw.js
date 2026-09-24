@@ -3,7 +3,7 @@
  * copy of the gate and the voice clips serve when there is no signal (a reader
  * on a train). The simulator itself needs nothing from the network once the
  * gate has loaded — everything is computed on the phone. */
-const CACHE = 'tdos-v4';
+const CACHE = 'tdos-v5';
 
 /* N5 — the recordings are precached on install. Without this, a reader who
  * opens the tool offline for their first full run reaches a clip that has
