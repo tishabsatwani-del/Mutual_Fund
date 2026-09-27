@@ -3,7 +3,7 @@
  * copy of the gate and the voice clips serve when there is no signal (a reader
  * on a train). The simulator itself needs nothing from the network once the
  * gate has loaded — everything is computed on the phone. */
-const CACHE = 'tdos-v6';
+const CACHE = 'tdos-v7';
 
 /* N5 — the recordings are precached on install. Without this, a reader who
  * opens the tool offline for their first full run reaches a clip that has
@@ -22,8 +22,11 @@ const CACHE = 'tdos-v6';
  * from the site rather than left served in the clear. voice/access.mp3 is not
  * precached because the gate fetches it on the reader's first touch, which is
  * necessarily online. */
-// the owner, 27 September 2026: her ringtone for the distributor's call, her notification tone and her news intro too
-const PRECACHE = ['voice/notes/crash.mp3', 'voice/notes/emergency.mp3', 'voice/ringtone.mp3', 'voice/notification.mp3', 'voice/breaking-news.mp3'];
+// the owner, 27 September 2026: the ringtone for the distributor's call, the notification tone and her news intro too.
+// Later that day the two iPhone sounds first listed here (Apple's, not licensed for a product that is sold) gave way to
+// two original ones (ringtone.wav, notification.wav), and the cache moved to tdos-v7 so a returning reader's phone
+// lets the old files go.
+const PRECACHE = ['voice/notes/crash.mp3', 'voice/notes/emergency.mp3', 'voice/ringtone.wav', 'voice/notification.wav', 'voice/breaking-news.mp3'];
 
 self.addEventListener('install', (e) => {
   self.skipWaiting();
