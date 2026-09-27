@@ -26,7 +26,8 @@ const CACHE = 'tdos-v7';
 // Later that day the two iPhone sounds first listed here (Apple's, not licensed for a product that is sold) gave way to
 // two original ones (ringtone.wav, notification.wav), and the cache moved to tdos-v7 so a returning reader's phone
 // lets the old files go.
-const PRECACHE = ['voice/notes/crash.mp3', 'voice/notes/emergency.mp3', 'voice/ringtone.wav', 'voice/notification.wav', 'voice/breaking-news.mp3'];
+// And the chat's message tone (message.wav), which sounds as each message lands.
+const PRECACHE = ['voice/notes/crash.mp3', 'voice/notes/emergency.mp3', 'voice/ringtone.wav', 'voice/notification.wav', 'voice/message.wav', 'voice/breaking-news.mp3'];
 
 self.addEventListener('install', (e) => {
   self.skipWaiting();
