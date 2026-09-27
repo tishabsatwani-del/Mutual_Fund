@@ -3,7 +3,7 @@
  * copy of the gate and the voice clips serve when there is no signal (a reader
  * on a train). The simulator itself needs nothing from the network once the
  * gate has loaded — everything is computed on the phone. */
-const CACHE = 'tdos-v5';
+const CACHE = 'tdos-v6';
 
 /* N5 — the recordings are precached on install. Without this, a reader who
  * opens the tool offline for their first full run reaches a clip that has
@@ -11,15 +11,18 @@ const CACHE = 'tdos-v5';
  * of the author's. Nothing is lost while no recordings exist; the moment they
  * ship, this is what makes them play.
  *
- * Only the nine voice notes are listed. Three older narration clips
+ * The owner, 27 September 2026: the nine voice notes that were planned here are replaced by two recorded calls,
+ * one for every storm (crash.mp3) and one for every emergency (emergency.mp3), and only these are listed; the
+ * cache moves to tdos-v6 so a returning reader gets them.
+ *
+ * Before that, only the nine voice notes were listed. Three older narration clips
  * (opening, crash, emergency) used to be precached here; they belonged to the
  * two-door opening and the advisor phone call, both of which have since been
  * replaced, and nothing in the page requests them any more. They were removed
  * from the site rather than left served in the clear. voice/access.mp3 is not
  * precached because the gate fetches it on the reader's first touch, which is
  * necessarily online. */
-const NOTE_KEYS = ['covid', 'gfc', 'corr2022', 'drawn', 'icu', 'business', 'pandemic', 'war', 'jobloss'];
-const PRECACHE = NOTE_KEYS.reduce((a, k) => a.concat(['voice/notes/' + k + '.m4a', 'voice/notes/' + k + '.ogg']), []);
+const PRECACHE = ['voice/notes/crash.mp3', 'voice/notes/emergency.mp3'];
 
 self.addEventListener('install', (e) => {
   self.skipWaiting();

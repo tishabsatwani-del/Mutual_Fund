@@ -1,14 +1,9 @@
-This folder is where the nine recorded voice notes go — one per storm and one
-per emergency — under exactly these names:
+This folder holds the distributor's two recorded calls (the owner, 27 September 2026):
 
-    the storm door      covid  gfc  corr2022  drawn
-    the emergency door  icu  business  pandemic  war  jobloss
+    crash.mp3       the storm door: played for every storm
+    emergency.mp3   the emergency door: played for every emergency
 
-The simulator asks for "<name>.m4a" first and "<name>.ogg" second.
+Their words are shown on screen as they play (the simulator's CALLS, in the sources). If a recording
+cannot be played, the device voice reads the same words on the same clock.
 
-Until a file exists here, the device voice reads the English captions on the
-same clock, which is the designed fallback. Dropping a recording in needs no
-code change and no rebuild.
-
-This marker file exists only so the folder itself is kept: git cannot store an
-empty directory.
+This marker file exists only so the folder itself is kept: git cannot store an empty directory.
