@@ -22,8 +22,8 @@ const CACHE = 'tdos-v6';
  * from the site rather than left served in the clear. voice/access.mp3 is not
  * precached because the gate fetches it on the reader's first touch, which is
  * necessarily online. */
-// the owner, 27 September 2026: her ringtone for the distributor's call and her notification tone too
-const PRECACHE = ['voice/notes/crash.mp3', 'voice/notes/emergency.mp3', 'voice/ringtone.mp3', 'voice/notification.mp3'];
+// the owner, 27 September 2026: her ringtone for the distributor's call, her notification tone and her news intro too
+const PRECACHE = ['voice/notes/crash.mp3', 'voice/notes/emergency.mp3', 'voice/ringtone.mp3', 'voice/notification.mp3', 'voice/breaking-news.mp3'];
 
 self.addEventListener('install', (e) => {
   self.skipWaiting();
