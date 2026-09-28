@@ -452,7 +452,7 @@ button.link {
    with no wrap and no truncation. The words-for-size rule removes the cause --
    a headline is now "₹1.26 crore", not fourteen digits -- and these two stop
    any figure that still would not fit from escaping its card. */
-.result .value, .result .sub, .stat b, .data td {
+.result .value, .result .sub, .stat b {
   overflow-wrap: anywhere; word-break: normal;
 }
 @media (max-width: 24rem) { .result .value { font-size: 2.2rem; } }
@@ -1316,3 +1316,96 @@ svg.fanchart { width: 100%; height: auto; display: block; }
   }
   table.data.hmatrix th { font-size: .66rem; letter-spacing: .03em; }
 }
+
+/* ------------------------------------------------------------ 3.0 additions
+   Classes the rewritten screens introduce. Everything below reuses the tokens
+   above; no new colour enters the product here. */
+.cardtext { margin: .55rem 0 0; color: var(--ink-2); }
+.cardtext + .cardtext { margin-top: .6rem; }
+.hint.tight { margin: .25rem 0 0; }
+.subhead {
+  font-size: .78rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--muted); margin: 1.1rem 0 .35rem;
+}
+ol.steps { margin: .5rem 0 0; padding-left: 1.3rem; color: var(--ink-2); }
+ol.steps li { margin: .3rem 0; padding-left: .15rem; }
+ul.plainlist { margin: .5rem 0 0; padding-left: 1.2rem; color: var(--ink-2); }
+ul.plainlist li { margin: .3rem 0; }
+pre.sample {
+  margin: .6rem 0; padding: .6rem .75rem; overflow-x: auto;
+  background: var(--surface-3); border: 1px solid var(--line); border-radius: 8px;
+  font-size: .8rem; line-height: 1.5; color: var(--ink-2); white-space: pre;
+}
+details.explain.inner { margin-top: .6rem; padding-top: .5rem; }
+details.explain.inner summary { font-size: .86rem; }
+.card.inset { background: var(--surface-2); border-style: dashed; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .86em; white-space: nowrap; }
+
+/* the mode chips on the portfolio screen sit on the page, not in a card */
+.chips.modepick { margin: .4rem 0 .3rem; }
+.chips.modepick .chip { flex: 1 1 12rem; text-align: center; }
+
+/* per-fund value rows: the NAV-file door under the two boxes */
+.val-door { margin-top: .5rem; }
+
+/* growth chart: the reader's own marks on the line */
+svg .mark.in  { fill: var(--good); stroke: var(--surface); stroke-width: 1.5; }
+svg .mark.out { fill: var(--critical); stroke: var(--surface); stroke-width: 1.5; }
+.legend-dot.markin  { background: var(--good); }
+.legend-dot.markout { background: var(--critical); }
+svg .rl-line.bench { stroke: var(--ix-bench, #EE9B00); stroke-width: 1.4; stroke-dasharray: 5 4; opacity: .85; }
+svg .rl-line.fund  { stroke: var(--ix-fund, #00B4D8); }
+
+/* tables: a total row, a row that marks where the reader stands */
+table.data tr.total td { font-weight: 700; border-top: 2px solid var(--line-strong); }
+table.data tr.now td { background: var(--accent-soft); font-weight: 600; }
+table.data.charmatrix th, table.data.charmatrix td, table.data.bins td { white-space: nowrap; }
+
+/* the Understand page: a term list that jumps, and one card per entry */
+.termlist { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .5rem; }
+.termlist a {
+  display: inline-block; padding: .35rem .7rem; border: 1px solid var(--line-strong);
+  border-radius: 999px; font-size: .84rem; font-weight: 600; color: var(--ink);
+  text-decoration: none; background: var(--surface-2);
+}
+.termlist a:hover, .termlist a:focus-visible { border-color: var(--accent); color: var(--accent); }
+.card.uentry { scroll-margin-top: 4.5rem; }
+.card.uentry h2 { font-family: var(--serif); font-size: 1.2rem; margin: 0 0 .4rem; }
+.card.uentry p { margin: .5rem 0 0; color: var(--ink-2); }
+.card.uentry p strong { color: var(--ink); }
+.card:target { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* a figure's name is a link to its explanation: quiet, but findable */
+a.term { color: inherit; text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: .18em; }
+a.term:hover, a.term:focus-visible { text-decoration-color: var(--accent); color: var(--accent); }
+.stat .k a.term { color: inherit; }
+
+/* Table cells: a figure or a date never breaks inside itself. Every table
+   sits in a .scroll wrapper, so a column that is genuinely too wide scrolls
+   sideways with its heading attached instead of wrapping "₹6,60,000" into
+   three lines. The first column is the label and wraps freely; a table whose
+   later columns carry prose says so with .prose. The gloss under a figure
+   wraps on its own line. */
+table.data td, table.data th { overflow-wrap: normal; }
+table.data td:not(:first-child), table.data th:not(:first-child) { white-space: nowrap; }
+table.data.prose td, table.data.prose th { white-space: normal; }
+table.data td .qsub { white-space: normal; }
+
+/* the growth line is drawn 640 units wide and shown at a phone's width, so
+   its axis text is set larger than the histogram's to stay legible there */
+figure.chart.growth svg .axis, figure.chart.growth svg .rl-axis { font-size: 14px; }
+/* Every chart is drawn 640 units wide and scaled to the screen. On a phone
+   that scale is about 0.55, so the text inside is set larger there and lands
+   at roughly the size of a caption. */
+@media (max-width: 45rem) {
+  figure.chart svg .axis, figure.chart svg .barlabel, figure.chart svg .rl-axis, figure.chart svg .rl-glabel,
+  figure.chart svg .ix-lossword { font-size: 17px; }
+  figure.chart svg .barlabel.gap { font-size: 18px; }
+}
+
+.nb { white-space: nowrap; }
+.stat .v.long { font-size: .98rem; line-height: 1.35; margin-top: .25rem; }
+.stats.topline .v.long { font-size: 1.1rem; }
+/* a prose table reads left to right; only its amount column is a figure */
+table.data.prose td, table.data.prose th { text-align: left; }
+table.data.prose td.num, table.data.prose th.num { text-align: right; white-space: nowrap; }

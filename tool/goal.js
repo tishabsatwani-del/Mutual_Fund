@@ -1,0 +1,181 @@
+/* Where You Stand — Plan my goal. */
+(function (root) {
+  'use strict';
+  var A = root.PRCApp, E = root.PRCEngine, D = root.PRCDoors, C = root.PRCCharts;
+  var $ = A.$, $$ = A.$$, esc = A.esc, money = A.money, pct = A.pct, notice = A.notice, fmtDate = A.fmtDate;
+  var stat = A.stat, term = A.term, fold = A.fold;
+
+  var G = { history: null, door: null, ran: false, last: null };
+  var FIELDS = [
+    { id: 'g-target', kind: 'rupees' }, { id: 'g-current', kind: 'rupees' }, { id: 'g-sip', kind: 'rupees' },
+    { id: 'g-years', kind: 'years' }, { id: 'g-rate', kind: 'rate' }, { id: 'g-step', kind: 'stepUp' }
+  ];
+  function outOfRange() {
+    var broken = [];
+    FIELDS.forEach(function (f) {
+      var el = $('#' + f.id), v = parseFloat(el.value), say = A.checkInput(f.kind, v), note = $('#' + f.id + '-bad');
+      if (note) { note.textContent = say || ''; note.hidden = !say; }
+      el.setAttribute('aria-invalid', say ? 'true' : 'false');
+      if (say) broken.push(say);
+    });
+    var infl = $('#g-infl'), iv = parseFloat(infl.value), ibad = $('#g-infl-bad');
+    var isay = infl.value.trim() === '' ? null : A.checkInput('inflation', iv);
+    if (ibad) { ibad.textContent = isay || ''; ibad.hidden = !isay; }
+    if (isay) broken.push(isay);
+    return broken;
+  }
+  var LEVERS = [
+    { id: 'g-scn-sip', key: 'monthlySip', label: 'Monthly investment', min: 0, step: 500, from: function (i) { return Math.round(i.monthlySip); },
+      max: function (i, plan) { var needed = i.monthlySip + ((plan && plan.extraMonthly) || 0); return Math.max(5000, Math.ceil(Math.max(i.monthlySip * 4, needed * 1.5) / 500) * 500); }, say: function (v) { return money(v) + ' a month'; } },
+    { id: 'g-scn-step', key: 'annualStepUpRate', label: 'Raised each year by', min: 0, step: 1, from: function (i) { return Math.round(i.annualStepUpRate * 100); }, max: function () { return 25; }, scale: 0.01, say: function (v) { return v + '% a year'; } },
+    { id: 'g-scn-years', key: 'years', label: 'Years left', min: 1, step: 1, from: function (i) { return Math.round(i.years); }, max: function (i) { return Math.min(50, Math.max(10, Math.round(i.years) + 15)); }, say: function (v) { return v + (v === 1 ? ' year' : ' years'); } },
+    { id: 'g-scn-target', key: 'target', label: 'Amount you are aiming for', min: 0, step: 50000, from: function (i) { return Math.round(i.target / 50000) * 50000; }, max: function (i) { return Math.max(500000, Math.round(i.target * 2 / 50000) * 50000); }, say: function (v) { return A.moneyWords(v); } }
+  ];
+  function wireScenario(input) {
+    function read() {
+      var v = { currentValue: input.currentValue, monthlySip: input.monthlySip, years: input.years, annualRate: input.annualRate, annualStepUpRate: input.annualStepUpRate, target: input.target };
+      LEVERS.forEach(function (L) {
+        var el = $('#' + L.id); if (!el) return;
+        var n = parseFloat(el.value);
+        v[L.key] = isFinite(n) ? n * (L.scale || 1) : v[L.key];
+        var out = $('#' + L.id + '-v'); if (out) out.textContent = L.say(isFinite(n) ? n : L.from(input));
+      });
+      return v;
+    }
+    function draw() {
+      var v = read(), p = E.projectGoal(v), slot = $('#g-scn-out');
+      if (!slot) return;
+      var moved = LEVERS.filter(function (L) { var el = $('#' + L.id); return el && parseFloat(el.value) !== L.from(input); }).length;
+      if (!moved) { slot.innerHTML = ''; return; }
+      if (!p.ok) { slot.innerHTML = notice('bad', esc(p.message)); return; }
+      var diff = p.projected - v.target;
+      slot.innerHTML = '<div class="result" style="margin:.9rem 0 0"><div class="label">On these four, you reach</div><div class="value small">' + A.moneyWords(p.projected) + '</div>' +
+        '<div class="sub">' + money(p.projected) + ' · against ' + money(v.target) + ' · ' + (diff >= 0 ? 'covered, ' + money(diff) + ' to spare' : 'short by ' + money(-diff)) + '</div></div>' +
+        '<p class="hint">Over ' + v.years.toFixed(0) + ' years you would pay in ' + money(p.totalContributed) + ' of your own money, on top of the ' + money(v.currentValue) + ' you already hold.</p>';
+    }
+    LEVERS.forEach(function (L) { var el = $('#' + L.id); if (el) el.addEventListener('input', draw); });
+    read();
+    var reset = $('#g-scn-reset');
+    if (reset) reset.addEventListener('click', function () { LEVERS.forEach(function (L) { var el = $('#' + L.id); if (el) el.value = L.from(input); }); draw(); });
+  }
+
+  function calcGoal() {
+    var out = $('#g-out');
+    var broken = outOfRange();
+    if (broken.length) { out.innerHTML = notice('bad', esc(broken[0]) + (broken.length > 1 ? ' And ' + (broken.length - 1) + ' other field' + (broken.length > 2 ? 's are' : ' is') + ' out of range.' : '')); return; }
+    var input = {
+      currentValue: parseFloat($('#g-current').value), monthlySip: parseFloat($('#g-sip').value), years: parseFloat($('#g-years').value),
+      annualRate: parseFloat($('#g-rate').value) / 100, annualStepUpRate: parseFloat($('#g-step').value) / 100, target: parseFloat($('#g-target').value)
+    };
+    var infl = $('#g-infl').value.trim() === '' ? null : parseFloat($('#g-infl').value) / 100;
+    var plan = E.projectGoal(input);
+    if (!plan.ok) { out.innerHTML = notice('bad', esc(plan.message)); return; }
+    G.ran = true; G.last = input;
+    var name = $('#g-name').value.trim() || 'this goal';
+    var main = '', market = '', numbers = '';
+    main += '<div class="result"><div class="label">' + term('goal', 'If nothing changes, you reach') + '</div><div class="value">' + A.moneyWords(plan.projected) + '</div><div class="sub">' + money(plan.projected) + ' · Goal: ' + money(plan.target) + '</div></div>';
+    main += plan.onTrack ? notice('ok', '<strong>On track.</strong> On the return you assumed, ' + esc(name) + ' is covered with ' + esc(A.moneyWords(plan.surplus)) + ' to spare.')
+      : notice('bad', '<strong>Short by ' + esc(money(plan.gap)) + '.</strong> On the return you assumed, ' + esc(name) + ' is not covered by what you are doing now.');
+    main += '<div class="stats topline">' + stat('You reach', A.moneyWords(plan.projected)) + stat('Your goal', A.moneyWords(plan.target)) +
+      stat(plan.onTrack ? 'To spare' : 'Short by', A.moneyWords(plan.onTrack ? plan.surplus : plan.gap)) + stat(plan.onTrack ? 'Needed each month' : 'More each month', plan.onTrack ? 'nothing more' : money(plan.extraMonthly)) + '</div>';
+    main += '<div class="card">' + C.goalBar(plan) + '</div>';
+
+    /* what it would take: the extra, the rate the goal needs, the four levers */
+    var req = E.requiredRate(input);
+    main += '<div class="card"><h2>What it would take</h2>';
+    if (!plan.onTrack) {
+      main += '<div class="result" style="margin:0 0 .6rem"><div class="label">More each month</div><div class="value small">' + money(plan.extraMonthly) + (input.annualStepUpRate > 0 ? ' now' : ', every month') + '</div>' +
+        '<div class="sub">' + (input.annualStepUpRate > 0 ? 'rising ' + pct(input.annualStepUpRate, 0) + ' a year with the rest of your instalment, ' : '') + 'on top of the ' + money(input.monthlySip) + ' a month you already invest</div></div>';
+    } else main += '<p class="cardtext">Nothing more is required on these assumptions. The levers below show what happens if you do more anyway.</p>';
+    if (req.ok) {
+      main += '<p class="cardtext"><strong>' + term('requiredRate', 'The return this goal needs') + ':</strong> ' +
+        (req.rate != null ? 'with what you have and what you add, ' + esc(name) + ' is reached at exactly <strong>' + pct(req.rate) + ' a year</strong>. You assumed ' + pct(input.annualRate) + '. ' +
+          (req.rate > input.annualRate ? 'The gap between the two is the return you are hoping the market will supply; the levers below are the parts you control.' : 'Anything above the required rate is margin.') +
+          (G.history ? historyBeat(req.rate, input.years) : ' Load a history below the form and this line also says how often stretches of your length delivered it.')
+          : esc(req.message)) + '</p>';
+    }
+    main += '<div class="scenario" id="g-scn"><p class="hint tight">Move any of these four. The figure moves with them; your entries above are untouched. The return is not a lever: it is the one thing nobody controls.</p>' +
+      LEVERS.map(function (L) { return '<div class="lever"><label for="' + L.id + '">' + L.label + '</label><input type="range" id="' + L.id + '" min="' + L.min + '" max="' + L.max(input, plan) + '" step="' + L.step + '" value="' + L.from(input) + '"><output id="' + L.id + '-v" for="' + L.id + '"></output></div>'; }).join('') +
+      '<div id="g-scn-out" aria-live="polite"></div><button class="secondary" type="button" id="g-scn-reset">Put them back</button></div></div>';
+    main += fold('What this figure is not', '<p>The ' + pct(input.annualRate) + ' is an assumption you typed in, not a rate anyone can promise. Real markets do not deliver the same return every year, and a run of poor years early on hurts more than the same years late. The projection is an illustration of arithmetic, not a forecast, and it leaves out tax and exit loads.</p>');
+    main += '<div class="meaning"><h3>What to look at next</h3><p>The <em>If the market differs</em> tab shows the same plan at four other returns' + (G.history ? ', and under the worst, middle and best stretches in ' + esc(G.history.name) : ', and under a history file’s own stretches once one is loaded') + '. The <em>All the numbers</em> tab separates your own money from growth' + (infl != null ? ' and puts the goal in today’s rupees' : '') + '.</p></div>';
+
+    /* the market's say: four rates, the file's own stretches, and waiting */
+    market += '<div class="card"><h2>It depends what the market does</h2><div class="scroll"><table class="data"><thead><tr><th>If returns average</th><th>You reach</th><th>Extra needed each month</th></tr></thead><tbody>';
+    E.requiredAcrossRates(input, [0.06, 0.08, 0.10, 0.12]).forEach(function (row) {
+      if (row.error) return;
+      market += '<tr' + (Math.abs(row.rate - input.annualRate) < 1e-9 ? ' class="now"' : '') + '><td>' + pct(row.rate, 0) + ' a year</td><td>' + money(row.projected) + '</td><td>' + (row.onTrack ? 'nothing more' : money(row.extraMonthly) + ' a month') + '</td></tr>';
+    });
+    market += '</tbody></table></div><p class="hint">' + (E.requiredAcrossRates(input, [input.annualRate])[0] && [0.06, 0.08, 0.10, 0.12].some(function (r) { return Math.abs(r - input.annualRate) < 1e-9; }) ? 'Your own assumption of ' + pct(input.annualRate, 0) + ' is highlighted. ' : 'Your own assumption is ' + pct(input.annualRate) + '. ') + 'Nobody can tell you which of these rows the future will resemble.</p>';
+    if (G.history) market += historyRows(input);
+    else market += '<p class="cardtext">Load a NAV or index history file under the form and this card also runs your plan through the worst, the middle and the best stretch of your length that the file holds.</p>';
+    market += '</div>';
+    var waits = E.costOfWaiting(input, [0, 5, 10]).filter(function (w) { return !w.error; });
+    if (waits.length > 1) {
+      market += '<div class="card"><h2>What waiting costs</h2><div class="scroll"><table class="data"><thead><tr><th>If you start</th><th>Years left</th><th>Needed each month</th><th>Total you pay in</th></tr></thead><tbody>';
+      waits.forEach(function (w) {
+        market += '<tr><td>' + (w.delay === 0 ? 'now' : 'in ' + w.delay + ' years') + '</td>' + (w.impossible ? '<td colspan="3">the goal date has already passed</td>' : '<td>' + w.yearsLeft + '</td><td>' + money(w.monthlyNeeded) + '</td><td>' + money(w.totalPaid) + '</td>') + '</tr>';
+      });
+      market += '</tbody></table></div>';
+      if (waits[0].monthlyNeeded > 0 && !waits[1].impossible) market += '<p class="cardtext">Same goal, same date, same assumed return. Waiting ' + waits[1].delay + ' years raises what you must put in each month from ' + money(waits[0].monthlyNeeded) + ' to <strong>' + money(waits[1].monthlyNeeded) + '</strong>, and the total you pay in from ' + money(waits[0].totalPaid) + ' to ' + money(waits[1].totalPaid) + '. Nothing about the market changed between those rows; only the number of years did.</p>';
+      market += '</div>';
+    }
+
+    /* own money and growth; today's rupees */
+    var ownMoney = input.currentValue + plan.totalContributed, growth = plan.projected - ownMoney;
+    numbers += '<div class="card"><h2>Your money, and growth on it</h2><div class="stats">' + stat('Already saved', money(input.currentValue)) + stat('Still to pay in', money(plan.totalContributed)) + stat('Growth on both', money(growth)) + stat('Growth’s share of the end', growth > 0 ? pct(growth / plan.projected, 0) : '—') + '</div>' +
+      '<p class="cardtext">Of the ' + money(plan.projected) + ' at the end, ' + money(ownMoney) + ' is money you hand over yourself and ' + money(growth) + ' is what it earns while you leave it alone. The longer the period, the more the second number does the work.</p></div>';
+    if (infl != null) {
+      var tr = E.todaysRupees(input.target, infl, input.years);
+      numbers += '<div class="card"><h2>' + term('todaysRupees', 'The goal in today’s rupees') + '</h2><div class="stats">' + stat('Your target', money(input.target)) + stat('Buys, in today’s money', money(tr.buysToday)) + stat('To keep today’s buying power, aim for', money(tr.targetForToday)) + '</div>' +
+        '<p class="cardtext">At ' + pct(infl, 1) + ' inflation for ' + input.years + ' years, prices multiply by ' + tr.factor.toFixed(2) + '. So ' + money(input.target) + ' then buys what ' + money(tr.buysToday) + ' buys today, and a goal worth ' + money(input.target) + ' in today’s money is ' + money(tr.targetForToday) + ' by then. Move the last lever on the <em>Your plan</em> tab to ' + A.moneyWords(tr.targetForToday) + ' to see what that takes.</p></div>';
+    } else {
+      numbers += notice('', '<strong>These are future rupees, not today’s.</strong> Type an inflation figure in the form above and this tab says what the goal buys in today’s money, and what target keeps today’s buying power.');
+    }
+    numbers += '<div class="card"><h2>The arithmetic</h2><div class="scroll"><table class="data prose"><tbody>' +
+      A.trow('Years', String(input.years)) + A.trow('Return assumed', pct(input.annualRate) + ' a year, compounded monthly at ' + pct(Math.pow(1 + input.annualRate, 1 / 12) - 1, 3) + ' a month') +
+      A.trow('Monthly amount', money(input.monthlySip) + (input.annualStepUpRate > 0 ? ', rising ' + pct(input.annualStepUpRate, 0) + ' each year' : ', level')) +
+      A.trow('Instalments', String(Math.round(input.years * 12))) + A.trow('Paid in over the years', money(plan.totalContributed)) +
+      A.trow('What you already have grows to', money(input.currentValue * Math.pow(1 + input.annualRate, input.years))) +
+      A.trow('End value', money(plan.projected)) + '</tbody></table></div>' +
+      '<p class="hint">Each month’s instalment is added at the start of the month and earns from then. The step-up applies once a year, on the anniversary of the first instalment.</p></div>';
+
+    var html = A.tabs('g-tabs', [
+      { key: 'plan', label: 'Your plan', html: main },
+      { key: 'market', label: 'If the market differs', html: market },
+      { key: 'numbers', label: 'All the numbers', html: numbers }
+    ]) + A.pdfFoot('goal', name);
+    out.innerHTML = html;
+    wireScenario(input);
+  }
+  function historyBeat(rate, years) {
+    var r = E.rollingReturns(G.history.series, Math.max(1, Math.round(years)), {});
+    if (!r.ok) return '';
+    var sh = E.shareAbove(r.values, rate);
+    return ' In ' + esc(G.history.name) + ', ' + pct(sh.share, 0) + ' of the ' + Math.max(1, Math.round(years)) + '-year stretches (' + sh.above.toLocaleString('en-IN') + ' of ' + sh.count.toLocaleString('en-IN') + ') delivered at least that. Past stretches, not odds.';
+  }
+  function historyRows(input) {
+    var g = E.goalUnderHistory(input, G.history.series);
+    if (!g.ok) return notice('warn', esc(G.history.name) + ': ' + esc(g.message));
+    function row(label, x, dates) {
+      return '<tr><td>' + label + (dates ? ' <span class="qsub">' + dates + '</span>' : '') + '</td><td>' + pct(x.rate, 1) + ' a year</td><td>' + money(x.plan.projected) + '</td><td>' + (x.plan.onTrack ? 'nothing more' : money(x.plan.extraMonthly) + ' a month') + '</td></tr>';
+    }
+    return '<h3 class="subhead">' + term('goalHistory', 'Under ' + esc(G.history.name) + '’s own stretches of ' + g.years + ' years') + '</h3>' +
+      '<div class="scroll"><table class="data"><thead><tr><th>Stretch</th><th>It returned</th><th>You reach</th><th>Extra needed</th></tr></thead><tbody>' +
+      row('Worst', g.worst, fmtDate(g.worst.from) + ' to ' + fmtDate(g.worst.to)) + row('Median of ' + g.windows.toLocaleString('en-IN') + ' stretches', g.median, '') + row('Best', g.best, fmtDate(g.best.from) + ' to ' + fmtDate(g.best.to)) +
+      '</tbody></table></div><p class="hint">Three stretches that already happened in this file, each ' + g.years + ' years long, applied to your plan. They are the range that history holds, not the range the future will hold' + (g.best.rate > 0.5 ? '; a rate above 50% is capped at 50% in the plan' : '') + '.</p>';
+  }
+
+  function init() {
+    $('#g-history-howto').innerHTML = D.guide('any');
+    G.door = D.mount($('#g-history-door'), {
+      prefix: 'gh', kind: 'any', label: 'A NAV or index history file', hint: 'CSV, Excel or text · a date column and a value column',
+      gate: function (rows) { var v = A.P.checkSchema(rows); return v.ok ? null : notice('bad', esc(v.message)); },
+      onLoaded: function (res) { G.history = res; if (G.ran) calcGoal(); }
+    });
+    FIELDS.forEach(function (f) { $('#' + f.id).addEventListener('input', outOfRange); });
+    $('#g-infl').addEventListener('input', outOfRange);
+    $('#g-calc').addEventListener('click', calcGoal);
+  }
+  root.PRCGoal = { init: init, calc: calcGoal, state: G };
+})(typeof globalThis !== 'undefined' ? globalThis : this);

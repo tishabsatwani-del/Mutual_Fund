@@ -130,6 +130,13 @@
     return toTimestamp(serial ? serialToParts(raw) : parseDateParts(raw, dayFirst));
   }
 
+  /* Does this cell read as a date in EITHER order? 01/13/2024 is a date; it
+     is just month-first. Which order the column uses is decided afterwards by
+     detectDayFirst, over the whole column. */
+  function readsAsDate(cell) {
+    return !isNaN(toTimestamp(parseDateParts(cell, true))) || !isNaN(toTimestamp(parseDateParts(cell, false)));
+  }
+
   function toTimestamp(p) {
     if (!p) return NaN;
     if (p.m < 1 || p.m > 12 || p.d < 1 || p.d > 31) return NaN;
@@ -157,7 +164,7 @@
        warnings, which is worse than saying nothing. */
     if (!ambiguousFormat) return { dayFirst: true, certain: true };
     if (firstOver12 && !secondOver12) return { dayFirst: true, certain: true };
-    if (secondOver12 && !firstOver12) return { dayFirst: false, certain: true };
+    if (secondOver12 && !firstOver12) return { dayFirst: false, certain: true, monthFirst: true };
     if (firstOver12 && secondOver12) return { dayFirst: true, certain: false, conflict: true };
     return { dayFirst: true, certain: false };  /* day-first default, flagged to the user */
   }
@@ -222,7 +229,7 @@
         var cell = probe[r] ? probe[r][c] : null;
         if (cell == null || String(cell).trim() === '') continue;
         filled++;
-        if (!isNaN(toTimestamp(parseDateParts(cell, true)))) { dates++; continue; }
+        if (readsAsDate(cell)) { dates++; continue; }
         if (serialOf(cell) !== null) serials++;
         var n = parseNumber(cell);
         if (isFinite(n)) { numbers++; if (n > 0) positive++; }
@@ -398,7 +405,7 @@
         if (cell == null || cell === '') continue;
         filled++;
         if (samples.length < 3) samples.push(String(cell).slice(0, 24));
-        if (!isNaN(toTimestamp(parseDateParts(cell, true)))) dates++;
+        if (readsAsDate(cell)) dates++;
         else if (isFinite(parseNumber(cell))) nums++;
       }
       out.push({
@@ -823,8 +830,8 @@
     var warnings = [];
     if (!dayFirstInfo.certain) {
       warnings.push(dayFirstInfo.conflict
-        ? 'This file mixes day-first and month-first dates. It has been read as day-first (05-08-2026 means 5 August). Check the first and last dates below.'
-        : 'Every date in this file could be read either way, so it has been read as day-first (05-08-2026 means 5 August). Check the first and last dates below.');
+        ? 'This file mixes day-first and month-first dates. It has been read as day-first, so 05-08 means the 5th of August. Check the first and last dates below.'
+        : 'Every date in this file could be read either way, so it has been read as day-first, so 05-08 means the 5th of August. Check the first and last dates below.');
     }
     var gap = largestGapDays(series);
     if (gap > 45) {
@@ -980,7 +987,7 @@
     checkSchema: checkSchema, TRADEBOOK_COPY: TRADEBOOK_COPY, NOT_NUMERIC_COPY: NOT_NUMERIC_COPY,
     NOT_TABULAR_COPY: NOT_TABULAR_COPY, findHeader: findHeader, columnProfile: columnProfile,
     parseNumber: parseNumber,
-    parseDateParts: parseDateParts,
+    parseDateParts: parseDateParts, readsAsDate: readsAsDate,
     toTimestamp: toTimestamp,
     rowsToSeries: rowsToSeries,
     columnSummary: columnSummary,

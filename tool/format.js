@@ -34,6 +34,8 @@
   /* A true minus (U+2212), not a hyphen. Applied after formatting so the digits
    * are grouped on the magnitude and the sign is set typographically. */
   function signed(text, negative, plus) {
+    /* a figure that rounds to zero carries no sign: never "−0.0%" */
+    if (!/[1-9]/.test(text)) return text;
     return (negative ? '−' : (plus ? '+' : '')) + text;
   }
 
