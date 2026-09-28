@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en-IN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Where You Stand</title>
+<meta name="description" content="Run the book's five questions on your own money. Your own return, the fund's own record, where your stretch sits inside it, and the same money in an index fund. Worked out on your phone.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23F1EFEA'/%3E%3Crect x='5' y='13' width='22' height='7' fill='%23FFE566'/%3E%3Cpath d='M5 20h22' stroke='%231E2433' stroke-width='1.5'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="theme.css">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#F1EFEA" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#12161E" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Where You Stand">
+<link rel="apple-touch-icon" href="icon/icon-180.png">
+</head>
+<body data-view="home">
+
+<header class="bar">
+  <a class="name" href="#home">Where You Stand</a>
+  <button class="back" id="back" type="button" hidden>All four</button>
+</header>
+
+<main class="page" id="main">
+
+  <!-- ============================================================== HOME -->
+  <!-- Fifty words for the whole screen, the author's budget for LANDING-PROMISE.
+       The header already carries the name, so home does not repeat it as a
+       heading; the promise line leads, and the four entries are cut to four
+       words each so the author's line fits inside the fifty. -->
+  <section data-view="home">
+    <h1 class="visually-hidden">Where You Stand</h1>
+    <div id="home-promise"></div>
+    <nav class="entries">
+      <a class="entry" href="#mine"><b>My return</b><span>Your money, your dates.</span></a>
+      <a class="entry" href="#record"><b>This fund’s record</b><span>Every window, worst first.</span></a>
+      <a class="entry" href="#stand"><b>My money in this fund</b><span>Your number, placed.</span></a>
+      <a class="entry" href="#plan"><b>My plan, tested</b><span>Against what happened.</span></a>
+    </nav>
+  </section>
+
+  <!-- ================================================ TOOL 2 · the record -->
+  <section data-view="record" hidden>
+    <h1>This fund’s record</h1>
+
+    <div class="section" id="r-fund">
+      <p class="label">The fund</p>
+      <button class="primary" id="r-file-open" type="button">Load your fund’s price history</button>
+      <input type="file" id="r-file" accept=".csv,.txt,.xlsx,.json" multiple hidden>
+      <p class="gloss" id="r-state" aria-live="polite"></p>
+      <p class="gloss">Bring your own file. Nothing is fetched and nothing is sent.</p>
+      <details class="section guide">
+        <summary class="linkish">Which file, and where to get it</summary>
+        <dl class="guide-list">
+          <dt>Which file</dt>
+          <dd>The daily NAV history of the scheme you own, from its first day to today. One scheme is
+            enough; a file with every scheme of the fund house is fine.</dd>
+          <dt>Where</dt>
+          <dd>Your fund house’s website — search it for NAV history — or AMFI in 90-day pieces dropped
+            here together.</dd>
+          <dt>Dates</dt>
+          <dd>Launch to today. If you are unsure, the earliest the site allows.</dd>
+          <dt>Format</dt>
+          <dd>Whatever it gives you. Screenshots and PDFs do not work.</dd>
+          <dt>Then</dt>
+          <dd>Tap Load, choose the files, and check the name and dates shown back to you.</dd>
+          <dt>An index to compare against</dt>
+          <dd>niftyindices.com → Reports → Historical Data → Total Returns Index, the index named on
+            your factsheet, the widest dates allowed, in pieces if it refuses a long range. Same
+            source, same steps, both times.</dd>
+        </dl>
+      </details>
+    </div>
+
+    <!-- the plan toggle appears only when a file or a search offers both -->
+    <div class="section" id="r-plan" hidden>
+      <p class="label">Plan</p>
+      <div class="chips" id="r-plan-chips" role="radiogroup" aria-label="Plan"></div>
+    </div>
+
+    <!-- no default, and nothing renders until one is chosen -->
+    <div class="section" id="r-window" hidden>
+      <p class="label">How long will you hold?</p>
+      <div class="chips" id="r-years" role="radiogroup" aria-label="Holding period"></div>
+      <p class="gloss" id="r-window-note"></p>
+    </div>
+
+    <div id="r-out" aria-live="polite"></div>
+  </section>
+
+  <!-- ================================================= TOOL 3 · my money -->
+  <section data-view="stand" hidden>
+    <h1>My money in this fund</h1>
+
+    <div class="section" id="step-fund">
+      <p class="label">The fund</p>
+      <button class="primary" id="use-file" type="button">Load your fund’s price history</button>
+      <input type="file" id="file" accept=".csv,.txt,.xlsx,.json" multiple hidden>
+      <p class="gloss" id="fund-state" aria-live="polite"></p>
+      <p class="gloss">Bring your own file. Nothing is fetched and nothing is sent.</p>
+      <details class="section guide">
+        <summary class="linkish">Which file, and where to get it</summary>
+        <dl class="guide-list">
+          <dt>Which file</dt>
+          <dd>The daily NAV history of the scheme you own, from its first day to today. One scheme is
+            enough; a file with every scheme of the fund house is fine.</dd>
+          <dt>Where</dt>
+          <dd>Your fund house’s website — search it for NAV history — or AMFI in 90-day pieces dropped
+            here together.</dd>
+          <dt>Dates</dt>
+          <dd>Launch to today. If you are unsure, the earliest the site allows.</dd>
+          <dt>Format</dt>
+          <dd>Whatever it gives you. Screenshots and PDFs do not work.</dd>
+          <dt>Then</dt>
+          <dd>Tap Load, choose the files, and check the name and dates shown back to you.</dd>
+          <dt>An index to compare against</dt>
+          <dd>niftyindices.com → Reports → Historical Data → Total Returns Index, the index named on
+            your factsheet, the widest dates allowed, in pieces if it refuses a long range. Same
+            source, same steps, both times.</dd>
+        </dl>
+      </details>
+      <p class="gloss" id="index-state"></p>
+      <button class="linkish" id="index-open" type="button">Load an index fund to compare against</button>
+      <input type="file" id="index-file" accept=".csv,.txt,.xlsx,.json" hidden>
+    </div>
+
+    <div class="section" id="step-ledger" hidden>
+      <h2>What you paid in</h2>
+      <div class="boxed scroller">
+        <table class="ledger">
+          <thead><tr><th>Date</th><th>In or out</th><th class="n">Amount</th><th></th></tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+      <div class="actions">
+        <button class="linkish" id="add" type="button">Add a line</button>
+        <button class="linkish" id="sip" type="button">Monthly instalments</button>
+        <button class="linkish" id="paste-open" type="button">From a spreadsheet</button>
+        <button class="linkish" id="example" type="button">Try an example</button>
+        <button class="linkish" id="clear" type="button">Clear</button>
+      </div>
+
+      <div class="boxed" id="paste-box" hidden>
+        <p class="label">The date, then the amount</p>
+        <p class="gloss">A minus or brackets on the money you took out.</p>
+        <textarea id="paste-text" rows="6" spellcheck="false"
+                  aria-label="Paste two columns: the date, and the amount"></textarea>
+        <div class="actions">
+          <button class="primary" id="paste-read" type="button">Read these lines</button>
+          <button class="linkish" id="ledger-file-open" type="button">Read a CSV instead</button>
+          <input type="file" id="ledger-file" accept=".csv,.txt,.tsv,.xls,.xlsx" hidden>
+        </div>
+        <p class="gloss">Or drop the file anywhere on this list.</p>
+      </div>
+      <p class="gloss" id="paste-note" aria-live="polite"></p>
+      <div class="boxed" id="paste-ask" hidden></div>
+
+      <div class="boxed" id="sip-box" hidden>
+        <label class="field" for="sip-from"><span class="label">First instalment</span>
+          <input type="date" id="sip-from"></label>
+        <label class="field" for="sip-amt"><span class="label">Amount each month</span>
+          <input type="number" id="sip-amt" inputmode="decimal" min="0" step="any"></label>
+        <label class="field" for="sip-n"><span class="label">How many</span>
+          <input type="number" id="sip-n" inputmode="numeric" min="1" max="600" step="1"></label>
+        <button class="primary" id="sip-add" type="button">Write these lines</button>
+      </div>
+
+      <h2 style="margin-top:1.5rem">What it is worth</h2>
+      <label class="field" for="worth"><span class="label">The whole holding</span>
+        <input type="number" id="worth" inputmode="decimal" min="0" step="any"
+               placeholder="Leave empty and the fund’s own NAV is used"></label>
+
+      <button class="primary" id="run" type="button" disabled>Show me where I stand</button>
+    </div>
+
+    <div class="section" id="step-reading" hidden aria-live="polite"><div id="reading"></div></div>
+  </section>
+
+  <!-- ================================================= TOOL 1 · my return -->
+  <section data-view="mine" hidden>
+    <h1>My return</h1>
+
+    <div class="section" id="m-ledger">
+      <div class="boxed scroller">
+        <table class="ledger">
+          <thead><tr><th>Date</th><th>In or out</th><th class="n">Amount</th>
+            <th class="fund" id="m-head-fund" hidden>Fund</th></tr></thead>
+          <tbody id="m-rows"></tbody>
+        </table>
+      </div>
+      <p class="gloss" id="m-total"></p>
+      <div class="actions">
+        <button class="linkish" id="m-add" type="button">Add a line</button>
+        <button class="linkish" id="m-sip" type="button">Monthly instalments</button>
+        <button class="linkish" id="m-paste-open" type="button">From a spreadsheet</button>
+      </div>
+      <div class="actions">
+        <button class="linkish" id="m-example" type="button">Try an example</button>
+        <button class="linkish" id="m-save" type="button">Save entries</button>
+        <button class="linkish" id="m-load" type="button">Load entries</button>
+        <button class="linkish" id="m-clear" type="button">Clear</button>
+      </div>
+      <p class="gloss" id="m-store-note" aria-live="polite"></p>
+
+      <!-- one editor, for a single payment or for a run of instalments -->
+      <div class="boxed" id="m-edit" hidden>
+        <p class="label" id="m-e-title">A new line</p>
+        <label class="field" for="m-e-kind"><span class="label">What kind of line</span>
+          <select id="m-e-kind">
+            <option value="one">One payment</option>
+            <option value="sip">Monthly instalments</option>
+          </select></label>
+        <label class="field" for="m-e-date"><span class="label" id="m-e-date-label">Date</span>
+          <input type="date" id="m-e-date"></label>
+        <label class="field" for="m-e-dir" id="m-e-dir-field"><span class="label">In or out</span>
+          <select id="m-e-dir">
+            <option value="in">Money in</option>
+            <option value="out">Money out</option>
+          </select></label>
+        <label class="field" for="m-e-amount"><span class="label" id="m-e-amount-label">Amount</span>
+          <input type="number" id="m-e-amount" inputmode="decimal" min="0" step="any"></label>
+        <label class="field" for="m-e-n" id="m-e-n-field" hidden><span class="label">How many</span>
+          <input type="number" id="m-e-n" inputmode="numeric" min="1" max="600" step="1"></label>
+        <label class="field" for="m-e-fund"><span class="label">Fund, if you keep more than one</span>
+          <input type="text" id="m-e-fund" autocomplete="off"></label>
+        <p class="gloss" id="m-e-note" aria-live="polite"></p>
+        <div class="actions">
+          <button class="primary" id="m-e-save" type="button">Keep this line</button>
+          <button class="linkish" id="m-e-cancel" type="button">Cancel</button>
+          <button class="linkish" id="m-e-drop" type="button" hidden>Remove this line</button>
+        </div>
+      </div>
+
+      <div class="boxed" id="m-paste" hidden>
+        <p class="label">Two columns: the date, then the amount</p>
+        <p class="gloss">A minus in front of an amount means money out.</p>
+        <textarea id="m-paste-text" rows="6" spellcheck="false"
+                  placeholder="2021-04-05&#9;5000&#10;2023-08-14&#9;-50000"></textarea>
+        <div class="actions">
+          <button class="primary" id="m-paste-read" type="button">Read these lines</button>
+          <button class="linkish" id="m-file-open" type="button">Read a CSV instead</button>
+          <input type="file" id="m-file" accept=".csv,.txt,.tsv,.xls,.xlsx" hidden>
+        </div>
+        <p class="gloss">Or drop the file anywhere on this list.</p>
+      </div>
+      <p class="gloss" id="m-paste-note" aria-live="polite"></p>
+      <div class="boxed" id="m-paste-ask" hidden></div>
+
+      <h2 style="margin-top:1.75rem">What it is worth</h2>
+      <div class="pair">
+        <label class="field" for="m-worth"><span class="label">The whole holding</span>
+          <input type="number" id="m-worth" inputmode="decimal" min="0" step="any"></label>
+        <label class="field" for="m-worth-on"><span class="label">On this date</span>
+          <input type="date" id="m-worth-on"></label>
+      </div>
+
+      <p class="gloss" id="m-needs" aria-live="polite"></p>
+      <button class="primary" id="m-run" type="button" disabled aria-describedby="m-needs"
+              style="margin-top:.5rem">Show me my return</button>
+    </div>
+
+    <div class="section" id="m-result" hidden aria-live="polite"><div id="m-out"></div></div>
+  </section>
+
+  <!-- ================================================ TOOL 4 · plan, tested -->
+  <section data-view="plan" hidden>
+    <h1>My plan, tested</h1>
+
+    <div class="section">
+      <p class="label">The fund to test it against</p>
+      <button class="primary" id="p-file-open" type="button">Load a fund’s price history</button>
+      <input type="file" id="p-file" accept=".csv,.txt,.xlsx,.json" hidden>
+      <p class="gloss" id="p-fund-state" aria-live="polite"></p>
+      <p class="gloss">Bring your own file. Nothing is fetched and nothing is sent.</p>
+      <details class="section guide">
+        <summary class="linkish">Which file, and where to get it</summary>
+        <dl class="guide-list">
+          <dt>Which file</dt>
+          <dd>The daily NAV history of the scheme you own, from its first day to today. One scheme is
+            enough; a file with every scheme of the fund house is fine.</dd>
+          <dt>Where</dt>
+          <dd>Your fund house’s website — search it for NAV history — or AMFI in 90-day pieces dropped
+            here together.</dd>
+          <dt>Dates</dt>
+          <dd>Launch to today. If you are unsure, the earliest the site allows.</dd>
+          <dt>Format</dt>
+          <dd>Whatever it gives you. Screenshots and PDFs do not work.</dd>
+          <dt>Then</dt>
+          <dd>Tap Load, choose the files, and check the name and dates shown back to you.</dd>
+          <dt>An index to compare against</dt>
+          <dd>niftyindices.com → Reports → Historical Data → Total Returns Index, the index named on
+            your factsheet, the widest dates allowed, in pieces if it refuses a long range. Same
+            source, same steps, both times.</dd>
+        </dl>
+      </details>
+      <label class="field" for="p-rate" id="p-suppose" style="max-width:14rem">
+        <span class="label">Suppose, % a year</span>
+        <input type="number" id="p-rate" inputmode="decimal" step="0.1" min="0" max="100"></label>
+    </div>
+
+    <div class="section">
+      <p class="label">The plan</p>
+      <label class="field" for="p-have"><span class="label">What you have already</span>
+        <input type="number" id="p-have" inputmode="decimal" min="0" step="any"></label>
+      <label class="field" for="p-monthly"><span class="label">What you can put in each month</span>
+        <input type="number" id="p-monthly" inputmode="decimal" min="0" step="any"></label>
+      <label class="field" for="p-step"><span class="label">Raise it each year by, % (optional)</span>
+        <input type="number" id="p-step" inputmode="decimal" min="0" max="50" step="0.5"></label>
+      <label class="field" for="p-years"><span class="label">For how many years</span>
+        <input type="number" id="p-years" inputmode="numeric" min="1" max="40" step="1"></label>
+      <label class="field" for="p-needed"><span class="label">How much you need at the end</span>
+        <input type="number" id="p-needed" inputmode="decimal" min="0" step="any"></label>
+    </div>
+
+    <div id="p-out" aria-live="polite"></div>
+  </section>
+
+  <!-- ========================================================= ABOUT -->
+  <section data-view="about" hidden>
+    <h1>About this page</h1>
+    <div id="about-main"></div>
+    <div class="section">
+      <p class="label">The four tools</p>
+      <ul class="plain" id="about-tools"></ul>
+    </div>
+    <div class="section">
+      <p class="label">Where the book says more</p>
+      <ul class="plain" id="about-refs"></ul>
+    </div>
+    <div class="section">
+      <p class="label">What this build reads</p>
+      <div class="scroller"><table class="ledger"><tbody id="about-build"></tbody></table></div>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <p id="foot-refrains"></p>
+    <p><span id="foot-about"><a href="#about">About this page</a> · </span>Everything is worked out on this device.</p>
+  </footer>
+</main>
+
+<script src="deck.js"></script>
+<script src="../../sim/format.js"></script>
+<script src="../../sim/workbook.js"></script>
+<script src="../../sim/engines.js"></script>
+<script src="../../sim/schemes.js"></script>
+<script src="../../sim/position.js"></script>
+<script src="../../sim/states.js"></script>
+<script src="../parse.js"></script>
+<script src="../../sim/upload.js"></script>
+<script src="shared.js"></script>
+<script src="lifeline.js"></script>
+<script src="spread.js"></script>
+<script src="record.js"></script>
+<script src="stand.js"></script>
+<script src="mine.js"></script>
+<script src="plan.js"></script>
+<script src="reading.js"></script>
+<script src="boot.js"></script>
+</body>
+</html>

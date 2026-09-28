@@ -1,0 +1,30 @@
+# Never publish readable simulator sources. They belong in the private
+# sources repository only. This list exists because an earlier repository
+# published them by accident.
+#
+# Patterns are anchored with a leading slash so they match ONLY the repo
+# root. The open XIRR tool legitimately ships tool/app.js, tool/styles.css
+# and sim/tests/*.test.js, and must never be caught by these.
+/master.html
+/master.*.html
+/engine.js
+/assemble.js
+/app.js
+/styles.css
+/BUILD_BRIEF.md
+/body.html
+/css_add.css
+/ui_*.js
+*.built.html
+*.v2pre.html
+/build-sources/
+/v2/
+/tools/
+/tests/
+
+# Ordinary noise
+*.pyc
+__pycache__/
+node_modules/
+package-lock.json
+.DS_Store

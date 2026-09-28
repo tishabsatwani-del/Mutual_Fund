@@ -1,0 +1,5 @@
+{
+  "_comment": "Bundled benchmark history. Empty on purpose in version 1.0 -- see data/README.md. Nothing here is generated, estimated or back-filled: every point must come from an official index file, or the tool would report confident statistics about a market that never existed.",
+  "asOf": null,
+  "benchmarks": []
+}

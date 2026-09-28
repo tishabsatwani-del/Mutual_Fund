@@ -1,0 +1,9 @@
+This folder holds the distributor's two recorded calls (the owner, 27 September 2026):
+
+    crash.mp3       the storm door: played for every storm
+    emergency.mp3   the emergency door: played for every emergency
+
+Their words are shown on screen as they play (the simulator's CALLS, in the sources). If a recording
+cannot be played, the device voice reads the same words on the same clock.
+
+This marker file exists only so the folder itself is kept: git cannot store an empty directory.
