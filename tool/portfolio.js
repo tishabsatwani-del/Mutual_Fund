@@ -79,23 +79,19 @@
     $('#pf-howto').innerHTML = D.guide('statement');
     var host = $('#pf-statement-door');
     host.innerHTML =
-      '<div class="filebox" id="pf-drop" tabindex="0" role="button" aria-label="Choose your statement file"><label class="pickbtn" id="pf-pick" for="pf-file" tabindex="0" role="button">Choose a file</label><p>or drop it here · CSV or Excel</p></div>' +
-      '<input type="file" id="pf-file" accept="' + A.FILE_ACCEPT + '">' +
+      '<div class="filebox" id="pf-drop"><span class="filewrap"><input type="file" class="filepick" id="pf-file" accept="' + A.FILE_ACCEPT + '" aria-label="Choose your statement file" title="Choose a file"></span><p>or drop it here · CSV or Excel</p></div>' +
       '<button class="secondary pastebtn" type="button" id="pf-paste-open">Paste the rows instead</button>' +
       '<div class="pastebox" id="pf-paste-box" hidden><label class="fieldlabel" for="pf-paste-text">Copy the rows out of your statement and paste them here</label>' +
       '<textarea id="pf-paste-text" rows="6" spellcheck="false"></textarea><div class="btnrow"><button class="primary" type="button" id="pf-paste-read">Read these</button></div></div>';
-    var pick = $('#pf-pick'), input = $('#pf-file'), drop = $('#pf-drop');
-    function busy() { setTimeout(function () { A.pickBusy($('#pf-pick')); }, 0); }
-    function openPicker() { input.click(); busy(); }
-    drop.addEventListener('click', function (e) { if (e.target.closest('label')) busy(); else if (e.target === drop || e.target.tagName === 'P') openPicker(); });
-    drop.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPicker(); } });
+    var input = $('#pf-file'), drop = $('#pf-drop');
+    drop.addEventListener('click', function (e) { if (e.target === drop || e.target.tagName === 'P') input.click(); });
     var depth = 0;
     function allow(e) { e.preventDefault(); if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'; }
     drop.addEventListener('dragenter', function (e) { allow(e); depth++; drop.classList.add('over'); });
     drop.addEventListener('dragover', allow);
     drop.addEventListener('dragleave', function () { if (--depth <= 0) { depth = 0; drop.classList.remove('over'); } });
     drop.addEventListener('drop', function (e) { e.preventDefault(); depth = 0; drop.classList.remove('over'); var files = Array.prototype.slice.call((e.dataTransfer && e.dataTransfer.files) || []); if (files.length) takeFile(files[0]); });
-    input.addEventListener('change', function (e) { A.pickDone(); var files = Array.prototype.slice.call(e.target.files || []); input.value = ''; if (files.length) takeFile(files[0]); });
+    input.addEventListener('change', function (e) { var files = Array.prototype.slice.call(e.target.files || []); try { input.value = ''; } catch (err) { /* harmless */ } if (files.length) takeFile(files[0]); });
     $('#pf-paste-open').addEventListener('click', function () { var box = $('#pf-paste-box'); box.hidden = !box.hidden; if (!box.hidden) $('#pf-paste-text').focus(); });
     $('#pf-paste-read').addEventListener('click', function () {
       var text = $('#pf-paste-text').value;

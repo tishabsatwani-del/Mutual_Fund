@@ -243,6 +243,7 @@
     }
   }
 
+  var lastUrl = null;
   function download(blob, filename) {
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
@@ -250,7 +251,12 @@
     document.body.appendChild(a);
     a.click();
     a.remove();
-    setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+    /* the address stays alive for a while: a browser that swallowed the
+       download attempt can still open the file from the link shown afterwards */
+    if (lastUrl) { try { URL.revokeObjectURL(lastUrl); } catch (e) { /* nothing */ } }
+    lastUrl = url;
+    setTimeout(function () { if (lastUrl === url) { lastUrl = null; try { URL.revokeObjectURL(url); } catch (e) { /* nothing */ } } }, 10 * 60 * 1000);
+    return url;
   }
 
   function save(opts) {
@@ -300,8 +306,8 @@
         });
       });
     }).then(function (blob) {
-      download(blob, name);
-      return name;
+      var url = download(blob, name);
+      return { name: name, url: url, size: blob.size };
     }).catch(function (err) {
       if (root.console && console.warn) console.warn('Save as PDF failed:', err);
       throw new Error(BLOCKED);

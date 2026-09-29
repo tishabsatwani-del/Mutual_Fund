@@ -274,6 +274,20 @@
     return end;
   }
 
+  /* A page opened inside another app's own browser view, rather than the
+     phone's browser, often cannot open a file picker or save a download: the
+     host app has to provide both and many do not. Best-effort recognition from
+     the user agent, used only to say so where those two buttons live. */
+  function inAppBrowser() {
+    var ua = (root.navigator && navigator.userAgent) || '';
+    if (/; wv\)|\bwv\b.*Chrome\//.test(ua) && /Android/.test(ua)) return true;
+    if (/Android/.test(ua) && /Version\/\d+\.\d+/.test(ua) && /Chrome\//.test(ua) && /Mobile/.test(ua)) return true;
+    if (/(FBAN|FBAV|Instagram|Line\/|MicroMessenger|Snapchat|LinkedInApp|GSA\/|Twitter|TikTok|musical_ly)/i.test(ua)) return true;
+    if (/(iPhone|iPad|iPod)/.test(ua) && !/Safari\//.test(ua) && !/(CriOS|FxiOS|EdgiOS|OPiOS|DuckDuckGo|Brave)/.test(ua)) return true;
+    return false;
+  }
+  var IN_APP_NOTE = '<strong>This page seems to be open inside another app’s browser, not your phone’s browser.</strong> There, Choose a file and Save as PDF may do nothing. Open this address in your browser (Safari, Chrome or the browser you use) and both work.';
+
   root.PRCApp = {
     E: E, P: P, F: F, VERSION: VERSION, HORIZONS: HORIZONS,
     money: money, moneyLong: moneyLong, moneyWords: moneyWords, short: short, signedMoney: signedMoney, count: count,
@@ -283,6 +297,7 @@
     $: $, $$: $$, el: el, esc: esc, notice: notice, term: term, stat: stat, trow: trow, fold: fold, tabs: tabs, pdfFoot: pdfFoot,
     csvCell: csvCell, fileSlug: fileSlug, downloadText: downloadText,
     show: show, initRouter: initRouter,
-    readFile: readFile, readStatement: readStatement, pickBusy: pickBusy, pickDone: pickDone, FILE_ACCEPT: FILE_ACCEPT
+    readFile: readFile, readStatement: readStatement, pickBusy: pickBusy, pickDone: pickDone, FILE_ACCEPT: FILE_ACCEPT,
+    inAppBrowser: inAppBrowser, IN_APP_NOTE: IN_APP_NOTE
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

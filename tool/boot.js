@@ -112,7 +112,13 @@
         shortName: A.fileSlug(btn.dataset.name || PDF_TITLE[which]), inputs: null,
         appendix: which === 'rolling' && root.PRCRolling ? root.PRCRolling.windowAppendix() : null,
         footerLine: 'Already happened, not a forecast. Educational tool, not investment advice. Figures are before tax and exit load.'
-      }).then(function () { if (note) note.textContent = ''; }, function (err) {
+      }).then(function (got) {
+        if (!note) return;
+        var name = got && got.name ? got.name : 'the PDF';
+        note.innerHTML = 'Saved as <strong>' + esc(name) + '</strong>' + (got && got.size ? ' (' + Math.max(1, Math.round(got.size / 1024)) + ' KB)' : '') +
+          '. If nothing appeared, <a href="' + (got && got.url ? got.url : '#') + '" download="' + esc(name) + '" target="_blank" rel="noopener">open the PDF here</a>' +
+          (A.inAppBrowser() ? ', or open this page in your phone’s browser' : '') + '.';
+      }, function (err) {
         if (note) note.textContent = (err && err.message) || 'Your browser blocked the download. Use Share → Print → Save as PDF.';
       }).then(function () { delete btn.dataset.busy; btn.removeAttribute('aria-busy'); });
     });
@@ -134,6 +140,13 @@
     shared();
     if (root.PRCDates) root.PRCDates.decorate(document);
     var ver = $('#ver'); if (ver) ver.textContent = A.VERSION;
+    if (A.inAppBrowser()) {
+      ['#pf-door', '#step-source', '#g-history-card'].forEach(function (sel) {
+        var card = $(sel); if (!card) return;
+        var n = document.createElement('div'); n.innerHTML = A.notice('warn', A.IN_APP_NOTE); n.firstChild.classList.add('inapp');
+        card.insertBefore(n.firstChild, card.firstChild.nextSibling);
+      });
+    }
     if (root.PRCUnderstand) root.PRCUnderstand.init();
     if (root.PRCPortfolio) root.PRCPortfolio.init();
     if (root.PRCGoal) root.PRCGoal.init();

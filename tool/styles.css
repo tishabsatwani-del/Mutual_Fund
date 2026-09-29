@@ -819,6 +819,34 @@ input[type="file"] {
   position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0;
   opacity: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; pointer-events: none;
 }
+/* The visible file control: the browser's own input, dressed as the tool's
+   secondary button. Its "no file chosen" text is set to nothing; the button
+   part is styled through the file-selector pseudo-element, in both spellings
+   so older WebKit is covered. Where a browser knows neither, its own button
+   shows, unstyled and working. */
+.filewrap { display: inline-block; max-width: 100%; vertical-align: middle; }
+input[type="file"].filepick {
+  position: static; width: auto; height: auto; margin: 0; padding: 0; border: 0;
+  opacity: 1; overflow: visible; clip: auto; pointer-events: auto; white-space: normal;
+  display: inline-block; max-width: 100%; font-size: 0; color: transparent; line-height: 1;
+  background: none; cursor: pointer;
+}
+input[type="file"].filepick::-webkit-file-upload-button {
+  font: inherit; font-size: .92rem; font-weight: 400; line-height: 1.2; min-height: 44px; padding: .5rem .9rem; margin: 0;
+  background: var(--surface); color: var(--ink); border: 1px solid var(--line-strong); border-radius: 9px;
+  cursor: pointer; -webkit-appearance: none; appearance: none;
+}
+input[type="file"].filepick::file-selector-button {
+  font: inherit; font-size: .92rem; font-weight: 400; line-height: 1.2; min-height: 44px; padding: .5rem .9rem; margin: 0;
+  background: var(--surface); color: var(--ink); border: 1px solid var(--line-strong); border-radius: 9px;
+  cursor: pointer; -webkit-appearance: none; appearance: none;
+}
+input[type="file"].filepick:hover::-webkit-file-upload-button { border-color: var(--accent); }
+input[type="file"].filepick:hover::file-selector-button { border-color: var(--accent); }
+input[type="file"].filepick:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; border-radius: 9px; }
+label.fileline { display: inline-flex; align-items: center; gap: .5rem; flex-wrap: wrap; color: var(--ink-2); font-size: .92rem; }
+.filebox.loaded > .filewrap, .filebox.refused > .filewrap, .filebox.working > .filewrap { flex: none; margin: 0; }
+.notice.inapp { margin: .6rem 0 .9rem; }
 label.pickbtn {
   display: inline-flex; align-items: center; justify-content: center;
   min-height: 44px; padding: .5rem .9rem; box-sizing: border-box;

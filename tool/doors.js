@@ -88,9 +88,8 @@
     var state = { files: [], pieces: [], series: null, name: '', report: null, rows: null, schemes: null, picked: null, kindGuess: null };
 
     host.innerHTML =
-      (o.label ? '<label class="fieldlabel" for="' + prefix + '-pick">' + esc(o.label) + '</label>' : '') +
-      '<div class="filebox" id="' + prefix + '-drop" tabindex="0" role="button" aria-label="' + esc(o.aria || o.label || 'Choose a file') + '">' + idleHtml() + '</div>' +
-      '<input type="file" id="' + prefix + '-file"' + (o.multiple === false ? '' : ' multiple') + ' accept="' + A.FILE_ACCEPT + '">' +
+      (o.label ? '<label class="fieldlabel" for="' + prefix + '-file">' + esc(o.label) + '</label>' : '') +
+      '<div class="filebox" id="' + prefix + '-drop">' + idleHtml() + '</div>' +
       '<div id="' + prefix + '-status" aria-live="polite"></div>' +
       '<button class="secondary pastebtn" type="button" id="' + prefix + '-paste-open">Paste the two columns instead</button>' +
       '<div class="pastebox" id="' + prefix + '-paste-box" hidden>' +
@@ -106,8 +105,15 @@
         '<p class="hint">Official downloads hold every scheme of a fund house in one file. Pick the exact name on your statement; check the plan and the option in it, since each is a separate row.</p>' +
       '</div>';
 
+    /* The control is the browser's own file input, visible and styled: no
+       script click and no label stands between the tap and the picker, so
+       the one thing every browser can do on its own is the thing that happens. */
+    function pickHtml(word) {
+      return '<span class="filewrap"><input type="file" class="filepick" id="' + prefix + '-file"' + (o.multiple === false ? '' : ' multiple') +
+        ' accept="' + A.FILE_ACCEPT + '" aria-label="' + esc(word) + '" title="' + esc(word) + '"></span>';
+    }
     function idleHtml() {
-      return '<label class="pickbtn" id="' + prefix + '-pick" for="' + prefix + '-file" tabindex="0" role="button">Choose a file</label>' +
+      return pickHtml('Choose a file') +
         '<p>' + esc(o.hint || 'CSV, Excel or text · a date column and a value column is all it needs') + '</p>';
     }
     function box() { return $('#' + prefix + '-drop'); }
@@ -117,7 +123,7 @@
       b.className = 'filebox ' + cls;
       b.innerHTML = '<div class="fileok"><span class="fileok-ic" aria-hidden="true">' + icon + '</span>' +
         '<span class="fileok-t"><strong class="fileok-name">' + esc(name) + '</strong><span class="fileok-sub">' + sub + '</span></span></div>' +
-        (action ? '<label class="pickbtn" id="' + prefix + '-pick" for="' + prefix + '-file" tabindex="0" role="button">' + action + '</label>' : '');
+        (action ? pickHtml(action) : '');
     }
     function reading(name) { setState('working', '<span class="spin"></span>', name, 'Reading the file…', ''); }
     function added(name, sub) { setState('loaded', '✓', name, '<strong class="ok-word">File added</strong>' + (sub ? ' — ' + sub : ''), o.multiple === false ? 'Choose a different file' : 'Add another file, or change it'); }
@@ -261,17 +267,20 @@
     }
 
     /* wiring */
-    var input = $('#' + prefix + '-file'), drop = box();
-    function busy() { setTimeout(function () { A.pickBusy($('#' + prefix + '-pick')); }, 0); }
-    function open() { input.click(); busy(); }
-    /* the label opens the picker natively (the one way every phone browser
-       honours); a tap elsewhere in the box asks the input directly */
-    drop.addEventListener('click', function (e) { if (e.target.closest('label')) busy(); else if (e.target === drop || e.target.closest('.fileok') || e.target.tagName === 'P') open(); });
-    drop.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
+    var drop = box();
+    function input() { return $('#' + prefix + '-file'); }
+    /* the input is re-drawn with the box; a tap on the box's own words asks it */
+    drop.addEventListener('click', function (e) { var inp = input(); if (inp && (e.target === drop || e.target.tagName === 'P')) inp.click(); });
     ['dragenter', 'dragover'].forEach(function (t) { drop.addEventListener(t, function (e) { e.preventDefault(); drop.classList.add('over'); }); });
     ['dragleave', 'drop'].forEach(function (t) { drop.addEventListener(t, function (e) { e.preventDefault(); drop.classList.remove('over'); }); });
     drop.addEventListener('drop', function (e) { if (e.dataTransfer.files && e.dataTransfer.files.length) takeFiles(e.dataTransfer.files); });
-    input.addEventListener('change', function () { A.pickDone(); var chosen = Array.prototype.slice.call(input.files); input.value = ''; if (chosen.length) takeFiles(chosen); });
+    drop.addEventListener('change', function (e) {
+      var inp = e.target;
+      if (!inp || inp.type !== 'file') return;
+      var chosen = Array.prototype.slice.call(inp.files || []);
+      try { inp.value = ''; } catch (err) { /* some browsers refuse; harmless */ }
+      if (chosen.length) takeFiles(chosen);
+    });
     $('#' + prefix + '-paste-open').addEventListener('click', function () {
       var pb = $('#' + prefix + '-paste-box'); pb.hidden = !pb.hidden;
       $('#' + prefix + '-paste-open').textContent = pb.hidden ? 'Paste the two columns instead' : 'Use a file instead';
