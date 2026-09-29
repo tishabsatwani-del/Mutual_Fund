@@ -79,14 +79,15 @@
     $('#pf-howto').innerHTML = D.guide('statement');
     var host = $('#pf-statement-door');
     host.innerHTML =
-      '<div class="filebox" id="pf-drop" tabindex="0" role="button" aria-label="Choose your statement file"><button class="secondary" type="button" id="pf-pick">Choose a file</button><p>or drop it here · CSV or Excel</p></div>' +
+      '<div class="filebox" id="pf-drop" tabindex="0" role="button" aria-label="Choose your statement file"><label class="pickbtn" id="pf-pick" for="pf-file" tabindex="0" role="button">Choose a file</label><p>or drop it here · CSV or Excel</p></div>' +
       '<input type="file" id="pf-file" accept="' + A.FILE_ACCEPT + '">' +
       '<button class="secondary pastebtn" type="button" id="pf-paste-open">Paste the rows instead</button>' +
       '<div class="pastebox" id="pf-paste-box" hidden><label class="fieldlabel" for="pf-paste-text">Copy the rows out of your statement and paste them here</label>' +
       '<textarea id="pf-paste-text" rows="6" spellcheck="false"></textarea><div class="btnrow"><button class="primary" type="button" id="pf-paste-read">Read these</button></div></div>';
     var pick = $('#pf-pick'), input = $('#pf-file'), drop = $('#pf-drop');
-    function openPicker() { input.click(); setTimeout(function () { A.pickBusy($('#pf-pick')); }, 0); }
-    drop.addEventListener('click', function (e) { if (e.target === drop || e.target.closest('button') || e.target.tagName === 'P') openPicker(); });
+    function busy() { setTimeout(function () { A.pickBusy($('#pf-pick')); }, 0); }
+    function openPicker() { input.click(); busy(); }
+    drop.addEventListener('click', function (e) { if (e.target.closest('label')) busy(); else if (e.target === drop || e.target.tagName === 'P') openPicker(); });
     drop.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPicker(); } });
     var depth = 0;
     function allow(e) { e.preventDefault(); if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'; }
@@ -767,7 +768,6 @@
     $('#pf-demo').addEventListener('click', fillExample);
     $('#pf-clear').addEventListener('click', function () { blankRows(); $('#pf-out').innerHTML = ''; PF.ran = false; });
     $('#pf-export').addEventListener('click', exportRows);
-    $('#pf-import').addEventListener('click', function () { $('#pf-import-file').click(); });
     $('#pf-import-file').addEventListener('change', function (e) { var f = e.target.files && e.target.files[0]; e.target.value = ''; if (f) importRows(f); });
     $('#pf-calc').addEventListener('click', calcPortfolio);
     $('#pf-reset').addEventListener('click', resetPortfolio);

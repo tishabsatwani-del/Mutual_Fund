@@ -812,7 +812,23 @@ svg .zero { stroke: var(--line-strong); stroke-width: 2; }
 }
 .filebox.over { border-color: var(--accent); background: var(--accent-soft); }
 .filebox p { margin: .5rem 0 0; font-size: .9375rem; color: var(--ink-3); }
-input[type="file"] { display: none; }
+/* The file input stays in the page, out of sight, so the label that names it
+   can open the picker natively on every phone browser. display:none would
+   stop that in some of them. */
+input[type="file"] {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0;
+  opacity: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; pointer-events: none;
+}
+label.pickbtn {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 44px; padding: .5rem .9rem; box-sizing: border-box;
+  background: var(--surface); color: var(--ink); border: 1px solid var(--line-strong);
+  border-radius: 9px; font: inherit; font-size: .92rem; font-weight: 400; cursor: pointer;
+  -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent;
+}
+label.pickbtn:hover { border-color: var(--accent); }
+label.pickbtn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+label.pickbtn[data-opening="yes"] { opacity: .7; }
 
 /* The box answers for itself.
  *
@@ -846,7 +862,8 @@ input[type="file"] { display: none; }
 .fileok-sub { display: block; margin-top: .15rem; font-size: .86rem; color: var(--ink-2); line-height: 1.45; }
 .fileok-sub .ok-word  { color: var(--good); }
 .fileok-sub .bad-word { color: var(--critical); }
-.filebox.loaded > button, .filebox.refused > button, .filebox.working > button { flex: none; margin: 0; }
+.filebox.loaded > button, .filebox.refused > button, .filebox.working > button,
+.filebox.loaded > label, .filebox.refused > label, .filebox.working > label { flex: none; margin: 0; }
 
 /* A ring rather than a spinner where motion is switched off: the state is
    still legible, it simply does not turn. */
@@ -1176,7 +1193,7 @@ details.overlapinfo summary, details.teachnotes summary { color: var(--ink-2); }
 .yearchips .chip { min-height: 36px; padding: .25rem .6rem; font-size: .82rem; }
 .winrow { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; margin: .6rem 0 0; }
 .totop {
-  position: fixed; right: 1rem; bottom: 1.2rem; z-index: 40;
+  position: fixed; left: 1rem; bottom: 1.2rem; z-index: 40;
   min-height: 44px; padding: .5rem .9rem; border-radius: 999px;
   background: var(--accent); color: var(--accent-ink); border: 0; font: inherit; font-weight: 700;
   box-shadow: 0 6px 18px rgba(0, 0, 0, .35); cursor: pointer;

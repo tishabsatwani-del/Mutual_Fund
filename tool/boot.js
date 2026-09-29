@@ -22,7 +22,9 @@
     window.addEventListener('scroll', function () {
       document.querySelectorAll('.ixpath').forEach(function (host) {
         var b = host.querySelector('.totop');
-        if (b) b.hidden = !(window.scrollY > host.offsetTop + window.innerHeight);
+        if (!b) return;
+        var endOnScreen = host.getBoundingClientRect().bottom < window.innerHeight + 24;
+        b.hidden = !(window.scrollY > host.offsetTop + window.innerHeight) || endOnScreen;
       });
     }, { passive: true });
     document.addEventListener('click', function (ev) {

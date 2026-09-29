@@ -270,10 +270,15 @@
       clone = buildClone(opts);
       var svgs = Array.prototype.slice.call(clone.querySelectorAll('svg'));
       return Promise.all(svgs.map(rasterise)).then(function () {
+        /* one canvas holds the whole clone before it is cut into pages, and a
+           phone caps a canvas at about sixteen million pixels: a long result at
+           full scale would come back blank. The scale gives way to the length. */
+        var cloneH = Math.max(1, clone.scrollHeight || clone.offsetHeight || 1);
+        var scale = Math.max(0.7, Math.min(1.6, Math.sqrt(15000000 / (800 * cloneH))));
         return html2pdf().set({
           margin: [12, 10, 16, 10],
           image: { type: 'jpeg', quality: 0.92 },
-          html2canvas: { scale: 1.6, useCORS: false, backgroundColor: '#ffffff', logging: false,
+          html2canvas: { scale: scale, useCORS: false, backgroundColor: '#ffffff', logging: false,
                          windowWidth: 800, scrollX: 0, scrollY: 0 },
           jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
           pagebreak: { mode: ['css', 'legacy'], avoid: ['.card', '.meaning', 'tr', '.qgrid', '.stats'] }

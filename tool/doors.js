@@ -107,7 +107,7 @@
       '</div>';
 
     function idleHtml() {
-      return '<button class="secondary" type="button" id="' + prefix + '-pick">Choose a file</button>' +
+      return '<label class="pickbtn" id="' + prefix + '-pick" for="' + prefix + '-file" tabindex="0" role="button">Choose a file</label>' +
         '<p>' + esc(o.hint || 'CSV, Excel or text · a date column and a value column is all it needs') + '</p>';
     }
     function box() { return $('#' + prefix + '-drop'); }
@@ -117,7 +117,7 @@
       b.className = 'filebox ' + cls;
       b.innerHTML = '<div class="fileok"><span class="fileok-ic" aria-hidden="true">' + icon + '</span>' +
         '<span class="fileok-t"><strong class="fileok-name">' + esc(name) + '</strong><span class="fileok-sub">' + sub + '</span></span></div>' +
-        (action ? '<button class="secondary" type="button" id="' + prefix + '-pick">' + action + '</button>' : '');
+        (action ? '<label class="pickbtn" id="' + prefix + '-pick" for="' + prefix + '-file" tabindex="0" role="button">' + action + '</label>' : '');
     }
     function reading(name) { setState('working', '<span class="spin"></span>', name, 'Reading the file…', ''); }
     function added(name, sub) { setState('loaded', '✓', name, '<strong class="ok-word">File added</strong>' + (sub ? ' — ' + sub : ''), o.multiple === false ? 'Choose a different file' : 'Add another file, or change it'); }
@@ -262,8 +262,11 @@
 
     /* wiring */
     var input = $('#' + prefix + '-file'), drop = box();
-    function open() { input.click(); setTimeout(function () { A.pickBusy($('#' + prefix + '-pick')); }, 0); }
-    drop.addEventListener('click', function (e) { if (e.target.closest('button') || e.target === drop || e.target.closest('.fileok') || e.target.tagName === 'P') open(); });
+    function busy() { setTimeout(function () { A.pickBusy($('#' + prefix + '-pick')); }, 0); }
+    function open() { input.click(); busy(); }
+    /* the label opens the picker natively (the one way every phone browser
+       honours); a tap elsewhere in the box asks the input directly */
+    drop.addEventListener('click', function (e) { if (e.target.closest('label')) busy(); else if (e.target === drop || e.target.closest('.fileok') || e.target.tagName === 'P') open(); });
     drop.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
     ['dragenter', 'dragover'].forEach(function (t) { drop.addEventListener(t, function (e) { e.preventDefault(); drop.classList.add('over'); }); });
     ['dragleave', 'drop'].forEach(function (t) { drop.addEventListener(t, function (e) { e.preventDefault(); drop.classList.remove('over'); }); });

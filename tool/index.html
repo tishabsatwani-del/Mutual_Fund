@@ -6,7 +6,7 @@
 <title>Where You Stand</title>
 <meta name="description" content="Measure what your own money actually earned, see what every number means, and work out what it would take to reach your goal. Runs entirely in your browser.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231f4e5f'/%3E%3Cpath d='M7 22.5 13 15l4.5 4.5L25 9.5' fill='none' stroke='%23ffffff' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="styles.css?v=3">
+<link rel="stylesheet" href="styles.css?v=4">
 </head>
 <body data-view="home">
 <a class="skip" href="#main">Skip to content</a>
@@ -138,8 +138,8 @@
       </div>
       <div class="btnrow" style="margin-top:.4rem">
         <button class="secondary" type="button" id="pf-export">Save my entries as a file</button>
-        <button class="secondary" type="button" id="pf-import">Load a saved file</button>
-        <input type="file" id="pf-import-file" hidden>
+        <label class="pickbtn" id="pf-import" for="pf-import-file" tabindex="0" role="button">Load a saved file</label>
+        <input type="file" id="pf-import-file" class="sr-file" accept=".csv,.txt,text/csv,text/plain">
       </div>
       <p class="hint" id="pf-export-note">The saved file loads back here through <em>Load a saved file</em> exactly as you left it.</p>
     </div>
@@ -383,20 +383,20 @@
 
 </main>
 
-<script src="format.js?v=3"></script>
-<script src="workbook.js?v=3"></script>
-<script src="engine.js?v=3"></script>
-<script src="parse.js?v=3"></script>
-<script src="upload.js?v=3"></script>
-<script src="app.js?v=3"></script>
-<script src="dates.js?v=3"></script>
-<script src="pdf.js?v=3"></script>
-<script src="charts.js?v=3"></script>
-<script src="doors.js?v=3"></script>
-<script src="understand.js?v=3"></script>
-<script src="portfolio.js?v=3"></script>
-<script src="goal.js?v=3"></script>
-<script src="rolling.js?v=3"></script>
-<script src="boot.js?v=3"></script>
+<script src="format.js?v=4"></script>
+<script src="workbook.js?v=4"></script>
+<script src="engine.js?v=4"></script>
+<script src="parse.js?v=4"></script>
+<script src="upload.js?v=4"></script>
+<script src="app.js?v=4"></script>
+<script src="dates.js?v=4"></script>
+<script src="pdf.js?v=4"></script>
+<script src="charts.js?v=4"></script>
+<script src="doors.js?v=4"></script>
+<script src="understand.js?v=4"></script>
+<script src="portfolio.js?v=4"></script>
+<script src="goal.js?v=4"></script>
+<script src="rolling.js?v=4"></script>
+<script src="boot.js?v=4"></script>
 </body>
 </html>
