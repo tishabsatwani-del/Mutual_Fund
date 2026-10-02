@@ -793,7 +793,7 @@
       html += '<div class="result"><div class="label">Your total gain so far</div><div class="value">' + esc(A.signedPct(abs)) + '</div>' +
         '<div class="sub">' + money(g.invested) + ' put in, worth ' + money(g.current + g.withdrawn) + ' after ' + res.days + ' days, ' + fmtDate(first) + ' to ' + fmtDate(last) + '. Before exit load and tax.</div>' +
         '<div class="sub defline">' + EXIT_LOAD + '</div>' + (youngSays ? '<div class="sub youngline">' + youngSays + '</div>' : '') + '</div>' +
-        '<p class="cardtext">Under a year, the yearly rate is the one to ignore: it stretches ' + res.days + ' days to a twelve-month pace and reads ' +
+        '<p class="cardtext">Under a year, <strong class="key">the yearly rate is the one to ignore</strong>: it stretches ' + res.days + ' days to a twelve-month pace and reads ' +
         esc(pct(rate)) + ' a year, which is not something that has happened to anyone. Read the total. The yearly rate starts meaning something after a year.</p>';
     } else {
       html += '<div class="result"><div class="label">Your XIRR</div><div class="value">' + esc(pct(rate)) + '</div>' +
@@ -814,7 +814,80 @@
     if (PF.index) html += indexSummary(g, res);
     html += ownFallLines(info);
     html += realReturnCard(rate);
+    html += readingTogether(g, res, info);
     return html;
+  }
+
+  /* Reading your result together: the main figures as one picture, in short
+     sentences a beginner can read on a phone, then the questions only the
+     reader can answer. A sentence appears only when its figures exist, and
+     none of them says what to do. */
+  function readingTogether(g, res, info) {
+    var many = g.names.length > 1, facts = [], asks = [];
+    var label = function (x) { return esc(A.shortName(x.title, g.names.map(titleOf))); };
+    var gainWords = function (n) { return (n < 0 ? 'lost ' : 'gained ') + money(Math.abs(n)); };
+    /* the same rupees, on the same dates, in the index or the fund of step 3 */
+    var ix = PF.index, eq = ix ? indexEquivalent(g).eq : null, compared = false;
+    if (eq && eq.ok) {
+      var them = fundCmp() ? A.shortName(ix.name, g.names.map(titleOf)) : ix.name;
+      var where = esc(them) + (fundCmp() ? ' (' + FUND_TAG + ')' : '');
+      var kind = ix.kind === 'PRICE' ? ' It is a price index, which leaves dividends out. That flatters your side by about its dividend yield each year.'
+        : ix.kind !== 'TRI' && ix.kind !== 'NAV' ? ' Whether this index counts dividends is not known. If it does not, your side looks better than it is.' : '';
+      if (res.underAYear) {
+        facts.push('In ' + res.days + ' days your money ' + gainWords(g.current + g.withdrawn - g.invested) + '. The same rupees, on your dates, would have ' + gainWords(eq.gain) + ' in ' + where + '.' + kind);
+      } else if (eq.rate != null) {
+        var rel = A.relation(res.rate, eq.rate), gap = (Math.abs(res.rate - eq.rate) * 100).toFixed(2);
+        compared = true;
+        facts.push('The same rupees, on your dates, would have earned ' + pct(eq.rate, 2) + ' a year in ' + where + '. ' +
+          (rel === 'equal' ? 'That is the same rate your money earned.' : 'Your money earned ' + pct(res.rate, 2) + '. <strong class="key">The ' + gap + ' points between them came from holding ' + (many ? 'your funds' : 'your fund') + ' instead.</strong>') + kind);
+        if (rel !== 'equal') asks.push(['The gap', 'Your ' + (many ? 'funds' : 'fund') + ' ran ' + gap + ' points a year ' + (rel === 'greater' ? 'ahead of' : 'behind') + ' the same rupees in ' + esc(them) + '. ' +
+          'Do you know what produced that gap: ' + (many ? 'the funds’ own choices, their costs' : 'the fund’s own choices, its costs') + ', or the stretch your dates happened to cover? Do you expect it to repeat?']);
+      }
+    }
+    /* timing, fund by fund: the reader's rate against the fund's own over the same dates */
+    var timed = res.underAYear ? [] : g.names.map(function (k) { return info[k]; }).filter(function (x) { return x && x.over && x.over.ok && x.rate.ok; });
+    if (timed.length) {
+      var t = [];
+      if (compared) t.push('Your timing plays no part in that gap, because both sides use your dates.');
+      var inside = timed.length > 1 ? 'each fund' : 'the fund';
+      t.push(compared ? 'Timing shows inside ' + inside + ' instead.' : 'Your timing shows inside ' + inside + '.');
+      var moved = timed.map(function (x) { return { x: x, rel: A.relation(x.rate.rate, x.over.rate), gap: Math.abs(x.rate.rate - x.over.rate) * 100 }; });
+      var same = moved.filter(function (m) { return m.rel === 'equal'; }), up = moved.filter(function (m) { return m.rel === 'greater'; }), down = moved.filter(function (m) { return m.rel === 'smaller'; });
+      var single = function (x) { return x.payments && x.payments.length === 1 && x.payments[0].kind === 'in'; };
+      if (moved.length <= 3) {
+        var first = true;
+        moved.forEach(function (m) {
+          if (m.rel === 'equal') return;
+          t.push(first ? 'In ' + label(m.x) + ', your money’s rate is ' + m.gap.toFixed(2) + ' points ' + (m.rel === 'greater' ? 'above' : 'below') + ' the fund’s own over your dates.'
+            : 'In ' + label(m.x) + ', it is ' + m.gap.toFixed(2) + ' points ' + (m.rel === 'greater' ? 'above' : 'below') + '.');
+          first = false;
+        });
+        if (same.length) t.push('In ' + same.map(function (m) { return label(m.x); }).join(' and ') + (same.length === 1 && single(same[0].x) ? ', which had a single payment,' : '') + ' the two are the same.');
+      } else {
+        var most = function (list) { return list.reduce(function (a, b) { return b.gap > a.gap ? b : a; }); };
+        if (up.length) t.push('In ' + up.length + ' of your ' + moved.length + ' funds, your money’s rate is above the fund’s own over your dates. The biggest difference is ' + most(up).gap.toFixed(2) + ' points, in ' + label(most(up).x) + '.');
+        if (down.length) t.push('In ' + down.length + (down.length === 1 ? ' fund' : ' funds') + ' it is below, by up to ' + most(down).gap.toFixed(2) + ' points (' + label(most(down).x) + ').');
+        if (same.length) t.push('In ' + same.length + (same.length === 1 ? ' fund' : ' funds') + ' the two are the same.');
+      }
+      facts.push(t.join(' '));
+      var lead = up.concat(down).reduce(function (a, b) { return !a || b.gap > a.gap ? b : a; }, null);
+      if (lead) asks.push(['Your dates', 'In ' + label(lead.x) + ', when you paid in ' + (lead.rel === 'greater' ? 'lifted' : 'lowered') + ' your money’s rate ' + lead.gap.toFixed(2) + ' points ' + (lead.rel === 'greater' ? 'above' : 'below') + ' the fund’s own. Was that something you chose, or how the calendar happened to fall?']);
+    }
+    /* the largest fall in rupees, with its share */
+    var fell = g.names.map(function (k) { return info[k]; }).filter(function (x) { return x && x.path && x.path.ok && x.path.worst.rupees > 0; });
+    if (fell.length) {
+      var big = fell.reduce(function (a, b) { return b.path.worst.rupees > a.path.worst.rupees ? b : a; }), w = big.path.worst;
+      var size = '<strong>' + money(w.rupees) + (w.share != null ? ', ' + pct(w.share) + ' of its value' : '') + '</strong>';
+      facts.push((many ? 'Along the way, your largest fall in rupees was in ' + label(big) + '. Your money there fell ' + size + ', between ' : 'Along the way, your money’s largest fall was ' + size + ', between ') +
+        fmtDate(w.from) + ' and ' + fmtDate(w.to) + '. ' +
+        (big.path.recoveredOn ? 'It was back at its level from before the fall on ' + fmtDate(big.path.recoveredOn) + '.' : 'By ' + fmtDate(big.path.path[big.path.path.length - 1].t) + ' it had not climbed back to that level.'));
+      asks.push(['The fall', 'Your money in ' + label(big) + ' fell ' + money(w.rupees) + ' in ' + A.monthsText(big.path.fallDays) + '. Suppose a fall like that came in the year before you need this money. ' +
+        'Would anything force the money out before it climbed back: a payment due, a purchase planned, your own nerve?']);
+    }
+    if (!facts.length) return '';
+    return '<div class="card readtogether" id="pf-together"><h2>Reading your result together</h2>' + facts.map(function (f) { return '<p class="cardtext">' + f + '</p>'; }).join('') +
+      (asks.length ? '<h3 class="subhead">' + (asks.length === 1 ? 'A question only you can answer' : 'Questions only you can answer') + '</h3><ol class="insights reflectlist">' +
+        asks.map(function (q) { return '<li><span class="ins-h">' + q[0] + '</span><span class="ins-b">' + q[1] + '</span></li>'; }).join('') + '</ol>' : '') + '</div>';
   }
 
   /* one card per fund: name, then put in, taken out, units, value, XIRR;
@@ -858,7 +931,7 @@
       var sp = x.span;
       return '<div class="card"><h2>' + esc(x.title) + ': the fund over your dates</h2>' +
         '<div class="stats">' + stat('The fund itself', pct(over.rate, 2)) + stat('Your money in it', pct(own.rate, 2)) + stat('The gap', (rel === 'equal' ? '0.00' : gap.toFixed(2)) + ' points') + '</div>' +
-        '<p class="cardtext">The fund’s NAV from ' + fmtDate(over.from) + ' to ' + fmtDate(over.to) + ', one lump sum on the first day; your money, on the dates it actually moved. ' + sentence +
+        '<p class="cardtext">The fund’s NAV from ' + fmtDate(over.from) + ' to ' + fmtDate(over.to) + ', one lump sum on the first day; your money, on the dates it actually moved. <strong class="key">' + sentence + '</strong>' +
         ' Same fund, same dates: the difference comes only from when, and how much, you paid in and took out. Your money’s rate is the higher one when more of it was in during the fund’s better stretches, the lower one when more was in during its weaker ones.</p>' +
         (sp && sp.ok ? '<p class="cardtext">' + percentileWords(sp) + ' ' + RANK_NOTE + '</p>' : '') +
         '</div>';
@@ -870,7 +943,7 @@
       return '<div class="card"><h2>' + esc(x.title) + ': your money’s deepest fall</h2><div class="stats">' + stat('It fell by', money(w.rupees)) + stat('That was', w.share != null ? pct(w.share) + ' of its value' : 'not known') +
         stat('From', fmtDate(w.from)) + stat('To', fmtDate(w.to)) + '</div>' +
         '<p class="cardtext">From price moves alone; your own payments and withdrawals are taken out of the reckoning. ' +
-        (x.path.recoveredOn ? 'It was back at its level from before the fall on ' + fmtDate(x.path.recoveredOn) + '.' : 'It had not climbed back to its level from before the fall by ' + fmtDate(x.path.path[x.path.path.length - 1].t) + '.') + '</p></div>';
+        (x.path.recoveredOn ? 'It was <strong>back at its level from before the fall on ' + fmtDate(x.path.recoveredOn) + '</strong>.' : 'It had <strong>not climbed back to its level from before the fall by ' + fmtDate(x.path.path[x.path.path.length - 1].t) + '</strong>.') + '</p></div>';
     }).join('');
   }
 
@@ -892,9 +965,9 @@
       if (say) { out.innerHTML = ''; return; }
       var real = (1 + rate) / (1 + i / 100) - 1;
       var rel = A.relation(real, 0);
-      var words = rel === 'smaller' ? 'What this money buys fell: prices rose faster than it grew.'
-        : rel === 'equal' ? 'What this money buys is about the same: it grew as fast as prices.'
-        : 'What this money buys grew: it grew faster than prices.';
+      var words = rel === 'smaller' ? '<strong class="key">What this money buys fell</strong>: prices rose faster than it grew.'
+        : rel === 'equal' ? '<strong class="key">What this money buys is about the same</strong>: it grew as fast as prices.'
+        : '<strong class="key">What this money buys grew</strong>: it grew faster than prices.';
       out.innerHTML = '<div class="stats" style="margin:.2rem 0 0">' + stat('Your return', pct(rate)) + stat('Inflation', i.toFixed(1) + '%') + stat('What is left', pct(real)) + '</div>' +
         '<p class="cardtext">' + words + ' Worked out as (1 + return) ÷ (1 + inflation) − 1.</p>';
     });
@@ -931,7 +1004,7 @@
     if (!eq.ok) return '<div class="card"><h2>' + esc(head) + '</h2>' + notice('bad', esc(eq.message)) + '</div>';
     return '<div class="card"><h2>' + esc(head.charAt(0).toUpperCase() + head.slice(1)) + '</h2>' + (fundCmp() ? '<p class="hint tight">' + esc(FUND_NOTE) + '</p>' : '') +
       '<div class="stats">' + stat('Your XIRR', pct(res.rate, 2)) + stat(them, eq.rate == null ? 'no rate' : pct(eq.rate, 2)) + '</div>' +
-      (eq.rate != null ? '<p class="cardtext"><strong>' + indexSentence(res, eq) + '</strong> ' + sharedDates(g) + '</p>' : '') + kindNote() + '</div>';
+      (eq.rate != null ? '<p class="cardtext"><strong class="key">' + indexSentence(res, eq) + '</strong> ' + sharedDates(g) + '</p>' : '') + kindNote() + '</div>';
   }
   function indexTab(g, res) {
     var ix = PF.index, x = indexEquivalent(g), eq = x.eq, payments = x.payments;
@@ -941,7 +1014,7 @@
     var html = '<div class="card"><h2>' + (ix.kind === 'PRICE' ? 'Against the price index: the' : 'The') + ' same rupees, on the same dates, in ' + esc(ix.name) + '</h2>' + (fund ? '<p class="hint tight">' + esc(FUND_NOTE) + '</p>' : '') +
       '<div class="stats">' + stat('Your XIRR', pct(res.rate, 2)) + stat(fund ? 'In ' + short : 'In the index', eq.rate == null ? 'no rate' : pct(eq.rate, 2)) +
       stat('Your gain', A.signedMoney(g.current + g.withdrawn - g.invested)) + stat(fund ? 'Gain in ' + short : 'Index gain', A.signedMoney(eq.gain)) + '</div>' +
-      (eq.rate != null ? '<p class="cardtext"><strong>' + indexSentence(res, eq) + '</strong> ' + sharedDates(g) + (fund ? '' : ' The index carries no costs and cannot be bought as it stands; a fund that tracks it pays its own costs out of the gap.') + '</p>' : '') +
+      (eq.rate != null ? '<p class="cardtext"><strong class="key">' + indexSentence(res, eq) + '</strong> ' + sharedDates(g) + (fund ? '' : ' The index carries no costs and cannot be bought as it stands; a fund that tracks it pays its own costs out of the gap.') + '</p>' : '') +
       kindNote() +
       (eq.skipped.length ? '<p class="hint">' + eq.skipped.length + ' payment' + (eq.skipped.length === 1 ? '' : 's') + ' fell outside ' + (fund ? 'that NAV file’s' : 'the index file’s') + ' dates and ' + (eq.skipped.length === 1 ? 'was' : 'were') + ' left out on both sides.</p>' : '') +
       '</div>';
@@ -968,11 +1041,11 @@
       if (eq.ok && own.ok && eq.rate != null) {
         var d = Math.abs(eq.rate - own.rate);
         html += '<h3 class="subhead">Does your statement agree with the fund’s NAV file?</h3><p class="cardtext">Your payments, bought at each date’s NAV (or the next one) in this file, give ' + esc(pct(eq.rate)) + ' a year' + (x.valueFlow && !x.valueFlow.fromFile ? ', valuing the units on ' + fmtDate(eq.valuedOn) : '') + '; your own entries give ' + esc(pct(own.rate)) + '. ' +
-          (d < 0.0025 ? 'They agree.' : 'They differ by ' + esc(pct(d)) + ' a year. A gap here usually means a payment or withdrawal is missing from the entries, a value was typed for a different day, or the file holds a different plan or option of the fund.') + '</p>';
+          (d < 0.0025 ? '<strong class="key">They agree.</strong>' : '<strong class="key">They differ by ' + esc(pct(d)) + ' a year.</strong> A gap here usually means a payment or withdrawal is missing from the entries, a value was typed for a different day, or the file holds a different plan or option of the fund.') + '</p>';
       }
       if (path.ok && path.worst.rupees > 0) {
         html += '<h3 class="subhead">Your money’s deepest fall</h3><p class="cardtext">' + money(path.worst.rupees) + (path.worst.share != null ? ', ' + pct(path.worst.share) + ' of its value,' : '') + ' between ' + fmtDate(path.worst.from) + ' and ' + fmtDate(path.worst.to) + '. ' +
-          (path.recoveredOn ? 'It took until ' + fmtDate(path.recoveredOn) + ', ' + A.monthsText(path.recoveryDays) + ' after the bottom, to climb back to its level from before the fall.' : 'It had not climbed back to its level from before the fall by the end of the file.') + '</p>';
+          (path.recoveredOn ? 'It took until ' + fmtDate(path.recoveredOn) + ', <strong>' + A.monthsText(path.recoveryDays) + ' after the bottom</strong>, to climb back to its level from before the fall.' : 'It had <strong>not climbed back to its level from before the fall</strong> by the end of the file.') + '</p>';
       }
       var marks = x.payments.map(function (p) { return { t: p.t, amount: p.amount, kind: p.kind }; });
       var from = E.atOrBefore(nav.series, x.firstT, 7);

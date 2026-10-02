@@ -107,7 +107,7 @@
     } else main += '<p class="cardtext">Nothing more is required on these assumptions. The levers below show what happens if you do more anyway.</p>';
     if (req.ok) {
       main += '<p class="cardtext"><strong>' + term('requiredRate', 'The return this goal needs') + ':</strong> ' +
-        (req.rate != null ? 'with what you have and what you add, ' + esc(name) + ' is reached at exactly <strong>' + pct(req.rate) + ' a year</strong>. ' +
+        (req.rate != null ? 'with what you have and what you add, ' + esc(name) + ' is reached at exactly <strong class="key">' + pct(req.rate) + ' a year</strong>. ' +
           (req.rate < 0 && pct(-req.rate) !== pct(0) ? 'A rate below zero means what you have and pay in already comes to more than the goal: the money could lose ' + pct(-req.rate) + ' a year and still reach it. ' : '') +
           'You assumed ' + pct(input.annualRate) + '. ' +
           (req.rate > input.annualRate ? 'The gap between the two is the return you are hoping the market will supply; the levers below are the parts you control.' : 'Anything above the required rate is margin.') +
@@ -118,7 +118,10 @@
       LEVERS.map(function (L) { var r = lattice(L, input, plan); return '<div class="lever"><label for="' + L.id + '">' + L.label + '</label><input type="range" id="' + L.id + '" min="' + r.min + '" max="' + r.max + '" step="' + L.step + '" value="' + r.value + '"><output id="' + L.id + '-v" for="' + L.id + '"></output></div>'; }).join('') +
       '<div id="g-scn-out" aria-live="polite"></div><button class="secondary" type="button" id="g-scn-reset">Put them back</button></div></div>';
     main += fold('What this figure is not', '<p>The ' + pct(input.annualRate) + ' is an assumption you typed in, not a rate anyone can promise. Real markets do not deliver the same return every year, and a run of poor years early on hurts more than the same years late. The projection is an illustration of arithmetic, not a forecast, and it leaves out tax and exit loads.</p>');
+    var readPlan = readingPlan(input, plan, infl);
     main += '<div class="meaning"><h3>What to look at next</h3><p>The <em>If the market differs</em> tab shows the same plan at four other returns' + (G.history ? ', and under the worst, middle and best stretches in ' + esc(G.history.name) : ', and under a history file’s own stretches once one is loaded') + '. The <em>All the numbers</em> tab separates your own money from growth' + (infl != null ? ' and puts the goal in today’s rupees' : '') + '.</p></div>';
+
+    main += readPlan;
 
     /* the market's say: four rates, the file's own stretches, and waiting */
     market += '<div class="card"><h2>It depends what the market does</h2><ul class="scnlines">';
@@ -137,18 +140,18 @@
         market += '<tr><td>' + (w.delay === 0 ? 'now' : 'in ' + w.delay + ' years') + '</td>' + (w.impossible ? '<td colspan="3">the goal date has already passed</td>' : '<td>' + w.yearsLeft + '</td><td>' + money(w.monthlyNeeded) + '</td><td>' + money(w.totalPaid) + '</td>') + '</tr>';
       });
       market += '</tbody></table></div>';
-      if (waits[0].monthlyNeeded > 0 && !waits[1].impossible) market += '<p class="cardtext">Same goal, same date, same assumed return. Waiting ' + waits[1].delay + ' years raises what you must put in each month from ' + money(waits[0].monthlyNeeded) + ' to <strong>' + money(waits[1].monthlyNeeded) + '</strong>, and the total you pay in from ' + money(waits[0].totalPaid) + ' to ' + money(waits[1].totalPaid) + '. Nothing about the market changed between those rows; only the number of years did.</p>';
+      if (waits[0].monthlyNeeded > 0 && !waits[1].impossible) market += '<p class="cardtext">Same goal, same date, same assumed return. Waiting ' + waits[1].delay + ' years raises what is needed each month from ' + money(waits[0].monthlyNeeded) + ' to <strong class="key">' + money(waits[1].monthlyNeeded) + '</strong>, and the total you pay in from ' + money(waits[0].totalPaid) + ' to ' + money(waits[1].totalPaid) + '. Nothing about the market changed between those rows; only the number of years did.</p>';
       market += '</div>';
     }
 
     /* own money and growth; today's rupees */
     var ownMoney = input.currentValue + plan.totalContributed, growth = plan.projected - ownMoney;
     numbers += '<div class="card"><h2>Your money, and growth on it</h2><div class="stats">' + stat('Already saved', money(input.currentValue)) + stat('Still to pay in', money(plan.totalContributed)) + stat('Growth on both', money(growth)) + stat('Growth’s share of the end', growth > 0 ? share(growth / plan.projected) : 'none') + '</div>' +
-      '<p class="cardtext">Of the ' + money(plan.projected) + ' at the end, ' + money(ownMoney) + ' is money you hand over yourself and ' + money(growth) + ' is what it earns while you leave it alone. The longer the period, the more the second number does the work.</p></div>';
+      '<p class="cardtext">Of the ' + money(plan.projected) + ' at the end, ' + money(ownMoney) + ' is money you hand over yourself and <strong class="key">' + money(growth) + ' is what it earns while you leave it alone</strong>. The longer the period, the more the second number does the work.</p></div>';
     if (infl != null) {
       var tr = E.todaysRupees(input.target, infl, input.years);
       numbers += '<div class="card"><h2>' + term('todaysRupees', 'The goal in today’s rupees') + '</h2><div class="stats">' + stat('Your target', money(input.target)) + stat('Buys, in today’s money', money(tr.buysToday)) + stat('To keep today’s buying power, aim for', money(tr.targetForToday)) + '</div>' +
-        '<p class="cardtext">At ' + pct(infl, 1) + ' inflation for ' + input.years + ' years, prices multiply by ' + tr.factor.toFixed(2) + '. So ' + money(input.target) + ' then buys what ' + money(tr.buysToday) + ' buys today, and a goal worth ' + money(input.target) + ' in today’s money is ' + money(tr.targetForToday) + ' by then. Move the last lever on the <em>Your plan</em> tab to ' + A.moneyWords(tr.targetForToday) + ' to see what that takes.</p></div>';
+        '<p class="cardtext">At ' + pct(infl, 1) + ' inflation for ' + input.years + ' years, prices multiply by ' + tr.factor.toFixed(2) + '. So <strong class="key">' + money(input.target) + ' then buys what ' + money(tr.buysToday) + ' buys today</strong>, and a goal worth ' + money(input.target) + ' in today’s money is ' + money(tr.targetForToday) + ' by then. Move the last lever on the <em>Your plan</em> tab to ' + A.moneyWords(tr.targetForToday) + ' to see what that takes.</p></div>';
     } else {
       numbers += notice('', '<strong>These are future rupees, not today’s.</strong> Type an inflation figure in the form above and this tab says what the goal buys in today’s money, and what target keeps today’s buying power.');
     }
@@ -167,6 +170,41 @@
     ]) + A.pdfFoot('goal', name);
     out.innerHTML = html;
     wireScenario(input);
+  }
+  /* Reading your plan together: what is the reader's own money and what the
+     return must supply, what the goal is worth today, and the questions only
+     the reader can answer. Short sentences; each only when its figures exist;
+     none says what to do. */
+  function readingPlan(input, plan, infl) {
+    var facts = [], asks = [], rate = function (r) { return Math.abs(r * 100 - Math.round(r * 100)) < 1e-9 ? pct(r, 0) : pct(r); };
+    var own = input.currentValue + plan.totalContributed, grown = plan.projected - own;
+    facts.push('Of the ' + A.moneyWords(plan.projected) + ' you reach, ' + A.moneyWords(own) + ' is money you put in yourself.');
+    if (grown > 0) facts.push('<strong class="key">The other ' + A.moneyWords(grown) + ' is growth the return has to supply.</strong>');
+    var rows = E.requiredAcrossRates(input, [0.06, 0.08, 0.10, 0.12]).filter(function (r) { return !r.error; });
+    var six = rows.filter(function (r) { return Math.abs(r.rate - 0.06) < 1e-9; })[0];
+    if (six && input.annualRate > 0.06 + 1e-9) facts.push('At 6% a year instead of ' + rate(input.annualRate) + ', the same payments reach ' + A.moneyWords(six.projected) + '.');
+    var tr = infl != null ? E.todaysRupees(input.target, infl, input.years) : null;
+    if (tr) facts.push('At ' + pct(infl, 1) + ' inflation, ' + A.moneyWords(input.target) + ' in ' + input.years + ' years buys what <strong>' + A.moneyWords(tr.buysToday) + '</strong> buys today.');
+    asks.push(['Today’s price or then?', 'Is ' + A.moneyWords(input.target) + ' what this goal costs today, or what it will cost in ' + input.years + ' years?' +
+      (tr ? ' If it is today’s price, the same goal costs ' + A.moneyWords(tr.targetForToday) + ' by then.' : '')]);
+    /* a lower return than the one assumed: the row nearest four points below
+       it, leaving 6% to the sentence above when another row is there */
+    var below = rows.filter(function (r) { return r.rate < input.annualRate - 1e-9; });
+    var pick = below.filter(function (r) { return Math.abs(r.rate - 0.06) > 1e-9; });
+    if (!pick.length && !(six && input.annualRate > 0.06 + 1e-9)) pick = below;
+    var aim = input.annualRate - 0.04, low = pick.reduce(function (a, b) { return !a || Math.abs(b.rate - aim) < Math.abs(a.rate - aim) - 1e-9 ? b : a; }, null);
+    asks.push(['What is fixed', (low ? 'At ' + pct(low.rate, 0) + ' a year this plan reaches ' + A.moneyWords(low.projected) + '. ' : '') + 'Which is fixed for you: the amount, the date, or what you can put in each month?']);
+    if (G.history) {
+      var h = E.goalUnderHistory(input, G.history.series), ser = G.history.series;
+      if (h.ok && h.windows > 0) {
+        var span = (ser[ser.length - 1].t - ser[0].t) / (365.2425 * 86400000);
+        asks.push(['The history', 'Every ' + h.years + '-year stretch in ' + esc(G.history.name) + ' returned ' + pct(h.worst.rate, 1) + ' a year or more. The file covers ' + span.toFixed(1) + ' years. ' +
+          'How much of the next ' + input.years + ' years do you expect to look like them?']);
+      }
+    }
+    return '<div class="card readtogether" id="g-together"><h2>Reading your plan together</h2><p class="cardtext">' + facts.join(' ') + '</p>' +
+      '<h3 class="subhead">Questions only you can answer</h3><ol class="insights reflectlist">' +
+      asks.map(function (q) { return '<li><span class="ins-h">' + q[0] + '</span><span class="ins-b">' + q[1] + '</span></li>'; }).join('') + '</ol></div>';
   }
   function historyBeat(rate, years) {
     var r = E.rollingReturns(G.history.series, Math.max(1, Math.round(years)), {});

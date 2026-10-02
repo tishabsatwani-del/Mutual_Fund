@@ -1496,6 +1496,15 @@ details.explain.means summary { padding: .3rem 0; font-size: .84rem; }
 details.explain.means .body { margin-top: .2rem; font-size: .9rem; }
 details.explain.means .body p { margin: .35rem 0 0; }
 details.explain.means .body p:first-child { margin-top: 0; }
+
+/* Emphasis: one system for the whole tool, two levels at most.
+   Level 1, the key takeaway of a block: bold, in the one accent colour.
+   Level 2, a secondary key phrase: bold only (a plain <strong>).
+   The colour is the same for a gain or a loss, a good result or a poor one:
+   it marks where to look, never what to think. 11.9:1 on a card; the PDF's
+   light layout and a printed page take the deep teal of the light palette. */
+strong.key { font-weight: 700; color: var(--accent); }
+@media print { strong.key { color: #0b6b7a; } }
 .fileok-sub .warn-word { color: var(--warn); }
 
 /* H7: About's data card as questions and answers, stacked at every width. */

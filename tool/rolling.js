@@ -348,16 +348,16 @@
     html += '<div class="stats topline">' + stat('Worst', pct(s.min), 'percentiles') + stat('Median', pct(s.median), 'median') + stat('Best', pct(s.max), 'percentiles') +
       stat('Ended below zero', s.below.toLocaleString('en-IN') + ' of ' + s.count.toLocaleString('en-IN')) +
       (paired ? stat('Ahead of ' + cname, share(paired.fundAheadShare) + ' of windows', 'ahead') : '') + '</div>';
-    html += '<p class="cardtext"><strong>Read the worst figure first.</strong> It is what this ' + (R.a.kindGuess === 'index' ? 'market' : 'fund') + ' did over your holding period at its most unkind, and nobody tells you in advance which stretch they are walking into. Read the average last, and never on its own.</p>';
+    html += '<p class="cardtext"><strong class="key">Read the worst figure first.</strong> It is what this ' + (R.a.kindGuess === 'index' ? 'market' : 'fund') + ' did over your holding period at its most unkind, and nobody tells you in advance which stretch they are walking into. Read the average last, and never on its own.</p>';
     html += '<div class="card"><h2>' + term('startDates', 'Same ' + (R.a.kindGuess === 'index' ? 'index' : 'fund') + ', two start dates') + '</h2>' +
       '<div class="scroll"><table class="data"><thead><tr><th></th><th>Started</th><th>Held until</th><th>Got</th></tr></thead><tbody>' +
       '<tr><td><strong>Best start</strong></td><td>' + fmtDate(r.best.t) + '</td><td>' + fmtDate(r.best.endT) + '</td><td>' + pct(r.best.r) + ' a year</td></tr>' +
       '<tr><td><strong>Worst start</strong></td><td>' + fmtDate(r.worst.t) + '</td><td>' + fmtDate(r.worst.endT) + '</td><td>' + pct(r.worst.r) + ' a year</td></tr></tbody></table></div>' +
-      '<p class="cardtext">Both held for the same ' + years + ' years in the same market. The only difference between them was the day they started, and that difference is worth <strong>' + pct(r.best.r - r.worst.r) + ' a year</strong>. Nobody chooses their starting day on purpose; it is worth knowing how much of any headline return was decided by it. The worst here is the worst of the years this file covers, from ' + fmtDate(series[0].t) + '; a fall that happened before that is not in it, so treat the figure as the worst so far, not the worst there is.</p></div>';
+      '<p class="cardtext">Both held for the same ' + years + ' years in the same market. The only difference between them was the day they started, and that difference is worth <strong class="key">' + pct(r.best.r - r.worst.r) + ' a year</strong>. Nobody chooses their starting day on purpose; it is worth knowing how much of any headline return was decided by it. The worst here is the worst of the years this file covers, from ' + fmtDate(series[0].t) + '; a fall that happened before that is not in it, so treat the figure as the worst so far, not the worst there is.</p></div>';
     html += '<div class="card">' + C.histogram(paired ? paired.fundValues : r.values, { years: years, name: name, compare: paired ? paired.benchValues : null, compareName: cname,
       caption: 'Each bar counts the ' + years + '-year periods that ended in that range of return' + (paired ? '; both files over the same ' + paired.pairs.toLocaleString('en-IN') + ' windows' : '') }) +
       '<p class="hint">' + (A.relation(s.p75, s.p25) === 'equal' ? 'The middle half of the periods all returned ' + pct(s.median) + '.'
-        : 'A quarter of periods fell below ' + pct(s.p25) + ', and a quarter came in above ' + pct(s.p75) + '. The spread is what decided what any one investor actually got.') + '</p></div>';
+        : 'A quarter of periods fell below ' + pct(s.p25) + ', and a quarter came in above ' + pct(s.p75) + '. <strong class="key">The spread is what decided what any one investor actually got.</strong>') + '</p></div>';
     html += rateCard('rolling', years, r.values);
     html += threeQuestions(series, years);
     html += fold('What these figures are not', '<ul class="points"><li><strong>Not a forecast.</strong> This is what already happened, over the dates in this file and no others.</li>' +
@@ -397,7 +397,7 @@
         (bdd && bdd.ok && bdd.depth < 0 ? stat(cname + '’s deepest fall', pct(bdd.depth) + (bdd.recoveredOn ? ', back to its old high ' + A.monthsText(bdd.recoveryDays) + ' after the bottom' : ', not yet back')) : '') +
         (uw.ok && uw.days > 0 ? stat('Longest below a high', A.monthsText(uw.days) + (uw.ongoing ? ', still' : ''), 'underwater') : '') + '</div>' +
         (uw.ok && uw.days > 0 ? '<p class="hint tight">Longest below a high: the longest time the value spent under an earlier peak before passing it.</p>' : '') +
-        '<p class="cardtext">A return says what was earned; this says what had to be sat through to earn it. Every ₹10,000 held through this was worth about <strong>₹' + bottom.toLocaleString('en-IN') + '</strong> at the bottom' +
+        '<p class="cardtext">A return says what was earned; this says what had to be sat through to earn it. Every ₹10,000 held through this was worth about <strong class="key">₹' + bottom.toLocaleString('en-IN') + '</strong> at the bottom' +
         (dd.recoveredOn ? ', and took until ' + fmtDate(dd.recoveredOn) + ' to be ₹10,000 again' : ', and had not got back to ₹10,000 by the end of this data') + '. ' +
         (uw.ok && uw.days > dd.fallDays + (dd.recoveryDays || 0) ? 'The longest stretch spent below a previous high was ' + A.monthsText(uw.days) + ', from ' + fmtDate(uw.from) + (uw.ongoing ? ' and still running at the end of the file' : ' to ' + fmtDate(uw.to)) + ', which is a different stretch from the deepest fall. ' : '') +
         'This is a different measurement from the worst window above: a value can fall steeply inside a window that still ends positive. If this fall began the month after you invested, would anything, a fee due, a purchase planned, your own nerve, force you to take the money out before it climbed back? Whoever sells at the bottom turns this dip into their permanent result.' +
@@ -491,7 +491,7 @@
     var gf = aligned && aligned.ok ? E.growthOf(aligned.a, 10000) : E.growthOf(series, 10000);
     var gb = aligned && aligned.ok ? E.growthOf(aligned.b, 10000) : null;
     html += '<div class="card"><h2>What ₹10,000 became</h2>' + C.growth(gf, { name: name, compare: gb, compareName: cname }) +
-      '<p class="cardtext">One sum on the first ' + (cmp ? 'shared ' : '') + 'date, never touched: ' + money(10000) + ' became <strong>' + money(gf[gf.length - 1].v) + '</strong>' + (gb ? ' in ' + esc(name) + ' and ' + money(gb[gb.length - 1].v) + ' in ' + esc(cname) : '') + ' by ' + fmtDate(gf[gf.length - 1].t) + '. The picture fund houses are required to show; here it is drawn on your file. Because the axis is logarithmic, a doubling looks the same size anywhere on it.</p></div>';
+      '<p class="cardtext">One sum on the first ' + (cmp ? 'shared ' : '') + 'date, never touched: ' + money(10000) + ' became <strong class="key">' + money(gf[gf.length - 1].v) + '</strong>' + (gb ? ' in ' + esc(name) + ' and <strong>' + money(gb[gb.length - 1].v) + '</strong> in ' + esc(cname) : '') + ' by ' + fmtDate(gf[gf.length - 1].t) + '. The picture fund houses are required to show; here it is drawn on your file. Because the axis is logarithmic, a doubling looks the same size anywhere on it.</p></div>';
     return html;
   }
 
@@ -524,7 +524,7 @@
       '</tbody></table></div>' + gapLine(name, cname) +
       A.means('<p>Typical size of a year’s swing: how far a year’s return typically strays from its average, up or down (the standard deviation of daily moves, scaled to a year). Larger means a bumpier ride; it says nothing about how much was earned.</p>') +
       namesNote(name, cname) +
-      (paired ? '<p class="cardtext"><strong>' + esc(name) + ' came out ahead in ' + share(paired.fundAheadShare) + ' of the paired windows</strong>, ' + paired.fundAhead.toLocaleString('en-IN') + ' of ' + paired.pairs.toLocaleString('en-IN') + '. Leading in most windows is a different statement from leading over one stretch: a fund can win on the dates you happen to look at and lose on most others.' + (fundCmp ? '' : ' A benchmark carries no costs, holds no cash and makes no decisions; a fund does all three.') + '</p>' : '') +
+      (paired ? '<p class="cardtext"><strong class="key">' + esc(name) + ' came out ahead in ' + share(paired.fundAheadShare) + ' of the paired windows</strong>, ' + paired.fundAhead.toLocaleString('en-IN') + ' of ' + paired.pairs.toLocaleString('en-IN') + '. Leading in most windows is a different statement from leading over one stretch: a fund can win on the dates you happen to look at and lose on most others.' + (fundCmp ? '' : ' A benchmark carries no costs, holds no cash and makes no decisions; a fund does all three.') + '</p>' : '') +
       '</div>';
     if (cap.ok) {
       /* labels go to term() and stat(), which escape; sentences are escaped here */
@@ -574,7 +574,7 @@
       A.means('<p>The 10th percentile is the return 1 window in 10 fell below; the 25th, 1 in 4. The 75th and 90th count the same way from the top.</p>' +
         '<p>Spread of the windows (standard deviation): how far a typical window’s return sat from the average. The larger it is, the more the start date decided what an investor got.</p>') +
       namesNote(name, cmp ? cname : null) +
-      '<p class="hint">The headline uses the median, not the mean: a handful of exceptional stretches cannot pull the median upward, while a mean can be lifted into a figure no ordinary holding period ever produced. Every figure describes the dates in these files; none is a probability or a forecast.</p></div>';
+      '<p class="hint"><strong>The headline uses the median, not the mean</strong>: a handful of exceptional stretches cannot pull the median upward, while a mean can be lifted into a figure no ordinary holding period ever produced. Every figure describes the dates in these files; none is a probability or a forecast.</p></div>';
     var bins = E.histogram(paired ? paired.fundValues : r.values, { bins: 8 });
     var dp = bins.some(function (x) { return Math.abs(x.from * 100 - Math.round(x.from * 100)) > 1e-9; }) ? 1 : 0;
     html += '<div class="card"><h2>How many windows ended in each range</h2><div class="scroll"><table class="data bins"><thead><tr><th>Return range, a year</th><th>Windows</th><th>Share</th></tr></thead><tbody>' +
