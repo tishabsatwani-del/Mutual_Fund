@@ -24,39 +24,40 @@
         window.scrollTo(0, Math.max(0, target.getBoundingClientRect().top + window.scrollY - above));
       }
     });
-    /* M2: back to the tabs once the reader is a screen down. Bottom right,
-       kept above the footer, and hidden whenever it would sit over a control
-       or the headline result, so it never covers what it is beside. */
-    var COVERS = 'button, a, input, select, textarea, label, summary, .chip, .lever, .result, .pdfrow';
-    var queued = false;
+    /* ↑ Top, in the page header on every screen: shown once the reader is most
+       of a screen down a long page, gone again near the top, and one tap glides
+       to the top. It used to float over the page, hide whenever it would cover
+       a card, and scroll to the result's tab bar, which does not move once the
+       bar is pinned: so it was seldom seen, and a tap often did nothing. */
+    var topBtn = document.getElementById('totop'), topQueued = false;
     function placeTop() {
-      queued = false;
-      var foot = document.querySelector('footer.foot');
-      var lift = 0;
-      if (foot) { var fr = foot.getBoundingClientRect(); if (fr.top < window.innerHeight) lift = window.innerHeight - fr.top; }
-      document.querySelectorAll('.ixpath').forEach(function (host) {
-        var b = host.querySelector('.totop');
-        if (!b) return;
-        var endOnScreen = host.getBoundingClientRect().bottom < window.innerHeight + 24;
-        if (!(window.scrollY > host.offsetTop + window.innerHeight) || endOnScreen) { b.hidden = true; return; }
-        b.style.bottom = (20 + lift) + 'px';
-        b.hidden = false;
-        var r = b.getBoundingClientRect();
-        b.style.visibility = 'hidden';
-        var y = r.top + r.height / 2;
-        var over = [[r.left + 3, y], [r.left + r.width / 2, y], [r.right - 3, y], [r.left + r.width / 2, r.top + 2], [r.left + r.width / 2, r.bottom - 2]].some(function (pt) {
-          var el = document.elementFromPoint(pt[0], pt[1]);
-          return !!(el && el.closest && el.closest(COVERS));
-        });
-        b.style.visibility = '';
-        b.hidden = over;
-      });
+      topQueued = false;
+      if (!topBtn) return;
+      var vh = window.innerHeight, y = window.scrollY || window.pageYOffset || 0;
+      var long = document.documentElement.scrollHeight > vh * 2;
+      var show = long && y > vh * (topBtn.hidden ? 0.8 : 0.5);
+      if (topBtn.hidden === show) topBtn.hidden = !show;
     }
-    window.addEventListener('scroll', function () { if (!queued) { queued = true; requestAnimationFrame(placeTop); } }, { passive: true });
-    window.addEventListener('resize', function () { if (!queued) { queued = true; requestAnimationFrame(placeTop); } });
-    document.addEventListener('click', function (ev) {
-      var top = ev.target && ev.target.closest ? ev.target.closest('.totop') : null;
-      if (top) { var host = top.closest('.ixpath'); (host.querySelector('.ixtabs') || host).scrollIntoView({ block: 'start', behavior: 'smooth' }); }
+    function queueTop() { if (!topQueued) { topQueued = true; requestAnimationFrame(placeTop); } }
+    window.addEventListener('scroll', queueTop, { passive: true });
+    window.addEventListener('resize', queueTop);
+    window.addEventListener('hashchange', queueTop);
+    /* smooth where the browser scrolls smoothly, and by hand where it cannot */
+    function glideTop() {
+      if ('scrollBehavior' in document.documentElement.style) { window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+      var from = window.scrollY || window.pageYOffset || 0, t0 = null, dur = Math.min(700, 250 + from / 10);
+      function step(ts) {
+        if (t0 === null) t0 = ts;
+        var k = Math.min(1, (ts - t0) / dur);
+        window.scrollTo(0, Math.round(from * Math.pow(1 - k, 3)));
+        if (k < 1) requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+    }
+    if (topBtn) topBtn.addEventListener('click', function () {
+      glideTop();
+      var brand = document.querySelector('.brand');
+      if (brand) { try { brand.focus({ preventScroll: true }); } catch (err) { /* harmless */ } }
     });
     /* the rate boxes: presets type for you; the box drives its card and the horizon table */
     document.addEventListener('click', function (ev) {

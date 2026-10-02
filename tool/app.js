@@ -188,7 +188,7 @@
     var body = live.map(function (t, i) {
       return '<section class="ixpanel' + (i === 0 ? ' on' : '') + '" data-panel="' + t.key + '" role="tabpanel"><h2 class="ixpanel-h">' + esc(t.label) + '</h2>' + t.html + '</section>';
     }).join('');
-    return '<div class="ixpath" id="' + id + '">' + bar + body + '<button class="totop" type="button" hidden aria-label="Back to the result tabs">↑ Top</button></div>';
+    return '<div class="ixpath" id="' + id + '">' + bar + body + '</div>';
   }
   function pdfFoot(which, name) {
     return '<div class="pdfrow"><button class="secondary pdfbtn" type="button" data-pdf="' + which + '" data-name="' + esc(name || '') + '">Save as PDF</button><p class="hint pdfnote" aria-live="polite"></p></div>';
