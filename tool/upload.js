@@ -492,6 +492,13 @@
              nameCol: -1, investedCol: -1, currentCol: -1, unitsCol: -1, code: code, message: message };
   }
 
+  /* An index's history is named as one, by what its headings say; a fund's
+     NAV, and rows that say nothing of what they are, keep the brief's sentence. */
+  function pricesMessage(rows) {
+    var k = P.indexFileKind ? P.indexFileKind(rows, '') : null;
+    return k && !k.nav && k.kind ? MESSAGES.indexNotPayments : MESSAGES.pricesNotPayments;
+  }
+
   /* ------------------------------------------------ which file is this? */
   function portfolioFile(input, options) {
     var rows = rowsFrom(input);
@@ -502,15 +509,15 @@
     var looks = P.pricesNotPayments(rows);
     if (looks.prices) {
       return { ok: false, kind: 'prices', rows: [], valuations: [], skipped: 0, code: 'PRICES',
-               message: MESSAGES.pricesNotPayments, reasons: looks.signals.reasons };
+               message: pricesMessage(rows), reasons: looks.signals.reasons };
     }
     var holdings = holdingsRows(rows, options);
     if (holdings.ok) return holdings;
     var ledger = ledgerRows(rows, options);
-    if (ledger.code === 'PRICES') return ledger;
+    if (ledger.code === 'PRICES') { ledger.message = pricesMessage(rows); return ledger; }
     if (ledger.ok || ledger.ask) {
       if (ledger.ok && looksLikePrices(ledger)) {
-        return { ok: false, kind: 'prices', rows: [], valuations: [], skipped: 0, code: 'PRICES', message: MESSAGES.pricesNotPayments };
+        return { ok: false, kind: 'prices', rows: [], valuations: [], skipped: 0, code: 'PRICES', message: pricesMessage(rows) };
       }
       ledger.kind = 'ledger';
       if (ledger.ok) ledger.switches = markSwitches(ledger.rows);
@@ -573,6 +580,11 @@
                  'picture of what is held today.',
     holdNoMoney: 'I found the fund names but no column of amounts beside them: neither what you put ' +
                  'in nor what it is worth now.',
+    indexNotPayments: 'This looks like an index’s history: one row for each day the market ' +
+                      'was open. It is not a record of your own payments. Read as payments it ' +
+                      'would produce a confident and completely wrong figure, so it is refused here. ' +
+                      'This screen wants your holdings or your transaction statement. To compare ' +
+                      'your money with this index, load it in step 3.',
     pricesNotPayments: 'This looks like a fund’s price history: one row for each day the market ' +
                        'was open. It is not a record of your own payments. Read as payments it ' +
                        'would produce a confident and completely wrong figure, so it is refused here. ' +

@@ -1309,12 +1309,17 @@ svg.fanchart { width: 100%; height: auto; display: block; }
 .fan-readout { margin: .4rem 0 0; min-height: 1.4em; font-variant-numeric: tabular-nums; }
 
 /* tabbed results. Every panel is in the page; on a phone only the chosen one
-   shows, on a wide screen the row is a jump bar and all four stay open. */
+   shows, on a wide screen the row is a jump bar and all four stay open.
+   The bar sticks just below the page header (48 tall and its 1px rule), which
+   sticks too: at top 0 it slid under the header, hiding the first row of tabs
+   on a phone and the whole bar on a laptop. A jump lands below both. */
 .ixtabs {
   display: flex; gap: .4rem; flex-wrap: wrap; margin: 1rem 0 .4rem;
-  position: sticky; top: 0; z-index: 4; padding: .5rem 0;
+  position: sticky; top: 49px; z-index: 4; padding: .5rem 0;
+  scroll-margin-top: 49px;
   background: var(--bg, #0B1220);
 }
+.ixpanel { scroll-margin-top: 9rem; }
 .ixtab {
   flex: 1 1 auto; padding: .5rem .7rem; font-size: .84rem; font-weight: 600;
   border: 1px solid var(--line-strong); border-radius: 999px;
