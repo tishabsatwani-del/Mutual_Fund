@@ -887,7 +887,7 @@ label.pickbtn[data-opening="yes"] { opacity: .7; }
   display: block; font-size: .97rem; color: var(--ink); line-height: 1.3;
   overflow-wrap: anywhere;
 }
-.fileok-sub { display: block; margin-top: .15rem; font-size: .86rem; color: var(--ink-2); line-height: 1.45; }
+.fileok-sub { display: block; margin-top: .15rem; font-size: .86rem; color: var(--ink-2); line-height: 1.45; overflow-wrap: anywhere; }
 .fileok-sub .ok-word  { color: var(--good); }
 .fileok-sub .bad-word { color: var(--critical); }
 .filebox.loaded > button, .filebox.refused > button, .filebox.working > button,

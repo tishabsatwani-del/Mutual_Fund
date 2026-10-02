@@ -60,6 +60,40 @@
   function isoToTs(s) { var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s || '')); return m ? Date.UTC(+m[1], +m[2] - 1, +m[3]) : NaN; }
   function count(n) { return F.count(n); }
 
+  /* ------------------------------------------------------------ the chimes
+     A short, soft sound when a file is accepted and a gentler, lower one when
+     it is refused. Made here with the Web Audio API, so there is no sound file
+     and nothing to fetch; quiet, each under a third of a second; never awaited,
+     so it can neither block nor delay anything; and silent wherever the
+     browser will not play. Browsers open sound only from a reader's touch, so
+     the context is woken by a touch on a file slot, a paste button or a picker. */
+  var audio = null;
+  function wakeAudio(ev) {
+    var t = ev && ev.target;
+    if (!t || !t.closest || !t.closest('.filebox, .filewrap, .pastebox, .pastebtn, .picker')) return;
+    try {
+      if (!audio) { var AC = root.AudioContext || root.webkitAudioContext; if (!AC) return; audio = new AC(); }
+      if (audio.state === 'suspended' && audio.resume) audio.resume().catch(function () {});
+    } catch (err) { audio = null; }
+  }
+  if (root.addEventListener) ['pointerdown', 'touchend', 'click', 'keydown'].forEach(function (t) { root.addEventListener(t, wakeAudio, { capture: true, passive: true }); });
+  function chime(kind) {
+    try {
+      if (!audio || audio.state !== 'running') return;
+      var ok = kind === 'ok', t0 = audio.currentTime + 0.01;
+      /* accepted: two soft rising notes; refused: two gentle falling ones */
+      (ok ? [[659.25, 0, 0.09], [880, 0.08, 0.12]] : [[392, 0, 0.12], [329.63, 0.1, 0.16]]).forEach(function (n) {
+        var osc = audio.createOscillator(), gain = audio.createGain(), at = t0 + n[1];
+        osc.type = 'sine'; osc.frequency.setValueAtTime(n[0], at);
+        gain.gain.setValueAtTime(0.0001, at);
+        gain.gain.exponentialRampToValueAtTime(ok ? 0.05 : 0.035, at + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.0001, at + n[2]);
+        osc.connect(gain); gain.connect(audio.destination);
+        osc.start(at); osc.stop(at + n[2] + 0.02);
+      });
+    } catch (err) { /* a sound is never worth an error */ }
+  }
+
   /* --------------------------------------------------------------- DOM help */
   function $(sel, root_) { return (root_ || document).querySelector(sel); }
   function $$(sel, root_) { return Array.prototype.slice.call((root_ || document).querySelectorAll(sel)); }
@@ -369,7 +403,7 @@
   root.PRCApp = {
     E: E, P: P, F: F, VERSION: VERSION, HORIZONS: HORIZONS,
     money: money, moneyLong: moneyLong, moneyWords: moneyWords, short: short, signedMoney: signedMoney, count: count,
-    pct: pct, signedPct: signedPct, share: share, shortName: shortName, echo: F.echo, checkInput: F.checkInput,
+    pct: pct, signedPct: signedPct, share: share, shortName: shortName, chime: chime, echo: F.echo, checkInput: F.checkInput,
     fmtDate: fmtDate, fmtYears: fmtYears, months: months, monthsText: monthsText,
     todayTs: todayTs, isoToday: isoToday, isoOf: isoOf, isoToTs: isoToTs,
     $: $, $$: $$, el: el, esc: esc, notice: notice, term: term, stat: stat, trow: trow, fold: fold, tabs: tabs, pdfFoot: pdfFoot,

@@ -87,25 +87,27 @@
     $('#pf-howto').innerHTML = D.guide('statement');
     var host = $('#pf-statement-door');
     host.innerHTML =
-      '<div class="filebox" id="pf-drop"><span class="filewrap"><input type="file" class="filepick" id="pf-file" accept="' + A.FILE_ACCEPT + '" aria-label="Choose your statement file" title="Choose a file"></span><p>or drop it here · CSV or Excel</p></div>' +
+      '<div class="filebox" id="pf-drop">' + PF_IDLE + '</div>' +
+      '<p class="hint tight" id="pf-dup" aria-live="polite" hidden>This file is already added.</p>' +
       '<button class="secondary pastebtn" type="button" id="pf-paste-open">Paste the rows instead</button>' +
       '<div class="pastebox" id="pf-paste-box" hidden><label class="fieldlabel" for="pf-paste-text">Copy the rows out of your statement and paste them here</label>' +
       '<textarea id="pf-paste-text" rows="6" spellcheck="false"></textarea><div class="btnrow"><button class="primary" type="button" id="pf-paste-read">Read these</button></div></div>';
-    var input = $('#pf-file'), drop = $('#pf-drop');
-    drop.addEventListener('click', function (e) { if (e.target === drop || e.target.tagName === 'P') input.click(); });
+    var drop = $('#pf-drop');
+    drop.addEventListener('click', function (e) { var input = $('#pf-file'); if (input && (e.target === drop || e.target.tagName === 'P')) input.click(); });
     var depth = 0;
     function allow(e) { e.preventDefault(); if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'; }
     drop.addEventListener('dragenter', function (e) { allow(e); depth++; drop.classList.add('over'); });
     drop.addEventListener('dragover', allow);
     drop.addEventListener('dragleave', function () { if (--depth <= 0) { depth = 0; drop.classList.remove('over'); } });
     drop.addEventListener('drop', function (e) { e.preventDefault(); depth = 0; drop.classList.remove('over'); var files = Array.prototype.slice.call((e.dataTransfer && e.dataTransfer.files) || []); if (files.length) takeFile(files[0]); });
-    input.addEventListener('change', function (e) { var files = Array.prototype.slice.call(e.target.files || []); try { input.value = ''; } catch (err) { /* harmless */ } if (files.length) takeFile(files[0]); });
+    drop.addEventListener('change', function (e) { var input = e.target; if (!input || input.type !== 'file') return; var files = Array.prototype.slice.call(input.files || []); try { input.value = ''; } catch (err) { /* harmless */ } if (files.length) takeFile(files[0]); });
     $('#pf-paste-open').addEventListener('click', function () { var box = $('#pf-paste-box'); box.hidden = !box.hidden; if (!box.hidden) $('#pf-paste-text').focus(); });
     $('#pf-paste-read').addEventListener('click', function () {
       var text = $('#pf-paste-text').value;
       if (!text.trim()) return;
-      PF.answers = {}; PF.source = 'pasted rows'; PF.file = null; PF.sheets = null;
-      readInto(text);
+      PF.answers = {}; PF.source = 'pasted rows'; PF.file = null; PF.sheets = null; PF.accepted = false;
+      dupLine(false); card(null);
+      readInto(text, true);
     });
 
     /* step 3, on both modes: the benchmark index's TRI (a price index with its
@@ -186,14 +188,32 @@
       : 'Not established. Until you say, the comparison cannot tell whether a gap is real or only the dividends the index leaves out.';
   }
 
+  /* The payments card, drawn like every other file slot's: the file's name with
+     a tick when it is read, with the mark when it is refused, and the same
+     file chosen again is not read again. */
+  var PF_IDLE = '<span class="filewrap"><input type="file" class="filepick" id="pf-file" accept="' + A.FILE_ACCEPT + '" aria-label="Choose your statement file" title="Choose a file"></span><p>or drop it here · CSV or Excel</p>';
+  function card(state, name) {
+    var drop = $('#pf-drop'); if (!drop) return;
+    drop.className = 'filebox' + (state ? ' ' + state : '');
+    drop.innerHTML = !state ? PF_IDLE :
+      '<div class="fileok"><span class="fileok-ic" aria-hidden="true">' + (state === 'loaded' ? '✓' : '!') + '</span><span class="fileok-t"><strong class="fileok-name">' + esc(name) + '</strong><span class="fileok-sub">' +
+      (state === 'loaded' ? '<strong class="ok-word">File added</strong>' : '<strong class="bad-word">Not added.</strong> The reason is below.') + '</span></span></div>' +
+      '<span class="filewrap"><input type="file" class="filepick" id="pf-file" accept="' + A.FILE_ACCEPT + '" aria-label="Choose your statement file" title="' + (state === 'loaded' ? 'Choose a different file' : 'Choose another file') + '"></span>';
+  }
+  function dupLine(show) { var d = $('#pf-dup'); if (d) d.hidden = !show; }
+  function sigOf(f) { return f ? f.name + '|' + f.size : ''; }
   function takeFile(file, sheet) {
+    var again = sheet == null && PF.file && PF.accepted && sigOf(file) === sigOf(PF.file);
+    dupLine(!!again);
+    if (again) return;
+    PF.accepted = false;
     PF.answers = {}; PF.file = file; PF.source = file.name || 'that file'; PF.sheet = sheet == null ? null : sheet;
     say('pf-door-out', 'Reading ' + esc(PF.source) + '…');
     A.readStatement(file, PF.sheet).then(function (got) {
       PF.sheets = got.sheets || null; PF.sheetName = got.sheetName || null;
-      readInto(got.rows ? got.rows : got.text);
+      readInto(got.rows ? got.rows : got.text, true);
       if (got.sheets && got.sheets.length > 1) offerSheets(got.sheets, got.sheetName);
-    }).catch(function (err) { forget(); say('pf-door-out', '', notice('bad', esc(err.message))); refreshGate(); });
+    }).catch(function (err) { forget(); card('refused', PF.source); A.chime('no'); say('pf-door-out', '', notice('bad', esc(err.message))); refreshGate(); });
   }
   function offerSheets(sheets, current) {
     var host = $('#pf-door-out');
@@ -210,9 +230,15 @@
     $('#pf-read').hidden = true; $('#pf-out').innerHTML = ''; PF.ran = false;
     drawFundCards();
   }
-  function readInto(source) {
+  function readInto(source, fresh) {
     PF.last = source;
     var r = U.portfolioFile(source, PF.answers);
+    if (fresh) {
+      var ok = r.ok || r.ask === 'direction';
+      PF.accepted = ok;
+      if (PF.file) card(ok ? 'loaded' : 'refused', PF.source);
+      A.chime(ok ? 'ok' : 'no');
+    }
     if (r.ask === 'direction') { forget(); return askDirection(r); }
     if (!r.ok) {
       forget();
@@ -1077,6 +1103,7 @@
     PF.funds = []; PF.nav = {}; PF.navDoors = {}; PF.confirmed = {}; PF.ran = false;
     $('#pf-read').hidden = true; $('#pf-values').innerHTML = '';
     $('#pf-out').innerHTML = ''; $('#pf-door-out').innerHTML = ''; $('#pf-paste-text').value = ''; $('#pf-paste-box').hidden = true;
+    PF.file = null; PF.accepted = false; card(null); dupLine(false);
     if (PF.indexDoor) PF.indexDoor.clear();
     PF.index = null; drawIndexKind();
     if (PF.mode === 'typed') blankRows();

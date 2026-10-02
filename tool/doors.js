@@ -92,6 +92,7 @@
     host.innerHTML =
       (o.label ? '<label class="fieldlabel" for="' + prefix + '-file">' + esc(o.label) + '</label>' : '') +
       '<div class="filebox" id="' + prefix + '-drop">' + idleHtml() + '</div>' +
+      '<p class="hint tight" id="' + prefix + '-dup" aria-live="polite" hidden>This file is already added.</p>' +
       '<div id="' + prefix + '-status" aria-live="polite"></div>' +
       '<button class="secondary pastebtn" type="button" id="' + prefix + '-paste-open">Paste the two columns instead</button>' +
       '<div class="pastebox" id="' + prefix + '-paste-box" hidden>' +
@@ -128,18 +129,24 @@
         (action ? pickHtml(action) : '');
     }
     function reading(name) { setState('working', '<span class="spin"></span>', name, 'Reading the file…', ''); }
-    function added(name, sub) { setState('loaded', '✓', name, '<strong class="ok-word">File added</strong>' + (sub ? ': ' + sub : ''), o.multiple === false ? 'Choose a different file' : 'Add another file, or change it'); }
-    function refused(name) { setState('refused', '!', name, '<strong class="bad-word">Not added.</strong> The reason is below.', 'Choose another file'); }
+    /* one sound for each thing the reader does: the first outcome of an attempt */
+    var armed = false;
+    function chime(kind) { if (!armed) return; armed = false; if (A.chime) A.chime(kind); }
+    function dup(show) { var d = $('#' + prefix + '-dup'); if (d) d.hidden = !show; }
+    /* the same file is its name and its size: chosen again, it is not read again */
+    function sigOf(f) { return f && f.pastedText == null ? f.name + '|' + f.size : null; }
+    function added(name, sub) { chime('ok'); setState('loaded', '✓', name, '<strong class="ok-word">File added</strong>' + (sub ? ': ' + sub : ''), o.multiple === false ? 'Choose a different file' : 'Add another file, or change it'); }
+    function refused(name) { chime('no'); setState('refused', '!', name, '<strong class="bad-word">Not added.</strong> The reason is below.', 'Choose another file'); }
     /* H1: one status per slot. Every new attempt replaces what was there. */
     function say(html) { var st = $('#' + prefix + '-status'); if (st) st.innerHTML = html || ''; }
-    function hidePicker() { var w = $('#' + prefix + '-scheme-wrap'); if (w) { w.hidden = true; var l = w.querySelector('.pickedline'); if (l) l.remove(); } }
+    function hidePicker() { var w = $('#' + prefix + '-scheme-wrap'); if (w) { w.hidden = true; $$('.pickedline', w).forEach(function (l) { l.remove(); }); } }
     function empty() {
       state.pieces = []; state.series = null; state.name = ''; state.report = null; state.rows = null; state.schemes = null; state.picked = null; state.kindGuess = null;
     }
     function clear() {
       empty();
       var b = box(); if (b) { b.className = 'filebox'; b.innerHTML = idleHtml(); }
-      say(''); hidePicker(); $('#' + prefix + '-paste-text').value = ''; $('#' + prefix + '-paste-box').hidden = true;
+      say(''); hidePicker(); dup(false); armed = false; $('#' + prefix + '-paste-text').value = ''; $('#' + prefix + '-paste-box').hidden = true;
       if (o.onLoaded) o.onLoaded(null);
     }
 
@@ -150,6 +157,12 @@
     function takeFiles(files) {
       var list = Array.prototype.slice.call(files || []);
       if (!list.length) return;
+      var have = state.pieces.map(function (p) { return p.sig; });
+      var fresh0 = list.filter(function (f) { var s = sigOf(f); return !s || have.indexOf(s) === -1; });
+      dup(fresh0.length < list.length);
+      if (!fresh0.length) return;
+      list = fresh0;
+      armed = true;
       if (o.multiple === false) state.pieces = [];
       reading(list.length === 1 ? list[0].name : list.length + ' files');
       say(''); hidePicker();
@@ -162,7 +175,8 @@
       }
       next();
     }
-    function piece(file, res, err) {
+    function piece(file, res, err) { var p = pieceOf(file, res, err); p.sig = sigOf(file); return p; }
+    function pieceOf(file, res, err) {
       var rows = res ? res.rows : (err && err.extra && err.extra.rows) || null;
       var refusal = rows ? (o.gate ? o.gate(rows, file.name) : schemaRefusal(rows)) : null;
       if (refusal) return { name: file.name, refused: refusal };
@@ -247,6 +261,7 @@
       });
       if (!list.length) {
         /* the chosen scheme could not be read from any piece: say why, keep the picker */
+        chime('no');
         say(notice('bad', esc(failed.length ? failed[0].message : 'None of the files could be read as this scheme.')));
         state.series = null; if (o.onLoaded) o.onLoaded(null);
         return;
@@ -260,7 +275,10 @@
       var name = report.scheme || list[0].name.replace(/\.[^.]+$/, '');
       state.series = joined.series; state.name = name; state.report = report; state.rows = list[0].rows;
       state.kindGuess = P.guessDataKind(list[0].rows, list[0].name).kind;
-      var sub = report.used.toLocaleString('en-IN') + ' rows read · ' + fmtDate(report.firstDate) + ' to ' + fmtDate(report.lastDate) +
+      /* the file's own name too, where the card's title is the scheme's */
+      var files = list.map(function (p) { return p.name; }).filter(function (n, i, a) { return n && a.indexOf(n) === i; });
+      var named = files.length === 1 && files[0].replace(/\.[^.]+$/, '') === name ? '' : esc(files.join(', ')) + ' · ';
+      var sub = named + report.used.toLocaleString('en-IN') + ' rows read · ' + fmtDate(report.firstDate) + ' to ' + fmtDate(report.lastDate) +
         (list.length > 1 ? ' · ' + list.length + ' files joined' : '');
       var res = { series: state.series, name: name, report: report, files: list.length, gaps: joined.gaps, kindGuess: state.kindGuess, rows: state.rows };
       var extra = o.describe ? o.describe(res) : null;
@@ -303,7 +321,7 @@
     function showPicker(schemes, hasNames, onPick) {
       var wrap = $('#' + prefix + '-scheme-wrap'), q = $('#' + prefix + '-scheme-q');
       wrap.hidden = false; wrap.removeAttribute('data-folded'); q.value = '';
-      var line = wrap.querySelector('.pickedline'); if (line) line.remove();
+      $$('.pickedline', wrap).forEach(function (l) { l.remove(); });
       $('#' + prefix + '-scheme-note').textContent = hasNames
         ? 'Official downloads hold every scheme of a fund house in one file. Pick the exact name on your statement; the plan and the option are part of the name, and each is a separate row.'
         : 'This file has no column of scheme names, so each scheme is shown by its code. The code is on your statement or on the fund house’s page for the scheme.';
@@ -326,6 +344,8 @@
         $$('#' + prefix + '-scheme-list .hit').forEach(function (btn) {
           btn.addEventListener('click', function () {
             var sc = hits[+btn.dataset.i];
+            $$('.pickedline', wrap).forEach(function (l) { l.remove(); });
+            armed = true;
             onPick(sc);
             wrap.setAttribute('data-folded', 'yes');
             var l = A.el('p', { 'class': 'hint pickedline' });
