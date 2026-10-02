@@ -16,7 +16,13 @@
       var target = null;
       host.querySelectorAll('.ixpanel').forEach(function (p) { var on = p.dataset.panel === want; p.classList.toggle('on', on); if (on) target = p; });
       if (target && window.innerWidth > 720) target.scrollIntoView({ block: 'start', behavior: 'smooth' });
-      else if (target) host.querySelector('.ixtabs').scrollIntoView({ block: 'start' });
+      else if (target) {
+        /* a phone opens the chosen panel from its top, just below the page
+           header and the tab bar that sticks under it */
+        var head = document.querySelector('.topbar'), bar = host.querySelector('.ixtabs');
+        var above = (head ? head.getBoundingClientRect().height : 0) + (bar ? bar.getBoundingClientRect().height : 0);
+        window.scrollTo(0, Math.max(0, target.getBoundingClientRect().top + window.scrollY - above));
+      }
     });
     /* M2: back to the tabs once the reader is a screen down. Bottom right,
        kept above the footer, and hidden whenever it would sit over a control
