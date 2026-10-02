@@ -1,4 +1,4 @@
-/* Where You Stand — reading the reader's own statement.
+/* Where You Stand: reading the reader's own statement.
  *
  * Two shapes come through this door and the reader is never asked which:
  *
@@ -11,7 +11,7 @@
  * bracket is the reader saying "money out" themselves and wins outright. Where
  * amounts are unsigned, the words in the type column are handed back, pre-ticked
  * from a dictionary, and the reader confirms once. The one exception is this
- * tool's own three words — Money in, Money out, Worth today — which mean exactly
+ * tool's own three words (Money in, Money out, Worth today), which mean exactly
  * one thing each, so a file the tool saved is read back without a question.
  *
  * No DOM, no clock, no network.
@@ -112,13 +112,20 @@
     return null;
   }
 
-  var AMOUNT_HEADERS = ['amount', 'amt', 'transaction amount', 'net amount', 'amount (rs.)', 'amount in rs.',
-                        'value', 'debit', 'credit', 'withdrawal', 'deposit'];
-  var TYPE_HEADERS = ['type', 'transaction type', 'txn type', 'transaction', 'nature', 'kind',
-                      'particulars', 'description', 'narration', 'what happened'];
-  var UNITS_HEADERS = /^(units?|no\.?\s*of\s*units?|unit\s*(balance|qty|quantity)|quantity|qty|balance\s*units?)$/i;
+  /* Headings are compared as plain words (P.normHeader), so a registrar's
+     AMOUNT, TRADE_DATE and SCHEME_NAME read the same as Amount, Trade Date
+     and Scheme Name. The type headings are in order of preference: a
+     transaction type beats a bare "Type", which on some exports is a code. */
+  var AMOUNT_HEADERS = ['amount', 'amt', 'transaction amount', 'net amount', 'amount rs', 'amount in rs',
+                        'amount inr', 'value', 'debit', 'credit', 'withdrawal', 'deposit'];
+  var TYPE_HEADERS = ['transaction type', 'txn type', 'transaction', 'transaction description', 'description',
+                      'particulars', 'narration', 'nature', 'what happened', 'type', 'kind'];
+  var UNITS_HEADERS = /^(units?|no of units?|units? allotted|unit (balance|qty|quantity)|quantity|qty|balance units?)$/i;
   var FUND_HEADERS = /^(fund|fund name|scheme|scheme name|which fund|holding)$/i;
   var PRICE_HEADERS = /\bnav\b|net\s*asset|\bprice\b|\bclose\b|\bclosing\b|repurchase/i;
+  var ISIN_HEADERS = /\bisin\b/;
+  var CODE_HEADERS = /^(scheme code|amfi code|amfi scheme code|amfi)$/;
+  function plain(h) { return P.normHeader(h); }
 
   /* ----------------------------------------------------- a transaction statement */
   function ledgerRows(input, options) {
@@ -127,7 +134,9 @@
     if (blankRows(rows)) return ledgerFail('NO-ROWS', MESSAGES.ledgerNoRows);
 
     var header = null, body = rows;
-    if (rows.length >= 2 && !rows[0].some(anyDate)) { header = rows[0]; body = rows.slice(1); }
+    var hr = P.headingRow(rows);
+    if (hr >= 0 && rows.length >= hr + 2) { header = rows[hr]; body = rows.slice(hr + 1); }
+    else if (rows.length >= 2 && !rows[0].some(anyDate)) { header = rows[0]; body = rows.slice(1); }
     if (!body.length) return ledgerFail('NO-ROWS', MESSAGES.ledgerNoRows);
 
     var probe = body.slice(0, 40);
@@ -147,6 +156,12 @@
     if (amountCol < 0) return ledgerFail('NO-AMOUNT', MESSAGES.ledgerNoAmount);
     var fundCol = fundColumn(header, width, dateCol, amountCol);
     var unitsCol = unitsColumn(header, width, dateCol, amountCol, fundCol);
+    var isinCol = -1, codeCol = -1;
+    if (header) header.forEach(function (h, i) {
+      var p = plain(h);
+      if (isinCol === -1 && ISIN_HEADERS.test(p)) isinCol = i;
+      if (codeCol === -1 && CODE_HEADERS.test(p)) codeCol = i;
+    });
 
     var signed = false;
     for (var q = 0; q < body.length && !signed; q++) {
@@ -200,8 +215,10 @@
         if (said) dir = said;
       }
       var u = unitsCol >= 0 ? ledgerAmount(body[i][unitsCol]) : NaN;
+      var isin = isinCol >= 0 ? String(body[i][isinCol] == null ? '' : body[i][isinCol]).trim().toUpperCase() : '';
+      var code = codeCol >= 0 ? String(body[i][codeCol] == null ? '' : body[i][codeCol]).trim() : '';
       out.push({ t: t, amount: Math.abs(n), dir: dir, units: isFinite(u) ? Math.abs(u) : null,
-                 fund: fund, line: i + (header ? 2 : 1) });
+                 fund: fund, isin: P.ISIN_RE.test(isin) ? isin : '', code: code, line: i + (header ? 2 : 1) });
     }
     return {
       ok: out.length > 0, rows: out, valuations: valuations, skipped: skipped, header: header,
@@ -215,9 +232,13 @@
     var named = [], rest = [], c;
     for (c = 0; c < width; c++) {
       if (c === dateCol || c === amountCol || c === fundCol) continue;
-      var head = header ? String(header[c] == null ? '' : header[c]).toLowerCase().trim() : '';
+      var head = header ? plain(header[c]) : '';
       if (head && TYPE_HEADERS.indexOf(head) >= 0) named.push(c); else rest.push(c);
     }
+    named.sort(function (a, b) { return TYPE_HEADERS.indexOf(plain(header[a])) - TYPE_HEADERS.indexOf(plain(header[b])); });
+    /* a column whose heading names something else (a fund house, an
+       investor, a PAN, a folio, a broker) is never the type column */
+    rest = rest.filter(function (k) { var h = header ? plain(header[k]) : ''; return !/\b(mf|amc|investor|pan|folio|broker|arn|isin|code|name|email|mobile)\b/.test(h); });
     var order = named.concat(rest);
     for (var k = 0; k < order.length; k++) {
       var words = typeWords(body, order[k], named.indexOf(order[k]) >= 0);
@@ -265,11 +286,11 @@
     if (header) {
       for (var i = 0; i < header.length; i++) {
         if (i === dateCol) continue;
-        if (AMOUNT_HEADERS.indexOf(String(header[i] || '').toLowerCase().trim()) >= 0) return i;
+        if (AMOUNT_HEADERS.indexOf(plain(header[i])) >= 0) return i;
       }
       for (var j = 0; j < header.length; j++) {
         if (j === dateCol) continue;
-        if (/\bamount\b|\bamt\b/i.test(String(header[j] || ''))) return j;
+        if (/\bamount\b|\bamt\b/i.test(plain(header[j]))) return j;
       }
     }
     var need = Math.max(1, Math.ceil(probe.length * 0.6));
@@ -290,7 +311,7 @@
     if (!header) return -1;
     for (var i = 0; i < width; i++) {
       if (i === dateCol || i === amountCol || i === fundCol) continue;
-      if (UNITS_HEADERS.test(String(header[i] == null ? '' : header[i]).trim())) return i;
+      if (UNITS_HEADERS.test(plain(header[i]))) return i;
     }
     return -1;
   }
@@ -299,7 +320,7 @@
     if (header) {
       for (var i = 0; i < header.length; i++) {
         if (i === dateCol || i === amountCol) continue;
-        if (FUND_HEADERS.test(String(header[i] || '').trim())) return i;
+        if (FUND_HEADERS.test(plain(header[i]))) return i;
       }
       return -1;
     }
@@ -311,16 +332,22 @@
   function schemeTotals(rows) {
     var order = [], by = {};
     (rows || []).forEach(function (r) {
-      var key = (r.fund || '').trim() || '—';
+      var key = (r.fund || '').trim();
       if (!by[key]) {
         by[key] = { name: key, rows: [], paidIn: 0, tookOut: 0, unitsIn: 0, unitsOut: 0, units: null,
-                    first: r.t, last: r.t, hasUnits: false };
+                    first: r.t, last: r.t, hasUnits: false, isin: '', code: '', unitsBought: 0, paidForUnits: 0 };
         order.push(key);
       }
       var g = by[key];
       g.rows.push(r);
       if (r.dir === 'out') g.tookOut += r.amount; else g.paidIn += r.amount;
-      if (r.units != null) { g.hasUnits = true; if (r.dir === 'out') g.unitsOut += r.units; else g.unitsIn += r.units; }
+      if (r.units != null) {
+        g.hasUnits = true;
+        if (r.dir === 'out') g.unitsOut += r.units;
+        else { g.unitsIn += r.units; if (r.units > 0) { g.unitsBought += r.units; g.paidForUnits += r.amount; } }
+      }
+      if (r.isin && !g.isin) g.isin = r.isin;
+      if (r.code && !g.code) g.code = r.code;
       if (r.t < g.first) g.first = r.t;
       if (r.t > g.last) g.last = r.t;
     });
@@ -438,6 +465,8 @@
     return gaps[Math.floor(gaps.length / 2)] <= 4;
   }
   function manyDates(body, width) {
+    /* a line holding one cell (a section heading, a fund house's name) is not a row of data */
+    body = body.filter(function (row) { return row && row.filter(function (c) { return String(c == null ? '' : c).trim() !== ''; }).length >= 2; });
     for (var c = 0; c < width; c++) {
       var seen = {}, n = 0, distinct = 0;
       for (var r = 0; r < body.length; r++) {
@@ -467,6 +496,14 @@
   function portfolioFile(input, options) {
     var rows = rowsFrom(input);
     if (blankRows(rows)) return { ok: false, kind: null, rows: [], valuations: [], skipped: 0, code: 'EMPTY', message: MESSAGES.empty };
+    /* C1: one price-data check for every row set, a file, a paste or a drop,
+       before either reader sees it: a short NAV file can otherwise pass for a
+       holdings snapshot, its NAVs read as what each fund is worth. */
+    var looks = P.pricesNotPayments(rows);
+    if (looks.prices) {
+      return { ok: false, kind: 'prices', rows: [], valuations: [], skipped: 0, code: 'PRICES',
+               message: MESSAGES.pricesNotPayments, reasons: looks.signals.reasons };
+    }
     var holdings = holdingsRows(rows, options);
     if (holdings.ok) return holdings;
     var ledger = ledgerRows(rows, options);
@@ -521,7 +558,7 @@
 
   /* -------------------------------------------------------- the messages */
   var MESSAGES = {
-    empty: 'That file is empty — there is nothing in it to read. Download it again, or open it on ' +
+    empty: 'That file is empty: there is nothing in it to read. Download it again, or open it on ' +
            'your computer and check it holds rows.',
     ledgerNoRows: 'There was nothing to read in that. Copy the rows themselves, not a picture of them.',
     ledgerNoDates: 'I could not find a column of dates in that. Each line needs a date and an amount.',
@@ -534,20 +571,20 @@
     holdNoNames: 'I could not find a column of fund names in this file.',
     holdIsDated: 'The rows in this file carry different dates, so it is a record of payments rather than a ' +
                  'picture of what is held today.',
-    holdNoMoney: 'I found the fund names but no column of amounts beside them — neither what you put ' +
+    holdNoMoney: 'I found the fund names but no column of amounts beside them: neither what you put ' +
                  'in nor what it is worth now.',
-    pricesNotPayments: 'This looks like a fund’s price history — one row for each day the market ' +
-                       'was open — rather than a record of your own payments. Read as payments it ' +
+    pricesNotPayments: 'This looks like a fund’s price history: one row for each day the market ' +
+                       'was open. It is not a record of your own payments. Read as payments it ' +
                        'would produce a confident and completely wrong figure, so it is refused here. ' +
                        'This screen wants your holdings or your transaction statement. To measure the ' +
                        'fund itself, use Rolling returns, which is the screen this file belongs to.',
     neitherShape: 'I could not read this as either kind of file. Two downloads work here: your holdings ' +
                   'or portfolio statement, which lists each fund with what you put in and what it is ' +
                   'worth; or your transaction statement, which lists each payment with its date. A ' +
-                  'screenshot or a PDF will not work — look for CSV or Excel.',
+                  'screenshot or a PDF will not work. Look for CSV or Excel.',
     noDatesForRate: 'This is a holdings file, so it says what you own today but not when you bought it. A ' +
-                    'yearly rate needs the dates. For that, download your transaction statement instead ' +
-                    '— the same place, usually under Reports or Statements.',
+                    'yearly rate needs the dates. For that, download your transaction statement instead, ' +
+                    'from the same place, usually under Reports or Statements.',
     whichDirection: function (n) {
       return 'Every amount here is unsigned, and one column says what each line was. Tick the ' +
              (n === 1 ? 'word' : 'words') + ' that mean money going OUT.';

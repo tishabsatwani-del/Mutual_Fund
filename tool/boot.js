@@ -1,4 +1,4 @@
-/* Where You Stand — start-up, and the handlers every result screen shares. */
+/* Where You Stand: start-up, and the handlers every result screen shares. */
 (function (root) {
   'use strict';
   var A = root.PRCApp, E = root.PRCEngine, C = root.PRCCharts;
@@ -18,15 +18,36 @@
       if (target && window.innerWidth > 720) target.scrollIntoView({ block: 'start', behavior: 'smooth' });
       else if (target) host.querySelector('.ixtabs').scrollIntoView({ block: 'start' });
     });
-    /* back to the tabs once the reader is a screen down */
-    window.addEventListener('scroll', function () {
+    /* M2: back to the tabs once the reader is a screen down. Bottom right,
+       kept above the footer, and hidden whenever it would sit over a control
+       or the headline result, so it never covers what it is beside. */
+    var COVERS = 'button, a, input, select, textarea, label, summary, .chip, .lever, .result, .pdfrow';
+    var queued = false;
+    function placeTop() {
+      queued = false;
+      var foot = document.querySelector('footer.foot');
+      var lift = 0;
+      if (foot) { var fr = foot.getBoundingClientRect(); if (fr.top < window.innerHeight) lift = window.innerHeight - fr.top; }
       document.querySelectorAll('.ixpath').forEach(function (host) {
         var b = host.querySelector('.totop');
         if (!b) return;
         var endOnScreen = host.getBoundingClientRect().bottom < window.innerHeight + 24;
-        b.hidden = !(window.scrollY > host.offsetTop + window.innerHeight) || endOnScreen;
+        if (!(window.scrollY > host.offsetTop + window.innerHeight) || endOnScreen) { b.hidden = true; return; }
+        b.style.bottom = (20 + lift) + 'px';
+        b.hidden = false;
+        var r = b.getBoundingClientRect();
+        b.style.visibility = 'hidden';
+        var y = r.top + r.height / 2;
+        var over = [[r.left + 3, y], [r.left + r.width / 2, y], [r.right - 3, y], [r.left + r.width / 2, r.top + 2], [r.left + r.width / 2, r.bottom - 2]].some(function (pt) {
+          var el = document.elementFromPoint(pt[0], pt[1]);
+          return !!(el && el.closest && el.closest(COVERS));
+        });
+        b.style.visibility = '';
+        b.hidden = over;
       });
-    }, { passive: true });
+    }
+    window.addEventListener('scroll', function () { if (!queued) { queued = true; requestAnimationFrame(placeTop); } }, { passive: true });
+    window.addEventListener('resize', function () { if (!queued) { queued = true; requestAnimationFrame(placeTop); } });
     document.addEventListener('click', function (ev) {
       var top = ev.target && ev.target.closest ? ev.target.closest('.totop') : null;
       if (top) { var host = top.closest('.ixpath'); (host.querySelector('.ixtabs') || host).scrollIntoView({ block: 'start', behavior: 'smooth' }); }
@@ -49,7 +70,7 @@
       var out = document.getElementById('rateout-' + key), sub = document.getElementById('ratesub-' + key);
       if (!out || !values) return;
       var res = E.shareAbove(values, rate);
-      if (!res.ok) { out.textContent = '—'; sub.textContent = 'Enter a rate.'; return; }
+      if (!res.ok) { out.textContent = 'no rate'; sub.textContent = 'Enter a rate.'; return; }
       out.textContent = pct(res.share, 0);
       sub.textContent = 'In ' + pct(res.share, 0) + ' of the ' + years + '-year holding periods in this data (' + res.above.toLocaleString('en-IN') + ' of ' + res.count.toLocaleString('en-IN') + '), the return beat ' + pct(rate, 1) + ' a year. Past periods, not future odds.';
       var hd = root.PRCHorizonData && root.PRCHorizonData[key];
@@ -57,7 +78,7 @@
         var cell = document.querySelector('[data-beat-h="' + row.h + '"][data-key="' + key + '"]');
         if (!cell) return;
         var share = E.shareAbove(row.values, rate);
-        cell.textContent = share.ok ? pct(share.share, 0) : '—';
+        cell.textContent = share.ok ? pct(share.share, 0) : 'none';
       });
     });
     /* the fan chart's readout follows the horizon under the pointer, tapped, or focused */
@@ -108,7 +129,7 @@
       btn.dataset.busy = 'yes'; btn.setAttribute('aria-busy', 'true');
       if (note) note.textContent = 'Building the PDF…';
       root.PRCPdf.save({
-        root: rootEl, title: PDF_TITLE[which] + (btn.dataset.name ? ' — ' + btn.dataset.name : ''),
+        root: rootEl, title: PDF_TITLE[which] + (btn.dataset.name ? ': ' + btn.dataset.name : ''),
         shortName: A.fileSlug(btn.dataset.name || PDF_TITLE[which]), inputs: null,
         appendix: which === 'rolling' && root.PRCRolling ? root.PRCRolling.windowAppendix() : null,
         footerLine: 'Already happened, not a forecast. Educational tool, not investment advice. Figures are before tax and exit load.'
@@ -138,20 +159,20 @@
   function init() {
     A.initRouter();
     shared();
+    A.watchTables();
     if (root.PRCDates) root.PRCDates.decorate(document);
     var ver = $('#ver'); if (ver) ver.textContent = A.VERSION;
     if (A.inAppBrowser()) {
-      ['#pf-door', '#step-source', '#g-history-card'].forEach(function (sel) {
+      ['#pf-step1', '#step-source', '#g-history-card'].forEach(function (sel) {
         var card = $(sel); if (!card) return;
         var n = document.createElement('div'); n.innerHTML = A.notice('warn', A.IN_APP_NOTE); n.firstChild.classList.add('inapp');
         card.insertBefore(n.firstChild, card.firstChild.nextSibling);
       });
     }
-    if (root.PRCUnderstand) root.PRCUnderstand.init();
     if (root.PRCPortfolio) root.PRCPortfolio.init();
     if (root.PRCGoal) root.PRCGoal.init();
     if (root.PRCRolling) root.PRCRolling.init();
-    /* a hash such as #understand/xirr on first paint: scroll once the page exists */
+    /* a hash with an anchor, such as an old #understand/xirr link, on first paint: scroll once the page exists */
     var m = /^#([a-z]+)\/(.+)$/.exec(location.hash || '');
     if (m) setTimeout(function () { A.show(m[1] + '/' + m[2]); }, 0);
   }

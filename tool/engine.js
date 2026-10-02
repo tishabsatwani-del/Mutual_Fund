@@ -1,4 +1,4 @@
-/* Where You Stand — calculation engine.
+/* Where You Stand: calculation engine.
  *
  * Pure functions, no DOM, no network, no dependencies. Every function here is
  * checked against an independent implementation (Python, written from the
@@ -702,6 +702,10 @@
   function benchmarkEquivalent(flows, series, opts) {
     var o = opts || {};
     var tol = o.toleranceDays == null ? 7 : o.toleranceDays;
+    /* An index is bought at its value on the date, or the last value before
+       it. A fund's units are allotted at the NAV of the date, or the next NAV
+       after it: priceRule 'after' replays a fund's own NAV file that way. */
+    var priceAt = o.priceRule === 'after' ? atOrAfter : atOrBefore;
     if (!series || series.length < 2) return fail('TOO_SHORT', 'This file does not hold enough history.');
     var list = (flows || []).filter(function (f) { return f && isValidDate(f.t) && f.amount > 0 && f.kind !== 'value'; })
       .slice().sort(function (a, b) { return a.t - b.t; });
@@ -711,8 +715,8 @@
     for (var i = 0; i < list.length; i++) {
       var f = list[i];
       if (f.t > valueDate) { skipped.push({ t: f.t, amount: f.amount, why: 'after the valuation date' }); continue; }
-      var obs = atOrBefore(series, f.t, tol);
-      if (!obs) { skipped.push({ t: f.t, amount: f.amount, why: 'no value in the file near this date' }); continue; }
+      var obs = priceAt(series, f.t, tol);
+      if (!obs || obs.t > valueDate) { skipped.push({ t: f.t, amount: f.amount, why: 'no value in the file near this date' }); continue; }
       var u = f.amount / obs.v;
       if (f.kind === 'out') { units -= u; tookOut += f.amount; eq.push({ t: f.t, amount: f.amount }); }
       else { units += u; paidIn += f.amount; eq.push({ t: f.t, amount: -f.amount }); }
@@ -755,7 +759,9 @@
     if (!list.length || !series || series.length < 2) return fail('NO_FLOWS', 'Nothing to value.');
     var valueDate = o.valueDate != null ? o.valueDate : series[series.length - 1].t;
     var resolved = list.map(function (l) {
-      var obs = atOrBefore(series, l.t, tol);
+      /* units a payment bought: the statement's own figure, else the amount
+         at the NAV of the date, or the next NAV after it */
+      var obs = atOrAfter(series, l.t, tol);
       var units = l.units != null && l.units > 0 ? l.units : (obs ? l.amount / obs.v : null);
       return { t: l.t, dir: l.dir === 'out' ? 'out' : 'in', amount: l.amount, units: units, ok: !!units };
     }).filter(function (l) { return l.ok; });
@@ -936,6 +942,71 @@
     return total;
   }
 
+  /* ------------------------------------------- the reader's own stretch
+   * spanPercentile: where the fund's own rate over the reader's dates sits
+   * among every stretch of the same length in the fund's file. A stretch
+   * starts at every observation and ends on the last observation on or
+   * before the same number of days later, within `tol` days, or is dropped;
+   * each is annualised on a 365-day year, as every rate here is. The
+   * percentile is the share of stretches that returned less, ties counted
+   * half: 62 means 62 in every 100 stretches of that length did worse. */
+  function spanPercentile(series, fromT, toT, rate, opts) {
+    var o = opts || {};
+    var tol = o.toleranceDays == null ? 7 : o.toleranceDays;
+    if (!series || series.length < 2 || !isValidDate(fromT) || !isValidDate(toT) || !isFinite(rate)) return fail('NO_DATA', 'Nothing to place.');
+    var spanDays = dayCount(fromT, toT);
+    if (spanDays < 1) return fail('TOO_SHORT', 'The stretch is under a day.');
+    var values = [], j = 0, last = series[series.length - 1].t;
+    for (var i = 0; i < series.length; i++) {
+      var target = series[i].t + spanDays * MS_PER_DAY;
+      if (target > last) break;
+      if (j < i) j = i;
+      while (j + 1 < series.length && series[j + 1].t <= target) j++;
+      var end = series[j];
+      if (end.t <= series[i].t || dayCount(end.t, target) > tol) continue;
+      if (!(series[i].v > 0) || !(end.v > 0)) continue;
+      values.push(Math.pow(end.v / series[i].v, DAY_BASIS / dayCount(series[i].t, end.t)) - 1);
+    }
+    if (values.length < 3) return fail('TOO_FEW', 'Only ' + values.length + ' stretches of this length fit in the file.');
+    var below = 0, equal = 0;
+    for (var k = 0; k < values.length; k++) {
+      if (Math.abs(values[k] - rate) <= 1e-9) equal++;
+      else if (values[k] < rate) below++;
+    }
+    var sorted = values.slice().sort(function (a, b) { return a - b; });
+    return { ok: true, count: values.length, below: below, equal: equal, percentile: 100 * (below + equal / 2) / values.length,
+             spanDays: spanDays, years: spanDays / DAY_BASIS, min: sorted[0], median: median(sorted), max: sorted[sorted.length - 1] };
+  }
+
+  /* youngMoney: how much of the money paid in went in during the two years
+   * before the valuation date. Money that has had little time behind it
+   * moves a money-weighted rate more than its share of the years. */
+  function youngMoney(flows, valueDate) {
+    var since = addYears(valueDate, -2), total = 0, recent = 0;
+    (flows || []).forEach(function (f) {
+      if (!f || f.kind !== 'in' || !(f.amount > 0) || !isValidDate(f.t) || f.t > valueDate) return;
+      total += f.amount;
+      if (f.t > since) recent += f.amount;
+    });
+    return { total: total, recent: recent, share: total > 0 ? recent / total : 0, since: since };
+  }
+
+  /* breakEven: what a holding in loss must be worth, and what its NAV must
+   * reach, for its value plus what was taken out to equal what was put in. */
+  function breakEven(h) {
+    var need = (h.paidIn || 0) - (h.tookOut || 0);
+    var inLoss = need > 0 && isFinite(h.value) && h.value < need;
+    return { inLoss: inLoss, valueNeeded: inLoss ? need : null, navNeeded: inLoss && h.units > 0 ? need / h.units : null };
+  }
+
+  /* averagePurchaseNav: what was paid for each unit bought, on average,
+   * across every purchase that carries its units: money in divided by units in. */
+  function averagePurchaseNav(lots) {
+    var paid = 0, units = 0;
+    (lots || []).forEach(function (l) { if (l && l.dir !== 'out' && l.units > 0 && l.amount > 0) { paid += l.amount; units += l.units; } });
+    return units > 0 ? { ok: true, nav: paid / units, paid: paid, units: units } : fail('NO_UNITS', 'No purchase carries its units.');
+  }
+
   /* ----------------------------------------------------------------- export */
   var api = {
     MS_PER_DAY: MS_PER_DAY, DAY_BASIS: DAY_BASIS, utc: utc, dayCount: dayCount, yearsBetween: yearsBetween,
@@ -955,7 +1026,8 @@
     monthlyRate: monthlyRate, futureValueOfLumpSum: futureValueOfLumpSum, futureValueOfSip: futureValueOfSip,
     sipGrowthFactor: sipGrowthFactor, projectGoal: projectGoal, requiredRate: requiredRate, todaysRupees: todaysRupees,
     goalUnderHistory: goalUnderHistory, requiredAcrossRates: requiredAcrossRates, costOfWaiting: costOfWaiting,
-    contributions: contributions
+    contributions: contributions, spanPercentile: spanPercentile, youngMoney: youngMoney, breakEven: breakEven,
+    averagePurchaseNav: averagePurchaseNav
   };
   if (typeof module === 'object' && module.exports) { module.exports = api; }
   root.PRCEngine = api;

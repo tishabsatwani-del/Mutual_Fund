@@ -1,4 +1,4 @@
-/* Where You Stand — Plan my goal. */
+/* Where You Stand: Plan my goal. */
 (function (root) {
   'use strict';
   var A = root.PRCApp, E = root.PRCEngine, D = root.PRCDoors, C = root.PRCCharts;
@@ -24,19 +24,34 @@
     if (isay) broken.push(isay);
     return broken;
   }
+  /* H6: every lever starts at exactly what was typed, even between steps,
+     and "Put them back" restores it exactly. Each slider's steps are laid
+     from the typed value (its minimum is shifted onto the same lattice), so
+     the typed value is a position the slider can actually hold. */
   var LEVERS = [
-    { id: 'g-scn-sip', key: 'monthlySip', label: 'Monthly investment', min: 0, step: 500, from: function (i) { return Math.round(i.monthlySip); },
+    { id: 'g-scn-sip', key: 'monthlySip', label: 'Monthly investment', min: 0, step: 500, from: function (i) { return i.monthlySip; },
       max: function (i, plan) { var needed = i.monthlySip + ((plan && plan.extraMonthly) || 0); return Math.max(5000, Math.ceil(Math.max(i.monthlySip * 4, needed * 1.5) / 500) * 500); }, say: function (v) { return money(v) + ' a month'; } },
-    { id: 'g-scn-step', key: 'annualStepUpRate', label: 'Raised each year by', min: 0, step: 1, from: function (i) { return Math.round(i.annualStepUpRate * 100); }, max: function () { return 25; }, scale: 0.01, say: function (v) { return v + '% a year'; } },
-    { id: 'g-scn-years', key: 'years', label: 'Years left', min: 1, step: 1, from: function (i) { return Math.round(i.years); }, max: function (i) { return Math.min(50, Math.max(10, Math.round(i.years) + 15)); }, say: function (v) { return v + (v === 1 ? ' year' : ' years'); } },
-    { id: 'g-scn-target', key: 'target', label: 'Amount you are aiming for', min: 0, step: 50000, from: function (i) { return Math.round(i.target / 50000) * 50000; }, max: function (i) { return Math.max(500000, Math.round(i.target * 2 / 50000) * 50000); }, say: function (v) { return A.moneyWords(v); } }
+    { id: 'g-scn-step', key: 'annualStepUpRate', label: 'Raised each year by', min: 0, step: 1, from: function (i) { return Math.round(i.annualStepUpRate * 1e8) / 1e6; }, max: function () { return 25; }, scale: 0.01, say: function (v) { return trim(v) + '% a year'; } },
+    { id: 'g-scn-years', key: 'years', label: 'Years left', min: 1, step: 1, from: function (i) { return i.years; }, max: function (i) { return Math.min(50, Math.max(10, Math.round(i.years) + 15)); }, say: function (v) { return trim(v) + (v === 1 ? ' year' : ' years'); } },
+    { id: 'g-scn-target', key: 'target', label: 'Amount you are aiming for', min: 0, step: 50000, from: function (i) { return i.target; }, max: function (i) { return Math.max(500000, Math.round(i.target * 2 / 50000) * 50000); }, say: function (v) { return A.moneyWords(v); } }
   ];
+  function trim(v) { return String(Math.round(v * 1000) / 1000); }
+  /* the slider's range, laid on a lattice that passes through the typed value */
+  function lattice(L, input, plan) {
+    var exact = L.from(input), step = L.step;
+    var off = ((exact - L.min) % step + step) % step;
+    var min = L.min + off;
+    var max = Math.max(L.max(input, plan), exact);
+    max = min + Math.ceil((max - min) / step - 1e-9) * step;
+    return { min: min, max: max, value: exact };
+  }
   function wireScenario(input) {
+    var touched = {};
     function read() {
       var v = { currentValue: input.currentValue, monthlySip: input.monthlySip, years: input.years, annualRate: input.annualRate, annualStepUpRate: input.annualStepUpRate, target: input.target };
       LEVERS.forEach(function (L) {
         var el = $('#' + L.id); if (!el) return;
-        var n = parseFloat(el.value);
+        var n = touched[L.id] ? parseFloat(el.value) : L.from(input);
         v[L.key] = isFinite(n) ? n * (L.scale || 1) : v[L.key];
         var out = $('#' + L.id + '-v'); if (out) out.textContent = L.say(isFinite(n) ? n : L.from(input));
       });
@@ -45,18 +60,21 @@
     function draw() {
       var v = read(), p = E.projectGoal(v), slot = $('#g-scn-out');
       if (!slot) return;
-      var moved = LEVERS.filter(function (L) { var el = $('#' + L.id); return el && parseFloat(el.value) !== L.from(input); }).length;
+      var moved = LEVERS.filter(function (L) { return touched[L.id] && Math.abs(parseFloat($('#' + L.id).value) - L.from(input)) > 1e-9; }).length;
       if (!moved) { slot.innerHTML = ''; return; }
       if (!p.ok) { slot.innerHTML = notice('bad', esc(p.message)); return; }
       var diff = p.projected - v.target;
       slot.innerHTML = '<div class="result" style="margin:.9rem 0 0"><div class="label">On these four, you reach</div><div class="value small">' + A.moneyWords(p.projected) + '</div>' +
         '<div class="sub">' + money(p.projected) + ' · against ' + money(v.target) + ' · ' + (diff >= 0 ? 'covered, ' + money(diff) + ' to spare' : 'short by ' + money(-diff)) + '</div></div>' +
-        '<p class="hint">Over ' + v.years.toFixed(0) + ' years you would pay in ' + money(p.totalContributed) + ' of your own money, on top of the ' + money(v.currentValue) + ' you already hold.</p>';
+        '<p class="hint">Over ' + trim(v.years) + ' years you would pay in ' + money(p.totalContributed) + ' of your own money, on top of the ' + money(v.currentValue) + ' you already hold.</p>';
     }
-    LEVERS.forEach(function (L) { var el = $('#' + L.id); if (el) el.addEventListener('input', draw); });
+    LEVERS.forEach(function (L) { var el = $('#' + L.id); if (el) el.addEventListener('input', function () { touched[L.id] = true; draw(); }); });
     read();
     var reset = $('#g-scn-reset');
-    if (reset) reset.addEventListener('click', function () { LEVERS.forEach(function (L) { var el = $('#' + L.id); if (el) el.value = L.from(input); }); draw(); });
+    if (reset) reset.addEventListener('click', function () {
+      LEVERS.forEach(function (L) { var el = $('#' + L.id); if (el) { el.value = L.from(input); touched[L.id] = false; } });
+      draw();
+    });
   }
 
   function calcGoal() {
@@ -74,7 +92,7 @@
     var name = $('#g-name').value.trim() || 'this goal';
     var main = '', market = '', numbers = '';
     main += '<div class="result"><div class="label">' + term('goal', 'If nothing changes, you reach') + '</div><div class="value">' + A.moneyWords(plan.projected) + '</div><div class="sub">' + money(plan.projected) + ' · Goal: ' + money(plan.target) + '</div></div>';
-    main += plan.onTrack ? notice('ok', '<strong>On track.</strong> On the return you assumed, ' + esc(name) + ' is covered with ' + esc(A.moneyWords(plan.surplus)) + ' to spare.')
+    main += plan.onTrack ? notice('', '<strong>Covered, on the return you assumed.</strong> ' + esc(A.moneyWords(plan.surplus)) + ' to spare for ' + esc(name) + '.')
       : notice('bad', '<strong>Short by ' + esc(money(plan.gap)) + '.</strong> On the return you assumed, ' + esc(name) + ' is not covered by what you are doing now.');
     main += '<div class="stats topline">' + stat('You reach', A.moneyWords(plan.projected)) + stat('Your goal', A.moneyWords(plan.target)) +
       stat(plan.onTrack ? 'To spare' : 'Short by', A.moneyWords(plan.onTrack ? plan.surplus : plan.gap)) + stat(plan.onTrack ? 'Needed each month' : 'More each month', plan.onTrack ? 'nothing more' : money(plan.extraMonthly)) + '</div>';
@@ -95,18 +113,18 @@
           : esc(req.message)) + '</p>';
     }
     main += '<div class="scenario" id="g-scn"><p class="hint tight">Move any of these four. The figure moves with them; your entries above are untouched. The return is not a lever: it is the one thing nobody controls.</p>' +
-      LEVERS.map(function (L) { return '<div class="lever"><label for="' + L.id + '">' + L.label + '</label><input type="range" id="' + L.id + '" min="' + L.min + '" max="' + L.max(input, plan) + '" step="' + L.step + '" value="' + L.from(input) + '"><output id="' + L.id + '-v" for="' + L.id + '"></output></div>'; }).join('') +
+      LEVERS.map(function (L) { var r = lattice(L, input, plan); return '<div class="lever"><label for="' + L.id + '">' + L.label + '</label><input type="range" id="' + L.id + '" min="' + r.min + '" max="' + r.max + '" step="' + L.step + '" value="' + r.value + '"><output id="' + L.id + '-v" for="' + L.id + '"></output></div>'; }).join('') +
       '<div id="g-scn-out" aria-live="polite"></div><button class="secondary" type="button" id="g-scn-reset">Put them back</button></div></div>';
     main += fold('What this figure is not', '<p>The ' + pct(input.annualRate) + ' is an assumption you typed in, not a rate anyone can promise. Real markets do not deliver the same return every year, and a run of poor years early on hurts more than the same years late. The projection is an illustration of arithmetic, not a forecast, and it leaves out tax and exit loads.</p>');
     main += '<div class="meaning"><h3>What to look at next</h3><p>The <em>If the market differs</em> tab shows the same plan at four other returns' + (G.history ? ', and under the worst, middle and best stretches in ' + esc(G.history.name) : ', and under a history file’s own stretches once one is loaded') + '. The <em>All the numbers</em> tab separates your own money from growth' + (infl != null ? ' and puts the goal in today’s rupees' : '') + '.</p></div>';
 
     /* the market's say: four rates, the file's own stretches, and waiting */
-    market += '<div class="card"><h2>It depends what the market does</h2><div class="scroll"><table class="data"><thead><tr><th>If returns average</th><th>You reach</th><th>Extra needed each month</th></tr></thead><tbody>';
+    market += '<div class="card"><h2>It depends what the market does</h2><ul class="scnlines">';
     E.requiredAcrossRates(input, [0.06, 0.08, 0.10, 0.12]).forEach(function (row) {
       if (row.error) return;
-      market += '<tr' + (Math.abs(row.rate - input.annualRate) < 1e-9 ? ' class="now"' : '') + '><td>' + pct(row.rate, 0) + ' a year</td><td>' + money(row.projected) + '</td><td>' + (row.onTrack ? 'nothing more' : money(row.extraMonthly) + ' a month') + '</td></tr>';
+      market += '<li' + (Math.abs(row.rate - input.annualRate) < 1e-9 ? ' class="now"' : '') + '>At ' + pct(row.rate, 0) + ' a year: <strong>' + esc(A.moneyWords(row.projected)) + '</strong>, ' + (row.onTrack ? 'nothing more needed.' : esc(money(row.extraMonthly)) + ' more needed each month.') + '</li>';
     });
-    market += '</tbody></table></div><p class="hint">' + (E.requiredAcrossRates(input, [input.annualRate])[0] && [0.06, 0.08, 0.10, 0.12].some(function (r) { return Math.abs(r - input.annualRate) < 1e-9; }) ? 'Your own assumption of ' + pct(input.annualRate, 0) + ' is highlighted. ' : 'Your own assumption is ' + pct(input.annualRate) + '. ') + 'Nobody can tell you which of these rows the future will resemble.</p>';
+    market += '</ul><p class="hint">' + (E.requiredAcrossRates(input, [input.annualRate])[0] && [0.06, 0.08, 0.10, 0.12].some(function (r) { return Math.abs(r - input.annualRate) < 1e-9; }) ? 'Your own assumption of ' + pct(input.annualRate, 0) + ' is highlighted. ' : 'Your own assumption is ' + pct(input.annualRate) + '. ') + 'Nobody can tell you which of these rows the future will resemble.</p>';
     if (G.history) market += historyRows(input);
     else market += '<p class="cardtext">Load a NAV or index history file under the form and this card also runs your plan through the worst, the middle and the best stretch of your length that the file holds.</p>';
     market += '</div>';
@@ -123,7 +141,7 @@
 
     /* own money and growth; today's rupees */
     var ownMoney = input.currentValue + plan.totalContributed, growth = plan.projected - ownMoney;
-    numbers += '<div class="card"><h2>Your money, and growth on it</h2><div class="stats">' + stat('Already saved', money(input.currentValue)) + stat('Still to pay in', money(plan.totalContributed)) + stat('Growth on both', money(growth)) + stat('Growth’s share of the end', growth > 0 ? pct(growth / plan.projected, 0) : '—') + '</div>' +
+    numbers += '<div class="card"><h2>Your money, and growth on it</h2><div class="stats">' + stat('Already saved', money(input.currentValue)) + stat('Still to pay in', money(plan.totalContributed)) + stat('Growth on both', money(growth)) + stat('Growth’s share of the end', growth > 0 ? pct(growth / plan.projected, 0) : 'none') + '</div>' +
       '<p class="cardtext">Of the ' + money(plan.projected) + ' at the end, ' + money(ownMoney) + ' is money you hand over yourself and ' + money(growth) + ' is what it earns while you leave it alone. The longer the period, the more the second number does the work.</p></div>';
     if (infl != null) {
       var tr = E.todaysRupees(input.target, infl, input.years);

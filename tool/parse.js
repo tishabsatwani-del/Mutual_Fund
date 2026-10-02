@@ -1,4 +1,4 @@
-/* The Portfolio Reality Check — file reading.
+/* The Portfolio Reality Check: file reading.
  *
  * Turns a NAV or index file into a clean, sorted, dated series, and reports
  * exactly what it threw away and why. Nothing here guesses silently: if the
@@ -9,11 +9,31 @@
 
   var MONTHS = { jan:1, feb:2, mar:3, apr:4, may:5, jun:6, jul:7, aug:8, sep:9, sept:9, oct:10, nov:11, dec:12 };
 
+  /* Headings as the files write them, reduced to plain lowercase words.
+   *
+   * The same heading arrives in several spellings: AMFI writes "Net Asset
+   * Value", NSE's index service "TotalReturnsIndex", a registrar's export
+   * "SCHEME_NAME", a hand-made file "NAV_Value". Splitting camelCase and
+   * turning underscores, slashes and brackets into spaces makes all of them
+   * the words a person would read, which is what every heading test below
+   * is written against. Without it "NAV_Value" matched nothing, and the
+   * file's first numeric column, a scheme code, was read as the NAV. */
+  function normHeader(h) {
+    return String(h == null ? '' : h)
+      .replace(/([a-z])([A-Z])/g, '$1 $2')
+      .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+      .toLowerCase()
+      .replace(/[_\-.\/\\()\[\]{}:#₹*]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
   var SCHEME_HEADERS = ['scheme name', 'schemename', 'scheme', 'fund name', 'fundname',
                         'fund', 'plan name', 'security name', 'index name'];
+  var CODE_HEADERS = ['scheme code', 'amfi code', 'amfi scheme code', 'code', 'scheme id'];
 
   var DATE_HEADERS = ['date', 'nav date', 'navdate', 'as on', 'as on date', 'day', 'period'];
-  var VALUE_HEADERS = ['nav', 'net asset value', 'net asset value (rs.)', 'nav (rs.)', 'nav rs',
+  var VALUE_HEADERS = ['nav', 'net asset value', 'net asset value rs', 'nav rs',
                        'close', 'closing', 'closing value', 'close price', 'index value',
                        'total returns index', 'tri', 'adj close', 'adjusted close', 'value', 'price'];
 
@@ -177,31 +197,34 @@
    * thirteen columns, nine of them numeric, and only one of the nine is the
    * index value; a reader that takes "the first numeric column" out of it
    * produces a rolling return on traded volume. */
+  /* Headings that are NEVER the value, whatever the column holds. Tested on
+   * the plain words from normHeader. A scheme code, an ISIN, a folio, an id
+   * or a number names a thing, not a price; AMFI's Repurchase and Sale Price
+   * columns are blank or a load-adjusted copy of the NAV. Volumes, turnover,
+   * changes, ratios, units and balances are numbers that are not a price. */
+  var NEVER_VALUE = /\bcode\b|\bisin\b|\bfolio\b|\bid\b|\bnumber\b|\brepurchase\b|\bsale price\b/;
   var NOT_VALUE = [
-    /\bvolumes?\b|\bvol\.?$|\bqty\b|\bquantit(y|ies)\b|\bshares\b|\bcontracts\b/,
+    NEVER_VALUE,
+    /\bvolumes?\b|\bvol$|\bqty\b|\bquantit(y|ies)\b|\bshares\b|\bcontracts\b/,
     /\bturnover\b/,
     /\bchange\b|\bchg\b|\bpoints?\b|\bpct\b|%|\byield\b|\bratio\b/,
-    /\bp\s*\/\s*e\b|\bp\s*\/\s*b\b|\bpe\b|\bpb\b|\bdiv(idend)?\b/,
-    /\bcode\b|\bisin\b|\bfolio\b|\baccount\b/,
-    /\b(id|no|num|number|sr|srno|s\.no)\b/,
+    /\bp e\b|\bp b\b|\bpe\b|\bpb\b|\bdiv(idend)?\b/,
+    /\baccount\b|\b(no|num|sr|srno|s no)\b/,
     /\bunits?\b|\bbalance\b/
   ];
 
-  /* Which numeric column is the price, when a file offers several.
-   *
-   * Earlier is better. The list is ordered by how specifically the heading
-   * commits to being a closing price: "Closing Index Value" beats "Open Index
-   * Value" beats a bare "Value", and a total-return index beats all of them
-   * because it is the one this tool actually asks for. */
+  /* Which numeric column is the value, when a file offers several: the
+   * heading decides, in this order. Net asset value, NAV, total returns
+   * index, index value, close, value; a bare price and a day's open, high
+   * or low only when nothing above is there. */
   var VALUE_RANK = [
-    /\bnet asset value\b|\bnav\b/,
+    /\bnet asset value\b/,
+    /\bnav\b/,
     /\btotal returns? index\b|\btri\b/,
-    /\bclos(e|ing)\b[^,]*\bindex\b|\bindex\b[^,]*\bclos(e|ing)\b/,
-    /\badj(usted)?\.?\s*clos(e|ing)\b/,
+    /\bindex value\b/,
     /\bclos(e|ing)\b/,
-    /\bindex\s*value\b/,
-    /\bprice\b/,
     /\bvalue\b/,
+    /\bprice\b/,
     /\bopen\b|\bhigh\b|\blow\b/
   ];
 
@@ -224,7 +247,7 @@
     var need = Math.min(2, probe.length);
     var out = [];
     for (var c = 0; c < width; c++) {
-      var filled = 0, dates = 0, numbers = 0, positive = 0, serials = 0;
+      var filled = 0, dates = 0, numbers = 0, positive = 0, serials = 0, whole = 0, decimals = 0;
       for (var r = 0; r < probe.length; r++) {
         var cell = probe[r] ? probe[r][c] : null;
         if (cell == null || String(cell).trim() === '') continue;
@@ -232,7 +255,13 @@
         if (readsAsDate(cell)) { dates++; continue; }
         if (serialOf(cell) !== null) serials++;
         var n = parseNumber(cell);
-        if (isFinite(n)) { numbers++; if (n > 0) positive++; }
+        if (isFinite(n)) {
+          numbers++; if (n > 0) positive++;
+          var dp = decimalPlaces(cell);
+          /* whole as written: "80.0000" is a NAV written to four places */
+          if (Math.floor(n) === n && dp === 0) whole++;
+          if (dp > decimals) decimals = dp;
+        }
       }
       out.push({
         index: c, filled: filled, dates: dates, numbers: numbers, positive: positive,
@@ -240,10 +269,20 @@
         isDates: filled >= need && dates >= filled * 0.6,
         /* Prices are positive. A column of positive numbers is a candidate; a
            column that is 40% negative is a change or a points move. */
-        isPrices: filled >= need && numbers >= filled * 0.6 && positive >= filled * 0.6
+        isPrices: filled >= need && numbers >= filled * 0.6 && positive >= filled * 0.6,
+        /* A whole number on every row is a code, a count or an id, never a
+           NAV or an index value, which carry decimals. */
+        allWhole: numbers > 0 && whole === numbers,
+        decimals: decimals
       });
     }
     return out;
+  }
+  /* Decimal places as written: "24.7805" has four, "120503" none. */
+  function decimalPlaces(cell) {
+    var s = String(cell == null ? '' : cell).trim().replace(/[₹$,\s]/g, '');
+    var m = /\.(\d+)$/.exec(s);
+    return m ? m[1].length : 0;
   }
 
   /* Two columns out of however many the file has.
@@ -258,9 +297,7 @@
    * could not be uploaded. */
   function pickColumns(rows, headerRow) {
     var prof = columnProfile(rows);
-    var lower = headerRow
-      ? headerRow.map(function (h) { return String(h == null ? '' : h).toLowerCase().trim(); })
-      : null;
+    var lower = headerRow ? headerRow.map(normHeader) : null;
 
     function heading(c) { return lower && lower[c] != null ? lower[c] : ''; }
 
@@ -288,21 +325,22 @@
       });
     }
 
-    /* ---- the value column */
+    /* ---- the value column: the heading first, in VALUE_RANK's order.
+       A heading that names something else (a code, an ISIN, a volume) is
+       never the value, and neither is a column of whole numbers: a NAV or an
+       index value carries decimals, a scheme code does not. A column with no
+       heading the list knows is taken only when no named one is there. */
     var valueCol = -1, bestValue = 1e9;
     prof.forEach(function (col) {
-      if (col.index === dateCol || !col.isPrices) return;
+      if (col.index === dateCol || !col.isPrices || col.allWhole) return;
       var h = heading(col.index);
-      var score;
-      if (lower && VALUE_HEADERS.indexOf(h) !== -1) score = -1;         /* named exactly */
-      else {
-        var rank = lower ? headingRank(VALUE_RANK, h) : null;
-        if (rank !== null) score = rank;
-        else if (lower && h && headingRank(NOT_VALUE, h) !== null) score = 900 + col.index;
-        else score = 100 + col.index;
-      }
-      /* A heading that names something else loses even to an unnamed column,
-         but is still better than having no value column at all. */
+      if (h && NEVER_VALUE.test(h)) return;
+      /* a heading that names the value wins even with "per unit" or
+         "points" in it ("NAV per Unit", "Index Value (Points)"); one that
+         names some other number (a volume, a change, units) is taken only
+         when there is nothing else */
+      var rank = h ? headingRank(VALUE_RANK, h) : null;
+      var score = rank !== null ? rank : (h && headingRank(NOT_VALUE, h) !== null ? 900 + col.index : 100 + col.index);
       if (score < bestValue) { bestValue = score; valueCol = col.index; }
     });
 
@@ -384,7 +422,7 @@
 
   function looksLikeHeader(row) {
     if (!row) return false;
-    var text = row.join(' ').toLowerCase();
+    var text = row.map(normHeader).join(' ');
     var named = DATE_HEADERS.concat(VALUE_HEADERS).some(function (h) { return text.indexOf(h) !== -1; });
     var mostlyText = row.filter(function (c) { return c !== '' && isNaN(parseNumber(c)); }).length >= Math.ceil(row.length / 2);
     return named && mostlyText;
@@ -474,7 +512,8 @@
      "Amount" alone is not here: a NAV file can carry one. */
   var TRADE_VALUES = /^(buy|sell|b|s|purchase|redemption|credit|debit|cr|dr)$/i;
 
-  function checkSchema(rows) {
+  function checkSchema(rows, options) {
+    var TRADEBOOK_COPY = tradebookCopy(options && options.slot);
     if (!rows || !rows.length) {
       return fail('EMPTY', 'That file has no rows in it that could be read.');
     }
@@ -491,8 +530,9 @@
       header.forEach(function (h) {
         var name = String(h == null ? '' : h).trim();
         if (!name) return;
+        var plain = normHeader(name);
         TRADE_HEADERS.forEach(function (re) {
-          if (re.test(name) && hits.indexOf(name) === -1) hits.push(name);
+          if ((re.test(name) || re.test(plain)) && hits.indexOf(name) === -1) hits.push(name);
         });
       });
     }
@@ -546,7 +586,7 @@
       if (anyDate && !anyPrice && header) {
         var named = -1;
         for (var vh = 0; vh < header.length; vh++) {
-          var hh = String(header[vh] == null ? '' : header[vh]).toLowerCase().trim();
+          var hh = normHeader(header[vh]);
           if (!hh) continue;
           if (VALUE_HEADERS.indexOf(hh) !== -1 || headingRank(VALUE_RANK, hh) !== null) {
             if (headingRank(NOT_VALUE, hh) === null) { named = vh; break; }
@@ -638,7 +678,7 @@
     var need = 'This screen needs two columns: a date, and the NAV or index value on that date.';
     if (!anyDate && !anyPrice) {
       return 'No table could be read out of that file. ' + need +
-             ' Nothing in it read as a column of dates or a column of values — which usually ' +
+             ' Nothing in it read as a column of dates or a column of values, which usually ' +
              'means it is not a spreadsheet at all, or the data sits inside a picture. ' +
              'Save it as CSV or Excel and load that.';
     }
@@ -655,17 +695,19 @@
   var NOT_TABULAR_COPY =
     'That file is not a spreadsheet. This screen reads a table of dates and values, and a PDF ' +
     'stores its numbers as page layout rather than as columns, so there is nothing here that can ' +
-    'read one reliably — and a number read wrongly out of a PDF would be silently wrong. ' +
+    'read one reliably, and a number read wrongly out of a PDF would be silently wrong. ' +
     'Open the statement in Excel or your fund house’s portal and download the same history as ' +
     'CSV or Excel, or copy the two columns and paste them in.';
 
-  /* A statement of the reader's own payments -- a tradebook, a CAS, a
-     transaction log -- is the right file on the wrong screen, and is told
-     so in those words. */
-  var TRADEBOOK_COPY =
-    'This looks like a statement of your own payments. Rolling returns need the fund\u2019s ' +
-    'price history \u2014 a date and the NAV or index value on that date. Check my portfolio ' +
-    'is the screen for this file.';
+  /* A statement of the reader's own payments (a tradebook, a CAS, a
+     transaction log) is the right file in the wrong slot, and is told so in
+     words that fit the slot it was put in. */
+  function tradebookCopy(slot) {
+    if (slot === 'index') return 'This looks like a statement of your own payments. This slot needs the index\u2019s history: a date and the index value on that date. Your statement goes in step 1.';
+    if (slot === 'nav') return 'This looks like a statement of your own payments. This slot needs the fund\u2019s NAV history: a date and the NAV on that date. Your statement goes in step 1.';
+    return 'This looks like a statement of your own payments. This screen needs a price history: a date and the NAV or index value on that date. Check my portfolio is the screen for this file.';
+  }
+  var TRADEBOOK_COPY = tradebookCopy();
 
   /* Section 3's red banner is written for a tradebook. A column of text under a
      NAV heading is a different fault and gets its own sentence, because "this
@@ -677,25 +719,50 @@
 
   function fail(code, message) { return { ok: false, code: code, message: message, detected: [] }; }
 
-  function pickSchemeColumn(header, rows) {
-    if (!header) return -1;
-    var lower = header.map(function (h) { return String(h).toLowerCase().trim(); });
-    for (var i = 0; i < lower.length; i++) {
-      if (SCHEME_HEADERS.indexOf(lower[i]) !== -1) return i;
-    }
-    for (var j = 0; j < lower.length; j++) {
-      if (/scheme|fund name/.test(lower[j])) return j;
-    }
-    return -1;
+  var ISIN_RE = /^INF[A-Z0-9]{9}$/;
+
+  /* The refusal the brief writes for a value column that never moves. */
+  function flatCopy(header) {
+    var found = header ? header.map(function (h) { return String(h == null ? '' : h).trim(); }).filter(Boolean) : [];
+    return 'Every value in this file\u2019s value column is the same. The wrong column was read. ' +
+      (found.length ? 'The headers found were: ' + found.join(', ') + '.' : 'The file has no row of headers.');
   }
 
+  /* The columns that say which scheme a row belongs to.
+   *   name   the scheme's name, with its plan and option: what a reader knows
+   *   code   the AMFI scheme code, one for each plan and option
+   * A file with a code column is keyed by the code, because two plans can
+   * share a name in a careless file and two codes never share a scheme. The
+   * name is what the reader is shown and what they type to find it. */
+  function schemeColumns(header) {
+    var out = { key: -1, name: -1, code: -1 };
+    if (!header) return out;
+    var lower = header.map(normHeader);
+    var i;
+    for (i = 0; i < lower.length && out.name === -1; i++) {
+      if (SCHEME_HEADERS.indexOf(lower[i]) !== -1) out.name = i;
+    }
+    for (i = 0; i < lower.length && out.name === -1; i++) {
+      if (/\bscheme\b|\bfund name\b/.test(lower[i]) && !/\bcode\b|\bisin\b|\bid\b/.test(lower[i])) out.name = i;
+    }
+    for (i = 0; i < lower.length && out.code === -1; i++) {
+      if (CODE_HEADERS.indexOf(lower[i]) !== -1 || /\b(scheme|amfi) code\b/.test(lower[i])) out.code = i;
+    }
+    out.key = out.code !== -1 ? out.code : out.name;
+    return out;
+  }
+  function pickSchemeColumn(header) { return schemeColumns(header).key; }
+  function cellText(row, col) { return col < 0 || !row ? '' : String(row[col] == null ? '' : row[col]).trim(); }
+
   /* Every distinct scheme in the file, with enough detail to tell near-identical
-   * names apart before choosing one. */
+   * names apart before choosing one: its name (plan and option are part of an
+   * AMFI name), its code, and the dates its prices cover. */
   function listSchemes(rows) {
-    var header = looksLikeHeader(rows[0]) ? rows[0] : null;
-    var body = header ? rows.slice(1) : rows;
-    var schemeCol = pickSchemeColumn(header, body);
-    if (schemeCol === -1) return null;
+    var found0 = findHeader(rows);
+    var header = found0.header;
+    var body = found0.body;
+    var sc = schemeColumns(header);
+    if (sc.key === -1) return null;
 
     var cols = pickColumns(body, header);
     if (cols.dateCol === -1 || cols.valueCol === -1) return null;
@@ -703,26 +770,34 @@
 
     var found = {}, order = [];
     for (var i = 0; i < body.length; i++) {
-      var name = String(body[i][schemeCol] == null ? '' : body[i][schemeCol]).trim();
-      if (!name) continue;
+      var key = cellText(body[i], sc.key);
+      if (!key) continue;
       var t = readDate(body[i][cols.dateCol], dayFirst, cols.serialDates);
       var v = parseNumber(body[i][cols.valueCol]);
       if (isNaN(t) || !isFinite(v) || v <= 0) continue;
-      if (!found[name]) { found[name] = { name: name, rows: 0, first: t, last: t }; order.push(name); }
-      var f = found[name];
+      if (!found[key]) {
+        found[key] = { key: key, name: cellText(body[i], sc.name), code: cellText(body[i], sc.code), rows: 0, first: t, last: t, names: [] };
+        order.push(key);
+      }
+      var f = found[key];
+      var nmNow = cellText(body[i], sc.name);
+      if (nmNow && f.names.indexOf(nmNow) === -1) f.names.push(nmNow);
+      /* a renamed scheme is listed under its latest name; the older ones still match a search */
+      if (nmNow && (t >= f.last || !f.name)) f.name = nmNow;
       f.rows++;
       if (t < f.first) f.first = t;
       if (t > f.last) f.last = t;
     }
     var list = order.map(function (n) { return found[n]; })
-      .sort(function (a, b) { return a.name.localeCompare(b.name); });
-    return list.length ? { column: schemeCol, schemes: list } : null;
+      .sort(function (a, b) { return (a.name || a.key).localeCompare(b.name || b.key); });
+    return list.length ? { column: sc.key, nameColumn: sc.name, codeColumn: sc.code, hasNames: sc.name !== -1, schemes: list } : null;
   }
 
   /* ------------------------------------------------------------------ main */
 
   function rowsToSeries(rows, options) {
     var opts = options || {};
+    var noun = opts.noun || 'fund';
     if (!rows || rows.length < 2) {
       return { ok: false, code: 'EMPTY', message: 'That file has no rows in it that could be read.' };
     }
@@ -732,22 +807,24 @@
     var header = found.header;
     var body = found.body;
 
-    /* one file, many schemes: keep only the one asked for */
-    var schemeCol = pickSchemeColumn(header, body);
-    var schemeName = null;
+    /* one file, many schemes: keep only the one asked for, by its key (the
+       code where the file has one, else the name) */
+    var sc = schemeColumns(header);
+    var schemeCol = sc.key;
+    var schemeName = null, schemeCode = null, schemeNames = [];
     if (schemeCol !== -1) {
       var wanted = opts.scheme;
       var distinct = {};
+      /* only rows that carry a date count: AMFI's files interleave section
+         headings ("Open Ended Schemes(...)", the fund house's name) with
+         the data, and a heading is not a scheme */
       for (var q = 0; q < body.length; q++) {
-        var nm = String(body[q][schemeCol] == null ? '' : body[q][schemeCol]).trim();
-        if (nm) distinct[nm] = true;
+        var nm = cellText(body[q], schemeCol);
+        if (nm && body[q].some(readsAsDate)) distinct[nm] = true;
       }
       var names = Object.keys(distinct);
       if (wanted) {
-        body = body.filter(function (r) {
-          return String(r[schemeCol] == null ? '' : r[schemeCol]).trim() === wanted;
-        });
-        schemeName = wanted;
+        body = body.filter(function (r) { return cellText(r, schemeCol) === wanted; });
         if (!body.length) {
           return { ok: false, code: 'NO_SUCH_SCHEME',
                    message: 'No rows in that file belong to \u201c' + wanted + '\u201d.' };
@@ -755,9 +832,31 @@
       } else if (names.length > 1) {
         return { ok: false, code: 'MANY_SCHEMES', schemes: names.length,
                  message: 'That file holds ' + names.length + ' different schemes. Choose which one to analyse.' };
-      } else if (names.length === 1) {
-        schemeName = names[0];      /* one scheme: name the analysis after it */
       }
+      if (wanted || names.length === 1) {
+        /* one scheme: name the analysis after it, and keep its code */
+        /* the latest row names the scheme; every name it carried is kept */
+        var latest = -Infinity;
+        for (var w = 0; w < body.length; w++) {
+          var dcell = null;
+          for (var dc = 0; dc < body[w].length && dcell === null; dc++) if (readsAsDate(body[w][dc])) dcell = body[w][dc];
+          if (dcell === null) continue;
+          var tw = toTimestamp(parseDateParts(dcell, true));
+          var nmw = sc.name !== -1 ? cellText(body[w], sc.name) : '';
+          if (nmw && schemeNames.indexOf(nmw) === -1) schemeNames.push(nmw);
+          if (nmw && (isNaN(tw) || tw >= latest)) { schemeName = nmw; if (!isNaN(tw)) latest = tw; }
+          if (!schemeCode && sc.code !== -1) schemeCode = cellText(body[w], sc.code) || null;
+        }
+        if (!schemeName) schemeName = wanted || names[0];
+      }
+    }
+    /* the ISINs on the rows used, so a statement can be checked against them */
+    var isins = {};
+    if (header) {
+      header.forEach(function (h, c) {
+        if (!/\bisin\b/.test(normHeader(h))) return;
+        for (var b = 0; b < body.length; b++) { var code = cellText(body[b], c).toUpperCase(); if (ISIN_RE.test(code)) isins[code] = true; }
+      });
     }
 
     /* Review v4 §5, and the reader's own override. Detection reads content
@@ -819,13 +918,21 @@
     if (schemeCol === -1 && skipped.duplicate >= series.length && series.length) {
       return {
         ok: false, code: 'MIXED_SERIES',
-        message: 'That file looks like more than one fund stacked together: ' + skipped.duplicate +
-                 ' rows repeat a date already seen, and no column names the fund they belong to. ' +
-                 'Load a file for one fund, or one that names the fund in a column.'
+        message: 'That file looks like more than one ' + noun + ' stacked together: ' + skipped.duplicate +
+                 ' rows repeat a date already seen, and no column names the ' + noun + ' they belong to. ' +
+                 'Load a file for one ' + noun + ', or one that names the ' + noun + ' in a column.'
       };
     }
 
     series.sort(function (a, b) { return a.t - b.t; });
+
+    /* Belt and braces: a price never sits still for a whole file. If every
+       value read is the same, the column read was not the price, whatever
+       the rules above concluded, and nothing is worked out from it. */
+    if (series.every(function (p) { return p.v === series[0].v; })) {
+      return { ok: false, code: 'FLAT', headers: header ? header.map(function (h) { return String(h == null ? '' : h).trim(); }).filter(Boolean) : [],
+               message: flatCopy(header) };
+    }
 
     var warnings = [];
     if (!dayFirstInfo.certain) {
@@ -849,6 +956,10 @@
         dayFirst: dayFirstInfo.dayFirst,
         dateCertain: dayFirstInfo.certain,
         scheme: schemeName,
+        code: schemeCode,
+        names: schemeNames,
+        isins: Object.keys(isins),
+        headers: header ? header.map(function (h) { return String(h == null ? '' : h).trim(); }).filter(Boolean) : [],
         headerFound: !!header,
         firstDate: series[0].t,
         lastDate: series[series.length - 1].t,
@@ -879,9 +990,9 @@
   /* ============================================== which KIND of history this is
    *
    * Shape cannot tell a fund NAV file from an index file: both are a date and
-   * a value. But the files themselves say what they are — AMFI's export
+   * a value. But the files themselves say what they are: AMFI's export
    * carries "Net Asset Value", scheme names and plan words; NSE's carries
-   * "Total Returns Index", index columns and never a scheme — so the words in
+   * "Total Returns Index", index columns and never a scheme, so the words in
    * the file are read and weighed. An index FUND's NAV file mentions "Nifty"
    * too, which is why one hit decides nothing: the fund-side words must
    * clearly outweigh the index-side words, or nothing is claimed. A file that
@@ -971,6 +1082,184 @@
     return out;
   }
 
+  /* ============================================ what kind of rows these are
+   *
+   * One reading of a row set, whatever door it came through: a file, a paste
+   * or a drop. It reports what it saw; each slot decides what that means for
+   * it. The statement slot asks "prices or payments?"; the index slot asks
+   * "a fund's NAV, or an index, and which kind of index?".
+   *
+   * Prices or payments, the brief's rule: rows are price data when an ISIN
+   * (INF and nine letters or digits) is in them; or a heading says net asset
+   * value, NAV, scheme code, index, close or total returns; or four in five
+   * of the would-be amounts are one figure (beside another column that
+   * moves, so a bare list of equal SIP instalments is still read); or the
+   * would-be amounts are whole numbers on every row beside a column carrying
+   * decimals; or the rows run on consecutive trading days with no
+   * transaction word in them. A transaction word (purchase, SIP, redemption,
+   * switch...) or an Amount heading anywhere says the rows are payments, and
+   * outweighs every one of those. */
+  var TYPE_WORD = /^(purchase|additional purchase|new purchase|fresh purchase|sip\b|systematic|redemption|redeem|switch|stp\b|swp\b|transfer|withdraw|money (in|out)\b|worth today|buy\b|sell\b|bought|sold|lump\s*sum|dividend|idcw|reinvest|lateral shift|segregat|gift)/i;
+  var AMOUNT_HEADING = /\bamount\b|\bamt\b/;
+  var PRICE_HEADING = /\bnet asset value\b|\bnav\b|\bscheme code\b|\bindex\b|\bclos(e|ing)\b|\btotal returns?\b/;
+  var TRI_HEADING = /\btotal returns? index\b|\btri\b/;
+  var CLOSE_HEADING = /\bclos(e|ing)\b/;
+
+  /* The row of headings: the last row with two or more words in it that
+     comes before the first row holding a date. */
+  var HEADING_WORD = /\b(date|amount|amt|units?|nav|net asset value|price|value|type|transaction|description|particulars|scheme|fund|folio|balance|isin|code|close|open|high|low|index|what happened|worth)\b/;
+  function headingRow(rows) {
+    var limit = Math.min(rows.length, HEADER_SEARCH_ROWS), at = -1, best = -1;
+    for (var i = 0; i < limit; i++) {
+      var r = rows[i] || [];
+      if (r.some(function (c) { return readsAsDate(c); })) break;
+      var cells = r.filter(function (c) { var t = String(c == null ? '' : c).trim(); return t && !isFinite(parseNumber(t)); });
+      if (cells.length < 2) continue;
+      /* the row with the most column words wins, so a fund's name or a folio
+         line between the headings and the data is not taken for them */
+      var score = cells.filter(function (c) { return HEADING_WORD.test(normHeader(c)); }).length;
+      if (score >= best) { best = score; at = i; }
+    }
+    return at;
+  }
+
+  function rowSignals(rows) {
+    var out = { header: null, typeWords: [], amountHeading: null, isin: null, priceHeadings: [],
+                identical: false, wholeBesideDecimals: false, dailyRun: false, reasons: [], dated: false, amfi: false,
+                nav: false, tri: false, close: false };
+    if (!rows || !rows.length) return out;
+    var h = headingRow(rows);
+    var header = h >= 0 ? rows[h] : null;
+    var body = rows.slice(h + 1).filter(function (r) { return r && r.some(function (c) { return String(c == null ? '' : c).trim() !== ''; }); }).slice(0, 400);
+    out.header = header;
+    var plain = header ? header.map(normHeader) : [];
+
+    plain.forEach(function (p, c) {
+      var raw = String(header[c] == null ? '' : header[c]).trim();
+      if (!p) return;
+      if (AMOUNT_HEADING.test(p) && !out.amountHeading) out.amountHeading = raw;
+      if (PRICE_HEADING.test(p)) out.priceHeadings.push(raw);
+      if (/\bnet asset value\b|\bnav\b|\bscheme code\b|\bamfi code\b|\bisin\b/.test(p)) out.nav = true;
+      if (TRI_HEADING.test(p)) out.tri = true;
+      if (CLOSE_HEADING.test(p)) out.close = true;
+    });
+    if (header && schemeColumns(header).name !== -1 && !/\bindex name\b/.test(plain.join(' | '))) out.nav = true;
+    /* AMFI's own pair of headings, on its history and its one-day NAVAll alike */
+    out.amfi = plain.some(function (p) { return /\bscheme code\b/.test(p); }) && plain.some(function (p) { return /\bnet asset value\b/.test(p); });
+
+    var width = 0;
+    body.forEach(function (r) { if (r.length > width) width = r.length; });
+    var seenWord = {};
+    rows.slice(0, 420).forEach(function (r) {
+      (r || []).forEach(function (cell) {
+        var t = String(cell == null ? '' : cell).trim();
+        if (!t) return;
+        var isinHit = /\bINF[A-Z0-9]{9}\b/.exec(t.toUpperCase());
+        if (isinHit && !out.isin) out.isin = isinHit[0];
+      });
+    });
+    body.forEach(function (r) {
+      r.forEach(function (cell) {
+        var t = String(cell == null ? '' : cell).trim();
+        if (t && t.length <= 40 && TYPE_WORD.test(t) && !seenWord[t.toLowerCase()]) { seenWord[t.toLowerCase()] = true; out.typeWords.push(t); }
+      });
+    });
+    if (out.isin) out.nav = true;
+
+    /* the date column, and the column a reader of payments would take as the amount */
+    var dateCol = -1, best = 0, c, r;
+    for (c = 0; c < width; c++) {
+      var n = 0;
+      for (r = 0; r < body.length; r++) if (readsAsDate(body[r][c])) n++;
+      if (n > best) { best = n; dateCol = c; }
+    }
+    /* rows that carry data: a section heading on a line of its own is not one */
+    var dataRows = body.filter(function (r) { return r.filter(function (c) { return String(c == null ? '' : c).trim() !== ''; }).length >= 2; });
+    if (dateCol === -1 || best < Math.max(1, Math.ceil(dataRows.length * 0.5))) return finish();
+    var distinctDates = {};
+    body.forEach(function (row) { var t0 = toTimestamp(parseDateParts(row[dateCol], true)); if (!isNaN(t0)) distinctDates[t0] = true; });
+    out.dated = Object.keys(distinctDates).length >= 2;
+    var numeric = [];
+    for (c = 0; c < width; c++) {
+      if (c === dateCol) continue;
+      var filled = 0, nums = [], dec = 0;
+      for (r = 0; r < body.length; r++) {
+        var cell = body[r][c];
+        if (cell == null || String(cell).trim() === '') continue;
+        filled++;
+        var v = parseNumber(String(cell).replace(/^\((.*)\)$/, '-$1'));
+        if (isFinite(v)) { nums.push(v); var dp = decimalPlaces(cell); if (dp > dec) dec = dp; }
+      }
+      if (filled && nums.length >= Math.ceil(filled * 0.6)) numeric.push({ col: c, nums: nums, decimals: dec });
+    }
+    var amountCol = -1;
+    plain.forEach(function (p, k) { if (amountCol === -1 && k !== dateCol && AMOUNT_HEADING.test(p)) amountCol = k; });
+    if (amountCol === -1) {
+      var order = [];
+      for (c = dateCol + 1; c < width; c++) order.push(c);
+      for (c = 0; c < dateCol; c++) order.push(c);
+      for (var o = 0; o < order.length && amountCol === -1; o++) {
+        if (numeric.some(function (x) { return x.col === order[o]; })) amountCol = order[o];
+      }
+    }
+    var cand = numeric.filter(function (x) { return x.col === amountCol; })[0];
+    var others = numeric.filter(function (x) { return x.col !== amountCol; });
+    if (cand && cand.nums.length >= 3) {
+      var counts = {}, top = 0;
+      cand.nums.forEach(function (v) { counts[v] = (counts[v] || 0) + 1; if (counts[v] > top) top = counts[v]; });
+      var moves = others.some(function (x) { var first = x.nums[0]; return x.nums.some(function (v) { return v !== first; }); });
+      out.identical = top >= cand.nums.length * 0.8 && moves;
+      out.wholeBesideDecimals = cand.nums.every(function (v) { return Math.floor(v) === v; }) && others.some(function (x) { return x.decimals >= 2; });
+    }
+    /* consecutive trading days: five or more dates, four in five of the gaps
+       between them no longer than a weekend and a holiday */
+    var days = {};
+    body.forEach(function (row) { var t = toTimestamp(parseDateParts(row[dateCol], true)); if (!isNaN(t)) days[t] = true; });
+    var ts = Object.keys(days).map(Number).sort(function (a, b) { return a - b; });
+    if (ts.length >= 5) {
+      var short = 0;
+      for (var g = 1; g < ts.length; g++) if ((ts[g] - ts[g - 1]) / 86400000 <= 4) short++;
+      out.dailyRun = short >= (ts.length - 1) * 0.8 && !out.typeWords.length;
+    }
+    return finish();
+
+    function finish() {
+      if (out.isin) out.reasons.push('an ISIN (' + out.isin + ')');
+      if (out.priceHeadings.length) out.reasons.push('a price heading (' + out.priceHeadings.slice(0, 3).join(', ') + ')');
+      if (out.identical) out.reasons.push('the same figure on four rows in five');
+      if (out.wholeBesideDecimals) out.reasons.push('whole numbers beside a column with decimals');
+      if (out.dailyRun) out.reasons.push('one row for each trading day');
+      return out;
+    }
+  }
+
+  /* The statement slot's question. Prices are a dated series: a holdings
+     snapshot carries ISINs and NAVs too, but no column of dates, and it is
+     left for the holdings reader. */
+  function pricesNotPayments(rows) {
+    var s = rowSignals(rows);
+    var statement = s.typeWords.length > 0 || !!s.amountHeading;
+    /* After review: "the same figure four rows in five" and "whole numbers
+       beside decimals" describe a scheme code beside a NAV, and equally a SIP
+       amount beside its units. On their own they refused real statements
+       pasted without headings, so they count only beside an ISIN, a price
+       heading or a run of trading days, which AMFI's and NSE's rows always
+       carry. AMFI's own headings (Scheme Code, Net Asset Value) mark price
+       data even on a one-day file such as NAVAll. */
+    var decisive = !!s.isin || s.priceHeadings.length > 0 || s.dailyRun;
+    return { prices: !statement && ((s.dated && decisive) || s.amfi), signals: s };
+  }
+
+  /* The index slot's question: a fund's NAV file is refused; a total return
+     index is taken as one; a file with a Close and no total returns column
+     is a price index; anything else (a bare date and value) is not known. */
+  function indexFileKind(rows, fileName) {
+    var s = rowSignals(rows);
+    var guess = guessDataKind(rows, fileName);
+    if (s.nav || (guess.kind === 'nav' && !s.tri && !s.close)) return { nav: true, signals: s };
+    return { nav: false, kind: s.tri ? 'TRI' : s.close ? 'PRICE' : null, signals: s };
+  }
+
   /* Keep only the part of a series inside a chosen window. Both bounds are
    * inclusive, and either may be left out. */
   function sliceSeries(series, fromT, toT) {
@@ -995,6 +1284,14 @@
     listSchemes: listSchemes,
     listSchemesText: listSchemesText,
     guessDataKind: guessDataKind,
+    normHeader: normHeader,
+    schemeColumns: schemeColumns,
+    rowSignals: rowSignals,
+    headingRow: headingRow,
+    pricesNotPayments: pricesNotPayments,
+    indexFileKind: indexFileKind,
+    flatCopy: flatCopy,
+    ISIN_RE: ISIN_RE,
     sliceSeries: sliceSeries,
     parseSeriesText: parseSeriesText
   };

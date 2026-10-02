@@ -6,7 +6,7 @@
 <title>Where You Stand</title>
 <meta name="description" content="Measure what your own money actually earned, see what every number means, and work out what it would take to reach your goal. Runs entirely in your browser.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231f4e5f'/%3E%3Cpath d='M7 22.5 13 15l4.5 4.5L25 9.5' fill='none' stroke='%23ffffff' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="styles.css?v=5">
+<link rel="stylesheet" href="styles.css?v=6">
 </head>
 <body data-view="home">
 <a class="skip" href="#main">Skip to content</a>
@@ -24,8 +24,8 @@
 <section class="view on" id="view-home" aria-labelledby="home-h">
   <div class="hero">
     <h1 id="home-h">Run it on <span class="grad">your own money</span>.</h1>
-    <p>Bring your own file. Nothing is fetched, nothing is sent, nothing is stored. Every number is
-    explained where it appears, so you can read your own position without anyone else.</p>
+    <p>Bring your own file. Nothing is fetched, nothing is sent, nothing is stored. Every number says
+    what it is a figure of, so you can read your own position without anyone else.</p>
   </div>
 
   <div class="tiles">
@@ -44,11 +44,6 @@
       <h2>Rolling returns</h2>
       <p>A fund or an index over every holding period in its history, on its own or against a benchmark.</p>
     </button>
-    <button class="tile" data-go="understand">
-      <span class="tile-step">Understand</span>
-      <h2>Understand every number</h2>
-      <p>What each figure means, how it is worked out, what it is not, and one worked example.</p>
-    </button>
   </div>
 
   <div class="card">
@@ -63,7 +58,7 @@
     <ol class="steps">
       <li>Choose what you want to understand.</li>
       <li>Load a file, or type your numbers in.</li>
-      <li>Read the result, then read what it means underneath it. Tap any figure&rsquo;s name for its explanation.</li>
+      <li>Read the result. Every figure says what it is a figure of.</li>
     </ol>
   </div>
 </section>
@@ -73,46 +68,41 @@
   <h1 id="pf-h">Check my portfolio</h1>
   <p class="lede">What your own money earned, counting the date every rupee went in and came out.</p>
 
-  <div class="chips modepick" id="pf-mode" role="radiogroup" aria-label="How will you give your entries?">
-    <button class="chip" type="button" role="radio" data-mode="file" aria-checked="false">I have a statement file</button>
-    <button class="chip" type="button" role="radio" data-mode="typed" aria-checked="false">I will type it in</button>
-  </div>
-  <p class="hint" id="pf-mode-prompt">Pick one to begin.</p>
+  <!-- ------------------------------------------------ step 1: the payments -->
+  <div class="card step" id="pf-step1">
+    <h2><span class="stepno">1</span> Your payments</h2>
+    <div class="chips modepick" id="pf-mode" role="radiogroup" aria-label="How will you give your payments?">
+      <button class="chip" type="button" role="radio" data-mode="file" aria-checked="false">I have a statement file</button>
+      <button class="chip" type="button" role="radio" data-mode="typed" aria-checked="false">I will type it in</button>
+    </div>
+    <p class="hint" id="pf-mode-prompt">Pick one to begin.</p>
 
-  <!-- ------------------------------------------------ the statement door -->
-  <div id="pf-filemode" hidden>
-    <div class="card" id="pf-door">
-      <h2>Your statement file</h2>
+    <div id="pf-filemode" hidden>
       <p class="hint tight">Either of two downloads works, and you do not have to know which you have.
       <strong>Transactions</strong>: every payment with its date. <strong>Holdings</strong>: each fund with
       what you put in and what it is worth now. CSV or Excel.</p>
       <div id="pf-howto"></div>
       <div id="pf-statement-door"></div>
       <div id="pf-door-out" aria-live="polite"></div>
+      <div id="pf-read" hidden>
+        <h3 class="subhead" id="pf-read-h">What I read</h3>
+        <div id="pf-read-summary"></div>
+        <details class="explain" id="pf-read-details">
+          <summary>Every line, to check against your statement</summary>
+          <div class="body">
+            <ul class="readlist" id="pf-read-list"></ul>
+            <p class="hint">Anything read wrongly can be dropped from the list; nothing here is typed in.</p>
+          </div>
+        </details>
+      </div>
     </div>
 
-    <div class="card" id="pf-read" hidden>
-      <h2 id="pf-read-h">What I read</h2>
-      <div id="pf-read-summary"></div>
-      <details class="explain" id="pf-read-details">
-        <summary>Every line, to check against your statement</summary>
-        <div class="body">
-          <ul class="readlist" id="pf-read-list"></ul>
-          <p class="hint">Anything read wrongly can be dropped from the list; nothing here is typed in.</p>
-        </div>
-      </details>
-    </div>
-  </div>
-
-  <!-- ------------------------------------------------- the typed entries -->
-  <div id="pf-typedmode" hidden>
-    <div class="card" id="pf-manual-card">
-      <h2>Your money in and out</h2>
+    <div id="pf-typedmode" hidden>
       <p class="hint tight">One row for every payment. Name the fund on each row if you hold more than one, and
       every fund is measured on its own beside the whole.</p>
       <div class="rows">
         <div class="row-head" aria-hidden="true">
-          <div>Date</div><div>What happened</div><div>Amount</div><div>Which fund</div><div></div>
+          <div>Date</div><div>What happened</div><div>Amount</div><div>Which fund?</div><div></div>
         </div>
         <div class="rows" id="pf-rows"></div>
       </div>
@@ -144,39 +134,26 @@
     </div>
   </div>
 
-  <!-- ------------------------------------ what it is worth, and the two optional files -->
-  <div id="pf-after" hidden>
-    <div class="card" id="pf-worth-card" hidden>
-      <h2>What it is worth today</h2>
-      <p class="hint tight">A statement of payments records what you paid, never what it grew to. This is the one
-      figure no file of payments contains.</p>
-      <div class="field" style="max-width:20rem">
-        <label for="pf-worth">The whole holding, today (&#8377;)</label>
-        <input type="number" id="pf-worth" inputmode="decimal" min="0" step="any">
-        <p class="hint" id="pf-worth-echo"></p>
-      </div>
-    </div>
+  <!-- ------------------------------------- step 2: what each fund is worth -->
+  <div class="card step" id="pf-step2" hidden>
+    <h2><span class="stepno">2</span> What each fund is worth today</h2>
+    <p class="hint tight">A statement of payments records what you paid, never what it grew to. Load each
+    fund&rsquo;s NAV history file and the value is worked out from it; type a value only if you have no file.</p>
+    <div id="pf-values"></div>
+    <p class="hint" id="pf-values-note" aria-live="polite"></p>
+  </div>
 
-    <div class="card" id="pf-values-card" hidden>
-      <h2>What is each fund worth today?</h2>
-      <p class="hint tight">Give each fund today&rsquo;s NAV or its value, whichever your app shows. Or load the
-      fund&rsquo;s NAV history file and the value is filled from it, and the fund&rsquo;s own record over your
-      dates opens up.</p>
-      <div id="pf-values"></div>
-      <p class="hint" id="pf-values-note" aria-live="polite"></p>
-    </div>
-
-    <div class="card" id="pf-index-card">
-      <h2>Compare with an index <span class="optional">optional</span></h2>
-      <p class="hint tight">Load the total return index (TRI) file of the benchmark you want to measure against.
-      The same rupees on the same dates are put into it, and the two rates sit side by side.</p>
-      <div id="pf-index-howto"></div>
-      <div id="pf-index-door"></div>
-    </div>
+  <!-- ------------------------------------------- step 3: the index (optional) -->
+  <div class="card step" id="pf-step3" hidden>
+    <h2><span class="stepno">3</span> Compare with the benchmark index (TRI) <span class="optional">optional</span></h2>
+    <p class="hint tight">Load the total return index (TRI) file of the benchmark you want to measure against.
+    The same rupees on the same dates are put into it, and the two rates sit side by side.</p>
+    <div id="pf-index-howto"></div>
+    <div id="pf-index-door"></div>
   </div>
 
   <div class="btnrow" id="pf-actions" hidden>
-    <button class="primary" type="button" id="pf-calc" disabled>Show me my portfolio</button>
+    <button class="primary" type="button" id="pf-calc" hidden>Show me my portfolio</button>
     <button class="secondary" type="button" id="pf-reset">Start again</button>
   </div>
   <div id="pf-out" aria-live="polite"></div>
@@ -200,8 +177,7 @@
         <input type="number" id="g-rate" aria-describedby="g-rate-bad" value="10" min="0" max="30" step="0.5" inputmode="decimal">
         <p class="hint refuse" id="g-rate-bad" hidden></p>
         <p class="hint">An assumption you are choosing, not a rate anyone can promise you. This tool will not
-        suggest a number. Not sure? <button class="link" type="button" data-go="rolling">See what a market has
-        actually returned over periods this long</button>.</p>
+        suggest a number.</p>
       </div>
       <div class="field"><label for="g-step">Raise the monthly amount each year by (%)</label><input type="number" id="g-step" aria-describedby="g-step-bad" value="0" min="0" max="25" step="1" inputmode="decimal"><p class="hint refuse" id="g-step-bad" hidden></p></div>
       <div class="field">
@@ -286,14 +262,6 @@
   <div id="r-out" aria-live="polite"></div>
 </section>
 
-<!-- ============================================================ UNDERSTAND -->
-<section class="view" id="view-understand" aria-labelledby="u-h">
-  <h1 id="u-h">Understand every number</h1>
-  <p class="lede">What each figure on this site means, how it is worked out, and what it is not. Tap a name to
-  jump to it.</p>
-  <div id="u-body"></div>
-</section>
-
 <!-- ================================================================ SHEET -->
 <section class="view" id="view-sheet" aria-labelledby="s-h">
   <h1 id="s-h">The spreadsheet</h1>
@@ -342,15 +310,31 @@
     <p class="cardtext">Everything you type or load is worked out inside your browser, on your device. Nothing is
     uploaded, stored on a server, or written to this device. Close the tab and it is gone, which is why there is
     a button to save your own entries as a file.</p>
-    <div class="scroll"><table class="data"><tbody>
-      <tr><td>Where the arithmetic runs</td><td>in this page, on your device</td></tr>
-      <tr><td>What this page requests</td><td>only its own files, from this address; nothing from any other site, at any point</td></tr>
-      <tr><td>A fund&rsquo;s or index&rsquo;s prices</td><td>a file you download and choose yourself</td></tr>
-      <tr><td>Password-protected files</td><td>not read; there is no decryption here</td></tr>
-      <tr><td>What is sent anywhere</td><td>nothing</td></tr>
-      <tr><td>Account, sign-up, email</td><td>none</td></tr>
-      <tr><td>What the figures leave out</td><td>tax and exit load; a fund&rsquo;s NAV already includes its expense ratio</td></tr>
-    </tbody></table></div>
+    <dl class="qa">
+      <dt>Where does the arithmetic run?</dt><dd>In this page, on your device.</dd>
+      <dt>What does this page request?</dt><dd>Only its own files, from this address. Nothing from any other site, at any point.</dd>
+      <dt>Where do a fund&rsquo;s or an index&rsquo;s prices come from?</dt><dd>A file you download and choose yourself.</dd>
+      <dt>Are password-protected files read?</dt><dd>No. There is no decryption here.</dd>
+      <dt>What is sent anywhere?</dt><dd>Nothing.</dd>
+      <dt>Is there an account, a sign-up or an email?</dt><dd>None.</dd>
+      <dt>What do the figures leave out?</dt><dd>Exit load and tax. A fund&rsquo;s NAV already includes its expense ratio.</dd>
+    </dl>
+  </div>
+  <div class="card" id="how">
+    <h2>How this tool calculates</h2>
+    <ul class="plainlist conventions">
+      <li>A year is 365 days, the convention of spreadsheet XIRR and of every factsheet.</li>
+      <li>A window of N years ends on the same calendar date N years later, or on the last value up to seven days before it; beyond that the window is dropped, never stretched. Each window&rsquo;s figure is the value at its end divided by the value at its start, raised to the power 365 divided by its days, minus 1.</li>
+      <li>Weekly and monthly start frequencies thin the start dates only; every window is still measured first value to last.</li>
+      <li>Percentiles use linear interpolation between neighbours, the spreadsheet PERCENTILE rule. Where your own stretch sits among a fund&rsquo;s stretches of the same length is the share of those stretches that returned less than the fund did over your dates, ties counted half.</li>
+      <li>The same rupees in the index: each payment buys index units at the index value on that date, or the last value on or before it; withdrawals sell units; the units left are valued on the valuation date.</li>
+      <li>Units from a NAV file: amount divided by the NAV on the payment date, or the next NAV on or after it.</li>
+      <li>Volatility is the standard deviation of day-to-day log returns times the square root of the observations per year in the file.</li>
+      <li>Capture ratios use month-end values. The information ratio uses daily arithmetic returns and the standard deviation of daily excess returns, the basis SEBI set in circular SEBI/HO/IMD/IMD-PoD-2/P/CIR/2025/6 of 17 January 2025.</li>
+      <li>Dates are read day first; a file whose dates only make sense month first is read month first; a file that reads both ways says so.</li>
+      <li>Rows with no value, a zero, or a negative are counted and shown, never used. The same date twice keeps the last. Gaps wider than 45 days are reported.</li>
+      <li>Everything is before exit load and tax; a fund&rsquo;s NAV already carries its expense ratio.</li>
+    </ul>
   </div>
   <div class="card">
     <h2>What this is</h2>
@@ -363,6 +347,7 @@
     <h2>What this is not</h2>
     <p class="cardtext">It does not recommend funds, rate them, rank them, or tell you what to buy, sell, hold or
     switch. Figures are before exit load and before tax. It is an educational tool, not investment advice.</p>
+    <p class="cardtext">Mutual fund investments are subject to market risks, read all scheme related documents carefully. Past performance may or may not be sustained in future.</p>
   </div>
   <div class="card">
     <h2>Version</h2>
@@ -372,30 +357,27 @@
 
 <footer class="foot">
   <div class="foot-links">
-    <button class="link" data-go="understand" type="button">Understand every number</button>
     <button class="link" data-go="about" type="button">About &amp; privacy</button>
     <button class="link" data-go="sheet" type="button">The spreadsheet</button>
   </div>
-  <p>Worked out on your device. Nothing you enter leaves this page.</p>
-  <p>Educational tool, not investment advice. Figures are before exit load and tax.</p>
+  <p>Worked out on your device. Educational tool, not investment advice.</p>
 </footer>
 
 </main>
 
-<script src="format.js?v=5"></script>
-<script src="workbook.js?v=5"></script>
-<script src="engine.js?v=5"></script>
-<script src="parse.js?v=5"></script>
-<script src="upload.js?v=5"></script>
-<script src="app.js?v=5"></script>
-<script src="dates.js?v=5"></script>
-<script src="pdf.js?v=5"></script>
-<script src="charts.js?v=5"></script>
-<script src="doors.js?v=5"></script>
-<script src="understand.js?v=5"></script>
-<script src="portfolio.js?v=5"></script>
-<script src="goal.js?v=5"></script>
-<script src="rolling.js?v=5"></script>
-<script src="boot.js?v=5"></script>
+<script src="format.js?v=6"></script>
+<script src="workbook.js?v=6"></script>
+<script src="engine.js?v=6"></script>
+<script src="parse.js?v=6"></script>
+<script src="upload.js?v=6"></script>
+<script src="app.js?v=6"></script>
+<script src="dates.js?v=6"></script>
+<script src="pdf.js?v=6"></script>
+<script src="charts.js?v=6"></script>
+<script src="doors.js?v=6"></script>
+<script src="portfolio.js?v=6"></script>
+<script src="goal.js?v=6"></script>
+<script src="rolling.js?v=6"></script>
+<script src="boot.js?v=6"></script>
 </body>
 </html>

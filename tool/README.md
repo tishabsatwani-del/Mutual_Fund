@@ -6,8 +6,9 @@ never moves. Everything a reader is promised lives behind it, including the
 spreadsheet; `/Mutual_Fund/xirr/` is only a redirect for links already pointing
 there.
 
-Four screens and a glossary on one page: Check my portfolio, Plan my goal,
-Rolling returns, Understand every number, and the spreadsheet download.
+Three screens on one page: Check my portfolio, Plan my goal and Rolling returns,
+with the spreadsheet download and an About page that sets out how every figure
+is calculated. The ideas themselves are taught in the book, not here.
 
 ## What it does, and what it never does
 
@@ -25,7 +26,7 @@ market references, so it does not go stale.
 | `index.html` | The whole interface. No build step. |
 | `styles.css` | One stylesheet. No framework, no font requests. |
 | `engine.js` | Every calculation: XIRR (all roots), CAGR, rolling returns, drawdown, benchmark-equivalent flows, capture ratios, information ratio, tracking, calendar and trailing returns, goal maths. Pure functions, no DOM. |
-| `parse.js` | Turns a messy CSV, text or pasted table into a clean dated series and reports what it dropped. Reads day-first and month-first dates. |
+| `parse.js` | Turns a messy CSV, text or pasted table into a clean dated series and reports what it dropped. Reads day-first and month-first dates. Picks the value column by its heading (never a code, ISIN or whole-number column) and refuses a column that never moves. Tells price data from payments, and a fund's NAV file from an index file. |
 | `upload.js` | Reads a statement: a transaction ledger, a holdings file, or the tool's own saved entries. |
 | `workbook.js` | Reads `.xlsx` by unzipping it with the browser's own `DecompressionStream`; no spreadsheet library. |
 | `format.js` | Rupees, percentages and dates, one way everywhere. |
@@ -33,11 +34,11 @@ market references, so it does not go stale.
 | `charts.js` | Inline SVG: histogram, growth of ₹10,000, rolling line, fan chart, goal bar. |
 | `doors.js` | The file doors: drop zone, paste box, scheme picker, the how-to guides and their videos. |
 | `app.js` | Formatting helpers, routing, result tabs, file intake. |
-| `portfolio.js`, `goal.js`, `rolling.js`, `understand.js` | The four screens. |
+| `portfolio.js`, `goal.js`, `rolling.js` | The three screens. |
 | `boot.js` | Start-up and the handlers every result screen shares (tabs, rate boxes, PDF). |
 | `pdf.js` + `vendor/` | Save as PDF, rendered on the device. |
 | `media/` | Two short recordings of the downloads, made on a phone. |
-| `XIRR-Calculator.xlsx` | The spreadsheet: the same calculations as plain formulas. `XIRR-Calculator-2.1.xlsx` and `XIRR-Calculator-4.xlsx` are identical copies kept for links already in circulation. |
+| `XIRR-Calculator.xlsx` | The spreadsheet: the same calculations as plain formulas, saved with every result already worked out so a phone viewer shows them. `XIRR-Calculator-2.1.xlsx` and `XIRR-Calculator-4.xlsx` are identical copies kept for links already in circulation. |
 | `qr-portfolio-reality-check.svg` / `.png` | Print artwork for the address in the book. |
 
 **No dependencies, no CDN, no API, no backend, no analytics, no storage.** The

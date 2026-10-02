@@ -1,4 +1,4 @@
-/* Where You Stand — the number standard, review v4 section 11.
+/* Where You Stand: the number standard, review v4 section 11.
  *
  * Section 11 is a specification, not a preference: every figure in the product
  * goes through this file, web and workbook, and nothing is formatted at the
@@ -55,12 +55,12 @@
    * lowercase; never "L", "Cr", "Lakhs" or "Crores". The sign closes up.
    */
   function money(n) {
-    if (bad(n)) return '—';
+    if (bad(n)) return 'not known';
     return signed('₹' + G0.format(Math.abs(n)), n < 0);
   }
 
   function moneyWords(n) {
-    if (bad(n)) return '—';
+    if (bad(n)) return 'not known';
     var a = Math.abs(n);
     if (a < LAKH) return money(n);
 
@@ -85,7 +85,7 @@
    * number can go either way -- a return can, a fee cannot. */
   function pct(r, options) {
     var o = options || {};
-    if (bad(r)) return '—';
+    if (bad(r)) return 'not known';
     var dp = o.dp == null ? 1 : o.dp;
     var v = Math.abs(r * 100);
     var text = new Intl.NumberFormat('en-IN', {
@@ -98,22 +98,22 @@
   function points(p, options) { return pct(p / 100, options); }
 
   function years(y) {
-    if (bad(y)) return '—';
+    if (bad(y)) return 'not known';
     return new Intl.NumberFormat('en-IN', {
       minimumFractionDigits: 1, maximumFractionDigits: 1
     }).format(y) + (Math.abs(y - 1) < 0.05 ? ' year' : ' years');
   }
 
-  function count(n) { return bad(n) ? '—' : G0.format(n); }
+  function count(n) { return bad(n) ? 'not known' : G0.format(n); }
 
   /* ------------------------------------------------------------- dates
    * dd-MMM-yyyy, always, in inputs as well as output. 04/01/2022 is read as
    * 4 January by an Indian reader and meant as 1 April by an American tool,
    * and there is no way to tell which from the string. */
   function date(t) {
-    if (t == null || (typeof t === 'number' && !isFinite(t))) return '—';
+    if (t == null || (typeof t === 'number' && !isFinite(t))) return 'not known';
     var d = new Date(t);
-    if (isNaN(d.getTime())) return '—';
+    if (isNaN(d.getTime())) return 'not known';
     return String(d.getUTCDate()).padStart(2, '0') + '-' +
            MONTHS[d.getUTCMonth()] + '-' + d.getUTCFullYear();
   }

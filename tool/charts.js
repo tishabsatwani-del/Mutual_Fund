@@ -1,4 +1,4 @@
-/* Where You Stand — the charts. Inline SVG sized by viewBox so it scales on a
+/* Where You Stand: the charts. Inline SVG sized by viewBox so it scales on a
  * phone; one hue per series, and the axis carries the meaning, never colour
  * alone. Every chart has a caption and an aria-label that says the same thing
  * in words. */
@@ -233,7 +233,7 @@
   function fanReadout(h, p10, med, p90, n, b, compareName) {
     function f(v) { return typeof v === 'number' ? pct(v) : v; }
     var text = h + (+h === 1 ? ' year' : ' years') + ': 10th percentile ' + f(p10) + ' · median ' + f(med) + ' · 90th percentile ' + f(p90) + ' (' + Number(n).toLocaleString('en-IN') + ' windows)';
-    if (b) text += ' — ' + (compareName || 'the index') + ': 10th ' + f(b.p10) + ' · median ' + f(b.median) + ' · 90th ' + f(b.p90);
+    if (b) text += '; ' + (compareName || 'the index') + ': 10th ' + f(b.p10) + ' · median ' + f(b.median) + ' · 90th ' + f(b.p90);
     return text;
   }
 

@@ -1,8 +1,8 @@
-/* Where You Stand — the file door, shared by every screen.
+/* Where You Stand: the file door, shared by every screen.
  *
  * One component, one behaviour everywhere: choose a file (or several of the
  * same history), drop it, or paste two columns. The box itself shows the
- * state — reading, added with rows and dates, or refused with the reason —
+ * state (reading, added with rows and dates, or refused with the reason),
  * so nobody has to scroll to find out whether a tap worked. A file holding
  * many schemes shows a picker inside the door. Several files of one history
  * are joined by date.
@@ -50,7 +50,7 @@
     },
     index: function () {
       return '<details class="explain howto"><summary>Get the index file: where, which report, what it looks like</summary><div class="body">' +
-        '<p><strong>The file:</strong> the daily values of the benchmark index, in its <em>total return</em> form (TRI), which counts dividends the way a fund’s NAV does. A price index leaves dividends out and reads lower every year; if only a price index is available, load it and say so when asked.</p>' +
+        '<p><strong>The file:</strong> the daily values of the benchmark index, in its <em>total return</em> form (TRI), which counts dividends the way a fund’s NAV does. A price index leaves dividends out and reads lower every year; it is accepted only with a flag that says so.</p>' +
         '<p><strong>Where:</strong> the index provider’s own website. For the indices most Indian funds are measured against, that is the site of the exchange’s index company: its historical data or reports section, the total returns report, your index, the dates, then the download link.</p>' +
         '<p><strong>If the site limits one download to a shorter stretch:</strong> download several stretches and load them all here. They are joined by date.</p>' +
         '<p><strong>What a good file looks like:</strong></p>' + sampleBlock(SAMPLE.index) +
@@ -81,11 +81,13 @@
 
   /* ------------------------------------------------------------ the door */
   var seq = 0;
+  var NOUN = { nav: 'fund', index: 'index', any: 'fund or index' };
   function mount(host, opts) {
     var o = opts || {};
     var prefix = o.prefix || ('door' + (seq++));
     var kind = o.kind || 'any';
-    var state = { files: [], pieces: [], series: null, name: '', report: null, rows: null, schemes: null, picked: null, kindGuess: null };
+    var noun = o.noun || NOUN[kind] || 'fund or index';
+    var state = { pieces: [], series: null, name: '', report: null, rows: null, schemes: null, picked: null, kindGuess: null };
 
     host.innerHTML =
       (o.label ? '<label class="fieldlabel" for="' + prefix + '-file">' + esc(o.label) + '</label>' : '') +
@@ -102,7 +104,7 @@
         '<div class="field"><label for="' + prefix + '-scheme-q">Which one in that file?</label>' +
         '<input type="text" id="' + prefix + '-scheme-q" autocomplete="off" placeholder="Type part of the name"><p class="hint" id="' + prefix + '-scheme-count"></p></div>' +
         '<div id="' + prefix + '-scheme-list" class="picker" role="listbox" aria-label="Schemes in this file"></div>' +
-        '<p class="hint">Official downloads hold every scheme of a fund house in one file. Pick the exact name on your statement; check the plan and the option in it, since each is a separate row.</p>' +
+        '<p class="hint" id="' + prefix + '-scheme-note">Official downloads hold every scheme of a fund house in one file. Pick the exact name on your statement; the plan and the option are part of the name, and each is a separate row.</p>' +
       '</div>';
 
     /* The control is the browser's own file input, visible and styled: no
@@ -126,103 +128,156 @@
         (action ? pickHtml(action) : '');
     }
     function reading(name) { setState('working', '<span class="spin"></span>', name, 'Reading the file…', ''); }
-    function added(name, sub) { setState('loaded', '✓', name, '<strong class="ok-word">File added</strong>' + (sub ? ' — ' + sub : ''), o.multiple === false ? 'Choose a different file' : 'Add another file, or change it'); }
-    function refused(name) { setState('refused', '!', name, '<strong class="bad-word">Not added</strong> — see below', 'Choose another file'); }
+    function added(name, sub) { setState('loaded', '✓', name, '<strong class="ok-word">File added</strong>' + (sub ? ': ' + sub : ''), o.multiple === false ? 'Choose a different file' : 'Add another file, or change it'); }
+    function refused(name) { setState('refused', '!', name, '<strong class="bad-word">Not added.</strong> The reason is below.', 'Choose another file'); }
+    /* H1: one status per slot. Every new attempt replaces what was there. */
     function say(html) { var st = $('#' + prefix + '-status'); if (st) st.innerHTML = html || ''; }
+    function hidePicker() { var w = $('#' + prefix + '-scheme-wrap'); if (w) { w.hidden = true; var l = w.querySelector('.pickedline'); if (l) l.remove(); } }
+    function empty() {
+      state.pieces = []; state.series = null; state.name = ''; state.report = null; state.rows = null; state.schemes = null; state.picked = null; state.kindGuess = null;
+    }
     function clear() {
-      state.files = []; state.pieces = []; state.series = null; state.name = ''; state.report = null; state.rows = null; state.schemes = null; state.picked = null; state.kindGuess = null;
+      empty();
       var b = box(); if (b) { b.className = 'filebox'; b.innerHTML = idleHtml(); }
-      say(''); $('#' + prefix + '-scheme-wrap').hidden = true; $('#' + prefix + '-paste-text').value = ''; $('#' + prefix + '-paste-box').hidden = true;
+      say(''); hidePicker(); $('#' + prefix + '-paste-text').value = ''; $('#' + prefix + '-paste-box').hidden = true;
       if (o.onLoaded) o.onLoaded(null);
     }
 
-    /* files arrive one at a time or several at once; each becomes a piece */
+    /* Files arrive one at a time or several at once; each becomes a piece.
+       An attempt is all or nothing: if any file in it is refused, the slot is
+       emptied and shows that refusal alone, so a green card never sits above
+       a red one. A file chosen again under the same name replaces its piece. */
     function takeFiles(files) {
       var list = Array.prototype.slice.call(files || []);
       if (!list.length) return;
       if (o.multiple === false) state.pieces = [];
       reading(list.length === 1 ? list[0].name : list.length + ' files');
-      say('');
-      var i = 0;
+      say(''); hidePicker();
+      var fresh = [], i = 0;
       function next() {
-        if (i >= list.length) { assemble(); return; }
+        if (i >= list.length) { landed(fresh); return; }
         var f = list[i++];
-        A.readFile(f, function (res) { onPiece(f, res, null); next(); }, function (msg, extra) { onPiece(f, null, { msg: msg, extra: extra }); next(); }, function () {});
+        A.readFile(f, function (res) { fresh.push(piece(f, res, null)); next(); },
+          function (msg, extra) { fresh.push(piece(f, null, { msg: msg, extra: extra })); next(); }, function () {}, { noun: noun });
       }
       next();
     }
-    function onPiece(file, res, err) {
+    function piece(file, res, err) {
       var rows = res ? res.rows : (err && err.extra && err.extra.rows) || null;
       var refusal = rows ? (o.gate ? o.gate(rows, file.name) : schemaRefusal(rows)) : null;
-      if (refusal) { state.pieces.push({ name: file.name, refused: refusal }); return; }
-      if (res) { state.pieces.push({ name: file.name, res: res, rows: rows }); return; }
-      if (err && err.extra && err.extra.schemes && rows) { state.pieces.push({ name: file.name, rows: rows, schemes: err.extra.schemes }); return; }
-      state.pieces.push({ name: file.name, refused: notice('bad', esc(err ? err.msg : 'That file could not be read.')) });
+      if (refusal) return { name: file.name, refused: refusal };
+      if (res) return { name: file.name, res: res, rows: rows };
+      if (err && err.extra && err.extra.schemes && rows) return { name: file.name, rows: rows, schemes: err.extra.schemes, hasNames: err.extra.hasNames !== false };
+      return { name: file.name, refused: notice('bad', esc(err ? err.msg : 'That file could not be read.')) };
+    }
+    function landed(fresh) {
+      var bad = fresh.filter(function (p) { return p.refused; });
+      if (bad.length) {
+        empty();
+        refused(bad.length === 1 ? bad[0].name : bad.length + ' of ' + fresh.length + ' files');
+        say(bad.map(function (p) { return (bad.length > 1 ? '<p class="hint tight"><strong>' + esc(p.name) + '</strong></p>' : '') + p.refused; }).join('') +
+          (fresh.length > bad.length ? '<p class="hint">Nothing from this attempt was kept. Choose the files again without the one refused.</p>' : ''));
+        if (o.onLoaded) o.onLoaded(null);
+        return;
+      }
+      /* Several files of one history are joined by date. A file of a
+         different history (other headings, another scheme or index, a price
+         index after a total return index) replaces what was there instead of
+         being stitched into it. */
+      if (state.pieces.length && fresh.some(function (p) { return idOf(p) !== idOf(state.pieces[0]); })) state.pieces = [];
+      fresh.forEach(function (p) {
+        state.pieces = state.pieces.filter(function (q) { return q.name !== p.name; });
+        state.pieces.push(p);
+      });
+      assemble();
+    }
+    function idOf(p) {
+      var rows = p.rows || [];
+      var head = P.findHeader(rows).header;
+      var headings = head ? head.map(P.normHeader).filter(Boolean).join(',') : '';
+      /* one scheme is one code, whatever it was called in a given year */
+      return headings + '|' + (p.res ? (p.res.report.code || p.res.report.scheme || '') : '*');
     }
     function schemaRefusal(rows) {
       if (!rows || !P.checkSchema) return null;
-      var v = P.checkSchema(rows);
+      var v = P.checkSchema(rows, { slot: kind });
       if (v.ok) return null;
       var found = (v.detected || []).filter(Boolean).slice(0, 10);
       return notice('bad', esc(v.message) + (found.length ? ' <br>The columns found in this file: <strong>' + found.map(function (n) { return esc(String(n)); }).join('</strong>, <strong>') + '</strong>.' : ''));
     }
 
-    /* join the pieces: refusals are shown, many-scheme pieces ask, the rest are stitched */
+    /* join the pieces: many-scheme pieces ask once, the rest are stitched */
     function assemble() {
-      var bad = state.pieces.filter(function (p) { return p.refused; });
       var many = state.pieces.filter(function (p) { return p.schemes; });
       var good = state.pieces.filter(function (p) { return p.res; });
-      if (bad.length && !good.length && !many.length) {
-        refused(bad[bad.length - 1].name); say(bad.map(function (p) { return p.refused; }).join(''));
-        state.series = null; if (o.onLoaded) o.onLoaded(null);
-        return;
-      }
       if (many.length) {
-        /* the scheme is chosen once, from the union of names, and applied to every piece that has it */
-        var names = {};
-        many.forEach(function (p) { p.schemes.forEach(function (s) { names[s.name] = names[s.name] || { name: s.name, rows: 0, first: s.first, last: s.last }; names[s.name].rows += s.rows; if (s.first < names[s.name].first) names[s.name].first = s.first; if (s.last > names[s.name].last) names[s.name].last = s.last; }); });
-        var schemes = Object.keys(names).map(function (k) { return names[k]; }).sort(function (a, b) { return a.name.localeCompare(b.name); });
+        /* the scheme is chosen once, from the union of keys, and applied to every piece that has it */
+        var byKey = {}, hasNames = many.some(function (p) { return p.hasNames; });
+        many.forEach(function (p) {
+          p.schemes.forEach(function (s) {
+            var k = s.key || s.name;
+            var x = byKey[k] = byKey[k] || { key: k, name: s.name || '', code: s.code || '', rows: 0, first: s.first, last: s.last, names: [] };
+            x.rows += s.rows; if (s.first < x.first) x.first = s.first;
+            if (s.last >= x.last && s.name) x.name = s.name;
+            if (s.last > x.last) x.last = s.last;
+            if (!x.name && s.name) x.name = s.name;
+            (s.names || []).forEach(function (n) { if (x.names.indexOf(n) === -1) x.names.push(n); });
+          });
+        });
+        var schemes = Object.keys(byKey).map(function (k) { return byKey[k]; })
+          .sort(function (a, b) { return (a.name || a.key).localeCompare(b.name || b.key); });
         state.schemes = schemes;
-        added(many.length === 1 ? many[0].name : many.length + ' files', schemes.length + ' schemes found — choose one below');
-        say(bad.map(function (p) { return p.refused; }).join(''));
-        showPicker(schemes, function (sc) { pickScheme(sc.name); });
-        if (state.picked && names[state.picked]) pickScheme(state.picked);
+        added(many.length === 1 ? many[0].name : many.length + ' files', schemes.length.toLocaleString('en-IN') + ' schemes found. Choose one below.');
+        say('');
+        showPicker(schemes, hasNames, function (sc) { pickScheme(sc.key); });
+        if (state.picked && byKey[state.picked]) pickScheme(state.picked);
         return;
       }
-      finish(good.map(function (p) { return { name: p.name, series: p.res.series, report: p.res.report, rows: p.rows }; }), bad);
+      finish(good.map(function (p) { return { name: p.name, series: p.res.series, report: p.res.report, rows: p.rows }; }));
     }
-    function pickScheme(name) {
-      state.picked = name;
+    function pickScheme(key) {
+      state.picked = key;
       var list = [], failed = [];
       state.pieces.forEach(function (p) {
         if (p.res) { list.push({ name: p.name, series: p.res.series, report: p.res.report, rows: p.rows }); return; }
         if (!p.schemes) return;
-        var r = P.rowsToSeries(p.rows, { scheme: name });
-        if (r.ok) list.push({ name: p.name, series: r.series, report: r.report, rows: p.rows }); else failed.push(p.name);
+        var r = P.rowsToSeries(p.rows, { scheme: key, noun: noun });
+        if (r.ok) list.push({ name: p.name, series: r.series, report: r.report, rows: p.rows });
+        else failed.push({ name: p.name, message: r.message, code: r.code });
       });
-      finish(list, state.pieces.filter(function (p) { return p.refused; }), name, failed);
+      if (!list.length) {
+        /* the chosen scheme could not be read from any piece: say why, keep the picker */
+        say(notice('bad', esc(failed.length ? failed[0].message : 'None of the files could be read as this scheme.')));
+        state.series = null; if (o.onLoaded) o.onLoaded(null);
+        return;
+      }
+      finish(list, failed.filter(function (f) { return f.code === 'NO_SUCH_SCHEME'; }).length);
     }
-    function finish(list, bad, schemeName, failed) {
-      if (!list.length) { say(notice('bad', 'None of the files could be read as this scheme.')); return; }
+    function finish(list, missingIn) {
+      if (!list.length) { say(notice('bad', 'None of the files could be read.')); return; }
       var joined = U.stitch(list.map(function (p) { return p.series; }));
       var report = mergeReports(list, joined);
-      var name = schemeName || list[0].report.scheme || list[0].name.replace(/\.[^.]+$/, '');
+      var name = report.scheme || list[0].name.replace(/\.[^.]+$/, '');
       state.series = joined.series; state.name = name; state.report = report; state.rows = list[0].rows;
       state.kindGuess = P.guessDataKind(list[0].rows, list[0].name).kind;
       var sub = report.used.toLocaleString('en-IN') + ' rows read · ' + fmtDate(report.firstDate) + ' to ' + fmtDate(report.lastDate) +
         (list.length > 1 ? ' · ' + list.length + ' files joined' : '');
-      added(name, sub);
-      var msgs = (bad || []).map(function (p) { return p.refused; });
-      if (failed && failed.length) msgs.push(notice('warn', failed.length + ' file' + (failed.length === 1 ? ' does' : 's do') + ' not hold this scheme and ' + (failed.length === 1 ? 'was' : 'were') + ' left out.'));
+      var res = { series: state.series, name: name, report: report, files: list.length, gaps: joined.gaps, kindGuess: state.kindGuess, rows: state.rows };
+      var extra = o.describe ? o.describe(res) : null;
+      added(name, sub + (extra && extra.tag ? ' · <strong class="warn-word">' + esc(extra.tag) + '</strong>' : ''));
+      var msgs = [];
+      if (extra && extra.html) msgs.push(extra.html);
+      if (missingIn) msgs.push(notice('warn', missingIn + ' file' + (missingIn === 1 ? ' does' : 's do') + ' not hold this scheme and ' + (missingIn === 1 ? 'was' : 'were') + ' left out.'));
       if (joined.gaps.length) msgs.push(notice('warn', esc(U.MESSAGES.gap(joined.gaps[0])) + (joined.gaps.length > 1 ? ' ' + (joined.gaps.length - 1) + ' more gap' + (joined.gaps.length > 2 ? 's' : '') + ' like it.' : '')));
       if (report.warnings.length) msgs.push(notice('warn', esc(report.warnings[0])));
       if (/\bidcw\b|\bdividend\b|\bpayout\b/i.test(name)) msgs.push(notice('warn', 'This looks like an IDCW row. Its NAV drops at every payout, so every return on it reads low. The Growth option of the same plan carries the full growth.'));
       say(msgs.join(''));
-      if (o.onLoaded) o.onLoaded({ series: state.series, name: name, report: report, files: list.length, gaps: joined.gaps, kindGuess: state.kindGuess, rows: state.rows });
+      if (o.onLoaded) o.onLoaded(res);
     }
     function mergeReports(list, joined) {
       var r = { rowsRead: 0, used: joined.series.length, skipped: { badDate: 0, badValue: 0, duplicate: 0, blank: 0 }, examples: [], warnings: [],
-                dayFirst: list[0].report.dayFirst, dateCertain: true, scheme: list[0].report.scheme,
+                dayFirst: list[0].report.dayFirst, dateCertain: true, scheme: list[0].report.scheme, code: list[0].report.code || null,
+                isins: [], names: [], headers: list[0].report.headers || [],
                 firstDate: joined.series[0].t, lastDate: joined.series[joined.series.length - 1].t, files: list.length, overlaps: joined.overlaps };
       list.forEach(function (p) {
         var x = p.report;
@@ -230,34 +285,51 @@
         r.examples = r.examples.concat(x.examples || []).slice(0, 3);
         if (!x.dateCertain) r.dateCertain = false;
         (x.warnings || []).forEach(function (w) { if (r.warnings.indexOf(w) === -1) r.warnings.push(w); });
+        (x.isins || []).forEach(function (i) { if (r.isins.indexOf(i) === -1) r.isins.push(i); });
+        (x.names || []).forEach(function (n) { if (r.names.indexOf(n) === -1) r.names.push(n); });
+        if (!r.code && x.code) r.code = x.code;
       });
+      /* the piece that reaches furthest names the scheme: its latest name */
+      var newest = list.reduce(function (a, b) { return b.report.lastDate >= a.report.lastDate ? b : a; });
+      if (newest.report.scheme) r.scheme = newest.report.scheme;
       r.spanYears = (r.lastDate - r.firstDate) / (365.25 * 86400000);
       return r;
     }
 
+    /* H2: each scheme on two lines. The first is its name, which carries the
+       plan and the option; the second its code and the dates it covers.
+       Typing matches the name (and the code, for a reader who knows it). */
     var MAX_HITS = 40;
-    function showPicker(schemes, onPick) {
+    function showPicker(schemes, hasNames, onPick) {
       var wrap = $('#' + prefix + '-scheme-wrap'), q = $('#' + prefix + '-scheme-q');
       wrap.hidden = false; wrap.removeAttribute('data-folded'); q.value = '';
       var line = wrap.querySelector('.pickedline'); if (line) line.remove();
+      $('#' + prefix + '-scheme-note').textContent = hasNames
+        ? 'Official downloads hold every scheme of a fund house in one file. Pick the exact name on your statement; the plan and the option are part of the name, and each is a separate row.'
+        : 'This file has no column of scheme names, so each scheme is shown by its code. The code is on your statement or on the fund house’s page for the scheme.';
+      q.placeholder = hasNames ? 'Type part of the name' : 'Type the scheme code';
+      function title(sc) { return sc.name || ('Scheme code ' + sc.key); }
       function render(term) {
         var needle = term.trim().toLowerCase();
-        var hits = needle ? schemes.filter(function (sc) { return sc.name.toLowerCase().indexOf(needle) !== -1; }) : schemes;
+        var hits = needle ? schemes.filter(function (sc) {
+          return [sc.name || ''].concat(sc.names || []).some(function (n) { return n.toLowerCase().indexOf(needle) !== -1; }) || String(sc.code || sc.key).toLowerCase().indexOf(needle) !== -1;
+        }) : schemes;
         $('#' + prefix + '-scheme-count').textContent = schemes.length.toLocaleString('en-IN') + (schemes.length === 1 ? ' scheme in this file' : ' schemes in this file') +
-          (needle ? ' · ' + hits.length.toLocaleString('en-IN') + ' match' + (hits.length === 1 ? '' : 'es') : ' — type to narrow the list');
+          (needle ? ' · ' + hits.length.toLocaleString('en-IN') + ' match' + (hits.length === 1 ? '' : 'es') : '. Type to narrow the list.');
         var list = $('#' + prefix + '-scheme-list');
         if (!hits.length) { list.innerHTML = '<p class="more">Nothing matches “' + esc(term) + '”.</p>'; return; }
         list.innerHTML = hits.slice(0, MAX_HITS).map(function (sc, i) {
-          return '<button class="hit" type="button" role="option" aria-selected="false" data-i="' + i + '"><span class="nm">' + esc(sc.name) + '</span>' +
-            '<span class="sub">' + fmtDate(sc.first) + ' to ' + fmtDate(sc.last) + ' · ' + (sc.rows === 1 ? 'one price only' : sc.rows.toLocaleString('en-IN') + ' prices') + '</span></button>';
-        }).join('') + (hits.length > MAX_HITS ? '<p class="more">' + (hits.length - MAX_HITS).toLocaleString('en-IN') + ' more — keep typing to narrow them down.</p>' : '');
+          var code = sc.code || (sc.name ? '' : sc.key);
+          return '<button class="hit" type="button" role="option" aria-selected="false" data-i="' + i + '"><span class="nm">' + esc(title(sc)) + '</span>' +
+            '<span class="sub">' + (sc.name && code ? 'Code ' + esc(code) + ' · ' : '') + fmtDate(sc.first) + ' to ' + fmtDate(sc.last) + ' · ' + (sc.rows === 1 ? 'one price only' : sc.rows.toLocaleString('en-IN') + ' prices') + '</span></button>';
+        }).join('') + (hits.length > MAX_HITS ? '<p class="more">' + (hits.length - MAX_HITS).toLocaleString('en-IN') + ' more. Keep typing to narrow them down.</p>' : '');
         $$('#' + prefix + '-scheme-list .hit').forEach(function (btn) {
           btn.addEventListener('click', function () {
             var sc = hits[+btn.dataset.i];
             onPick(sc);
             wrap.setAttribute('data-folded', 'yes');
             var l = A.el('p', { 'class': 'hint pickedline' });
-            l.innerHTML = 'Chosen: <strong>' + esc(sc.name) + '</strong> <button class="link" type="button">Change</button>';
+            l.innerHTML = 'Chosen: <strong>' + esc(title(sc)) + '</strong>' + (sc.name && sc.code ? ' (code ' + esc(sc.code) + ')' : '') + ' <button class="link" type="button">Change</button>';
             l.querySelector('button').addEventListener('click', function () { wrap.removeAttribute('data-folded'); l.remove(); q.focus(); });
             wrap.insertBefore(l, wrap.firstChild);
           });

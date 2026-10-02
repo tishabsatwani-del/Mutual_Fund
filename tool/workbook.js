@@ -1,4 +1,4 @@
-/* Where You Stand — reading a workbook, without a library.
+/* Where You Stand: reading a workbook, without a library.
  *
  * Review v4 §5: the door accepts .txt, .csv, .xlsx and .json. The first, second
  * and fourth are text; this is the third. It unzips the package with the
