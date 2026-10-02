@@ -560,6 +560,14 @@
       return { ok: false, code: 'TRADEBOOK', detected: hits, message: TRADEBOOK_COPY };
     }
 
+    /* 2b. The other marks of a statement, before the columns are looked for,
+           so a statement is called one even when it has no price column. */
+    var mark = statementMark(header, body, rows);
+    if (mark) {
+      var holdings = !columnProfile(body).some(function (col) { return col.isDates; });
+      return { ok: false, code: 'TRADEBOOK', detected: [mark], message: tradebookCopy(options && options.slot, holdings) };
+    }
+
     /* 3. A date column and a numeric value column, or there is nothing to read. */
     var cols = pickColumns(body, header);
     if (cols.dateCol === -1 || cols.valueCol === -1) {
@@ -702,10 +710,72 @@
   /* A statement of the reader's own payments (a tradebook, a CAS, a
      transaction log) is the right file in the wrong slot, and is told so in
      words that fit the slot it was put in. */
-  function tradebookCopy(slot) {
-    if (slot === 'index') return 'This looks like a statement of your own payments. This slot needs the index\u2019s history: a date and the index value on that date. Your statement goes in step 1.';
-    if (slot === 'nav') return 'This looks like a statement of your own payments. This slot needs the fund\u2019s NAV history: a date and the NAV on that date. Your statement goes in step 1.';
-    return 'This looks like a statement of your own payments. This screen needs a price history: a date and the NAV or index value on that date. Check my portfolio is the screen for this file.';
+  function tradebookCopy(slot, holdings) {
+    var what = 'This looks like a statement of your own ' + (holdings ? 'holdings' : 'payments') + '. ';
+    if (slot === 'index') return what + 'This slot needs the index\u2019s history: a date and the index value on that date. Your statement goes in step 1.';
+    if (slot === 'compare') return what + 'This slot needs the history to compare with: an index\u2019s values or a fund\u2019s NAVs, one row per date. Your statement goes in step 1.';
+    if (slot === 'nav') return what + 'This slot needs the fund\u2019s NAV history: a date and the NAV on that date. Your statement goes in step 1.';
+    return what + 'This screen needs a price history: a date and the NAV or index value on that date. Check my portfolio is the screen for this file.';
+  }
+
+  /* A statement by its other marks, for every slot that wants a price history.
+   *
+   * The headings and the words of a reader's own statement: an amount, units,
+   * money invested, a folio, a transaction or its description; or a column whose
+   * cells start with what happened (SIP Purchase, Systematic Investment,
+   * Redemption, Switch ...). These are the marks the payments slot reads the
+   * other way (the owner's C1 ruling), so a file is a statement on every
+   * screen or on none. Without them, a ledger of Date, Transaction, Amount,
+   * Units was read as a price history, its units column taken for a NAV.
+   *
+   * Rows without headings are a statement when whole amounts sit beside
+   * decimal units, or every figure is a whole amount, and nothing marks them
+   * as prices (an ISIN, a run of trading days). A NAV or an index value
+   * carries decimals; an AMFI row carries an ISIN. "per unit" in a heading is
+   * a NAV's, not a statement's. */
+  var STATEMENT_HEADING = /\b(amount|amt|units?|invested|investment amount|current value|market value|transactions?|description|particulars|narration|folio)\b/;
+  /* what happened, at the start of a cell; not dividend or IDCW, which a NAV
+     file can carry in an option column on every row */
+  var STATEMENT_WORD = /^(purchase|additional purchase|new purchase|fresh purchase|sip\b|systematic|redemption|redeem|switch|stp\b|swp\b|transfer|withdraw|money (in|out)\b|worth today|buy\b|sell\b|bought|sold|lump\s*sum)/i;
+  function statementMark(header, body, rows) {
+    var c, r;
+    if (header) {
+      for (c = 0; c < header.length; c++) {
+        var p = normHeader(header[c]).replace(/\bper units?\b/g, '');
+        if (p && STATEMENT_HEADING.test(p)) return String(header[c]).trim();
+      }
+    }
+    var probe = body.slice(0, 60), width = 0;
+    probe.forEach(function (row) { if (row && row.length > width) width = row.length; });
+    for (c = 0; c < width; c++) {
+      var seen = 0, hit = 0, first = '';
+      for (r = 0; r < probe.length; r++) {
+        var cell = String(probe[r][c] == null ? '' : probe[r][c]).trim();
+        if (!cell) continue;
+        seen++;
+        if (cell.length <= 60 && STATEMENT_WORD.test(cell)) { hit++; if (!first) first = cell; }
+      }
+      if (seen >= 2 && hit >= Math.ceil(seen * 0.6)) return (header && header[c] ? String(header[c]).trim() + ': ' : '') + first;
+    }
+    if (!header) {
+      var s = rowSignals(rows);
+      if (s.dated && !s.isin && !s.dailyRun) {
+        if (s.wholeBesideDecimals) return 'whole amounts beside units';
+        var nums = 0, whole = 0;
+        probe.forEach(function (row) {
+          (row || []).forEach(function (cell) {
+            var t = String(cell == null ? '' : cell).trim();
+            if (!t || readsAsDate(t)) return;
+            var v = parseNumber(t);
+            if (!isFinite(v)) return;
+            nums++;
+            if (decimalPlaces(t) === 0 && Math.abs(v) >= 100) whole++;
+          });
+        });
+        if (nums >= 3 && whole === nums) return 'whole amounts on dates';
+      }
+    }
+    return null;
   }
   var TRADEBOOK_COPY = tradebookCopy();
 

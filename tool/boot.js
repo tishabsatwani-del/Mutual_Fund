@@ -2,7 +2,7 @@
 (function (root) {
   'use strict';
   var A = root.PRCApp, E = root.PRCEngine, C = root.PRCCharts;
-  var $ = A.$, esc = A.esc, pct = A.pct;
+  var $ = A.$, esc = A.esc, pct = A.pct, share = A.share;
 
   function shared() {
     /* result tabs: one panel at a time on a phone; the CSS decides */
@@ -71,14 +71,14 @@
       if (!out || !values) return;
       var res = E.shareAbove(values, rate);
       if (!res.ok) { out.textContent = 'no rate'; sub.textContent = 'Enter a rate.'; return; }
-      out.textContent = pct(res.share, 0);
-      sub.textContent = 'In ' + pct(res.share, 0) + ' of the ' + years + '-year holding periods in this data (' + res.above.toLocaleString('en-IN') + ' of ' + res.count.toLocaleString('en-IN') + '), the return beat ' + pct(rate, 1) + ' a year. Past periods, not future odds.';
+      out.textContent = share(res.share);
+      sub.textContent = 'In ' + share(res.share) + ' of the ' + years + '-year holding periods in this data (' + res.above.toLocaleString('en-IN') + ' of ' + res.count.toLocaleString('en-IN') + '), the return beat ' + pct(rate, 1) + ' a year. Past periods, not future odds.';
       var hd = root.PRCHorizonData && root.PRCHorizonData[key];
       (hd || []).forEach(function (row) {
         var cell = document.querySelector('[data-beat-h="' + row.h + '"][data-key="' + key + '"]');
         if (!cell) return;
-        var share = E.shareAbove(row.values, rate);
-        cell.textContent = share.ok ? pct(share.share, 0) : 'none';
+        var beat = E.shareAbove(row.values, rate);
+        cell.textContent = beat.ok ? share(beat.share) : 'none';
       });
     });
     /* the fan chart's readout follows the horizon under the pointer, tapped, or focused */

@@ -2,7 +2,7 @@
 (function (root) {
   'use strict';
   var A = root.PRCApp, E = root.PRCEngine, D = root.PRCDoors, C = root.PRCCharts;
-  var $ = A.$, $$ = A.$$, esc = A.esc, money = A.money, pct = A.pct, notice = A.notice, fmtDate = A.fmtDate;
+  var $ = A.$, $$ = A.$$, esc = A.esc, money = A.money, pct = A.pct, share = A.share, notice = A.notice, fmtDate = A.fmtDate;
   var stat = A.stat, term = A.term, fold = A.fold;
 
   var G = { history: null, door: null, ran: false, last: null };
@@ -141,7 +141,7 @@
 
     /* own money and growth; today's rupees */
     var ownMoney = input.currentValue + plan.totalContributed, growth = plan.projected - ownMoney;
-    numbers += '<div class="card"><h2>Your money, and growth on it</h2><div class="stats">' + stat('Already saved', money(input.currentValue)) + stat('Still to pay in', money(plan.totalContributed)) + stat('Growth on both', money(growth)) + stat('Growth’s share of the end', growth > 0 ? pct(growth / plan.projected, 0) : 'none') + '</div>' +
+    numbers += '<div class="card"><h2>Your money, and growth on it</h2><div class="stats">' + stat('Already saved', money(input.currentValue)) + stat('Still to pay in', money(plan.totalContributed)) + stat('Growth on both', money(growth)) + stat('Growth’s share of the end', growth > 0 ? share(growth / plan.projected) : 'none') + '</div>' +
       '<p class="cardtext">Of the ' + money(plan.projected) + ' at the end, ' + money(ownMoney) + ' is money you hand over yourself and ' + money(growth) + ' is what it earns while you leave it alone. The longer the period, the more the second number does the work.</p></div>';
     if (infl != null) {
       var tr = E.todaysRupees(input.target, infl, input.years);
@@ -170,7 +170,7 @@
     var r = E.rollingReturns(G.history.series, Math.max(1, Math.round(years)), {});
     if (!r.ok) return '';
     var sh = E.shareAbove(r.values, rate);
-    return ' In ' + esc(G.history.name) + ', ' + pct(sh.share, 0) + ' of the ' + Math.max(1, Math.round(years)) + '-year stretches (' + sh.above.toLocaleString('en-IN') + ' of ' + sh.count.toLocaleString('en-IN') + ') delivered at least that. Past stretches, not odds.';
+    return ' In ' + esc(G.history.name) + ', ' + share(sh.share) + ' of the ' + Math.max(1, Math.round(years)) + '-year stretches (' + sh.above.toLocaleString('en-IN') + ' of ' + sh.count.toLocaleString('en-IN') + ') delivered at least that. Past stretches, not odds.';
   }
   function historyRows(input) {
     var g = E.goalUnderHistory(input, G.history.series);

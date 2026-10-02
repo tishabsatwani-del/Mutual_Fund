@@ -6,7 +6,7 @@
 <title>Where You Stand</title>
 <meta name="description" content="Measure what your own money actually earned, see what every number means, and work out what it would take to reach your goal. Runs entirely in your browser.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231f4e5f'/%3E%3Cpath d='M7 22.5 13 15l4.5 4.5L25 9.5' fill='none' stroke='%23ffffff' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="styles.css?v=6">
+<link rel="stylesheet" href="styles.css?v=7">
 </head>
 <body data-view="home">
 <a class="skip" href="#main">Skip to content</a>
@@ -146,7 +146,8 @@
   <!-- ------------------------------------------- step 3: the index (optional) -->
   <div class="card step" id="pf-step3" hidden>
     <h2><span class="stepno">3</span> Compare with the benchmark index (TRI) <span class="optional">optional</span></h2>
-    <p class="hint tight">Load the total return index (TRI) file of the benchmark you want to measure against.
+    <p class="hint tight">Load the total return index (TRI) file of the benchmark you want to measure against,
+    or a fund&rsquo;s NAV history, an index fund&rsquo;s say, which is compared as a fund, costs included.
     The same rupees on the same dates are put into it, and the two rates sit side by side.</p>
     <div id="pf-index-howto"></div>
     <div id="pf-index-door"></div>
@@ -327,7 +328,7 @@
       <li>A window of N years ends on the same calendar date N years later, or on the last value up to seven days before it; beyond that the window is dropped, never stretched. Each window&rsquo;s figure is the value at its end divided by the value at its start, raised to the power 365 divided by its days, minus 1.</li>
       <li>Weekly and monthly start frequencies thin the start dates only; every window is still measured first value to last.</li>
       <li>Percentiles use linear interpolation between neighbours, the spreadsheet PERCENTILE rule. Where your own stretch sits among a fund&rsquo;s stretches of the same length is the share of those stretches that returned less than the fund did over your dates, ties counted half.</li>
-      <li>The same rupees in the index: each payment buys index units at the index value on that date, or the last value on or before it; withdrawals sell units; the units left are valued on the valuation date.</li>
+      <li>The same rupees in the index: each payment buys index units at the index value on that date, or the last value on or before it; in a fund loaded at step 3, at its NAV as the next line says; withdrawals sell units; the units left are valued on the valuation date.</li>
       <li>Units from a NAV file: amount divided by the NAV on the payment date, or the next NAV on or after it.</li>
       <li>Volatility is the standard deviation of day-to-day log returns times the square root of the observations per year in the file.</li>
       <li>Capture ratios use month-end values. The information ratio uses daily arithmetic returns and the standard deviation of daily excess returns, the basis SEBI set in circular SEBI/HO/IMD/IMD-PoD-2/P/CIR/2025/6 of 17 January 2025.</li>
@@ -365,19 +366,19 @@
 
 </main>
 
-<script src="format.js?v=6"></script>
-<script src="workbook.js?v=6"></script>
-<script src="engine.js?v=6"></script>
-<script src="parse.js?v=6"></script>
-<script src="upload.js?v=6"></script>
-<script src="app.js?v=6"></script>
-<script src="dates.js?v=6"></script>
-<script src="pdf.js?v=6"></script>
-<script src="charts.js?v=6"></script>
-<script src="doors.js?v=6"></script>
-<script src="portfolio.js?v=6"></script>
-<script src="goal.js?v=6"></script>
-<script src="rolling.js?v=6"></script>
-<script src="boot.js?v=6"></script>
+<script src="format.js?v=7"></script>
+<script src="workbook.js?v=7"></script>
+<script src="engine.js?v=7"></script>
+<script src="parse.js?v=7"></script>
+<script src="upload.js?v=7"></script>
+<script src="app.js?v=7"></script>
+<script src="dates.js?v=7"></script>
+<script src="pdf.js?v=7"></script>
+<script src="charts.js?v=7"></script>
+<script src="doors.js?v=7"></script>
+<script src="portfolio.js?v=7"></script>
+<script src="goal.js?v=7"></script>
+<script src="rolling.js?v=7"></script>
+<script src="boot.js?v=7"></script>
 </body>
 </html>

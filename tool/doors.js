@@ -264,7 +264,7 @@
         (list.length > 1 ? ' · ' + list.length + ' files joined' : '');
       var res = { series: state.series, name: name, report: report, files: list.length, gaps: joined.gaps, kindGuess: state.kindGuess, rows: state.rows };
       var extra = o.describe ? o.describe(res) : null;
-      added(name, sub + (extra && extra.tag ? ' · <strong class="warn-word">' + esc(extra.tag) + '</strong>' : ''));
+      added(name, sub + (extra && extra.tag ? ' · <strong' + (extra.plain ? '' : ' class="warn-word"') + '>' + esc(extra.tag) + '</strong>' : ''));
       var msgs = [];
       if (extra && extra.html) msgs.push(extra.html);
       if (missingIn) msgs.push(notice('warn', missingIn + ' file' + (missingIn === 1 ? ' does' : 's do') + ' not hold this scheme and ' + (missingIn === 1 ? 'was' : 'were') + ' left out.'));

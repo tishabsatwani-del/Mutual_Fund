@@ -3,14 +3,14 @@
  * Three numbered steps, the way the Rolling returns screen is laid out:
  *   1  your payments: a statement file, pasted rows, or typed rows
  *   2  what each fund is worth today: from its NAV file, or typed as the last resort
- *   3  the benchmark index's TRI file, to compare with (optional)
+ *   3  the benchmark index's TRI file, or a fund's NAV history, to compare with (optional)
  * The button appears only when steps 1 and 2 are complete. The main result is
  * short; the detail is a tab away.
  */
 (function (root) {
   'use strict';
   var A = root.PRCApp, E = root.PRCEngine, P = root.PRCParse, U = root.SimUpload, D = root.PRCDoors, C = root.PRCCharts;
-  var $ = A.$, $$ = A.$$, esc = A.esc, money = A.money, pct = A.pct, notice = A.notice, fmtDate = A.fmtDate;
+  var $ = A.$, $$ = A.$$, esc = A.esc, money = A.money, pct = A.pct, share = A.share, notice = A.notice, fmtDate = A.fmtDate;
   var stat = A.stat, fold = A.fold;
 
   var KINDS = ['Money in', 'Money out', 'Worth today'];
@@ -108,18 +108,21 @@
       readInto(text);
     });
 
-    /* step 3: the index file, on both modes. It takes an index and nothing else. */
+    /* step 3, on both modes: the benchmark index's TRI (a price index with its
+       flag), or a fund's NAV history, an index fund's say. A fund is compared as
+       the fund it is: named, tagged "a fund, costs included", never the index. */
     $('#pf-index-howto').innerHTML = D.guide('index');
     PF.indexDoor = D.mount($('#pf-index-door'), {
-      prefix: 'pfix', kind: 'index', noun: 'index', label: 'The index’s total return (TRI) history file',
-      hint: 'CSV, Excel or text · a date column and the index value on that date',
+      prefix: 'pfix', kind: 'index', noun: 'fund or index', label: 'The index’s total return (TRI) file, or a fund’s NAV history',
+      hint: 'CSV, Excel or text · a date column and the index value or NAV on that date',
       gate: indexGate,
       describe: function (res) {
-        var k = P.indexFileKind(res.rows, res.name).kind;
-        return k === 'PRICE' ? { tag: 'Price index', html: notice('warn', PRICE_FLAG) } : null;
+        var k = P.indexFileKind(res.rows, res.name);
+        return k.nav ? { tag: FUND_TAG, plain: true } : k.kind === 'PRICE' ? { tag: 'Price index', html: notice('warn', PRICE_FLAG) } : null;
       },
       onLoaded: function (res) {
-        PF.index = res ? { series: res.series, name: res.name, report: res.report, kind: res.rows ? P.indexFileKind(res.rows, res.name).kind : null } : null;
+        var k = res && res.rows ? P.indexFileKind(res.rows, res.name) : null;
+        PF.index = res ? { series: res.series, name: res.name, report: res.report, kind: k ? (k.nav ? 'NAV' : k.kind) : null } : null;
         if (PF.index && !PF.index.kind) PF.index.kind = guessKind(res.name);
         drawIndexKind();
         if (PF.ran) calcPortfolio();
@@ -128,11 +131,21 @@
   }
   /* C3: the brief's wording, with the figure left out so it never goes stale */
   var PRICE_FLAG = '<strong>Price index:</strong> dividends are left out, which flatters your side by about the index’s dividend yield each year. The Total Returns tab of the same report fixes this.';
-  var NAV_AT_INDEX = 'This is a mutual fund’s NAV file, not an index. The index file comes from NSE Indices, Reports, Historical data, Total Returns Index tab: it has the columns Index Name, Date, Total Returns Index.';
-  function indexGate(rows, name) {
-    if (P.indexFileKind(rows, name).nav) return notice('bad', esc(NAV_AT_INDEX));
-    return schemaGate(rows, 'index');
+  /* The owner's ruling of 2 October 2026 on C3: a fund's NAV is welcome at step 3 too */
+  var FUND_TAG = 'a fund, costs included';
+  var FUND_NOTE = 'A fund, costs included: its NAV is net of its own costs, as your funds’ NAVs are.';
+  function indexGate(rows) { return schemaGate(rows, 'compare'); }
+  /* Step 2 values a fund's units at that fund's own NAV, so an index file is
+     refused there by what its headings say it is: NSE's total return report,
+     a file naming its index, NSE's price report. Two bare columns of dates and
+     values say nothing, and are read, as a NAV history's must be. */
+  var INDEX_AT_NAV = 'This is an index file, not a fund’s NAV. Your units are valued at the fund’s own NAV: load that fund’s NAV history here. An index goes in step 3, to compare with.';
+  function navGate(rows, name) {
+    var k = P.indexFileKind(rows, name), head = (P.rowSignals(rows).header || []).map(P.normHeader).join(' | ');
+    if (!k.nav && (k.kind === 'TRI' || /\bindex name\b/.test(head) || (k.kind === 'PRICE' && /\bshares traded\b|\bturnover\b/.test(head)))) return notice('bad', esc(INDEX_AT_NAV));
+    return schemaGate(rows, 'nav');
   }
+  function fundCmp() { return !!(PF.index && PF.index.kind === 'NAV'); }
   function schemaGate(rows, slot) {
     var v = P.checkSchema(rows, { slot: slot });
     if (v.ok) return null;
@@ -151,9 +164,9 @@
     var host = $('#pf-index-kind');
     if (!host) { host = A.el('div', { id: 'pf-index-kind' }); $('#pf-index-door').appendChild(host); }
     if (!PF.index || (PF.index.kind && PF.index.report && fromHeadings())) { host.innerHTML = ''; return; }
-    host.innerHTML = '<div class="field" style="margin-top:.8rem"><span class="fieldlabel">Does <strong>' + esc(PF.index.name) + '</strong> include dividends?</span>' +
+    host.innerHTML = '<div class="field" style="margin-top:.8rem"><span class="fieldlabel">Which kind of file is <strong>' + esc(PF.index.name) + '</strong>?</span>' +
       '<div class="chips" id="pf-kind-chips" role="radiogroup">' +
-      ['TRI', 'PRICE'].map(function (k) { return '<button class="chip" type="button" role="radio" data-kind="' + k + '" aria-checked="' + (PF.index.kind === k) + '">' + (k === 'TRI' ? 'Total return index: dividends included' : 'Price index: dividends left out') + '</button>'; }).join('') +
+      ['TRI', 'PRICE', 'NAV'].map(function (k) { return '<button class="chip" type="button" role="radio" data-kind="' + k + '" aria-checked="' + (PF.index.kind === k) + '">' + (k === 'TRI' ? 'Total return index: dividends included' : k === 'PRICE' ? 'Price index: dividends left out' : 'A fund’s NAV: costs included') + '</button>'; }).join('') +
       '</div><p class="hint" id="pf-kind-why"></p></div>';
     $$('#pf-kind-chips .chip').forEach(function (b) {
       b.addEventListener('click', function () { PF.index.kind = b.dataset.kind; $$('#pf-kind-chips .chip').forEach(function (c) { c.setAttribute('aria-checked', String(c === b)); }); sayKind(); if (PF.ran) calcPortfolio(); });
@@ -162,12 +175,14 @@
   }
   function fromHeadings() {
     var st = PF.indexDoor && PF.indexDoor.state;
-    return !!(st && st.rows && P.indexFileKind(st.rows, PF.index.name).kind);
+    var k = st && st.rows ? P.indexFileKind(st.rows, PF.index.name) : null;
+    return !!(k && (k.nav || k.kind));
   }
   function sayKind() {
     var why = $('#pf-kind-why'); if (!why || !PF.index) return;
     why.innerHTML = PF.index.kind === 'PRICE' ? PRICE_FLAG
       : PF.index.kind === 'TRI' ? 'Dividends are counted on both sides, so the comparison is like for like.'
+      : PF.index.kind === 'NAV' ? esc(FUND_NOTE)
       : 'Not established. Until you say, the comparison cannot tell whether a gap is real or only the dividends the index leaves out.';
   }
 
@@ -321,7 +336,7 @@
       PF.navDoors[f.key] = D.mount(row.querySelector('#' + id + '-door'), {
         prefix: 'pfnav' + id.replace(/\D/g, ''), kind: 'nav', noun: 'fund', label: 'NAV history of ' + f.title,
         hint: 'CSV, Excel or text · a date column and a NAV column',
-        gate: function (rows) { return schemaGate(rows, 'nav'); },
+        gate: navGate,
         describe: function (res) {
           var check = schemeCheck(f, res);
           return check && check.different ? { tag: 'Different scheme?', html: notice('warn', esc(check.message)) } : null;
@@ -681,7 +696,7 @@
     var price = PF.index && PF.index.kind === 'PRICE';
     out.innerHTML = A.tabs('pf-tabs', [
       { key: 'main', label: 'Your return', html: mainTab(g, res, info) },
-      { key: 'index', label: price ? 'Against the price index' : 'Against the index', html: PF.index ? indexTab(g, res) : null },
+      { key: 'index', label: fundCmp() ? 'Against ' + A.shortName(PF.index.name, g.names.map(titleOf)) : price ? 'Against the price index' : 'Against the index', html: PF.index ? indexTab(g, res) : null },
       { key: 'fund', label: 'Against the fund', html: withNav.length ? againstFundTab(g, res, info) : null },
       { key: 'all', label: 'All the numbers', html: allNumbersTab(g, res, info) }
     ]) + A.pdfFoot('portfolio', name);
@@ -857,43 +872,48 @@
     var payments = g.flows.filter(function (f) { return f.kind !== 'value'; }).map(function (f) { return { t: f.t, amount: Math.abs(f.amount), kind: f.kind }; });
     var valueDate = g.flows.filter(function (f) { return f.kind === 'value'; }).reduce(function (m, f) { return Math.max(m, f.t); }, -Infinity);
     if (!isFinite(valueDate)) valueDate = ix.series[ix.series.length - 1].t;
-    return { payments: payments, eq: E.benchmarkEquivalent(payments, ix.series, { valueDate: valueDate }) };
+    /* a fund's units are allotted at the NAV of the date or the next one, as the reader's are */
+    return { payments: payments, eq: E.benchmarkEquivalent(payments, ix.series, { valueDate: valueDate, priceRule: ix.kind === 'NAV' ? 'after' : null }) };
   }
   function indexSentence(res, eq) {
     var rel = A.relation(res.rate, eq.rate);
     if (rel === 'undefined') return '';
     if (rel === 'equal') return A.equalWords(res.rate, eq.rate, 2);
-    return 'Your money ran ' + esc(pct(Math.abs(res.rate - eq.rate), 2)) + ' a year ' + (rel === 'greater' ? 'ahead of' : 'behind') + ' the same rupees in the index.';
+    return 'Your money ran ' + esc(pct(Math.abs(res.rate - eq.rate), 2)) + ' a year ' + (rel === 'greater' ? 'ahead of' : 'behind') + ' the same rupees in ' + (fundCmp() ? esc(PF.index.name) : 'the index') + '.';
   }
   function kindNote() {
     var ix = PF.index;
     return ix.kind === 'PRICE' ? notice('warn', PRICE_FLAG)
+      : ix.kind === 'NAV' ? ''
       : ix.kind !== 'TRI' ? notice('warn', 'Whether this index counts dividends has not been established. Say which it is under the index file in step 3; a price index flatters your side by about its dividend yield.') : '';
   }
   function indexSummary(g, res) {
     var ix = PF.index, x = indexEquivalent(g), eq = x.eq;
     var head = (ix.kind === 'PRICE' ? 'Against the price index: ' : '') + 'the same rupees, on the same dates, in ' + ix.name;
+    var them = fundCmp() ? 'In ' + A.shortName(ix.name, g.names.map(titleOf)) : 'In the index';
     if (!eq.ok) return '<div class="card"><h2>' + esc(head) + '</h2>' + notice('bad', esc(eq.message)) + '</div>';
-    return '<div class="card"><h2>' + esc(head.charAt(0).toUpperCase() + head.slice(1)) + '</h2>' +
-      '<div class="stats">' + stat('Your XIRR', pct(res.rate, 2)) + stat('In the index', eq.rate == null ? 'no rate' : pct(eq.rate, 2)) + '</div>' +
+    return '<div class="card"><h2>' + esc(head.charAt(0).toUpperCase() + head.slice(1)) + '</h2>' + (fundCmp() ? '<p class="hint tight">' + esc(FUND_NOTE) + '</p>' : '') +
+      '<div class="stats">' + stat('Your XIRR', pct(res.rate, 2)) + stat(them, eq.rate == null ? 'no rate' : pct(eq.rate, 2)) + '</div>' +
       (eq.rate != null ? '<p class="cardtext"><strong>' + indexSentence(res, eq) + '</strong> Both figures share your dates.</p>' : '') + kindNote() + '</div>';
   }
   function indexTab(g, res) {
     var ix = PF.index, x = indexEquivalent(g), eq = x.eq, payments = x.payments;
     if (!eq.ok) return '<div class="card">' + notice('bad', esc(eq.message)) + '</div>';
-    var html = '<div class="card"><h2>' + (ix.kind === 'PRICE' ? 'Against the price index: the' : 'The') + ' same rupees, on the same dates, in ' + esc(ix.name) + '</h2>' +
-      '<div class="stats">' + stat('Your XIRR', pct(res.rate, 2)) + stat('In the index', eq.rate == null ? 'no rate' : pct(eq.rate, 2)) +
-      stat('Your gain', A.signedMoney(g.current + g.withdrawn - g.invested)) + stat('Index gain', A.signedMoney(eq.gain)) + '</div>' +
-      (eq.rate != null ? '<p class="cardtext"><strong>' + indexSentence(res, eq) + '</strong> Both figures share your dates, so this line removes the fund and leaves your timing in. The index carries no costs and cannot be bought as it stands; a fund that tracks it pays its own costs out of the gap.</p>' : '') +
+    /* a fund's NAV is named for what it is, never called the index */
+    var fund = fundCmp(), short = A.shortName(ix.name, g.names.map(titleOf)), where = fund ? ix.name : 'the index';
+    var html = '<div class="card"><h2>' + (ix.kind === 'PRICE' ? 'Against the price index: the' : 'The') + ' same rupees, on the same dates, in ' + esc(ix.name) + '</h2>' + (fund ? '<p class="hint tight">' + esc(FUND_NOTE) + '</p>' : '') +
+      '<div class="stats">' + stat('Your XIRR', pct(res.rate, 2)) + stat(fund ? 'In ' + short : 'In the index', eq.rate == null ? 'no rate' : pct(eq.rate, 2)) +
+      stat('Your gain', A.signedMoney(g.current + g.withdrawn - g.invested)) + stat(fund ? 'Gain in ' + short : 'Index gain', A.signedMoney(eq.gain)) + '</div>' +
+      (eq.rate != null ? '<p class="cardtext"><strong>' + indexSentence(res, eq) + '</strong> ' + (fund ? 'Both figures share your dates, so your timing is the same on both sides and the gap is your funds against this one.' : 'Both figures share your dates, so this line removes the fund and leaves your timing in. The index carries no costs and cannot be bought as it stands; a fund that tracks it pays its own costs out of the gap.') + '</p>' : '') +
       kindNote() +
-      (eq.skipped.length ? '<p class="hint">' + eq.skipped.length + ' payment' + (eq.skipped.length === 1 ? '' : 's') + ' fell outside the index file’s dates and ' + (eq.skipped.length === 1 ? 'was' : 'were') + ' left out on both sides.</p>' : '') +
+      (eq.skipped.length ? '<p class="hint">' + eq.skipped.length + ' payment' + (eq.skipped.length === 1 ? '' : 's') + ' fell outside ' + (fund ? 'that NAV file’s' : 'the index file’s') + ' dates and ' + (eq.skipped.length === 1 ? 'was' : 'were') + ' left out on both sides.</p>' : '') +
       '</div>';
     var marks = payments.map(function (f) { return { t: f.t, amount: f.amount, kind: f.kind }; });
-    html += '<div class="card"><h2>The index over your dates</h2>' +
-      C.growth(E.growthOf(ix.series, 10000, eq.used[0].t, eq.valuedOn), { name: ix.name, marks: marks, caption: 'What ₹10,000 in the index became over your own stretch, with your money in and out marked.' }) + '</div>';
-    html += fold('Every payment, put into the index', '<p>Each payment buys index units at the index’s value on that day (the last value on or before it); each withdrawal sells units. On ' + fmtDate(eq.valuedOn) + ' the units left, ' +
+    html += '<div class="card"><h2>' + (fund ? esc(ix.name) : 'The index') + ' over your dates</h2>' +
+      C.growth(E.growthOf(ix.series, 10000, eq.used[0].t, eq.valuedOn), { name: ix.name, marks: marks, caption: 'What ₹10,000 in ' + where + ' became over your own stretch, with your money in and out marked.' }) + '</div>';
+    html += fold('Every payment, put into ' + (fund ? esc(short) : 'the index'), '<p>' + (fund ? 'Each payment buys units at that fund’s NAV on the day, or the next NAV after it, as a purchase is allotted' : 'Each payment buys index units at the index’s value on that day (the last value on or before it)') + '; each withdrawal sells units. On ' + fmtDate(eq.valuedOn) + ' the units left, ' +
       esc(units3(eq.units)) + ', are worth ' + money(eq.endValue) + '.</p>' +
-      '<div class="scroll"><table class="data"><thead><tr><th>Date</th><th>Money</th><th>Index value used</th><th>Units</th></tr></thead><tbody>' +
+      '<div class="scroll"><table class="data"><thead><tr><th>Date</th><th>Money</th><th>' + (fund ? 'NAV used' : 'Index value used') + '</th><th>Units</th></tr></thead><tbody>' +
       eq.used.map(function (u) { return '<tr><td>' + fmtDate(u.t) + '</td><td>' + (u.kind === 'out' ? '−' : '') + money(u.amount) + '</td><td>' + u.price.toLocaleString('en-IN', { maximumFractionDigits: 2 }) + (u.priceDate !== u.t ? ' <span class="qsub">(' + fmtDate(u.priceDate) + ')</span>' : '') + '</td><td>' + (u.kind === 'out' ? '−' : '') + units3(u.units) + '</td></tr>'; }).join('') +
       '</tbody></table></div>');
     return html;
@@ -956,7 +976,7 @@
         var gn = (h.invested != null && h.current != null) ? h.current - h.invested : null, size = h.current != null ? h.current : h.invested;
         return '<div class="fundcard"><div class="fc-name">' + esc(h.name) + '</div><div class="fc-figs">' + fig('Put in', h.invested == null ? 'not in the file' : money(h.invested)) +
           fig('Worth now', h.current == null ? 'not in the file' : money(h.current)) + fig('Gain', gn == null || !(h.invested > 0) ? 'not known' : A.signedPct(gn / h.invested)) +
-          fig('Share', current > 0 && size != null ? pct(size / current, 0) : 'not known') + '</div></div>';
+          fig('Share', current > 0 && size != null ? share(size / current) : 'not known') + '</div></div>';
       }).join('') + '</div>' +
       '<p class="hint">Share is each holding’s part of what the whole is worth now.</p></div>';
     return html + A.pdfFoot('portfolio', 'My holdings');

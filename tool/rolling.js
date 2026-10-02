@@ -8,7 +8,7 @@
 (function (root) {
   'use strict';
   var A = root.PRCApp, E = root.PRCEngine, P = root.PRCParse, D = root.PRCDoors, C = root.PRCCharts;
-  var $ = A.$, $$ = A.$$, esc = A.esc, pct = A.pct, money = A.money, notice = A.notice, fmtDate = A.fmtDate;
+  var $ = A.$, $$ = A.$$, esc = A.esc, pct = A.pct, share = A.share, money = A.money, notice = A.notice, fmtDate = A.fmtDate;
   var stat = A.stat, term = A.term, fold = A.fold;
 
   var DEFAULT_YEARS = 3;
@@ -316,7 +316,7 @@
       { key: 'record', label: 'The record', html: recordTab(series, cmp, r, paired, years, name, cname, from, to, usedFrom, usedTo, thin, spanYears) },
       { key: 'falls', label: 'Falls and spread', html: thin ? null : fallsTab(series, cmp, r, paired, years, name, cname, calc) },
       { key: 'years', label: 'Over the years', html: yearsTab(series, cmp, years, name, cname) },
-      { key: 'against', label: 'Against the index', html: cmp ? againstTab(series, cmp, paired, years, name, cname) : null },
+      { key: 'against', label: R.bKind === 'NAV' ? 'Against ' + A.shortName(cname, name) : 'Against the index', html: cmp ? againstTab(series, cmp, paired, years, name, cname) : null },
       { key: 'all', label: 'All the numbers', html: allTab(series, cmp, r, paired, years, name, cname, calc) }
     ]) + A.pdfFoot('rolling', name);
   }
@@ -347,7 +347,7 @@
       '<div class="sub">the middle of ' + s.count.toLocaleString('en-IN') + ' holding periods, ' + fmtDate(series[0].t) + ' to ' + fmtDate(series[series.length - 1].t) + '. Half did better, half did worse.</div></div>';
     html += '<div class="stats topline">' + stat('Worst', pct(s.min), 'percentiles') + stat('Median', pct(s.median), 'median') + stat('Best', pct(s.max), 'percentiles') +
       stat('Ended below zero', s.below.toLocaleString('en-IN') + ' of ' + s.count.toLocaleString('en-IN')) +
-      (paired ? stat('Ahead of ' + cname, pct(paired.fundAheadShare, 0) + ' of windows', 'ahead') : '') + '</div>';
+      (paired ? stat('Ahead of ' + cname, share(paired.fundAheadShare) + ' of windows', 'ahead') : '') + '</div>';
     html += '<p class="cardtext"><strong>Read the worst figure first.</strong> It is what this ' + (R.a.kindGuess === 'index' ? 'market' : 'fund') + ' did over your holding period at its most unkind, and nobody tells you in advance which stretch they are walking into. Read the average last, and never on its own.</p>';
     html += '<div class="card"><h2>' + term('startDates', 'Same ' + (R.a.kindGuess === 'index' ? 'index' : 'fund') + ', two start dates') + '</h2>' +
       '<div class="scroll"><table class="data"><thead><tr><th></th><th>Started</th><th>Held until</th><th>Got</th></tr></thead><tbody>' +
@@ -371,8 +371,8 @@
       '<p class="hint tight">Your own target: the return you need, a deposit rate you could get instead, your guess at inflation plus a margin. This tool does not know today’s rates and does not pretend to.</p>' +
       '<div class="chips ratepresets" data-key="' + key + '">' + [6, 8, 10, 12].map(function (x) { return '<button class="chip" type="button" data-rate="' + x + '">' + x + '%</button>'; }).join('') + '</div>' +
       '<div class="field" style="max-width:16rem"><label for="rate-' + key + '">Rate to compare against, % a year</label><input type="number" id="rate-' + key + '" class="ratecheck" data-key="' + key + '" data-years="' + years + '" value="7" step="0.5" min="-50" max="100" inputmode="decimal"></div>' +
-      '<div class="result" style="margin:.6rem 0 0"><div class="label">Periods that beat it</div><div class="value" id="rateout-' + key + '">' + pct(res.share, 0) + '</div>' +
-      '<div class="sub" id="ratesub-' + key + '">In ' + pct(res.share, 0) + ' of the ' + years + '-year holding periods in this data (' + res.above.toLocaleString('en-IN') + ' of ' + res.count.toLocaleString('en-IN') + '), the return beat ' + pct(start, 1) + ' a year. Past periods, not future odds.</div></div>' +
+      '<div class="result" style="margin:.6rem 0 0"><div class="label">Periods that beat it</div><div class="value" id="rateout-' + key + '">' + share(res.share) + '</div>' +
+      '<div class="sub" id="ratesub-' + key + '">In ' + share(res.share) + ' of the ' + years + '-year holding periods in this data (' + res.above.toLocaleString('en-IN') + ' of ' + res.count.toLocaleString('en-IN') + '), the return beat ' + pct(start, 1) + ' a year. Past periods, not future odds.</div></div>' +
       '</div>';
   }
   function threeQuestions(series, years) {
@@ -439,8 +439,8 @@
       '<div class="scroll"><table class="data spread hmatrix"><thead><tr><th>Held for</th><th>Worst</th><th>10th</th><th>Median</th><th>90th</th><th>Best</th><th>Below zero</th><th>Beat your target</th></tr></thead><tbody>' +
       rows.map(function (row) {
         var em = row.h === chosenYears, beat = E.shareAbove(row.values, startRate);
-        return '<tr' + (em ? ' class="now"' : '') + '><td>' + row.h + (row.h === 1 ? ' year' : ' years') + (em ? ' ← chosen' : '') + '</td><td>' + pct(row.s.min) + '</td><td>' + pct(row.s.p10) + '</td><td>' + pct(row.s.median) + '</td><td>' + pct(row.s.p90) + '</td><td>' + pct(row.s.max) + '</td><td>' + pct(row.s.below / row.s.count, 0) + '</td>' +
-          '<td data-beat-h="' + row.h + '" data-key="rolling">' + (beat.ok ? pct(beat.share, 0) : 'none') + '</td></tr>';
+        return '<tr' + (em ? ' class="now"' : '') + '><td>' + row.h + (row.h === 1 ? ' year' : ' years') + (em ? ' ← chosen' : '') + '</td><td>' + pct(row.s.min) + '</td><td>' + pct(row.s.p10) + '</td><td>' + pct(row.s.median) + '</td><td>' + pct(row.s.p90) + '</td><td>' + pct(row.s.max) + '</td><td>' + share(row.s.below / row.s.count) + '</td>' +
+          '<td data-beat-h="' + row.h + '" data-key="rolling">' + (beat.ok ? share(beat.share) : 'none') + '</td></tr>';
       }).join('') + '</tbody></table></div>' +
       '<p class="cardtext">Where the Worst column rises and the band narrows as the holding period grows, longer holds narrowed the range of outcomes <em>in this data</em>. That is a description of these dates, not a law, and not a promise about the next period of any length. Longer horizons hold fewer windows, and all of them overlap.</p></div>';
   }
@@ -500,6 +500,10 @@
        whose name says it follows an index; for an active fund they describe
        nothing and only confuse. */
     var tracks = /\b(index|etf|nifty|sensex|bse|nse)\b/i.test(name);
+    /* The comparison file is another fund's NAV: it is named, never called the
+       index, and what is only true of an index (it carries no costs, the
+       regulator has the ratio published against it) is not said of it. */
+    var fundCmp = R.bKind === 'NAV', other = A.shortName(cname, name);
     function row(label, a, b, fmt, key) {
       var have = a != null && b != null;
       return '<tr><td>' + (key ? term(key, label) : esc(label)) + '</td><td>' + (a == null ? 'not known' : fmt(a)) + '</td><td>' + (b == null ? 'not known' : fmt(b)) + '</td><td>' + (have ? A.signedPct(a - b) : 'not known') + '</td></tr>';
@@ -508,26 +512,30 @@
       (paired ? '<p class="hint tight">Window figures come from the ' + paired.pairs.toLocaleString('en-IN') + ' paired ' + years + '-year windows, ' + fmtDate(paired.from) + ' to ' + fmtDate(paired.to) + (paired.filledFund || paired.filledBench ? ', with ' + (paired.filledFund + paired.filledBench) + ' dates one file lacked filled from that file’s previous value' : '') + '; the rest from the daily values on the dates both files have.</p>' : '') +
       '<div class="scroll"><table class="data charmatrix"><thead><tr><th></th><th>' + esc(colName(name)) + '</th><th>' + esc(colName(cname)) + '</th><th>Gap</th></tr></thead><tbody>' +
       (paired ? row('Median ' + years + '-year window', paired.fund.median, paired.bench.median, pct, 'median') + row('Worst window', paired.fund.min, paired.bench.min, pct, 'percentiles') + row('Best window', paired.fund.max, paired.bench.max, pct, 'percentiles') +
-        row('Windows ending above zero', paired.fund.positiveShare, paired.bench.positiveShare, function (v) { return pct(v, 0); }) : '') +
+        row('Windows ending above zero', paired.fund.positiveShare, paired.bench.positiveShare, function (v) { return share(v); }) : '') +
       row('Typical size of a year’s swing', fv.ok ? fv.sigma : null, bv.ok ? bv.sigma : null, function (v) { return pct(v, 1); }, 'volatility') +
       row('Deepest fall', fd.ok ? fd.depth : null, bd.ok ? bd.depth : null, pct, 'drawdown') +
       '</tbody></table></div>' + namesNote(name, cname) +
-      (paired ? '<p class="cardtext"><strong>' + esc(name) + ' came out ahead in ' + pct(paired.fundAheadShare, 0) + ' of the paired windows</strong>, ' + paired.fundAhead.toLocaleString('en-IN') + ' of ' + paired.pairs.toLocaleString('en-IN') + '. Leading in most windows is a different statement from leading over one stretch: a fund can win on the dates you happen to look at and lose on most others. A benchmark carries no costs, holds no cash and makes no decisions; a fund does all three.</p>' : '') +
+      (paired ? '<p class="cardtext"><strong>' + esc(name) + ' came out ahead in ' + share(paired.fundAheadShare) + ' of the paired windows</strong>, ' + paired.fundAhead.toLocaleString('en-IN') + ' of ' + paired.pairs.toLocaleString('en-IN') + '. Leading in most windows is a different statement from leading over one stretch: a fund can win on the dates you happen to look at and lose on most others.' + (fundCmp ? '' : ' A benchmark carries no costs, holds no cash and makes no decisions; a fund does all three.') + '</p>' : '') +
       '</div>';
     if (cap.ok) {
-      html += '<div class="card"><h2>' + term('capture', 'When the index rose, and when it fell') + '</h2>' +
-        '<div class="stats">' + stat('Of the index’s rises, it took', pct(cap.upside, 0)) + stat('Of the index’s falls, it took', pct(cap.downside, 0)) + stat('Months compared', String(cap.months)) + '</div>' +
-        '<p class="cardtext">In the ' + cap.upMonths + ' months the index rose, this fund captured <strong>' + pct(cap.upside, 0) + '</strong> of the rise; in the ' + cap.downMonths + ' months it fell, <strong>' + pct(cap.downside, 0) + '</strong> of the fall. Over 100% in up months means more than the index’s rises; under 100% in down months means less of its falls. ' +
-        (cap.downside != null && cap.downside < 0 ? 'A negative figure in down months means the fund rose, on average, while the index fell. ' : '') +
+      /* labels go to term() and stat(), which escape; sentences are escaped here */
+      var them = fundCmp ? other : 'the index', theirs = them + '’s';
+      html += '<div class="card"><h2>' + term('capture', 'When ' + them + ' rose, and when it fell') + '</h2>' +
+        '<div class="stats">' + stat('Of ' + theirs + ' rises, it took', pct(cap.upside, 0)) + stat('Of ' + theirs + ' falls, it took', pct(cap.downside, 0)) + stat('Months compared', String(cap.months)) + '</div>' +
+        '<p class="cardtext">In the ' + cap.upMonths + ' months ' + esc(them) + ' rose, ' + (fundCmp ? esc(name) : 'this fund') + ' captured <strong>' + pct(cap.upside, 0) + '</strong> of the rise; in the ' + cap.downMonths + ' months it fell, <strong>' + pct(cap.downside, 0) + '</strong> of the fall. Over 100% in up months means more than ' + esc(theirs) + ' rises; under 100% in down months means less of its falls. ' +
+        (cap.downside != null && cap.downside < 0 ? 'A negative figure in down months means ' + (fundCmp ? esc(name) : 'the fund') + ' rose, on average, while ' + esc(them) + ' fell. ' : '') +
         'A fund that takes less of the falls and less of the rises is a steadier thing, not a better or worse one; the two figures describe its shape.</p>' +
         (tk.ok && !tk.closely && Math.abs(tk.correlation) < 0.5 ? '<p class="hint">These two files barely move together (daily correlation ' + tk.correlation.toFixed(2) + '), so capture figures describe coincidence more than behaviour; they are meant for a fund and the index it is measured against.</p>' : '') + '</div>';
     }
     if (ir.ok || (tk.ok && tracks)) {
-      html += '<div class="card"><h2>' + term('ir', 'Two figures the regulator has funds publish') + '</h2><div class="stats">' +
+      html += '<div class="card"><h2>' + term('ir', fundCmp ? 'The yearly gap, and how steady it was' : 'Two figures the regulator has funds publish') + '</h2><div class="stats">' +
         (ir.ok ? stat('Excess return a year', A.signedPct(ir.excess)) + stat('Its unsteadiness', pct(ir.trackingError, 1)) + stat('Information ratio', ir.ratio.toFixed(2).replace(/^-/, '−'), 'ir') : '') +
-        (tk.ok && tk.closely && tracks ? stat('Tracking difference', A.signedPct(tk.difference), 'tracking') + stat('Tracking error', pct(tk.trackingError, 2), 'tracking') : '') + '</div>' +
-        (ir.ok ? '<p class="cardtext">The <strong>information ratio</strong> is the fund’s excess return over the index divided by how unsteady that excess was, on daily returns, ' + fmtDate(ir.from) + ' to ' + fmtDate(ir.to) + ': ' + A.signedPct(ir.excess) + ' ÷ ' + pct(ir.trackingError, 1) + ' = ' + ir.ratio.toFixed(2).replace(/^-/, '−') + '. Equity schemes must publish it daily. It is a ratio, not a rate: it says how consistently the fund’s difference from its index was earned, and it only compares across the same index and period.</p>' : '') +
-        (tk.ok && tracks ? (tk.closely ? '<p class="cardtext">These two move almost together (daily correlation ' + tk.correlation.toFixed(3) + '), which is how a fund that tracks an index behaves. The <strong>tracking difference</strong> is what the tracking cost over ' + fmtDate(tk.from) + ' to ' + fmtDate(tk.to) + ': ' + A.signedPct(tk.difference) + ' a year against the index' + (tk.lastYearDifference != null ? ', ' + A.signedPct(tk.lastYearDifference) + ' over the last year' : '') + '. The <strong>tracking error</strong> is how steadily it tracked: ' + pct(tk.trackingError, 2) + (tk.lastYearError != null ? ', ' + pct(tk.lastYearError, 2) + ' over the last year' : '') + '. The rule for equity index funds and ETFs caps the one-year tracking error at 2%.</p>'
+        (tk.ok && tk.closely && tracks && !fundCmp ? stat('Tracking difference', A.signedPct(tk.difference), 'tracking') + stat('Tracking error', pct(tk.trackingError, 2), 'tracking') : '') + '</div>' +
+        (ir.ok && fundCmp ? '<p class="cardtext">The <strong>information ratio</strong> is ' + esc(name) + '’s excess return over ' + esc(cname) + ' divided by how unsteady that excess was, on daily returns, ' + fmtDate(ir.from) + ' to ' + fmtDate(ir.to) + ': ' + A.signedPct(ir.excess) + ' ÷ ' + pct(ir.trackingError, 1) + ' = ' + ir.ratio.toFixed(2).replace(/^-/, '−') + '. It is a ratio, not a rate: it says how consistently the difference between the two was earned, and it only compares across the same pair and period.</p>' : '') +
+        (ir.ok && !fundCmp ? '<p class="cardtext">The <strong>information ratio</strong> is the fund’s excess return over the index divided by how unsteady that excess was, on daily returns, ' + fmtDate(ir.from) + ' to ' + fmtDate(ir.to) + ': ' + A.signedPct(ir.excess) + ' ÷ ' + pct(ir.trackingError, 1) + ' = ' + ir.ratio.toFixed(2).replace(/^-/, '−') + '. Equity schemes must publish it daily. It is a ratio, not a rate: it says how consistently the fund’s difference from its index was earned, and it only compares across the same index and period.</p>' : '') +
+        (tk.ok && tracks && fundCmp ? '<p class="hint">Tracking difference and error are not shown: they are measured against the index a fund follows, and ' + esc(cname) + ' is a fund.</p>' : '') +
+        (tk.ok && tracks && !fundCmp ? (tk.closely ? '<p class="cardtext">These two move almost together (daily correlation ' + tk.correlation.toFixed(3) + '), which is how a fund that tracks an index behaves. The <strong>tracking difference</strong> is what the tracking cost over ' + fmtDate(tk.from) + ' to ' + fmtDate(tk.to) + ': ' + A.signedPct(tk.difference) + ' a year against the index' + (tk.lastYearDifference != null ? ', ' + A.signedPct(tk.lastYearDifference) + ' over the last year' : '') + '. The <strong>tracking error</strong> is how steadily it tracked: ' + pct(tk.trackingError, 2) + (tk.lastYearError != null ? ', ' + pct(tk.lastYearError, 2) + ' over the last year' : '') + '. The rule for equity index funds and ETFs caps the one-year tracking error at 2%.</p>'
           : '<p class="hint">Tracking difference and error are not shown: the two files move with a daily correlation of ' + tk.correlation.toFixed(2) + ', so this is not a fund following that index, and those figures would describe nothing.</p>') : '') +
         '</div>';
     }
@@ -549,14 +557,14 @@
       row(term('percentiles', 'Worst'), pct(f.min), b ? pct(b.min) : null) + row('10th percentile', pct(f.p10), b ? pct(b.p10) : null) + row('25th percentile', pct(f.p25), b ? pct(b.p25) : null) +
       row(term('median', 'Median'), pct(f.median), b ? pct(b.median) : null) + row('75th percentile', pct(f.p75), b ? pct(b.p75) : null) + row('90th percentile', pct(f.p90), b ? pct(b.p90) : null) + row('Best', pct(f.max), b ? pct(b.max) : null) +
       row('Mean (average)', pct(f.mean), b ? pct(b.mean) : null) + row('Spread of the windows (standard deviation)', f.stdev == null ? 'one window' : pct(f.stdev), b ? (b.stdev == null ? 'one window' : pct(b.stdev)) : null) +
-      row('Ended below zero', f.below.toLocaleString('en-IN') + ' (' + pct(f.below / f.count, 1) + ')', b ? b.below.toLocaleString('en-IN') + ' (' + pct(b.below / b.count, 1) + ')' : null) +
-      (paired ? row(term('ahead', 'Windows ahead of ' + esc(cname)), paired.fundAhead.toLocaleString('en-IN') + ' (' + pct(paired.fundAheadShare, 1) + ')', 'not applicable') : '') +
+      row('Ended below zero', f.below.toLocaleString('en-IN') + ' (' + share(f.below / f.count, 1) + ')', b ? b.below.toLocaleString('en-IN') + ' (' + share(b.below / b.count, 1) + ')' : null) +
+      (paired ? row(term('ahead', 'Windows ahead of ' + esc(cname)), paired.fundAhead.toLocaleString('en-IN') + ' (' + share(paired.fundAheadShare, 1) + ')', 'not applicable') : '') +
       '</tbody></table></div>' + namesNote(name, cmp ? cname : null) +
       '<p class="hint">The headline uses the median, not the mean: a handful of exceptional stretches cannot pull the median upward, while a mean can be lifted into a figure no ordinary holding period ever produced. Every figure describes the dates in these files; none is a probability or a forecast.</p></div>';
     var bins = E.histogram(paired ? paired.fundValues : r.values, { bins: 8 });
     var dp = bins.some(function (x) { return Math.abs(x.from * 100 - Math.round(x.from * 100)) > 1e-9; }) ? 1 : 0;
     html += '<div class="card"><h2>How many windows ended in each range</h2><div class="scroll"><table class="data bins"><thead><tr><th>Return range, a year</th><th>Windows</th><th>Share</th></tr></thead><tbody>' +
-      bins.map(function (x) { return '<tr><td>' + pct(x.from, dp) + ' to ' + pct(x.to, dp) + '</td><td>' + x.count + '</td><td>' + pct(x.count / (paired ? paired.fundValues.length : r.values.length), 0) + '</td></tr>'; }).join('') + '</tbody></table></div></div>';
+      bins.map(function (x) { return '<tr><td>' + pct(x.from, dp) + ' to ' + pct(x.to, dp) + '</td><td>' + x.count + '</td><td>' + share(x.count / (paired ? paired.fundValues.length : r.values.length)) + '</td></tr>'; }).join('') + '</tbody></table></div></div>';
     html += windowTable(r.pairs, years, paired ? paired.matched : null, name, cname);
     var rep = R.a.report;
     if (rep) {

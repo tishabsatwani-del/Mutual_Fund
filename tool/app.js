@@ -17,6 +17,30 @@
   function moneyLong(n) { var words = F.echo(n); return money(n) + (words ? ' (' + words.replace(/^= /, '') + ')' : ''); }
   function pct(r, dp) { return F.pct(r, { dp: dp }); }
   function signedPct(r, dp) { return F.pct(r, { signed: true, dp: dp }); }
+  /* A share of a count or a whole: how many windows, how much of the money.
+     Whole percents as a rule, but a share that is not all never reads 100%
+     and one that is not none never reads 0%: it gets one decimal, and words
+     where even one decimal would round to the end. 5 windows of 1,305 below
+     zero once printed as "100%" above zero, beside a gap of +0.4%. */
+  function share(v, dp) {
+    var d = dp == null ? 0 : dp;
+    if (!(v > 0 && v < 1)) return pct(v, d);
+    var text = pct(v, d);
+    if (!/^(0|100)(\.0+)?%$/.test(text)) return text;
+    if (d < 1) { text = pct(v, 1); if (!/^(0|100)\.0%$/.test(text)) return text; }
+    return v < 0.5 ? 'under 0.1%' : 'over 99.9%';
+  }
+  /* A fund's name where it heads a tab or a figure: the scheme without its plan
+     and option ("… Index Fund - Direct Growth" reads "… Index Fund"), unless
+     that would read the same as a name beside it, as a Direct plan does against
+     its own Regular plan; and short enough not to wrap a tab. */
+  function shortName(n, others) {
+    function base(x) { return String(x || '').split(/\s+[-\u2013]\s+/)[0]; }
+    var full = String(n || ''), cut = base(full);
+    var clash = [].concat(others || []).some(function (o) { return base(o) === cut && String(o) !== full; });
+    var s = cut && !clash ? cut : full;
+    return s.length <= 32 ? s : s.slice(0, 31).replace(/\s+\S*$/, '').replace(/[\s\-\u2013,·]+$/, '') + '…';
+  }
   function signedMoney(n) { return (n >= 0 ? '+' : '') + money(n); }
   function fmtDate(t) { return F.date(t); }
   function fmtYears(y) { return F.years(y); }
@@ -345,7 +369,7 @@
   root.PRCApp = {
     E: E, P: P, F: F, VERSION: VERSION, HORIZONS: HORIZONS,
     money: money, moneyLong: moneyLong, moneyWords: moneyWords, short: short, signedMoney: signedMoney, count: count,
-    pct: pct, signedPct: signedPct, echo: F.echo, checkInput: F.checkInput,
+    pct: pct, signedPct: signedPct, share: share, shortName: shortName, echo: F.echo, checkInput: F.checkInput,
     fmtDate: fmtDate, fmtYears: fmtYears, months: months, monthsText: monthsText,
     todayTs: todayTs, isoToday: isoToday, isoOf: isoOf, isoToTs: isoToTs,
     $: $, $$: $$, el: el, esc: esc, notice: notice, term: term, stat: stat, trow: trow, fold: fold, tabs: tabs, pdfFoot: pdfFoot,
