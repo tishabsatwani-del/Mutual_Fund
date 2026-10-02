@@ -107,7 +107,9 @@
     } else main += '<p class="cardtext">Nothing more is required on these assumptions. The levers below show what happens if you do more anyway.</p>';
     if (req.ok) {
       main += '<p class="cardtext"><strong>' + term('requiredRate', 'The return this goal needs') + ':</strong> ' +
-        (req.rate != null ? 'with what you have and what you add, ' + esc(name) + ' is reached at exactly <strong>' + pct(req.rate) + ' a year</strong>. You assumed ' + pct(input.annualRate) + '. ' +
+        (req.rate != null ? 'with what you have and what you add, ' + esc(name) + ' is reached at exactly <strong>' + pct(req.rate) + ' a year</strong>. ' +
+          (req.rate < 0 && pct(-req.rate) !== pct(0) ? 'A rate below zero means what you have and pay in already comes to more than the goal: the money could lose ' + pct(-req.rate) + ' a year and still reach it. ' : '') +
+          'You assumed ' + pct(input.annualRate) + '. ' +
           (req.rate > input.annualRate ? 'The gap between the two is the return you are hoping the market will supply; the levers below are the parts you control.' : 'Anything above the required rate is margin.') +
           (G.history ? historyBeat(req.rate, input.years) : ' Load a history below the form and this line also says how often stretches of your length delivered it.')
           : esc(req.message)) + '</p>';

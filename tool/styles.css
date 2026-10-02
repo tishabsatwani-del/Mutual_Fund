@@ -1489,6 +1489,13 @@ label.switch.off { color: var(--muted); cursor: not-allowed; }
 .val-status:empty, .val-confirm:empty { display: none; }
 .confirmline .btnrow { margin-top: .6rem; }
 .result .youngline { margin-top: .5rem; color: var(--ink-2); }
+.result .defline { margin-top: .35rem; font-size: .9rem; }
+/* "What this means": a small tap under a figure, for the longer explanations */
+details.explain.means { margin: .45rem 0 0; border-top: 0; padding-top: 0; }
+details.explain.means summary { padding: .3rem 0; font-size: .84rem; }
+details.explain.means .body { margin-top: .2rem; font-size: .9rem; }
+details.explain.means .body p { margin: .35rem 0 0; }
+details.explain.means .body p:first-child { margin-top: 0; }
 .fileok-sub .warn-word { color: var(--warn); }
 
 /* H7: About's data card as questions and answers, stacked at every width. */

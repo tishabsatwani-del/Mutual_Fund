@@ -179,6 +179,11 @@
   function fold(summary, bodyHtml, open) {
     return '<details class="explain"' + (open ? ' open' : '') + '><summary>' + summary + '</summary><div class="body">' + bodyHtml + '</div></details>';
   }
+  /* "What this means": a small tap under a figure whose explanation is longer
+     than a line. It says what the figure is and how to read it, nothing more. */
+  function means(bodyHtml) {
+    return '<details class="explain means"><summary>What this means</summary><div class="body">' + bodyHtml + '</div></details>';
+  }
   function tabs(id, list) {
     /* list: [{key, label, html}]: the first is the main flow, the rest fold to one at a time on a phone */
     var live = list.filter(function (t) { return t && t.html; });
@@ -406,7 +411,7 @@
     pct: pct, signedPct: signedPct, share: share, shortName: shortName, chime: chime, echo: F.echo, checkInput: F.checkInput,
     fmtDate: fmtDate, fmtYears: fmtYears, months: months, monthsText: monthsText,
     todayTs: todayTs, isoToday: isoToday, isoOf: isoOf, isoToTs: isoToTs,
-    $: $, $$: $$, el: el, esc: esc, notice: notice, term: term, stat: stat, trow: trow, fold: fold, tabs: tabs, pdfFoot: pdfFoot,
+    $: $, $$: $$, el: el, esc: esc, notice: notice, term: term, stat: stat, trow: trow, fold: fold, means: means, tabs: tabs, pdfFoot: pdfFoot,
     relation: relation, equalWords: equalWords, EQUAL_BAND: EQUAL_BAND, stackTables: stackTables, watchTables: watchTables,
     csvCell: csvCell, fileSlug: fileSlug, downloadText: downloadText,
     show: show, initRouter: initRouter,

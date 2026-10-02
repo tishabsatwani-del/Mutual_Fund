@@ -333,7 +333,7 @@
       '<tr><td>' + term('windows', 'Each holding period') + '</td><td>' + years + (years === 1 ? ' year' : ' years') + ', starting on every ' + (R.frequency === 'daily' ? 'date the file has' : R.frequency === 'weekly' ? 'seventh day' : 'month') + ', ' + fmtDate(usedFrom) + ' to ' + fmtDate(lastStart) + '</td></tr>' +
       '</tbody></table></div>' +
       '<p class="cardtext">' + (thin ? 'Only ' + s.count + (s.count === 1 ? ' full window of this length fits' : ' full windows of this length fit') + ' in this file.'
-        : 'These ' + s.count.toLocaleString('en-IN') + ' windows overlap, as rolling windows are meant to; only <strong>' + r.independent + ' ' + (r.independent === 1 ? 'stretch' : 'stretches') + ' of ' + years + ' years</strong> fit inside ' + spanYears.toFixed(1) + ' years without touching. Read the range below as the shape of that much market and no more.' +
+        : 'These ' + s.count.toLocaleString('en-IN') + ' holding periods (windows) overlap, as rolling windows are meant to; only <strong>' + r.independent + ' ' + (r.independent === 1 ? 'stretch' : 'stretches') + ' of ' + years + ' years</strong> fit inside ' + spanYears.toFixed(1) + ' years without touching. Read the range below as the shape of that much market and no more.' +
           (spanYears < years + 3 ? ' <strong>Read it with suspicion:</strong> every window here begins inside a band of about ' + Math.max(0, spanYears - years).toFixed(1) + ' years, so they are one stretch measured over and over with its edges moved a little. Three spare years is roughly the least it takes for windows to begin in genuinely different markets.' : '')) +
       '</p></div>';
     if (thin) {
@@ -393,9 +393,10 @@
       var bottom = Math.round(10000 * (1 + dd.depth));
       html += '<div class="card"><h2>' + term('drawdown', 'The worst fall along the way') + '</h2>' +
         '<div class="stats">' + stat('Deepest fall', pct(dd.depth), 'drawdown') + stat('It began', fmtDate(dd.from.t)) + stat('The fall took', A.monthsText(dd.fallDays)) +
-        stat('Back to the old high', dd.recoveredOn ? fmtDate(dd.recoveredOn) + ', ' + A.monthsText(dd.recoveryDays) : 'not yet in this data') +
-        (bdd && bdd.ok && bdd.depth < 0 ? stat(cname + '’s deepest fall', pct(bdd.depth) + (bdd.recoveredOn ? ', back in ' + A.monthsText(bdd.fallDays + bdd.recoveryDays) : ', not yet back')) : '') +
+        stat('Back to the old high', dd.recoveredOn ? fmtDate(dd.recoveredOn) + ', ' + A.monthsText(dd.recoveryDays) + ' after the bottom' : 'not yet in this data') +
+        (bdd && bdd.ok && bdd.depth < 0 ? stat(cname + '’s deepest fall', pct(bdd.depth) + (bdd.recoveredOn ? ', back to its old high ' + A.monthsText(bdd.recoveryDays) + ' after the bottom' : ', not yet back')) : '') +
         (uw.ok && uw.days > 0 ? stat('Longest below a high', A.monthsText(uw.days) + (uw.ongoing ? ', still' : ''), 'underwater') : '') + '</div>' +
+        (uw.ok && uw.days > 0 ? '<p class="hint tight">Longest below a high: the longest time the value spent under an earlier peak before passing it.</p>' : '') +
         '<p class="cardtext">A return says what was earned; this says what had to be sat through to earn it. Every ₹10,000 held through this was worth about <strong>₹' + bottom.toLocaleString('en-IN') + '</strong> at the bottom' +
         (dd.recoveredOn ? ', and took until ' + fmtDate(dd.recoveredOn) + ' to be ₹10,000 again' : ', and had not got back to ₹10,000 by the end of this data') + '. ' +
         (uw.ok && uw.days > dd.fallDays + (dd.recoveryDays || 0) ? 'The longest stretch spent below a previous high was ' + A.monthsText(uw.days) + ', from ' + fmtDate(uw.from) + (uw.ongoing ? ' and still running at the end of the file' : ' to ' + fmtDate(uw.to)) + ', which is a different stretch from the deepest fall. ' : '') +
@@ -448,6 +449,11 @@
   /* a fund's full name is too long for a column heading; the heading takes
      its first words and the full names sit under the table */
   function colName(n) { n = String(n || ''); return n.length > 18 ? n.slice(0, 17).replace(/[\s\-\u2013\u2014,·]+$/, '') + '…' : n; }
+  /* what the Gap column is, under the table it heads */
+  function gapLine(name, cname) {
+    return '<p class="hint tight">Gap: ' + (R.bKind === 'NAV' ? esc(A.shortName(name, cname)) + '’s figure minus ' + esc(A.shortName(cname, name)) + '’s' : 'the fund’s figure minus the index’s') +
+      ', in percentage points, worked out before rounding (so it can differ by 0.1 from the figures beside it).</p>';
+  }
   function namesNote(name, cname) {
     var parts = [];
     if (colName(name) !== name) parts.push('<strong>' + esc(colName(name)) + '</strong> is ' + esc(name));
@@ -470,7 +476,7 @@
         cal.map(function (r) {
           return '<tr><td>' + r.year + (r.partial ? ' <span class="qsub">(' + (r.partial === 'start' ? 'from ' + fmtDate(r.from) : r.partial === 'end' ? 'to ' + fmtDate(r.to) : fmtDate(r.from) + ' to ' + fmtDate(r.to)) + ')</span>' : '') + '</td>' +
             '<td>' + A.signedPct(r.fund) + '</td>' + (cmp ? '<td>' + (r.bench == null ? 'not covered' : A.signedPct(r.bench)) + '</td><td>' + (r.bench == null ? 'not known' : A.signedPct(r.fund - r.bench)) + '</td>' : '') + '</tr>';
-        }).join('') + '</tbody></table></div>';
+        }).join('') + '</tbody></table></div>' + (cmp ? gapLine(name, cname) : '');
     }
     html += '<h3 class="subhead">The numbers a factsheet prints, to ' + fmtDate(series[series.length - 1].t) + '</h3>' +
       '<div class="scroll"><table class="data"><thead><tr><th>Held for</th><th>' + esc(colName(name)) + '</th>' + (cmp ? '<th>' + esc(colName(cname)) + '</th>' : '') + '<th>Rolling median</th><th>Rolling worst to best</th></tr></thead><tbody>' +
@@ -480,7 +486,7 @@
         return '<tr><td>' + label + '</td><td>' + (row.ok ? pct(row.fund) : '<span class="qsub">not in file</span>') + '</td>' + (cmp ? '<td>' + (row.bench == null ? 'not covered' : pct(row.bench)) + '</td>' : '') +
           '<td>' + (st ? pct(st.median) : 'too few windows') + '</td><td>' + (st ? pct(st.min) + ' to ' + pct(st.max) : 'too few windows') + '</td></tr>';
       }).join('') + '</tbody></table></div>' + namesNote(name, cmp ? cname : null) +
-      '<p class="cardtext">Each calendar year runs from the last value of the year before to its own last value. The factsheet figures end on the file’s last date and are annualised on a 365-day year; beside them, the median and the range of every window of the same length.</p></div>';
+      '<p class="cardtext">Each calendar year runs from the last value of the year before to its own last value. The factsheet figures end on the file’s last date and are annualised on a 365-day year; beside them, the median and the range of every window of the same length. Each factsheet figure is one window, the one ending on the file’s last date. Beside the range, it shows whether that one figure sits near the middle of the record or near an end.</p></div>';
     var aligned = cmp ? E.alignCalendar(series, cmp) : null;
     var gf = aligned && aligned.ok ? E.growthOf(aligned.a, 10000) : E.growthOf(series, 10000);
     var gb = aligned && aligned.ok ? E.growthOf(aligned.b, 10000) : null;
@@ -515,7 +521,9 @@
         row('Windows ending above zero', paired.fund.positiveShare, paired.bench.positiveShare, function (v) { return share(v); }) : '') +
       row('Typical size of a year’s swing', fv.ok ? fv.sigma : null, bv.ok ? bv.sigma : null, function (v) { return pct(v, 1); }, 'volatility') +
       row('Deepest fall', fd.ok ? fd.depth : null, bd.ok ? bd.depth : null, pct, 'drawdown') +
-      '</tbody></table></div>' + namesNote(name, cname) +
+      '</tbody></table></div>' + gapLine(name, cname) +
+      A.means('<p>Typical size of a year’s swing: how far a year’s return typically strays from its average, up or down (the standard deviation of daily moves, scaled to a year). Larger means a bumpier ride; it says nothing about how much was earned.</p>') +
+      namesNote(name, cname) +
       (paired ? '<p class="cardtext"><strong>' + esc(name) + ' came out ahead in ' + share(paired.fundAheadShare) + ' of the paired windows</strong>, ' + paired.fundAhead.toLocaleString('en-IN') + ' of ' + paired.pairs.toLocaleString('en-IN') + '. Leading in most windows is a different statement from leading over one stretch: a fund can win on the dates you happen to look at and lose on most others.' + (fundCmp ? '' : ' A benchmark carries no costs, holds no cash and makes no decisions; a fund does all three.') + '</p>' : '') +
       '</div>';
     if (cap.ok) {
@@ -532,6 +540,9 @@
       html += '<div class="card"><h2>' + term('ir', fundCmp ? 'The yearly gap, and how steady it was' : 'Two figures the regulator has funds publish') + '</h2><div class="stats">' +
         (ir.ok ? stat('Excess return a year', A.signedPct(ir.excess)) + stat('Its unsteadiness', pct(ir.trackingError, 1)) + stat('Information ratio', ir.ratio.toFixed(2).replace(/^-/, '−'), 'ir') : '') +
         (tk.ok && tk.closely && tracks && !fundCmp ? stat('Tracking difference', A.signedPct(tk.difference), 'tracking') + stat('Tracking error', pct(tk.trackingError, 2), 'tracking') : '') + '</div>' +
+        (ir.ok ? A.means('<p>Excess return a year: the average daily difference, scaled to a year; averaged day by day, it need not equal the gap between the two yearly returns.</p>' +
+          '<p>Its unsteadiness: how much that daily difference swung, scaled to a year (tracking error).</p>' +
+          '<p>Information ratio: above 0, ' + (fundCmp ? esc(name) + ' ran ahead of ' + esc(other) : 'the fund ran ahead of the index') + ' on average; below 0, behind; the further from 0, the more steadily.</p>') : '') +
         (ir.ok && fundCmp ? '<p class="cardtext">The <strong>information ratio</strong> is ' + esc(name) + '’s excess return over ' + esc(cname) + ' divided by how unsteady that excess was, on daily returns, ' + fmtDate(ir.from) + ' to ' + fmtDate(ir.to) + ': ' + A.signedPct(ir.excess) + ' ÷ ' + pct(ir.trackingError, 1) + ' = ' + ir.ratio.toFixed(2).replace(/^-/, '−') + '. It is a ratio, not a rate: it says how consistently the difference between the two was earned, and it only compares across the same pair and period.</p>' : '') +
         (ir.ok && !fundCmp ? '<p class="cardtext">The <strong>information ratio</strong> is the fund’s excess return over the index divided by how unsteady that excess was, on daily returns, ' + fmtDate(ir.from) + ' to ' + fmtDate(ir.to) + ': ' + A.signedPct(ir.excess) + ' ÷ ' + pct(ir.trackingError, 1) + ' = ' + ir.ratio.toFixed(2).replace(/^-/, '−') + '. Equity schemes must publish it daily. It is a ratio, not a rate: it says how consistently the fund’s difference from its index was earned, and it only compares across the same index and period.</p>' : '') +
         (tk.ok && tracks && fundCmp ? '<p class="hint">Tracking difference and error are not shown: they are measured against the index a fund follows, and ' + esc(cname) + ' is a fund.</p>' : '') +
@@ -559,7 +570,10 @@
       row('Mean (average)', pct(f.mean), b ? pct(b.mean) : null) + row('Spread of the windows (standard deviation)', f.stdev == null ? 'one window' : pct(f.stdev), b ? (b.stdev == null ? 'one window' : pct(b.stdev)) : null) +
       row('Ended below zero', f.below.toLocaleString('en-IN') + ' (' + share(f.below / f.count, 1) + ')', b ? b.below.toLocaleString('en-IN') + ' (' + share(b.below / b.count, 1) + ')' : null) +
       (paired ? row(term('ahead', 'Windows ahead of ' + esc(cname)), paired.fundAhead.toLocaleString('en-IN') + ' (' + share(paired.fundAheadShare, 1) + ')', 'not applicable') : '') +
-      '</tbody></table></div>' + namesNote(name, cmp ? cname : null) +
+      '</tbody></table></div>' +
+      A.means('<p>The 10th percentile is the return 1 window in 10 fell below; the 25th, 1 in 4. The 75th and 90th count the same way from the top.</p>' +
+        '<p>Spread of the windows (standard deviation): how far a typical window’s return sat from the average. The larger it is, the more the start date decided what an investor got.</p>') +
+      namesNote(name, cmp ? cname : null) +
       '<p class="hint">The headline uses the median, not the mean: a handful of exceptional stretches cannot pull the median upward, while a mean can be lifted into a figure no ordinary holding period ever produced. Every figure describes the dates in these files; none is a probability or a forecast.</p></div>';
     var bins = E.histogram(paired ? paired.fundValues : r.values, { bins: 8 });
     var dp = bins.some(function (x) { return Math.abs(x.from * 100 - Math.round(x.from * 100)) > 1e-9; }) ? 1 : 0;
@@ -569,7 +583,15 @@
     var rep = R.a.report;
     if (rep) {
       var skipped = rep.skipped.badDate + rep.skipped.badValue + rep.skipped.duplicate;
+      /* rows with neither a date nor a price (an AMFI download's section
+         headings, a note) and dates a second file repeated are not left-out
+         rows, so the sentence below does not count them; this line does */
+      var others = [];
+      if (rep.skipped.blank) others.push('headings or notes in the file' + (rep.files > 1 ? 's' : ''));
+      if (rep.overlaps) others.push('dates another of your files already held');
+      if (others.length && skipped) others.push('the rows left out below');
       html += '<div class="card"><h2>What was read from your file' + (rep.files > 1 ? 's' : '') + '</h2><div class="stats">' + stat('Rows in file', rep.rowsRead.toLocaleString('en-IN')) + stat('Rows used', rep.used.toLocaleString('en-IN')) + stat('First date', fmtDate(rep.firstDate)) + stat('Last date', fmtDate(rep.lastDate)) + '</div>' +
+        (rep.rowsRead > rep.used && others.length ? '<p class="hint tight">Rows used are the dated prices every figure here rests on; the other rows are ' + (others.length === 1 ? others[0] : others.slice(0, -1).join(', ') + ' or ' + others[others.length - 1]) + '.</p>' : '') +
         (skipped ? '<p class="cardtext">' + skipped + ' row' + (skipped === 1 ? ' was' : 's were') + ' left out: ' + rep.skipped.badDate + ' with a date that could not be read, ' + rep.skipped.badValue + ' with a missing, zero or negative value, ' + rep.skipped.duplicate + ' repeating a date already seen.</p>' +
           (rep.examples.length ? fold('Show me which rows', '<ul class="plainlist">' + rep.examples.map(function (x) { return '<li>Line ' + x.line + ': “' + esc(x.value) + '”: ' + esc(x.why) + '</li>'; }).join('') + '</ul>') : '') : '') +
         (rep.warnings || []).map(function (w) { return notice('warn', esc(w)); }).join('') + '</div>';
