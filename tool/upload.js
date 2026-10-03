@@ -101,6 +101,22 @@
     /transfer\s*[-_ ]?in/i, /\binvest/i, /\bstp\s*[-_ ]?in/i, /subscription|allot/i,
     /reinvest|dividend\s+reinvest/i, /\badd(ition)?\b/i, /lump\s*sum/i
   ];
+  /* An IDCW line has one meaning, whatever else is ticked: a payout is money
+     out, paid to the reader, and leaves the units as they were; a
+     reinvestment adds units and is not new money in. A line that says only
+     IDCW (or Dividend) is a reinvestment when it carries units, else a
+     payout. An IDCW moved into another scheme by transfer, sweep or switch
+     is money moving, read by its words like any other line. */
+  function idcwKind(word) {
+    var t = P.normHeader(word);
+    if (!t || /\btransfer|\bsweep|\bswitch|\bstp\b|\bdtp\b|\btds\b|\btax\b/.test(t)) return null;
+    var reinv = /\bre ?invest\w*|\breinv\b/.test(t), pay = /\bpay ?outs?\b|\bpaid\b|\bcredited\b/.test(t);
+    var idcw = /\bidcw\b|\bdividends?\b|\bdiv\b/.test(t);
+    if (reinv && !pay && (idcw || /^re ?invest(ment|ed)?$/.test(t))) return 'reinvest';
+    if (pay && !reinv && idcw) return 'payout';
+    if (idcw && !reinv && !pay && /^(idcw|dividends?|div)( (declared|income|distribution))?$/.test(t)) return 'idcw';
+    return null;
+  }
   function guessDirection(word) {
     var own = ownWord(word);
     if (own) return own;
@@ -177,18 +193,20 @@
     var found = typeColumn(header, body, width, dateCol, amountCol, fundCol);
     if (found) { typeCol = found.col; words = found.words; }
     if (typeCol >= 0) {
-      var allOwn = words.every(function (w) { return ownWord(w.word) !== null; });
+      words.forEach(function (w) { w.idcw = idcwKind(w.word); });
+      /* the tool's own words and IDCW lines need no answer */
+      var allOwn = words.every(function (w) { return ownWord(w.word) !== null || w.idcw; });
       var direction = o.direction;
       if (!direction && allOwn) {
         direction = {};
-        words.forEach(function (w) { direction[w.word] = ownWord(w.word); });
+        words.forEach(function (w) { if (!w.idcw) direction[w.word] = ownWord(w.word); });
       }
       if (!direction && !signed) {
         return {
           ok: false, ask: 'direction', rows: [], valuations: [], skipped: 0, header: header,
           dateCol: dateCol, amountCol: amountCol, fundCol: fundCol, unitsCol: unitsCol, typeCol: typeCol,
           words: words, dayFirst: dayFirst, dateCertain: dateCertain, example: example,
-          code: 'ASK-DIRECTION', message: MESSAGES.whichDirection(words.length)
+          code: 'ASK-DIRECTION', message: MESSAGES.whichDirection(words.filter(function (w) { return !w.idcw; }).length)
         };
       }
       if (direction) {
@@ -207,7 +225,8 @@
       if (!isFinite(t) || !isFinite(n) || n === 0) { skipped++; continue; }
       var dir = n < 0 ? 'out' : 'in';
       var fund = fundCol >= 0 ? String(body[i][fundCol] == null ? '' : body[i][fundCol]).trim() : '';
-      if (dirMap) {
+      var ik = typeCol >= 0 ? idcwKind(body[i][typeCol]) : null;
+      if (dirMap && !ik) {
         var word = String(body[i][typeCol] == null ? '' : body[i][typeCol]).trim().toLowerCase();
         var said = dirMap[word];
         if (!said && n > 0) { skipped++; continue; }
@@ -215,9 +234,13 @@
         if (said) dir = said;
       }
       var u = unitsCol >= 0 ? ledgerAmount(body[i][unitsCol]) : NaN;
+      if (ik === 'idcw') ik = isFinite(u) && Math.abs(u) > 0 ? 'reinvest' : 'payout';
+      /* a payout leaves the units as they were; a reinvestment adds units, and no money */
+      if (ik === 'payout') { dir = 'out'; u = NaN; }
+      else if (ik === 'reinvest') dir = 'reinvest';
       var isin = isinCol >= 0 ? String(body[i][isinCol] == null ? '' : body[i][isinCol]).trim().toUpperCase() : '';
       var code = codeCol >= 0 ? String(body[i][codeCol] == null ? '' : body[i][codeCol]).trim() : '';
-      out.push({ t: t, amount: Math.abs(n), dir: dir, units: isFinite(u) ? Math.abs(u) : null,
+      out.push({ t: t, amount: Math.abs(n), dir: dir, units: isFinite(u) ? Math.abs(u) : null, idcw: ik || null,
                  fund: fund, isin: P.ISIN_RE.test(isin) ? isin : '', code: code, line: i + (header ? 2 : 1) });
     }
     return {
@@ -335,16 +358,19 @@
       var key = (r.fund || '').trim();
       if (!by[key]) {
         by[key] = { name: key, rows: [], paidIn: 0, tookOut: 0, unitsIn: 0, unitsOut: 0, units: null,
-                    first: r.t, last: r.t, hasUnits: false, isin: '', code: '', unitsBought: 0, paidForUnits: 0 };
+                    first: r.t, last: r.t, hasUnits: false, isin: '', code: '', unitsBought: 0, paidForUnits: 0, idcwPaid: 0, idcwReinvested: 0 };
         order.push(key);
       }
       var g = by[key];
       g.rows.push(r);
-      if (r.dir === 'out') g.tookOut += r.amount; else g.paidIn += r.amount;
+      /* an IDCW payout is money out with no units; a reinvestment is units with no money */
+      if (r.dir === 'out') g.tookOut += r.amount; else if (r.dir !== 'reinvest') g.paidIn += r.amount;
+      if (r.idcw === 'payout') g.idcwPaid += r.amount;
+      if (r.dir === 'reinvest') g.idcwReinvested += r.amount;
       if (r.units != null) {
         g.hasUnits = true;
         if (r.dir === 'out') g.unitsOut += r.units;
-        else { g.unitsIn += r.units; if (r.units > 0) { g.unitsBought += r.units; g.paidForUnits += r.amount; } }
+        else { g.unitsIn += r.units; if (r.dir !== 'reinvest' && r.units > 0) { g.unitsBought += r.units; g.paidForUnits += r.amount; } }
       }
       if (r.isin && !g.isin) g.isin = r.isin;
       if (r.code && !g.code) g.code = r.code;
@@ -442,8 +468,10 @@
       if (name && PRICE_HEADERS.test(name)) return true;
     }
     if (body.length < 30 || dateCol < 0) return false;
-    var times = [];
-    for (var i = 0; i < body.length; i++) { var t = dateOf(body[i][dateCol], dayFirst); if (isFinite(t)) times.push(t); }
+    /* each date once: two funds paid on one day are two lines of one date,
+       not two days of a price history */
+    var times = [], seenT = {};
+    for (var i = 0; i < body.length; i++) { var t = dateOf(body[i][dateCol], dayFirst); if (isFinite(t) && !seenT[t]) { seenT[t] = true; times.push(t); } }
     if (times.length < 30) return false;
     times.sort(function (a, b) { return a - b; });
     var gaps = [];
@@ -458,7 +486,8 @@
     }
     var rows = ledger.rows;
     if (rows.length < 30) return false;
-    var times = rows.map(function (r) { return r.t; }).sort(function (a, b) { return a - b; });
+    var times = rows.map(function (r) { return r.t; }).filter(function (t, i, all) { return all.indexOf(t) === i; }).sort(function (a, b) { return a - b; });
+    if (times.length < 30) return false;
     var gaps = [];
     for (var i = 1; i < times.length; i++) gaps.push((times[i] - times[i - 1]) / MS_DAY);
     gaps.sort(function (a, b) { return a - b; });
@@ -610,7 +639,7 @@
   var api = {
     rowsFrom: rowsFrom, jsonRows: jsonRows,
     ledgerRows: ledgerRows, ledgerAmount: ledgerAmount, typeColumn: typeColumn, ownWord: ownWord,
-    guessDirection: guessDirection, holdingsRows: holdingsRows, portfolioFile: portfolioFile,
+    guessDirection: guessDirection, idcwKind: idcwKind, holdingsRows: holdingsRows, portfolioFile: portfolioFile,
     schemeTotals: schemeTotals, markSwitches: markSwitches, firstAmbiguousDate: firstAmbiguousDate,
     stitch: stitch, gapsIn: gapsIn, MESSAGES: MESSAGES, GAP_DAYS: GAP_DAYS
   };

@@ -202,7 +202,16 @@
    * or a number names a thing, not a price; AMFI's Repurchase and Sale Price
    * columns are blank or a load-adjusted copy of the NAV. Volumes, turnover,
    * changes, ratios, units and balances are numbers that are not a price. */
-  var NEVER_VALUE = /\bcode\b|\bisin\b|\bfolio\b|\bid\b|\bnumber\b|\brepurchase\b|\bsale price\b/;
+  var NEVER_BASE = /\bcode\b|\bisin\b|\bfolio\b|\bid\b|\bnumber\b/;
+  /* A fund house's "Sale and Repurchase NAV" is its NAV under its old name
+     (one price for both, since entry loads went), so a heading naming both
+     sides and the NAV is the value. A sale price or a repurchase price on its
+     own is still never read as the NAV. */
+  var NEVER_VALUE = { test: function (h) {
+    if (NEVER_BASE.test(h)) return true;
+    if (!/\brepurchase\b|\bsale\b/.test(h)) return false;
+    return !(/\bsale\b/.test(h) && /\brepurchase\b/.test(h) && /\bnav\b|\bnet asset value\b/.test(h));
+  } };
   var NOT_VALUE = [
     NEVER_VALUE,
     /\bvolumes?\b|\bvol$|\bqty\b|\bquantit(y|ies)\b|\bshares\b|\bcontracts\b/,
@@ -386,8 +395,15 @@
     var limit = Math.min(rows.length, HEADER_SEARCH_ROWS);
     var fallback = null;
     for (var i = 0; i < limit; i++) {
-      if (!looksLikeHeader(rows[i])) continue;
-      var body = rows.slice(i + 1);
+      /* Headings over two rows ("Regular Plan" across two columns, "Growth"
+         and "IDCW" under it) are read as one row of headings, each column
+         named by both. A summary's headings (a year's highest and lowest
+         NAV) are never the daily table's. */
+      var head = rows[i], top = i, start = i + 1;
+      if (subHeading(rows, i)) { head = joinHeadings(rows[i], rows[i + 1]); start = i + 2; }
+      else if (i > 0 && isGroupRow(rows[i - 1], rows[i])) { head = joinHeadings(rows[i - 1], rows[i]); top = i - 1; }
+      if (!looksLikeHeader(head) || summaryHeading(head)) continue;
+      var body = rows.slice(start);
       if (!body.length) continue;
 
       /* A TITLE IS NOT A HEADER, and telling them apart is a counting job.
@@ -402,22 +418,29 @@
        *
        * A header names the columns, so it has about as many cells as they do. */
       var width = modalWidth(body);
-      if (width >= 2 && filledCount(rows[i]) < Math.max(2, width - 1)) continue;
+      if (width >= 2 && filledCount(head) < Math.max(2, width - 1)) continue;
       /* Kept even though its columns may not check out. A row that reads as a
          header IS the header; whether the rows under it hold what it claims is
          a separate question, and it is the question worth answering. Throwing
          the header away here left the refusal unable to say "the column you
          called NAV holds text" -- it could only say it found no columns. */
-      if (fallback === null) fallback = { index: i, header: rows[i], body: body };
+      if (fallback === null) fallback = { index: start - 1, top: top, header: head, body: body };
       if (body.length < 2) continue;
-      var cols = pickColumns(body, rows[i]);
+      var cols = pickColumns(body, head);
       if (cols.dateCol !== -1 && cols.valueCol !== -1 && cols.dateCol !== cols.valueCol) {
-        return { index: i, header: rows[i], body: body };
+        return { index: start - 1, top: top, header: head, body: body };
       }
     }
     /* No header-shaped row at all. Everything is data and shape decides, which
        is how AMFI's headerless bulk files have always been read. */
-    return fallback || { index: -1, header: null, body: rows };
+    return fallback || { index: -1, top: -1, header: null, body: rows };
+  }
+  /* "Year | Highest NAV | Date | Lowest NAV | Date": every value it names is a summary's */
+  var SUMMARY_WORDS = /\bnav range\b|\b52\s*weeks?\b|\bhighest\b|\blowest\b/;
+  function summaryHeading(head) {
+    var words = (head || []).map(normHeader);
+    if (!words.some(function (h) { return SUMMARY_WORDS.test(h); })) return false;
+    return !words.some(function (h) { return h && !SUMMARY_WORDS.test(h) && headingRank(VALUE_RANK, h) !== null && !NEVER_VALUE.test(h); });
   }
 
   function looksLikeHeader(row) {
@@ -656,8 +679,10 @@
     }
 
     /* 6. Several amounts on one date, with no scheme column to explain
-          them, is a statement too: a price file has one value per date. */
-    if (pickSchemeColumn(header, body) === -1 && body.length >= 6) {
+          them, is a statement too: a price file has one value per date.
+          A file with a plan or option column, or with each plan and option
+          under a line of its own, explains them. */
+    if (!keyedBy(schemeColumns(header, body)) && variantSections(body).length < 2 && body.length >= 6) {
       var seenDates = {}, dup = 0, dated = 0;
       for (var q = 0; q < body.length && q < 400; q++) {
         var dcell = String(body[q][cols.dateCol] == null ? '' : body[q][cols.dateCol]).trim();
@@ -801,11 +826,18 @@
   /* The columns that say which scheme a row belongs to.
    *   name   the scheme's name, with its plan and option: what a reader knows
    *   code   the AMFI scheme code, one for each plan and option
+   *   plan, option, freq   a fund house's own columns for the plan, the
+   *          option and an IDCW's frequency, when each has rows of its own
    * A file with a code column is keyed by the code, because two plans can
    * share a name in a careless file and two codes never share a scheme. The
-   * name is what the reader is shown and what they type to find it. */
-  function schemeColumns(header) {
-    var out = { key: -1, name: -1, code: -1 };
+   * name is what the reader is shown and what they type to find it. A name,
+   * plan or option column holds words, and a code column holds no dates: a
+   * heading alone does not make one. */
+  var PLAN_HEAD = /^(scheme )?plans?( name| type)?$|^plans? (and )?options?$|^options? (and )?plans?$/;
+  var OPTION_HEAD = /^(scheme )?options?( name| type)?$|^(dividend|idcw) (option|type)$/;
+  var FREQ_HEAD = /^((dividend|idcw) )?frequency$/;
+  function schemeColumns(header, body) {
+    var out = { key: -1, name: -1, code: -1, plan: -1, option: -1, freq: -1 };
     if (!header) return out;
     var lower = header.map(normHeader);
     var i;
@@ -818,49 +850,473 @@
     for (i = 0; i < lower.length && out.code === -1; i++) {
       if (CODE_HEADERS.indexOf(lower[i]) !== -1 || /\b(scheme|amfi) code\b/.test(lower[i])) out.code = i;
     }
+    for (i = 0; i < lower.length; i++) {
+      if (out.plan === -1 && PLAN_HEAD.test(lower[i])) out.plan = i;
+      else if (out.option === -1 && OPTION_HEAD.test(lower[i])) out.option = i;
+      else if (out.freq === -1 && FREQ_HEAD.test(lower[i])) out.freq = i;
+    }
+    if (body) {
+      ['name', 'plan', 'option', 'freq'].forEach(function (k) { if (out[k] !== -1 && !wordsColumn(body, out[k])) out[k] = -1; });
+      if (out.code !== -1 && datesColumn(body, out.code)) out.code = -1;
+    }
     out.key = out.code !== -1 ? out.code : out.name;
     return out;
   }
+  function columnCells(body, col) {
+    var cells = [];
+    for (var r = 0; r < body.length && cells.length < 60; r++) { var c = body[r] ? body[r][col] : null; if (filledCell(c)) cells.push(c); }
+    return cells;
+  }
+  function wordsColumn(body, col) { var cells = columnCells(body, col); return !cells.length || cells.filter(textCell).length >= cells.length * 0.6; }
+  function datesColumn(body, col) { var cells = columnCells(body, col); return cells.length > 0 && cells.filter(readsAsDate).length >= cells.length * 0.6; }
+  function keyedBy(sc) { return sc.key !== -1 || sc.plan !== -1 || sc.option !== -1 || sc.freq !== -1; }
   function pickSchemeColumn(header) { return schemeColumns(header).key; }
   function cellText(row, col) { return col < 0 || !row ? '' : String(row[col] == null ? '' : row[col]).trim(); }
 
+  /* ============================================= a scheme's plan and option
+   *
+   * One scheme, many NAVs. Each plan (Direct, Regular; older debt funds also
+   * Retail, Institutional, Super Institutional) and each option (Growth;
+   * IDCW, once called Dividend, paid out or reinvested, daily to annual; now
+   * and then Bonus) has a NAV of its own, and two of them are never one
+   * history. They are read from a scheme's name, a column's heading, a title
+   * or a file's name, short forms included: Dir, Reg, Gr, Div, Reinv,
+   * IDCW-M. A scheme's own name can hold the same words ("Regular Savings
+   * Fund", "Growth Opportunities Fund", "Dividend Yield Fund"), so the parts
+   * after the name are read first; the whole is read for the plan only when
+   * the parts after it name none, and for the option only when there are no
+   * parts after it at all, with those names taken out. Text that names two
+   * plans, or two options, names neither: it is not one variant. */
+  var NAME_PHRASES = /\b(regular savings|regular income|growth opportunit\w*|growth sectors?|growth fund|growth and income|div(idend)? yield|dividend opportunit\w*|dividend stability|dividend leaders?|high dividend|dividend aristocrats?)\b/g;
+  /* a report's name is not a variant: "NAV and Dividend History" */
+  var REPORT_PHRASES = /\b(dividends?|idcw|navs?|net asset values?)\s+(history|report|declared|records?|details|data)\b|\bhistory of (dividends?|idcw)\b/g;
+  var FREQUENCIES = [['Daily', /\bdaily\b/], ['Weekly', /\bweekly\b/], ['Fortnightly', /\bfortnightly\b/], ['Monthly', /\bmonthly\b/],
+    ['Quarterly', /\bquarterly\b/], ['Annual', /\bannual(ly)?\b|\byearly\b/]];
+  var HALF_YEARLY = /\bhalf\s*yearly\b|\bsemi\s*annual(ly)?\b/g;
+  var IDCW_SHORT = { d: 'Daily', w: 'Weekly', f: 'Fortnightly', m: 'Monthly', q: 'Quarterly', h: 'Half-Yearly', hy: 'Half-Yearly', a: 'Annual', y: 'Annual' };
+  var SEPARATORS = /\s+[-–—]\s+|\s[-–—]|[-–—]\s|[()\[\]\/|,;:]+/;
+  function noVariant() { return { plan: null, option: null, payout: null, frequency: null }; }
+  function variantWords(t) {
+    var v = noVariant();
+    if (!t) return v;
+    t = ' ' + t + ' ';
+    var plans = [];
+    if (/\bsuper\s*institutional\b/.test(t)) { plans.push('Super Institutional'); t = t.replace(/\bsuper\s*institutional\b/g, ' '); }
+    if (/\binstitutional\b/.test(t)) plans.push('Institutional');
+    if (/\bretail\b/.test(t)) plans.push('Retail');
+    if (/\bdirect\b|\bdir\b/.test(t)) plans.push('Direct');
+    if (/\bregular\b|\breg\b/.test(t)) plans.push('Regular');
+    if (plans.length === 1) v.plan = plans[0];
+    var idcw = /\bidcw\b|\bdividends?\b|\bdiv\b/.test(t), bonus = /\bbonus\b/.test(t), growth = /\bgrowth\b|\bgr\b/.test(t);
+    if (idcw && !bonus && !growth) {
+      v.option = 'IDCW';
+      var re = /\bre\s*invest(ment|ed)?\b|\breinv\b/.test(t), po = /\bpay\s*outs?\b|\bpaid\b/.test(t);
+      if (re && !po) v.payout = 'Reinvestment'; else if (po && !re) v.payout = 'Payout';
+      var freq = [];
+      if (HALF_YEARLY.test(t)) { freq.push('Half-Yearly'); t = t.replace(HALF_YEARLY, ' '); }
+      HALF_YEARLY.lastIndex = 0;
+      FREQUENCIES.forEach(function (f) { if (f[1].test(t)) freq.push(f[0]); });
+      if (freq.length === 1) v.frequency = freq[0];
+      else if (!freq.length) { var short = /\bidcw\s*(hy|[dwfmqhay])\b/.exec(t); if (short) v.frequency = IDCW_SHORT[short[1]]; }
+    } else if (bonus && !idcw && !growth) v.option = 'Bonus';
+    else if (growth && !idcw && !bonus) v.option = 'Growth';
+    return v;
+  }
+  function plainWords(text) { return normHeader(text).replace(REPORT_PHRASES, ' ').replace(NAME_PHRASES, ' '); }
+  function variantOf(text) {
+    var raw = String(text == null ? '' : text);
+    if (!raw.trim()) return noVariant();
+    var parts = raw.split(SEPARATORS).map(normHeader).filter(Boolean);
+    var whole = variantWords(plainWords(raw));
+    /* the first part is a scheme's name, unless it only names a variant */
+    if (parts.length < 2 || pureVariant(parts[0])) return whole;
+    var tail = variantWords(plainWords(parts.slice(1).join(' ')));
+    if (!tail.plan) tail.plan = whole.plan;
+    return tail;
+  }
+  function variantKnown(v) { return !!(v && (v.plan || v.option)); }
+  /* "Direct Plan, Growth Option"; "Regular Plan, Monthly IDCW Option (Payout)" */
+  function variantLabel(v) {
+    if (!variantKnown(v)) return null;
+    var opt = v.option === 'IDCW' ? (v.frequency ? v.frequency + ' ' : '') + 'IDCW Option' + (v.payout ? ' (' + v.payout + ')' : '')
+      : v.option ? v.option + ' Option' : 'option not stated';
+    return (v.plan ? v.plan + ' Plan' : 'plan not stated') + ', ' + opt;
+  }
+  /* two variants that cannot be one NAV: a plan, an option, or an IDCW's
+     payout or frequency stated on both sides and different */
+  function variantsDiffer(a, b) {
+    if (!a || !b) return false;
+    if (a.plan && b.plan && a.plan !== b.plan) return true;
+    if (a.option && b.option && a.option !== b.option) return true;
+    if (a.option === 'IDCW' && b.option === 'IDCW') {
+      if (a.payout && b.payout && a.payout !== b.payout) return true;
+      if (a.frequency && b.frequency && a.frequency !== b.frequency) return true;
+    }
+    return false;
+  }
+  /* a's own words first; b fills only what a leaves unstated */
+  function mergeVariant(a, b) {
+    var out = noVariant();
+    out.plan = (a && a.plan) || (b && b.plan) || null;
+    out.option = (a && a.option) || (b && b.option) || null;
+    var from = a && a.option ? a : b;
+    var fill = b && a && a.option && b.option === a.option ? b : null;
+    out.payout = (from && from.payout) || (fill && fill.payout) || null;
+    out.frequency = (from && from.frequency) || (fill && fill.frequency) || null;
+    return out;
+  }
+  /* A field the file's choices leave unstated, filled from the wider
+     context: the titles over the table, then the file's own name. Only when
+     NO choice states that field itself: in a file where some rows say
+     "Direct Plan" and others say nothing, the others are not Direct. */
+  function fillFrom(list, ctx) {
+    var statesPlan = list.some(function (v) { return v.plan; }), statesOption = list.some(function (v) { return v.option; });
+    return list.map(function (v) {
+      var out = mergeVariant(v, null);
+      ctx.forEach(function (c) {
+        if (!c) return;
+        if (!statesPlan && !out.plan && c.plan) out.plan = c.plan;
+        if (!statesOption && !out.option && c.option) { out.option = c.option; out.payout = c.payout; out.frequency = c.frequency; }
+        else if (out.option === 'IDCW' && c.option === 'IDCW') {
+          if (!out.payout && c.payout && !list.some(function (x) { return x.payout; })) out.payout = c.payout;
+          if (!out.frequency && c.frequency && !list.some(function (x) { return x.frequency; })) out.frequency = c.frequency;
+        }
+      });
+      return out;
+    });
+  }
+  /* a file's own name, its extension and underscores taken off */
+  function fileVariant(fileName) {
+    var nm = String(fileName == null ? '' : fileName).replace(/\.[a-z0-9]{2,5}$/i, '').replace(/[_.]+/g, ' ');
+    return variantOf(nm);
+  }
+  /* the plan and option a file's titles state */
+  function titleVariant(titles) {
+    var v = noVariant();
+    (titles || []).forEach(function (t) { v = mergeVariant(v, variantOf(t)); });
+    return v;
+  }
+  /* The scheme's name without its plan and option: "Axis Bluechip Fund". */
+  function fundName(text) {
+    var raw = String(text == null ? '' : text).trim().replace(/^\s*(scheme|fund)(\s+name)?\s*[:\-–—]\s*/i, '');
+    if (!raw) return '';
+    var parts = raw.split(/\s+[-–—]\s+|\s[-–—]\s?|[-–—]\s|\s*[()\[\]|,]\s*/).map(function (s) { return s.trim(); }).filter(Boolean);
+    var keep = [];
+    for (var i = 0; i < parts.length; i++) {
+      if (i > 0 && variantKnown(variantWords(plainWords(parts[i])))) break;
+      keep.push(parts[i]);
+    }
+    return keep.join(' - ');
+  }
+  /* words that only say a plan or an option, a NAV or a currency */
+  var VARIANT_ONLY = /\b(super|institutional|retail|direct|dir|regular|reg|plans?|options?|idcw|dividends?|div|payouts?|pay|out|re|reinvestment|reinvest|reinvested|reinv|daily|weekly|fortnightly|monthly|quarterly|half|yearly|semi|annual|annually|bonus|growth|gr|nav|net|asset|value|rs|inr|[dwfmqhay])\b/g;
+  function pureVariant(text) { return !normHeader(text).replace(VARIANT_ONLY, ' ').trim(); }
+
+  /* ------------------------------------------------ a table's parts around its rows */
+  function filledCell(c) { return c != null && String(c).trim() !== ''; }
+  function textCell(c) { var t = String(c == null ? '' : c).trim(); return !!t && !readsAsDate(t) && !isFinite(parseNumber(t)); }
+  function dataRow(r) { return !!r && r.some(readsAsDate) && r.some(function (c) { return filledCell(c) && !readsAsDate(c) && isFinite(parseNumber(c)); }); }
+
+  /* Headings over two rows: "Regular Plan" across two columns with "Growth"
+     and "IDCW" under it, or "Sale and Repurchase NAV" over "Regular" and
+     "Direct". The upper row holds words over the value columns, never a
+     title in the first cell (a title sits there alone; the first cell of a
+     heading row is the date's, or empty), and a plan or an option is named
+     on one of the two rows. */
+  function isGroupRow(top, under) {
+    if (!top || !under) return false;
+    var t0 = String(top[0] == null ? '' : top[0]).trim();
+    if (t0 && !/\bdate\b|\bas on\b|\bperiod\b|\bday\b/.test(normHeader(t0))) return false;
+    var groups = 0, c;
+    for (c = 1; c < top.length; c++) {
+      if (!filledCell(top[c])) continue;
+      if (!textCell(top[c])) return false;
+      groups++;
+    }
+    if (!groups) return false;
+    var cells = under.filter(filledCell);
+    if (cells.length < 2 || under.some(readsAsDate)) return false;
+    if (cells.filter(textCell).length < cells.length * 0.6) return false;
+    function names(r) { for (var k = 1; k < r.length; k++) if (filledCell(r[k]) && variantKnown(variantOf(r[k]))) return true; return false; }
+    return names(top) || names(under);
+  }
+  function subHeading(rows, i) {
+    if (!isGroupRow(rows[i], rows[i + 1])) return false;
+    for (var k = i + 2; k < rows.length && k < i + 5; k++) {
+      if (!rows[k] || !rows[k].some(filledCell)) continue;
+      return rows[k].some(readsAsDate);
+    }
+    return false;
+  }
+  function joinHeadings(top, under) {
+    var width = Math.max(top.length, under.length), out = [], carry = '';
+    for (var c = 0; c < width; c++) {
+      var t = String(top[c] == null ? '' : top[c]).trim(), u = String(under[c] == null ? '' : under[c]).trim();
+      if (t) carry = t; else if (!u) carry = '';
+      out.push(((t || (u && c > 0 ? carry : '')) + ' ' + u).trim());
+    }
+    return out;
+  }
+
+  /* A fund house prints a summary beside the daily table: the year's highest
+     and lowest NAV, a "NAV Range", 52-week highs. Those rows carry dates and
+     NAVs too and are not the daily series. A summary line is dropped; from a
+     summary's own heading, nothing is read until the daily table's heading
+     comes back or a new part of the file begins. A repeat of the daily
+     heading (a new page) is not a row. */
+  var SUMMARY_HEAD = /\bnav range\b|\b52\s*weeks?\b|\bhighest\b|\blowest\b|^range\b/;
+  var SUMMARY_LINE = /^(highest|lowest|high|low|max(imum)?|min(imum)?|average|avg)\b|\bnav range\b|\b52\s*weeks?\b/;
+  function cleanBody(body, header) {
+    var head = header ? header.map(normHeader).join('|') : null, out = [], skipping = false;
+    for (var i = 0; i < body.length; i++) {
+      var r = body[i] || [];
+      var first = null;
+      for (var f = 0; f < r.length && first === null; f++) if (filledCell(r[f])) first = r[f];
+      if (first === null) { out.push(r); continue; }
+      /* a data row starts with its date or a number: nothing to look at */
+      if (!textCell(first)) { if (!skipping) out.push(r); continue; }
+      if (head && r.map(normHeader).join('|') === head) { skipping = false; continue; }
+      if (sectionTitle(r) != null) { skipping = false; out.push(r); continue; }
+      var words = r.filter(textCell), label = words.map(normHeader).join(' ');
+      if (!r.some(readsAsDate) && SUMMARY_HEAD.test(label)) { skipping = true; continue; }
+      if (skipping) continue;
+      if (SUMMARY_LINE.test(normHeader(first))) continue;
+      out.push(r);
+    }
+    return out;
+  }
+  /* the titles over the headings: a scheme's name, a report's name, a period */
+  function titleTexts(rows, before) {
+    var out = [];
+    for (var i = 0; i < before && i < rows.length; i++) {
+      var t = (rows[i] || []).filter(filledCell).map(function (c) { return String(c).trim(); }).join(' ');
+      if (t) out.push(t);
+    }
+    return out;
+  }
+  /* the scheme a title names: the first title that reads as a fund's name,
+     without the report's words around it ("NAV History of ...", "for the
+     period ...") and never the fund house's own name */
+  function schemeTitle(titles) {
+    for (var i = 0; i < titles.length; i++) {
+      var t = String(titles[i]).replace(/\s+/g, ' ').trim();
+      if (/^(fund\s*house|amc|asset management|registrar)\b/i.test(t)) continue;
+      t = t.replace(/^(historical\s+navs?|navs?\s+history|net asset values?|sale\s*(and|&|\/)\s*repurchase\s+(navs?|prices?)|navs?)\s*(report|history|details|data)?\s*(of|for)?\s*[:\-–—]?\s*/i, '')
+        .replace(/^(scheme|fund)(\s+name)?\s*[:\-–—]\s*/i, '')
+        .replace(/\s*[(\-–—:,]?\s*\b(for the period|from|between|as on|period)\b.*$/i, '').trim();
+      if (!t || !/\bfund\b|\bscheme\b|\bplan\b|\betf\b|\bfof\b/i.test(t)) continue;
+      if (/^[\w\s.&'’-]*\bmutual\s+fund\s*$/i.test(t)) continue;
+      if (pureVariant(fundName(t))) continue;
+      return t;
+    }
+    return '';
+  }
+
+  /* Side by side: one NAV column per variant ("Regular Plan Growth",
+     "Direct Plan IDCW"...). A column counts when it holds prices and its
+     heading names a NAV, or says nothing but a plan or an option. Two or
+     more that name different variants make a choice. Two that read the same,
+     or a NAV column that names none beside one that does, cannot be told
+     apart, and the file is not read: no guess is made between them. */
+  function columnVariants(body, header) {
+    if (!header) return null;
+    var prof = columnProfile(body), list = [];
+    prof.forEach(function (col) {
+      var raw = header[col.index], h = normHeader(raw);
+      if (!h || !col.isPrices || col.allWhole || NEVER_VALUE.test(h)) return;
+      var rank = headingRank(VALUE_RANK, h), v = variantOf(raw);
+      if (!(rank !== null && rank <= 1) && !(variantKnown(v) && pureVariant(raw))) return;
+      list.push({ col: col.index, heading: String(raw).trim(), variant: v, label: variantLabel(v) });
+    });
+    if (list.length < 2 || !list.some(function (x) { return x.label; })) return null;
+    var labels = list.map(function (x) { return x.label || ''; });
+    var ambiguous = labels.some(function (l, i) { return !l || labels.indexOf(l) !== i; });
+    return { ambiguous: ambiguous, list: list };
+  }
+  /* Rows per variant, each under a line of its own: "Direct Plan - Growth
+     Option", its rows, then "Regular Plan - Growth Option" and its rows.
+     Two such lines in a row are one title. */
+  function sectionTitle(row) {
+    var cells = (row || []).filter(filledCell);
+    if (!cells.length || cells.length > 3 || !cells.every(textCell)) return null;
+    var text = cells.map(function (c) { return String(c).trim(); }).join(' - ');
+    /* AMFI's category lines ("Open Ended Schemes ( Growth )") name a kind of
+       scheme, not an option */
+    if (/^(open|close|closed)[\s-]*ended\b|^interval\b/i.test(text)) return null;
+    return variantKnown(variantOf(text)) ? text : null;
+  }
+  function variantSections(body) {
+    var parts = [], cur = { title: '', rows: [], data: 0 };
+    body.forEach(function (r) {
+      var t = sectionTitle(r);
+      if (t != null) {
+        if (!cur.data) { cur.title = cur.title ? cur.title + ' - ' + t : t; return; }
+        parts.push(cur); cur = { title: t, rows: [], data: 0 }; return;
+      }
+      cur.rows.push(r);
+      if (dataRow(r)) cur.data++;
+    });
+    parts.push(cur);
+    return parts.filter(function (x) { return x.data > 0; });
+  }
+
+  /* The whole reading of a table, shared by the list of what a file holds
+     and by the series read from it. */
+  function tableOf(rows, fileName) {
+    var found = findHeader(rows);
+    var header = found.header;
+    var sc = schemeColumns(header, found.body);
+    var keyed = keyedBy(sc);
+    /* a file keyed by its rows (AMFI's, thousands of schemes) has no summary to drop */
+    var body = keyed ? found.body : cleanBody(found.body, header);
+    var titles = found.index < 0 ? [] : titleTexts(rows, found.top != null && found.top >= 0 ? found.top : found.index);
+    var columns = columnVariants(body, header);
+    var sections = keyed ? null : variantSections(body);
+    var single = sections && sections.length === 1 && sections[0].title ? sections[0] : null;
+    if (single) single.variant = variantOf(single.title);
+    var context = titles.slice();
+    if (sections && sections.length > 1 && !sections[0].title) {
+      /* the first variant's rows begin under the headings; its name is the
+         nearest title above them that names one */
+      for (var i = titles.length - 1; i >= 0; i--) {
+        if (variantKnown(variantOf(titles[i]))) { sections[0].title = titles[i]; context.splice(i, 1); break; }
+      }
+    }
+    /* a title that comes back (a page's heading, printed on every page)
+       continues the rows it named before; it is not a variant of its own */
+    if (sections && sections.length > 1) {
+      var byLabel = {}, merged = [];
+      sections.forEach(function (s) {
+        s.variant = variantOf(s.title); s.label = variantLabel(s.variant);
+        var same = s.label ? byLabel[s.label] : null;
+        if (same) { same.rows = same.rows.concat(s.rows); same.data += s.data; return; }
+        if (s.label) byLabel[s.label] = s;
+        merged.push(s);
+      });
+      sections = merged;
+      if (sections.length === 1 && sections[0].title) single = sections[0];
+    }
+    if (!sections || sections.length < 2) sections = null;
+    var sectionsAmbiguous = !!sections && sections.some(function (s) { return !s.label; });
+    return { found: found, header: header, body: body, titles: titles, sc: sc, keyed: keyed,
+             columns: columns && !columns.ambiguous ? columns.list : null, columnsAmbiguous: !!(columns && columns.ambiguous),
+             sections: sections, sectionsAmbiguous: sectionsAmbiguous, single: single,
+             title: schemeTitle(titles), titleVariant: titleVariant(context), fileVariant: fileVariant(fileName) };
+  }
+  /* A row's key: its code, or its name, with its plan, option and frequency
+     where the file gives them columns of their own. */
+  function rowKey(row, sc) {
+    var head = sc.code !== -1 ? cellText(row, sc.code) : cellText(row, sc.name);
+    return [head, cellText(row, sc.plan), cellText(row, sc.option), cellText(row, sc.freq)].filter(Boolean).join(' · ');
+  }
+  function rowVariantText(row, sc) { return [cellText(row, sc.plan), cellText(row, sc.option), cellText(row, sc.freq)].filter(Boolean).join(' - '); }
+  /* a choice's key: its rows' key, a section, a column, joined */
+  var KEY_JOIN = '\u001f';
+  function joinKey(a, b) { return [a, b].filter(Boolean).join(KEY_JOIN); }
+  function splitKey(key) {
+    var out = { group: null, section: null, column: null };
+    String(key == null ? '' : key).split(KEY_JOIN).forEach(function (p) {
+      if (p.indexOf('section:') === 0) out.section = p.slice(8);
+      else if (p.indexOf('column:') === 0) out.column = p.slice(7);
+      else if (p) out.group = p;
+    });
+    return out;
+  }
+  var AMBIGUOUS_VARIANTS_COPY = 'This file holds more than one NAV, and its headings do not say which plan and option each one is. ' +
+    'Nothing has been read from it, so no NAV is mixed with another. Download one plan and option at a time.';
+  /* a PDF, or any reading held to the strict standard, that is not certain */
+  var PDF_COPY = 'This PDF could not be read. Please download the Excel version instead.';
+
+  /* Every choice a file offers, with its full name and the dates its values
+   * cover: one per scheme, or plan and option, on its rows; one per section;
+   * one per variant column side by side; and each of these by each other
+   * when a file has both. */
+  function choicesOf(tb) {
+    var header = tb.header, body = tb.body, sc = tb.sc;
+    var cols = pickColumns(body, header);
+    if (cols.dateCol === -1 || (!tb.columns && cols.valueCol === -1)) return null;
+    var dayFirst = detectDayFirst(body, cols.dateCol).dayFirst;
+    var groups = [];
+    if (tb.keyed) {
+      var by = {}, order = [];
+      for (var i = 0; i < body.length; i++) {
+        var r = body[i], key = rowKey(r, sc);
+        if (!key) continue;
+        var t = readDate(r[cols.dateCol], dayFirst, cols.serialDates);
+        if (isNaN(t)) continue;      /* AMFI's section headings carry no date */
+        var g = by[key];
+        if (!g) { g = by[key] = { key: key, rows: [], name: '', code: cellText(r, sc.code), names: [], latest: -Infinity, cells: rowVariantText(r, sc) }; order.push(key); }
+        g.rows.push({ t: t, r: r });
+        var nm = cellText(r, sc.name);
+        if (nm && g.names.indexOf(nm) === -1) g.names.push(nm);
+        /* a renamed scheme is listed under its latest name; the older ones still match a search */
+        if (nm && (t >= g.latest || !g.name)) { g.name = nm; g.latest = t; }
+      }
+      groups = order.map(function (k) { var x = by[k]; x.own = mergeVariant(variantOf(x.cells), variantOf(x.name)); return x; });
+    } else {
+      var dated = function (list) {
+        var out = [];
+        list.forEach(function (r) { var t = readDate(r[cols.dateCol], dayFirst, cols.serialDates); if (!isNaN(t)) out.push({ t: t, r: r }); });
+        return out;
+      };
+      groups = tb.sections ? tb.sections.map(function (s) { return { key: 'section:' + s.label, rows: dated(s.rows), name: '', names: [], code: '', own: s.variant }; })
+        : [{ key: '', rows: dated(body), name: '', names: [], code: '', own: tb.single ? tb.single.variant : noVariant() }];
+    }
+    var columns = tb.columns ? tb.columns.map(function (c) { return { key: 'column:' + c.label, col: c.col, own: c.variant }; })
+      : [{ key: '', col: cols.valueCol, own: header ? variantOf(header[cols.valueCol]) : noVariant() }];
+    var out = [];
+    groups.forEach(function (g) {
+      columns.forEach(function (c) {
+        var n = 0, first = Infinity, last = -Infinity;
+        g.rows.forEach(function (x) {
+          var v = parseNumber(x.r[c.col]);
+          if (!isFinite(v) || v <= 0) return;
+          n++; if (x.t < first) first = x.t; if (x.t > last) last = x.t;
+        });
+        if (!n && groups.length * columns.length > 1) return;
+        out.push({ key: joinKey(g.key, c.key), name: g.name, code: g.code, names: g.names, rows: n, first: first, last: last, own: mergeVariant(c.own, g.own) });
+      });
+    });
+    /* the wider context fills what no choice states; a file of many schemes
+       on its rows takes nothing from it */
+    var ctx = tb.keyed && groups.length > 1 ? [] : [tb.titleVariant, tb.fileVariant];
+    var filled = fillFrom(out.map(function (x) { return x.own; }), ctx);
+    var fund = tb.title ? fundName(tb.title) : '';
+    out.forEach(function (x, k) {
+      x.variant = filled[k];
+      x.label = variantLabel(x.variant);
+      /* a variant listed by its full name: scheme, plan, option, frequency */
+      if (!tb.keyed || sc.plan !== -1 || sc.option !== -1 || sc.freq !== -1) {
+        var base = tb.keyed ? fundName(x.name) || x.name : fund;
+        if (x.label) x.name = (base ? base + ' – ' : '') + x.label;
+      }
+    });
+    return { choices: out, cols: cols, dayFirst: dayFirst, groups: groups.length, columns: columns.length, fund: fund };
+  }
+  /* one scheme in many plans and options, or many schemes */
+  function variantsOnly(list, tb) {
+    if (!tb.keyed) return true;
+    var names = {};
+    list.forEach(function (x) { names[(fundName(x.name) || x.name).toLowerCase()] = true; });
+    return Object.keys(names).length === 1;
+  }
+
   /* Every distinct scheme in the file, with enough detail to tell near-identical
    * names apart before choosing one: its name (plan and option are part of an
-   * AMFI name), its code, and the dates its prices cover. */
-  function listSchemes(rows) {
-    var found0 = findHeader(rows);
-    var header = found0.header;
-    var body = found0.body;
-    var sc = schemeColumns(header);
-    if (sc.key === -1) return null;
-
-    var cols = pickColumns(body, header);
-    if (cols.dateCol === -1 || cols.valueCol === -1) return null;
-    var dayFirst = detectDayFirst(body, cols.dateCol).dayFirst;
-
-    var found = {}, order = [];
-    for (var i = 0; i < body.length; i++) {
-      var key = cellText(body[i], sc.key);
-      if (!key) continue;
-      var t = readDate(body[i][cols.dateCol], dayFirst, cols.serialDates);
-      var v = parseNumber(body[i][cols.valueCol]);
-      if (isNaN(t) || !isFinite(v) || v <= 0) continue;
-      if (!found[key]) {
-        found[key] = { key: key, name: cellText(body[i], sc.name), code: cellText(body[i], sc.code), rows: 0, first: t, last: t, names: [] };
-        order.push(key);
-      }
-      var f = found[key];
-      var nmNow = cellText(body[i], sc.name);
-      if (nmNow && f.names.indexOf(nmNow) === -1) f.names.push(nmNow);
-      /* a renamed scheme is listed under its latest name; the older ones still match a search */
-      if (nmNow && (t >= f.last || !f.name)) f.name = nmNow;
-      f.rows++;
-      if (t < f.first) f.first = t;
-      if (t > f.last) f.last = t;
-    }
-    var list = order.map(function (n) { return found[n]; })
-      .sort(function (a, b) { return (a.name || a.key).localeCompare(b.name || b.key); });
-    return list.length ? { column: sc.key, nameColumn: sc.name, codeColumn: sc.code, hasNames: sc.name !== -1, schemes: list } : null;
+   * AMFI name), its code, and the dates its prices cover. A file that holds
+   * one scheme in several plans or options lists each of them by its full
+   * name. */
+  function listSchemes(rows, fileName) {
+    var tb = tableOf(rows, fileName);
+    if (tb.columnsAmbiguous || tb.sectionsAmbiguous) return null;
+    if (!tb.keyed && !tb.columns && !tb.sections) return null;
+    var got = choicesOf(tb);
+    if (!got || !got.choices.length) return null;
+    var list = got.choices.map(function (x) {
+      return { key: x.key, name: x.name, code: x.code, rows: x.rows, first: x.first, last: x.last, names: x.names, variant: x.variant, label: x.label };
+    }).sort(function (a, b) { return (a.name || a.key).localeCompare(b.name || b.key); });
+    var hasNames = list.some(function (x) { return x.name; });
+    return { column: tb.sc.key, nameColumn: tb.sc.name, codeColumn: tb.sc.code, hasNames: hasNames, schemes: list, variants: variantsOnly(list, tb) };
   }
 
   /* ------------------------------------------------------------------ main */
@@ -873,52 +1329,74 @@
     }
     /* The header can be on any of the first twenty rows, not only the first.
        See findHeader: a downloaded file usually puts a title above it. */
-    var found = findHeader(rows);
-    var header = found.header;
-    var body = found.body;
+    var tb = tableOf(rows, opts.fileName);
+    var header = tb.header;
+    var body = tb.body;
+    var sc = tb.sc;
+    if (tb.columnsAmbiguous || tb.sectionsAmbiguous) {
+      return { ok: false, code: 'AMBIGUOUS_VARIANTS', message: AMBIGUOUS_VARIANTS_COPY };
+    }
+    var wanted = splitKey(opts.scheme);
 
     /* one file, many schemes: keep only the one asked for, by its key (the
-       code where the file has one, else the name) */
-    var sc = schemeColumns(header);
-    var schemeCol = sc.key;
-    var schemeName = null, schemeCode = null, schemeNames = [];
-    if (schemeCol !== -1) {
-      var wanted = opts.scheme;
+       code where the file has one, else the name, with its plan and option
+       where they have columns of their own) */
+    var keyed = tb.keyed;
+    var schemeName = null, schemeCode = null, schemeNames = [], keys = [], ownVariant = noVariant();
+    if (keyed) {
       var distinct = {};
       /* only rows that carry a date count: AMFI's files interleave section
          headings ("Open Ended Schemes(...)", the fund house's name) with
          the data, and a heading is not a scheme */
       for (var q = 0; q < body.length; q++) {
-        var nm = cellText(body[q], schemeCol);
+        var nm = rowKey(body[q], sc);
         if (nm && body[q].some(readsAsDate)) distinct[nm] = true;
       }
-      var names = Object.keys(distinct);
-      if (wanted) {
-        body = body.filter(function (r) { return cellText(r, schemeCol) === wanted; });
+      keys = Object.keys(distinct);
+      if (wanted.group) {
+        body = body.filter(function (r) { return rowKey(r, sc) === wanted.group; });
         if (!body.length) {
           return { ok: false, code: 'NO_SUCH_SCHEME',
-                   message: 'No rows in that file belong to \u201c' + wanted + '\u201d.' };
+                   message: 'No rows in that file belong to “' + wanted.group + '”.' };
         }
-      } else if (names.length > 1) {
-        return { ok: false, code: 'MANY_SCHEMES', schemes: names.length,
-                 message: 'That file holds ' + names.length + ' different schemes. Choose which one to analyse.' };
       }
-      if (wanted || names.length === 1) {
-        /* one scheme: name the analysis after it, and keep its code */
-        /* the latest row names the scheme; every name it carried is kept */
-        var latest = -Infinity;
-        for (var w = 0; w < body.length; w++) {
-          var dcell = null;
-          for (var dc = 0; dc < body[w].length && dcell === null; dc++) if (readsAsDate(body[w][dc])) dcell = body[w][dc];
-          if (dcell === null) continue;
-          var tw = toTimestamp(parseDateParts(dcell, true));
-          var nmw = sc.name !== -1 ? cellText(body[w], sc.name) : '';
-          if (nmw && schemeNames.indexOf(nmw) === -1) schemeNames.push(nmw);
-          if (nmw && (isNaN(tw) || tw >= latest)) { schemeName = nmw; if (!isNaN(tw)) latest = tw; }
-          if (!schemeCode && sc.code !== -1) schemeCode = cellText(body[w], sc.code) || null;
-        }
-        if (!schemeName) schemeName = wanted || names[0];
+    }
+    var sections = tb.sections, columns = tb.columns;
+    if (tb.single) ownVariant = tb.single.variant;
+    if (sections && wanted.section) {
+      var sec = sections.filter(function (s) { return s.label === wanted.section; })[0];
+      if (!sec) return { ok: false, code: 'NO_SUCH_SCHEME', message: 'No rows in that file belong to “' + wanted.section + '”.' };
+      body = sec.rows; ownVariant = sec.variant;
+    }
+    var column = null;
+    if (columns && wanted.column) {
+      column = columns.filter(function (c) { return c.label === wanted.column; })[0];
+      if (!column) return { ok: false, code: 'NO_SUCH_SCHEME', message: 'No column in that file holds “' + wanted.column + '”.' };
+    }
+    var many = (keyed && !wanted.group ? keys.length : 1) * (sections && !wanted.section ? sections.length : 1) * (columns && !column ? columns.length : 1);
+    if (many > 1) {
+      var plansOnly = !keyed || keys.length < 2;
+      return { ok: false, code: 'MANY_SCHEMES', schemes: many,
+               message: plansOnly ? 'That file holds ' + many + ' plans and options of the fund. Choose which one to analyse.'
+                 : 'That file holds ' + many + ' different schemes. Choose which one to analyse.' };
+    }
+    if (keyed && (wanted.group || keys.length === 1)) {
+      /* one scheme: name the analysis after it, and keep its code */
+      /* the latest row names the scheme; every name it carried is kept */
+      var latest = -Infinity, cells = '';
+      for (var w = 0; w < body.length; w++) {
+        var dcell = null;
+        for (var dc = 0; dc < body[w].length && dcell === null; dc++) if (readsAsDate(body[w][dc])) dcell = body[w][dc];
+        if (dcell === null) continue;
+        var tw = toTimestamp(parseDateParts(dcell, true));
+        var nmw = sc.name !== -1 ? cellText(body[w], sc.name) : '';
+        if (nmw && schemeNames.indexOf(nmw) === -1) schemeNames.push(nmw);
+        if (nmw && (isNaN(tw) || tw >= latest)) { schemeName = nmw; if (!isNaN(tw)) latest = tw; }
+        if (!schemeCode && sc.code !== -1) schemeCode = cellText(body[w], sc.code) || null;
+        if (!cells) cells = rowVariantText(body[w], sc);
       }
+      if (!schemeName && sc.code !== -1) schemeName = schemeCode || wanted.group || keys[0];
+      ownVariant = mergeVariant(variantOf(cells), variantOf(schemeName));
     }
     /* the ISINs on the rows used, so a statement can be checked against them */
     var isins = {};
@@ -934,6 +1412,7 @@
      * and a file it cannot read should ask rather than refuse. When the reader
      * has told us which columns to use, that answer wins outright. */
     var cols = pickColumns(body, header);
+    if (column) cols.valueCol = column.col;
     if (opts.dateCol != null && opts.dateCol >= 0) cols.dateCol = opts.dateCol;
     if (opts.valueCol != null && opts.valueCol >= 0) cols.valueCol = opts.valueCol;
     if (cols.dateCol === -1 || cols.valueCol === -1 || cols.dateCol === cols.valueCol) {
@@ -944,37 +1423,64 @@
         message: 'Could not find a date column and a value column in that file. It needs two columns: the date, and the NAV or index value on that date.'
       };
     }
+    /* the plan and option of what is read: its own column, section or rows
+       first, then what the file's titles and its name say, where nothing in
+       the file's choices says it */
+    var colVariant = column ? column.variant : header ? variantOf(header[cols.valueCol]) : noVariant();
+    var own = mergeVariant(colVariant, ownVariant);
+    var siblings = (columns || []).map(function (c) { return c.variant; }).concat((sections || []).map(function (s) { return s.variant; }));
+    var ctx = keyed && keys.length > 1 ? [] : [tb.titleVariant, tb.fileVariant];
+    var variant = fillFrom([own].concat(siblings), ctx)[0];
 
     /* Review v4 §5: where day-first and month-first are both valid the reader
      * is asked once, and their answer arrives here. Detection still runs when
      * nothing has been asked, so a file whose dates can only be read one way
      * never raises a question at all. */
+    /* What the reader sees the history called: a plan or option chosen out of
+       a file by its full name, a fund house's file by the fund its title
+       names; a file whose rows name the scheme keeps that name (report.scheme). */
+    function displayName() {
+      var lab = variantLabel(variant);
+      if (column || (sections && wanted.section) || (keyed && (sc.plan !== -1 || sc.option !== -1 || sc.freq !== -1))) {
+        var base = keyed ? (fundName(schemeName) || schemeName) : (tb.title ? fundName(tb.title) : '');
+        return base && lab ? base + ' – ' + lab : (lab || base || null);
+      }
+      return !schemeName && tb.title ? fundName(tb.title) || null : null;
+    }
     var dayFirstInfo = detectDayFirst(body, cols.dateCol);
     if (opts.dayFirst !== undefined) {
       dayFirstInfo = { dayFirst: !!opts.dayFirst, certain: true, answered: true };
     }
     var seen = {}, series = [], skipped = { badDate: 0, badValue: 0, duplicate: 0, blank: 0 };
     var examples = [];
+    /* The strict standard, for words read off a PDF page: the date order is
+       certain, every line with a date has its NAV and every NAV its date, no
+       date carries two NAVs, and no day halves or doubles the NAV. Anything
+       less and nothing is shown. */
+    var strict = !!opts.strict, doubt = strict && !dayFirstInfo.certain;
+    function doubtful() { return { ok: false, code: 'DOUBTFUL', message: opts.doubtCopy || PDF_COPY }; }
 
     for (var i = 0; i < body.length; i++) {
       var row = body[i];
       var rawDate = row[cols.dateCol], rawValue = row[cols.valueCol];
       if ((rawDate == null || rawDate === '') && (rawValue == null || rawValue === '')) { skipped.blank++; continue; }
       var t = readDate(rawDate, dayFirstInfo.dayFirst, cols.serialDates);
-      if (isNaN(t)) { skipped.badDate++; note(examples, i, header, rawDate, 'date not understood'); continue; }
       var v = parseNumber(rawValue);
+      if (strict && (isNaN(t) !== !(isFinite(v) && v > 0))) doubt = true;
+      if (isNaN(t)) { skipped.badDate++; note(examples, i, header, rawDate, 'date not understood'); continue; }
       if (!isFinite(v) || v <= 0) { skipped.badValue++; note(examples, i, header, rawValue, 'value missing, zero or negative'); continue; }
-      if (seen[t] !== undefined) { skipped.duplicate++; series[seen[t]].v = v; continue; }  /* last entry for a date wins */
+      if (seen[t] !== undefined) { if (strict && series[seen[t]].v !== v) doubt = true; skipped.duplicate++; series[seen[t]].v = v; continue; }  /* last entry for a date wins */
       seen[t] = series.length;
       series.push({ t: t, v: v });
     }
+    if (doubt) return doubtful();
 
     if (series.length < 2) {
       if (schemeName) {
         return {
           ok: false, code: 'ONE_DAY_ONLY',
-          message: 'That file holds only ' + series.length + ' day of prices for \u201c' + schemeName +
-                   '\u201d. It is a daily snapshot of every fund, not a history. Download the NAV ' +
+          message: 'That file holds only ' + series.length + ' day of prices for “' + schemeName +
+                   '”. It is a daily snapshot of every fund, not a history. Download the NAV ' +
                    'history for a date range instead, and this will work.'
         };
       }
@@ -985,7 +1491,7 @@
       };
     }
 
-    if (schemeCol === -1 && skipped.duplicate >= series.length && series.length) {
+    if (!keyed && skipped.duplicate >= series.length && series.length) {
       return {
         ok: false, code: 'MIXED_SERIES',
         message: 'That file looks like more than one ' + noun + ' stacked together: ' + skipped.duplicate +
@@ -995,6 +1501,7 @@
     }
 
     series.sort(function (a, b) { return a.t - b.t; });
+    if (strict && series.some(function (p, k) { return k > 0 && (p.v > series[k - 1].v * 2 || p.v < series[k - 1].v / 2); })) return doubtful();
 
     /* Belt and braces: a price never sits still for a whole file. If every
        value read is the same, the column read was not the price, whatever
@@ -1034,6 +1541,10 @@
         firstDate: series[0].t,
         lastDate: series[series.length - 1].t,
         spanYears: (series[series.length - 1].t - series[0].t) / (365.25 * 86400000),
+        variant: variant,
+        variantLabel: variantLabel(variant),
+        fund: tb.title ? fundName(tb.title) : null,
+        title: displayName(),
         warnings: warnings
       }
     };
@@ -1416,7 +1927,17 @@
     flatCopy: flatCopy,
     ISIN_RE: ISIN_RE,
     sliceSeries: sliceSeries,
-    parseSeriesText: parseSeriesText
+    parseSeriesText: parseSeriesText,
+    variantOf: variantOf,
+    variantLabel: variantLabel,
+    variantKnown: variantKnown,
+    variantsDiffer: variantsDiffer,
+    PDF_COPY: PDF_COPY,
+    mergeVariant: mergeVariant,
+    fileVariant: fileVariant,
+    fundName: fundName,
+    tableOf: tableOf,
+    AMBIGUOUS_VARIANTS_COPY: AMBIGUOUS_VARIANTS_COPY
   };
   if (typeof module === 'object' && module.exports) { module.exports = api; }
   root.PRCParse = api;

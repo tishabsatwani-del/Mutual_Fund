@@ -109,6 +109,11 @@
   function unzip(bytes) {
     var view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     var out = {};
+    /* The central directory at the end of the package says where each part
+       is and how long. A package written as a stream (Java's, and so many a
+       website's) puts no sizes before its parts, only in that directory. */
+    var dir = centralDirectory(bytes, view);
+    if (dir) return dir;
     /* walk local file headers; enough for the flat packages Excel writes */
     var i = 0;
     while (i < bytes.length - 4) {
@@ -128,6 +133,26 @@
     if (!Object.keys(out).length) throw new Error('not a readable workbook');
     return out;
   }
+  function centralDirectory(bytes, view) {
+    var end = -1;
+    for (var k = bytes.length - 22; k >= Math.max(0, bytes.length - 65557); k--) {
+      if (view.getUint32(k, true) === 0x06054b50) { end = k; break; }
+    }
+    if (end < 0) return null;
+    var count = view.getUint16(end + 10, true), at = view.getUint32(end + 16, true), out = {};
+    for (var n = 0; n < count && at + 46 <= bytes.length; n++) {
+      if (view.getUint32(at, true) !== 0x02014b50) return null;
+      var method = view.getUint16(at + 10, true), compSize = view.getUint32(at + 20, true);
+      var nameLen = view.getUint16(at + 28, true), extraLen = view.getUint16(at + 30, true), commentLen = view.getUint16(at + 32, true);
+      var local = view.getUint32(at + 42, true);
+      var name = new TextDecoder().decode(bytes.subarray(at + 46, at + 46 + nameLen));
+      if (local + 30 > bytes.length || view.getUint32(local, true) !== 0x04034b50) return null;
+      var dataStart = local + 30 + view.getUint16(local + 26, true) + view.getUint16(local + 28, true);
+      out[name] = { method: method, data: bytes.subarray(dataStart, dataStart + compSize) };
+      at += 46 + nameLen + extraLen + commentLen;
+    }
+    return Object.keys(out).length ? out : null;
+  }
 
   function inflate(entry) {
     if (entry.method === 0) return Promise.resolve(new TextDecoder().decode(entry.data));
@@ -143,9 +168,9 @@
     var shared = [];
     if (sharedXml) {
       var sdoc = dom.parseFromString(sharedXml, 'application/xml');
-      Array.prototype.forEach.call(sdoc.getElementsByTagName('si'), function (si) {
+      Array.prototype.forEach.call(tags(sdoc, 'si'), function (si) {
         var text = '';
-        Array.prototype.forEach.call(si.getElementsByTagName('t'), function (t) { text += t.textContent; });
+        Array.prototype.forEach.call(tags(si, 't'), function (t) { text += t.textContent; });
         shared.push(text);
       });
     }
@@ -154,14 +179,14 @@
     if (stylesXml) {
       var stdoc = dom.parseFromString(stylesXml, 'application/xml');
       var customDate = {};
-      Array.prototype.forEach.call(stdoc.getElementsByTagName('numFmt'), function (f) {
+      Array.prototype.forEach.call(tags(stdoc, 'numFmt'), function (f) {
         var code = f.getAttribute('formatCode') || '';
         if (/[dmy]/i.test(code) && !/[#0]/.test(code.replace(/\[[^\]]*\]/g, ''))) {
           customDate[f.getAttribute('numFmtId')] = true;
         }
       });
-      var xfs = stdoc.getElementsByTagName('cellXfs')[0];
-      if (xfs) Array.prototype.forEach.call(xfs.getElementsByTagName('xf'), function (xf, idx) {
+      var xfs = tags(stdoc, 'cellXfs')[0];
+      if (xfs) Array.prototype.forEach.call(tags(xfs, 'xf'), function (xf, idx) {
         var id = xf.getAttribute('numFmtId');
         if (customDate[id] || DATE_FORMAT_IDS.indexOf(+id) !== -1) dateStyles[idx] = true;
       });
@@ -169,17 +194,18 @@
 
     var doc = dom.parseFromString(sheetXml, 'application/xml');
     var rows = [];
-    Array.prototype.forEach.call(doc.getElementsByTagName('row'), function (r) {
+    Array.prototype.forEach.call(tags(doc, 'row'), function (r) {
       var cells = [];
-      Array.prototype.forEach.call(r.getElementsByTagName('c'), function (c) {
+      Array.prototype.forEach.call(tags(r, 'c'), function (c) {
         var ref = c.getAttribute('r') || '';
-        var col = colIndex(ref.replace(/\d+/g, ''));
+        /* a cell without its reference sits next to the one before it */
+        var col = ref ? colIndex(ref.replace(/\d+/g, '')) : cells.length;
         var type = c.getAttribute('t');
         var styleIdx = c.getAttribute('s');
-        var vNode = c.getElementsByTagName('v')[0];
+        var vNode = tags(c, 'v')[0];
         var value = '';
         if (type === 'inlineStr') {
-          var isNode = c.getElementsByTagName('t')[0];
+          var isNode = tags(c, 't')[0];
           value = isNode ? isNode.textContent : '';
         } else if (type === 's') {
           value = shared[+(vNode ? vNode.textContent : -1)] || '';
@@ -196,6 +222,11 @@
     return rows;
   }
 
+  /* a part may write its elements with a prefix (x:row); the name is what counts */
+  function tags(node, name) {
+    var plain = node.getElementsByTagName(name);
+    return plain.length || !node.getElementsByTagNameNS ? plain : node.getElementsByTagNameNS('*', name);
+  }
   function colIndex(letters) {
     var n = 0;
     for (var i = 0; i < letters.length; i++) n = n * 26 + (letters.charCodeAt(i) - 64);

@@ -26,18 +26,20 @@ market references, so it does not go stale.
 | `index.html` | The whole interface. No build step. |
 | `styles.css` | One stylesheet. No framework, no font requests. |
 | `engine.js` | Every calculation: XIRR (all roots), CAGR, rolling returns, drawdown, benchmark-equivalent flows, capture ratios, information ratio, tracking, calendar and trailing returns, goal maths. Pure functions, no DOM. |
-| `parse.js` | Turns a messy CSV, text or pasted table into a clean dated series and reports what it dropped. Reads day-first and month-first dates. Picks the value column by its heading (never a code, ISIN or whole-number column) and refuses a column that never moves. Tells price data from payments, and a fund's NAV file from an index file. |
+| `parse.js` | Turns a messy CSV, text or pasted table into a clean dated series and reports what it dropped. Reads day-first and month-first dates. Picks the value column by its heading (never a code, ISIN or whole-number column) and refuses a column that never moves. Tells price data from payments, and a fund's NAV file from an index file. Reads each scheme's plan and option (Direct, Regular, Growth, IDCW and the rest) and never mixes two: a file holding several asks which one. |
 | `upload.js` | Reads a statement: a transaction ledger, a holdings file, or the tool's own saved entries. |
 | `workbook.js` | Reads `.xlsx` by unzipping it with the browser's own `DecompressionStream`; no spreadsheet library. |
+| `xls.js` | Reads an old `.xls` in each of its forms (an Excel 97-2003 workbook, an HTML table or Excel 2003 XML under that name) for the slots that take a fund's NAV history. |
+| `pdfrows.js` + `vendor/pdfjs/` | Reads the words of a fund house's NAV history PDF on the device with pdf.js, back into rows; a scanned or doubtful PDF is refused. |
 | `format.js` | Rupees, percentages and dates, one way everywhere. |
 | `dates.js` | Spells every chosen date as dd-Mmm-yyyy under the native date control. |
 | `charts.js` | Inline SVG: histogram, growth of ₹10,000, rolling line, fan chart, goal bar. |
-| `doors.js` | The file doors: drop zone, paste box, scheme picker, the how-to guides and their videos. |
+| `doors.js` | The file doors: drop zone, paste box, scheme and plan picker, the how-to guides and the index download's video. |
 | `app.js` | Formatting helpers, routing, result tabs, file intake. |
 | `portfolio.js`, `goal.js`, `rolling.js` | The three screens. |
 | `boot.js` | Start-up and the handlers every result screen shares (tabs, rate boxes, PDF). |
 | `pdf.js` + `vendor/` | Save as PDF, rendered on the device. |
-| `media/` | Two short recordings of the downloads, made on a phone. |
+| `media/` | A short recording of an index download, made on a phone. |
 | `XIRR-Calculator.xlsx` | The spreadsheet: the same calculations as plain formulas, saved with every result already worked out so a phone viewer shows them. `XIRR-Calculator-2.1.xlsx` and `XIRR-Calculator-4.xlsx` are identical copies kept for links already in circulation. |
 | `qr-portfolio-reality-check.svg` / `.png` | Print artwork for the address in the book. |
 

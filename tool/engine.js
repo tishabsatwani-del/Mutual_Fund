@@ -698,7 +698,14 @@
    * series. The series carries no costs, and the caller says so.
    *
    * flows: [{ t, amount, kind }] with amount > 0 and kind 'in' | 'out' | 'value'.
-   * 'value' flows are the reader's own valuations and are replaced here. */
+   * 'value' flows are the reader's own valuations and are replaced here.
+   *
+   * An IDCW line: kind 'payout' is money paid out to the reader, and
+   * 'reinvest' is a payout put back as units, no new money. In another
+   * series (an index, another fund) a payout is money taken out, sold at
+   * that day's value, and a reinvestment is nothing at all. Replayed in the
+   * fund's own NAV (opts.own), a payout sells no units, because the NAV
+   * itself fell by it, and a reinvestment buys units with no money. */
   function benchmarkEquivalent(flows, series, opts) {
     var o = opts || {};
     var tol = o.toleranceDays == null ? 7 : o.toleranceDays;
@@ -718,7 +725,9 @@
       var obs = priceAt(series, f.t, tol);
       if (!obs || obs.t > valueDate) { skipped.push({ t: f.t, amount: f.amount, why: 'no value in the file near this date' }); continue; }
       var u = f.amount / obs.v;
-      if (f.kind === 'out') { units -= u; tookOut += f.amount; eq.push({ t: f.t, amount: f.amount }); }
+      if (f.kind === 'reinvest') { if (!o.own) continue; units += u; }
+      else if (f.kind === 'payout' && o.own) { u = 0; tookOut += f.amount; eq.push({ t: f.t, amount: f.amount }); }
+      else if (f.kind === 'out' || f.kind === 'payout') { units -= u; tookOut += f.amount; eq.push({ t: f.t, amount: f.amount }); }
       else { units += u; paidIn += f.amount; eq.push({ t: f.t, amount: -f.amount }); }
       used.push({ t: f.t, amount: f.amount, kind: f.kind, price: obs.v, priceDate: obs.t, units: u });
     }
@@ -750,7 +759,9 @@
    * units held on that day times the day's value. A lot is {t, units, dir}
    * where units may be given (from a statement) or derived from amount / value.
    * Returns the value path and the net money put in on each date, so a fall
-   * can be measured on price moves alone. */
+   * can be measured on price moves alone. An IDCW payout (dir 'payout') is
+   * money out with the units unchanged; a reinvestment (dir 'reinvest') adds
+   * units with no money in. */
   function holdingPath(lots, series, opts) {
     var o = opts || {};
     var tol = o.toleranceDays == null ? 7 : o.toleranceDays;
@@ -762,8 +773,9 @@
       /* units a payment bought: the statement's own figure, else the amount
          at the NAV of the date, or the next NAV after it */
       var obs = atOrAfter(series, l.t, tol);
+      if (l.dir === 'payout') return { t: l.t, dir: 'payout', amount: l.amount, units: 0, ok: true };
       var units = l.units != null && l.units > 0 ? l.units : (obs ? l.amount / obs.v : null);
-      return { t: l.t, dir: l.dir === 'out' ? 'out' : 'in', amount: l.amount, units: units, ok: !!units };
+      return { t: l.t, dir: l.dir === 'out' || l.dir === 'reinvest' ? l.dir : 'in', amount: l.amount, units: units, ok: !!units };
     }).filter(function (l) { return l.ok; });
     if (!resolved.length) return fail('NO_MATCH', 'None of the payment dates fall inside this file’s history.');
     var path = [], j = 0, units = 0, netIn = 0;
@@ -772,7 +784,10 @@
       if (p.t < resolved[0].t || p.t > valueDate) continue;
       while (j < resolved.length && resolved[j].t <= p.t) {
         var l = resolved[j++];
-        if (l.dir === 'out') { units -= l.units; netIn -= l.amount; } else { units += l.units; netIn += l.amount; }
+        if (l.dir === 'out') { units -= l.units; netIn -= l.amount; }
+        else if (l.dir === 'payout') netIn -= l.amount;
+        else if (l.dir === 'reinvest') units += l.units;
+        else { units += l.units; netIn += l.amount; }
       }
       path.push({ t: p.t, v: units * p.v, units: units, netIn: netIn });
     }

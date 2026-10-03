@@ -9,7 +9,9 @@
  *
  *   PRCDoors.mount(hostEl, { prefix, kind: 'nav'|'index'|'any', label, hint,
  *                            multiple, onLoaded(result|null), gate(rows, name),
- *                            ask(result) -> null or { question, refusal } })
+ *                            ask(result) -> null or { question, refusal },
+ *                            navFile: takes a fund's NAV history, so an old .xls and a PDF too,
+ *                            idcwFlag: flags an IDCW option's NAV on the card })
  *   result: { series, name, report, files, gaps, kindGuess }
  *
  * The "Get your file" guides live here too, written so that they stay true
@@ -37,16 +39,22 @@
       '<p class="hint">' + esc(what) + ' The site may look different from this recording; what you are looking for is the same file.</p>' +
       '</div></details>';
   }
+  /* A fund's NAV history, in steps that stay true when a website changes:
+     no dates, and no site named. */
+  function navSteps() {
+    return '<ol class="steps">' +
+      '<li>Search for the exact scheme name in your browser and open the fund house’s own page for that scheme.</li>' +
+      '<li>On that page, find the NAV section, then its NAV history / historical NAV.</li>' +
+      '<li>Choose your plan and option (for example Direct, Growth) and the period you want (for example 1 year, 5 years, or a custom range).</li>' +
+      '<li>Download it as Excel or PDF.</li>' +
+      '<li>Upload that file here.</li>' +
+      '</ol><p class="hint">If the site’s layout has changed, look for “NAV history” or “historical NAV” on the scheme’s page.</p>';
+  }
   var GUIDES = {
     nav: function () {
       return '<details class="explain howto"><summary>Get your fund’s NAV file: where, which file, what it looks like</summary><div class="body">' +
-        '<p><strong>The file:</strong> your fund’s NAV history, one row per day, with the date and the NAV on that date. Any span of dates works; more history means more holding periods to measure.</p>' +
-        '<p><strong>Where:</strong> the website of the mutual fund industry body, AMFI, publishes every fund’s NAV history. On it, find <em>NAV History</em>, choose <em>historical NAV for a period</em>, your fund house, then the exact scheme you hold, then the dates, and download the file it offers, Excel or text. Your fund house’s own site offers the same history.</p>' +
-        '<p><strong>Which scheme:</strong> the same fund appears as several rows, one per plan and option. Pick the exact name on your statement, and prefer the Growth option: an IDCW option’s NAV drops at every payout, so its history understates what the fund earned.</p>' +
-        '<p><strong>If the site limits one download to a few years:</strong> download the history in pieces and load them all here, together or one after another. They are joined by date.</p>' +
+        navSteps() +
         '<p><strong>What a good file looks like</strong> (any of these date forms is read):</p>' + sampleBlock(SAMPLE.nav) +
-        '<p><strong>If it fails:</strong> the box below says why. A file holding hundreds of schemes is fine, you pick yours. A PDF or a screenshot will not work; download the table itself, or copy its two columns and paste them.</p>' +
-        videoBlock('media/amfi-nav-download.mp4', 'A real NAV download recorded on a phone, about a minute, including a failed attempt and how it was fixed.') +
         '</div></details>';
     },
     index: function () {
@@ -71,14 +79,18 @@
     },
     any: function () {
       return '<details class="explain howto"><summary>Get the file: a fund’s NAV history or an index’s values</summary><div class="body">' +
-        '<p><strong>A fund:</strong> its NAV history from the industry body’s website (NAV History, historical NAV for a period, your fund house, the exact scheme, the dates) or from the fund house’s own site. <strong>An index:</strong> its total return values from the index provider’s site. One row per day, a date and a value.</p>' +
+        '<p><strong>A fund’s NAV history:</strong></p>' + navSteps() +
+        '<p><strong>An index:</strong> its total return values from the index provider’s site. One row per day, a date and a value.</p>' +
         '<p><strong>If a download is limited to a few years:</strong> download the pieces and load them all; they are joined by date.</p>' +
         '<p><strong>What a good file looks like:</strong></p>' + sampleBlock(SAMPLE.nav) + sampleBlock(SAMPLE.index) +
-        videoBlock('media/amfi-nav-download.mp4', 'A real NAV download recorded on a phone, about a minute.') +
         '</div></details>';
     }
   };
   function guide(kind) { return (GUIDES[kind] || GUIDES.any)(); }
+
+  /* An IDCW option's NAV in a screen that measures returns: on the file's
+     card and on the result, in these words. */
+  var IDCW_FLAG = 'This is an IDCW option\u2019s NAV. It drops each time a payout is made, so these returns leave the payouts out and read lower than the fund\u2019s Growth record. The Growth option\u2019s NAV gives the fund\u2019s full record.';
 
   /* ------------------------------------------------------------ the door */
   var seq = 0;
@@ -116,7 +128,7 @@
        the one thing every browser can do on its own is the thing that happens. */
     function pickHtml(word) {
       return '<span class="filewrap"><input type="file" class="filepick" id="' + prefix + '-file"' + (o.multiple === false ? '' : ' multiple') +
-        ' accept="' + A.FILE_ACCEPT + '" aria-label="' + esc(word) + '" title="' + esc(word) + '"></span>';
+        ' accept="' + (o.navFile ? A.NAV_ACCEPT : A.FILE_ACCEPT) + '" aria-label="' + esc(word) + '" title="' + esc(word) + '"></span>';
     }
     function idleHtml() {
       return pickHtml('Choose a file') +
@@ -174,7 +186,7 @@
         if (i >= list.length) { landed(fresh); return; }
         var f = list[i++];
         A.readFile(f, function (res) { fresh.push(piece(f, res, null)); next(); },
-          function (msg, extra) { fresh.push(piece(f, null, { msg: msg, extra: extra })); next(); }, function () {}, { noun: noun });
+          function (msg, extra) { fresh.push(piece(f, null, { msg: msg, extra: extra })); next(); }, function () {}, { noun: noun, navFile: !!o.navFile });
       }
       next();
     }
@@ -184,7 +196,7 @@
       var refusal = rows ? (o.gate ? o.gate(rows, file.name) : schemaRefusal(rows)) : null;
       if (refusal) return { name: file.name, refused: refusal };
       if (res) return { name: file.name, res: res, rows: rows };
-      if (err && err.extra && err.extra.schemes && rows) return { name: file.name, rows: rows, schemes: err.extra.schemes, hasNames: err.extra.hasNames !== false };
+      if (err && err.extra && err.extra.schemes && rows) return { name: file.name, rows: rows, schemes: err.extra.schemes, hasNames: err.extra.hasNames !== false, variants: !!err.extra.variants };
       return { name: file.name, refused: notice('bad', esc(err ? err.msg : 'That file could not be read.')) };
     }
     function landed(fresh) {
@@ -202,7 +214,7 @@
          different history (other headings, another scheme or index, a price
          index after a total return index) replaces what was there instead of
          being stitched into it. */
-      if (state.pieces.length && fresh.some(function (p) { return idOf(p) !== idOf(state.pieces[0]); })) state.pieces = [];
+      if (state.pieces.length && fresh.some(function (p) { return apart(p, state.pieces[0]); })) state.pieces = [];
       fresh.forEach(function (p) {
         state.pieces = state.pieces.filter(function (q) { return q.name !== p.name; });
         state.pieces.push(p);
@@ -215,6 +227,10 @@
       var headings = head ? head.map(P.normHeader).filter(Boolean).join(',') : '';
       /* one scheme is one code, whatever it was called in a given year */
       return headings + '|' + (p.res ? (p.res.report.code || p.res.report.scheme || '') : '*');
+    }
+    /* two plans or options of one scheme are two histories, never one */
+    function apart(p, q) {
+      return idOf(p) !== idOf(q) || !!(p.res && q.res && P.variantsDiffer(p.res.report.variant, q.res.report.variant));
     }
     function schemaRefusal(rows) {
       if (!rows || !P.checkSchema) return null;
@@ -230,11 +246,11 @@
       var good = state.pieces.filter(function (p) { return p.res; });
       if (many.length) {
         /* the scheme is chosen once, from the union of keys, and applied to every piece that has it */
-        var byKey = {}, hasNames = many.some(function (p) { return p.hasNames; });
+        var byKey = {}, hasNames = many.some(function (p) { return p.hasNames; }), variants = many.every(function (p) { return p.variants; });
         many.forEach(function (p) {
           p.schemes.forEach(function (s) {
             var k = s.key || s.name;
-            var x = byKey[k] = byKey[k] || { key: k, name: s.name || '', code: s.code || '', rows: 0, first: s.first, last: s.last, names: [] };
+            var x = byKey[k] = byKey[k] || { key: k, name: s.name || '', code: s.code || '', rows: 0, first: s.first, last: s.last, names: [], label: s.label || null };
             x.rows += s.rows; if (s.first < x.first) x.first = s.first;
             if (s.last >= x.last && s.name) x.name = s.name;
             if (s.last > x.last) x.last = s.last;
@@ -245,9 +261,9 @@
         var schemes = Object.keys(byKey).map(function (k) { return byKey[k]; })
           .sort(function (a, b) { return (a.name || a.key).localeCompare(b.name || b.key); });
         state.schemes = schemes;
-        added(many.length === 1 ? many[0].name : many.length + ' files', schemes.length.toLocaleString('en-IN') + ' schemes found. Choose one below.');
+        added(many.length === 1 ? many[0].name : many.length + ' files', schemes.length.toLocaleString('en-IN') + (variants ? ' plans and options found. Choose one below.' : ' schemes found. Choose one below.'));
         say('');
-        showPicker(schemes, hasNames, function (sc) { pickScheme(sc.key); });
+        showPicker(schemes, hasNames, function (sc) { pickScheme(sc.key); }, variants);
         if (state.picked && byKey[state.picked]) pickScheme(state.picked);
         return;
       }
@@ -259,7 +275,8 @@
       state.pieces.forEach(function (p) {
         if (p.res) { list.push({ name: p.name, series: p.res.series, report: p.res.report, rows: p.rows, sig: p.sig }); return; }
         if (!p.schemes) return;
-        var r = P.rowsToSeries(p.rows, { scheme: key, noun: noun });
+        /* a PDF's rows are held to the strict standard here too */
+        var r = P.rowsToSeries(p.rows, { scheme: key, noun: noun, fileName: p.name, strict: /\.pdf$/i.test(p.name), doubtCopy: P.PDF_COPY });
         if (r.ok) list.push({ name: p.name, series: r.series, report: r.report, rows: p.rows, sig: p.sig });
         else failed.push({ name: p.name, message: r.message, code: r.code });
       });
@@ -276,25 +293,32 @@
       if (!list.length) { say(notice('bad', 'None of the files could be read.')); return; }
       var joined = U.stitch(list.map(function (p) { return p.series; }));
       var report = mergeReports(list, joined);
-      var name = report.scheme || list[0].name.replace(/\.[^.]+$/, '');
+      var name = report.title || report.scheme || list[0].name.replace(/\.[^.]+$/, '');
       state.series = joined.series; state.name = name; state.report = report; state.rows = list[0].rows;
       state.kindGuess = P.guessDataKind(list[0].rows, list[0].name).kind;
       /* the file's own name too, where the card's title is the scheme's */
       var files = list.map(function (p) { return p.name; }).filter(function (n, i, a) { return n && a.indexOf(n) === i; });
       var named = files.length === 1 && files[0].replace(/\.[^.]+$/, '') === name ? '' : esc(files.join(', ')) + ' · ';
-      var sub = named + report.used.toLocaleString('en-IN') + ' rows read · ' + fmtDate(report.firstDate) + ' to ' + fmtDate(report.lastDate) +
+      var pdf = list.every(function (p) { return /\.pdf$/i.test(p.name || ''); });
+      var sub = named + report.used.toLocaleString('en-IN') + (pdf ? ' NAVs read · ' : ' rows read · ') + fmtDate(report.firstDate) + ' to ' + fmtDate(report.lastDate) +
         (list.length > 1 ? ' · ' + list.length + ' files joined' : '');
+      /* a fund's file says which plan and option it holds; an index has none */
+      var fundFile = state.kindGuess !== 'index' && (report.variantLabel || kind === 'nav' || state.kindGuess === 'nav');
+      if (fundFile) sub += ' · ' + esc(report.variantLabel || 'plan and option not stated in the file');
+      var idcw = !!(o.idcwFlag && fundFile && isIdcw({ report: report, kindGuess: state.kindGuess }));
       var res = { series: state.series, name: name, report: report, files: list.length, gaps: joined.gaps, kindGuess: state.kindGuess, rows: state.rows,
                   file: list[0].name, parts: list.map(function (p) { return { rows: p.rows, name: p.name }; }) };
       function land() {
         var extra = o.describe ? o.describe(res) : null;
-        added(name, sub + (extra && extra.tag ? ' · <strong' + (extra.plain ? '' : ' class="warn-word"') + '>' + esc(extra.tag) + '</strong>' : ''));
+        added(name, sub + (extra && extra.tag ? ' · <strong' + (extra.plain ? '' : ' class="warn-word"') + '>' + esc(extra.tag) + '</strong>' : '') +
+          (idcw ? ' · <strong class="warn-word">IDCW option</strong>' : ''));
         var msgs = [];
+        if (idcw) msgs.push(notice('warn', esc(IDCW_FLAG)));
         if (extra && extra.html) msgs.push(extra.html);
         if (missingIn) msgs.push(notice('warn', missingIn + ' file' + (missingIn === 1 ? ' does' : 's do') + ' not hold this scheme and ' + (missingIn === 1 ? 'was' : 'were') + ' left out.'));
         if (joined.gaps.length) msgs.push(notice('warn', esc(U.MESSAGES.gap(joined.gaps[0])) + (joined.gaps.length > 1 ? ' ' + (joined.gaps.length - 1) + ' more gap' + (joined.gaps.length > 2 ? 's' : '') + ' like it.' : '')));
         if (report.warnings.length) msgs.push(notice('warn', esc(report.warnings[0])));
-        if (/\bidcw\b|\bdividend\b|\bpayout\b/i.test(name)) msgs.push(notice('warn', 'This looks like an IDCW row. Its NAV drops at every payout, so every return on it reads low. The Growth option of the same plan carries the full growth.'));
+        if (!o.idcwFlag && /\bidcw\b|\bdividend\b|\bpayout\b/i.test(name)) msgs.push(notice('warn', 'This looks like an IDCW row. Its NAV drops at every payout, so every return on it reads low. The Growth option of the same plan carries the full growth.'));
         say(msgs.join(''));
         if (o.onLoaded) o.onLoaded(res);
       }
@@ -332,6 +356,10 @@
       /* the piece that reaches furthest names the scheme: its latest name */
       var newest = list.reduce(function (a, b) { return b.report.lastDate >= a.report.lastDate ? b : a; });
       if (newest.report.scheme) r.scheme = newest.report.scheme;
+      r.variant = list.reduce(function (v, p) { return P.mergeVariant(v, p.report.variant); }, newest.report.variant || null);
+      r.variantLabel = P.variantLabel(r.variant);
+      r.fund = newest.report.fund || list[0].report.fund || null;
+      r.title = newest.report.title || list[0].report.title || null;
       r.spanYears = (r.lastDate - r.firstDate) / (365.25 * 86400000);
       return r;
     }
@@ -340,11 +368,14 @@
        plan and the option; the second its code and the dates it covers.
        Typing matches the name (and the code, for a reader who knows it). */
     var MAX_HITS = 40;
-    function showPicker(schemes, hasNames, onPick) {
+    function showPicker(schemes, hasNames, onPick, variants) {
       var wrap = $('#' + prefix + '-scheme-wrap'), q = $('#' + prefix + '-scheme-q');
       wrap.hidden = false; wrap.removeAttribute('data-folded'); q.value = '';
       $$('.pickedline', wrap).forEach(function (l) { l.remove(); });
-      $('#' + prefix + '-scheme-note').textContent = hasNames
+      $('#' + prefix + '-scheme-list').setAttribute('aria-label', variants ? 'Plans and options in this file' : 'Schemes in this file');
+      $('#' + prefix + '-scheme-note').textContent = variants
+        ? 'Each plan and option has its own NAV, and two are never mixed. Pick the one on your statement.'
+        : hasNames
         ? 'Official downloads hold every scheme of a fund house in one file. Pick the exact name on your statement; the plan and the option are part of the name, and each is a separate row.'
         : 'This file has no column of scheme names, so each scheme is shown by its code. The code is on your statement or on the fund house’s page for the scheme.';
       q.placeholder = hasNames ? 'Type part of the name' : 'Type the scheme code';
@@ -354,7 +385,7 @@
         var hits = needle ? schemes.filter(function (sc) {
           return [sc.name || ''].concat(sc.names || []).some(function (n) { return n.toLowerCase().indexOf(needle) !== -1; }) || String(sc.code || sc.key).toLowerCase().indexOf(needle) !== -1;
         }) : schemes;
-        $('#' + prefix + '-scheme-count').textContent = schemes.length.toLocaleString('en-IN') + (schemes.length === 1 ? ' scheme in this file' : ' schemes in this file') +
+        $('#' + prefix + '-scheme-count').textContent = schemes.length.toLocaleString('en-IN') + (variants ? ' plans and options in this file' : schemes.length === 1 ? ' scheme in this file' : ' schemes in this file') +
           (needle ? ' · ' + hits.length.toLocaleString('en-IN') + ' match' + (hits.length === 1 ? '' : 'es') : '. Type to narrow the list.');
         var list = $('#' + prefix + '-scheme-list');
         if (!hits.length) { list.innerHTML = '<p class="more">Nothing matches “' + esc(term) + '”.</p>'; return; }
@@ -410,5 +441,10 @@
     return { clear: clear, state: state, prefix: prefix, takeFiles: takeFiles, say: say };
   }
 
-  root.PRCDoors = { mount: mount, guide: guide, SAMPLE: SAMPLE };
+  /* a loaded file that is a fund's IDCW option NAV */
+  function isIdcw(res) { return !!(res && res.kindGuess !== 'index' && res.report && res.report.variant && res.report.variant.option === 'IDCW'); }
+  /* the flag on a result, naming the file it is about */
+  function idcwNote(res) { return isIdcw(res) ? notice('warn', '<strong>' + esc(res.name) + '.</strong> ' + esc(IDCW_FLAG)) : ''; }
+
+  root.PRCDoors = { mount: mount, guide: guide, SAMPLE: SAMPLE, IDCW_FLAG: IDCW_FLAG, isIdcw: isIdcw, idcwNote: idcwNote };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

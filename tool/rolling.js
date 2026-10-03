@@ -36,13 +36,13 @@
     $('#r-a-howto').innerHTML = D.guide('any');
     $('#r-b-howto').innerHTML = D.guide('index');
     R.doorA = D.mount($('#r-a-door'), {
-      prefix: 'ra', kind: 'any', noun: 'fund or index', label: 'The history file', hint: 'CSV, Excel or text · a date column and the NAV or index value on that date · several files of one history are joined',
-      gate: schemaGate,
+      prefix: 'ra', kind: 'any', noun: 'fund or index', label: 'The history file', hint: 'CSV, Excel, PDF or text · a date column and the NAV or index value on that date · several files of one history are joined',
+      gate: schemaGate, idcwFlag: true, navFile: true,
       onLoaded: function (res) { R.a = res; setLoaded(); }
     });
     R.doorB = D.mount($('#r-b-door'), {
       prefix: 'rb', kind: 'index', noun: 'fund or index', label: 'The file to compare against', hint: 'An index’s total return values, or another fund’s NAV history',
-      gate: schemaGate,
+      gate: schemaGate, idcwFlag: true, navFile: true,
       onLoaded: function (res) {
         R.b = res;
         R.bKind = res ? (res.kindGuess === 'nav' ? 'NAV' : guessKind(res.name, res.rows)) : null;
@@ -293,7 +293,7 @@
     var warning = '';
     if (R.b && cmp.length < 2) { cmp = null; warning = notice('bad', esc(R.b.name) + ' has no data between those dates, so no comparison is shown. Widen the dates, or load a different file.'); }
     R.ran = true;
-    out.innerHTML = '<p class="pastnote"><strong>Already happened, not a forecast.</strong></p>' + warning + render(series, cmp, from, to, usedFrom, usedTo);
+    out.innerHTML = '<p class="pastnote"><strong>Already happened, not a forecast.</strong></p>' + warning + D.idcwNote(R.a) + (cmp ? D.idcwNote(R.b) : '') + render(series, cmp, from, to, usedFrom, usedTo);
     out.scrollIntoView({ block: 'start', behavior: 'smooth' });
   }
 

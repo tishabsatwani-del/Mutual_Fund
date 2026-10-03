@@ -1081,6 +1081,7 @@ input, textarea, select, [contenteditable] {
   padding: .55rem 0; border-top: 1px solid var(--line); cursor: pointer;
 }
 .tick input { width: 1.05rem; height: 1.05rem; flex: none; accent-color: var(--accent); }
+.tick.fixed { margin: 0; cursor: default; padding-left: 1.6rem; }
 #pf-read-table th { text-align: right; }
 #pf-read-table th:first-child { text-align: left; }
 

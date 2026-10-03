@@ -113,6 +113,7 @@
           (req.rate > input.annualRate ? 'The gap between the two is the return you are hoping the market will supply; the levers below are the parts you control.' : 'Anything above the required rate is margin.') +
           (G.history ? historyBeat(req.rate, input.years) : ' Load a history below the form and this line also says how often stretches of your length delivered it.')
           : esc(req.message)) + '</p>';
+      if (G.history) main += D.idcwNote(G.history);
     }
     main += '<div class="scenario" id="g-scn"><p class="hint tight">Move any of these four. The figure moves with them; your entries above are untouched. The return is not a lever: it is the one thing nobody controls.</p>' +
       LEVERS.map(function (L) { var r = lattice(L, input, plan); return '<div class="lever"><label for="' + L.id + '">' + L.label + '</label><input type="range" id="' + L.id + '" min="' + r.min + '" max="' + r.max + '" step="' + L.step + '" value="' + r.value + '"><output id="' + L.id + '-v" for="' + L.id + '"></output></div>'; }).join('') +
@@ -218,7 +219,7 @@
     function row(label, x, dates) {
       return '<tr><td>' + label + (dates ? ' <span class="qsub">' + dates + '</span>' : '') + '</td><td>' + pct(x.rate, 1) + ' a year</td><td>' + money(x.plan.projected) + '</td><td>' + (x.plan.onTrack ? 'nothing more' : money(x.plan.extraMonthly) + ' a month') + '</td></tr>';
     }
-    return '<h3 class="subhead">' + term('goalHistory', 'Under ' + esc(G.history.name) + '’s own stretches of ' + g.years + ' years') + '</h3>' +
+    return '<h3 class="subhead">' + term('goalHistory', 'Under ' + esc(G.history.name) + '’s own stretches of ' + g.years + ' years') + '</h3>' + D.idcwNote(G.history) +
       '<div class="scroll"><table class="data"><thead><tr><th>Stretch</th><th>It returned</th><th>You reach</th><th>Extra needed</th></tr></thead><tbody>' +
       row('Worst', g.worst, fmtDate(g.worst.from) + ' to ' + fmtDate(g.worst.to)) + row('Median of ' + g.windows.toLocaleString('en-IN') + ' stretches', g.median, '') + row('Best', g.best, fmtDate(g.best.from) + ' to ' + fmtDate(g.best.to)) +
       '</tbody></table></div><p class="hint">Three stretches that already happened in this file, each ' + g.years + ' years long, applied to your plan. They are the range that history holds, not the range the future will hold' + (g.best.rate > 0.5 ? '; a rate above 50% is capped at 50% in the plan' : '') + '.</p>';
@@ -227,7 +228,7 @@
   function init() {
     $('#g-history-howto').innerHTML = D.guide('any');
     G.door = D.mount($('#g-history-door'), {
-      prefix: 'gh', kind: 'any', label: 'A NAV or index history file', hint: 'CSV, Excel or text · a date column and a value column',
+      prefix: 'gh', kind: 'any', label: 'A NAV or index history file', hint: 'CSV, Excel, PDF or text · a date column and a value column', idcwFlag: true, navFile: true,
       gate: function (rows) { var v = A.P.checkSchema(rows); return v.ok ? null : notice('bad', esc(v.message)); },
       onLoaded: function (res) { G.history = res; if (G.ran) calcGoal(); }
     });

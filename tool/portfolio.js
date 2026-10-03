@@ -271,9 +271,12 @@
   function askDirection(r) {
     var guessed = 0;
     var words = r.words.map(function (w, i) {
+      var lines = w.count + (w.count === 1 ? ' line' : ' lines');
+      /* an IDCW line means one thing, and is shown, not asked */
+      if (w.idcw) return '<p class="tick fixed"><span>' + esc(w.word) + ' <span class="qsub">' + lines + ' · ' + IDCW_SAYS[w.idcw] + '</span></span></p>';
       if (w.guess) guessed++;
       return '<label class="tick"><input type="checkbox" data-word="' + esc(w.word) + '" id="pf-dir-' + i + '"' + (w.guess === 'out' ? ' checked' : '') + '><span>' + esc(w.word) +
-        ' <span class="qsub">' + w.count + (w.count === 1 ? ' line' : ' lines') + (w.guess ? ' · read as money ' + w.guess : ' · not recognised') + '</span></span></label>';
+        ' <span class="qsub">' + lines + (w.guess ? ' · read as money ' + w.guess : ' · not recognised') + '</span></span></label>';
     }).join('');
     say('pf-door-out', '', '<div class="notice"><span class="ic">?</span><span>' + esc(r.message) + '</span></div><div class="ticks">' + words + '</div>' +
       '<p class="hint">' + (guessed ? 'Ticked from what these words usually mean. Change anything that is wrong for your statement. ' : '') + 'Anything left unticked is read as money in.</p>' +
@@ -287,6 +290,8 @@
     refreshGate();
   }
 
+  var IDCW_SAYS = { payout: 'IDCW paid to you: money out', reinvest: 'IDCW reinvested: units added, not money in',
+                   idcw: 'IDCW: money out when the line has no units, units added when it has' };
   /* ---------------------------------------------- what was read, as a summary */
   function drawRead(r) {
     var card = $('#pf-read'), summary = $('#pf-read-summary'), list = $('#pf-read-list'), head = $('#pf-read-h');
@@ -304,15 +309,23 @@
       PF.funds = [];
     } else {
       head.textContent = 'Money in and out';
-      var ins = 0, outs = 0, nIn = 0, nOut = 0, first = Infinity, last = -Infinity;
-      PF.imported.forEach(function (f) { if (f.dir === 'out') { outs += f.amount; nOut++; } else { ins += f.amount; nIn++; } if (f.t < first) first = f.t; if (f.t > last) last = f.t; });
+      var ins = 0, outs = 0, nIn = 0, nOut = 0, paid = 0, nPaid = 0, re = 0, nRe = 0, first = Infinity, last = -Infinity;
+      PF.imported.forEach(function (f) {
+        if (f.dir === 'reinvest') { re += f.amount; nRe++; }
+        else if (f.dir === 'out') { outs += f.amount; nOut++; if (f.idcw === 'payout') { paid += f.amount; nPaid++; } }
+        else { ins += f.amount; nIn++; }
+        if (f.t < first) first = f.t; if (f.t > last) last = f.t;
+      });
+      var nPay = PF.imported.length - nRe;
       var groups = U.schemeTotals(PF.imported);
       var named = groups.some(function (g) { return g.name; });
       PF.funds = groups.map(function (g) { return { key: g.name, title: titleOf(g.name), g: g }; });
-      summary.innerHTML = '<p class="hint tight">' + PF.imported.length + (PF.imported.length === 1 ? ' payment' : ' payments') + ' read from ' + esc(PF.source) +
+      summary.innerHTML = '<p class="hint tight">' + nPay + (nPay === 1 ? ' payment' : ' payments') + (nRe ? ' and ' + nRe + (nRe === 1 ? ' IDCW reinvestment' : ' IDCW reinvestments') : '') + ' read from ' + esc(PF.source) +
         (r.skipped ? ', ' + r.skipped + ' line' + (r.skipped === 1 ? '' : 's') + ' skipped' : '') + ', ' + fmtDate(first) + ' to ' + fmtDate(last) + '.' +
         (PF.switches ? ' ' + PF.switches + (PF.switches === 1 ? ' switch between funds was' : ' switches between funds were') + ' recognised and left out of the totals of money put in and taken out.' : '') +
-        (!r.dateCertain && r.example ? ' These dates read two ways; ' + esc(r.example.raw) + ' has been read as ' + esc(r.example.dayFirst) + '. Check the lines below.' : '') + '</p>' +
+        (!r.dateCertain && r.example ? ' These dates read two ways; ' + esc(r.example.raw) + ' has been read as ' + esc(r.example.dayFirst) + '. Check the lines below.' : '') +
+        (nPaid ? ' IDCW paid to you: ' + nPaid + (nPaid === 1 ? ' line, ' : ' lines, ') + money(paid) + ', counted as money out.' : '') +
+        (nRe ? ' IDCW reinvested: ' + nRe + (nRe === 1 ? ' line, ' : ' lines, ') + money(re) + ', counted as units added, not as money in.' : '') + '</p>' +
         '<div class="stats">' + stat('Money in', money(ins) + (nIn ? ' · ' + nIn : '')) + stat('Money out', nOut ? money(outs) + ' · ' + nOut : 'none') +
         (named ? stat('Funds named', String(groups.length)) : '') + '</div>' +
         (named ? '<div class="fundcards">' + groups.map(function (g) {
@@ -320,7 +333,10 @@
             fig('Put in', money(g.paidIn)) + fig('Taken out', g.tookOut ? money(g.tookOut) : 'none') + fig('Units left', g.hasUnits ? units3(g.units) : 'not in this file') + '</div></div>';
         }).join('') + '</div>' : '');
       list.innerHTML = PF.imported.map(function (f, i) {
-        return readLine(i, fmtDate(f.t) + (f.fund ? ' · ' + esc(f.fund) : ''), [[f.dir === 'out' ? 'money out' : 'money in', money(f.amount) + (f.switch ? ' (switch)' : '')]]);
+        var what = f.dir === 'reinvest' ? ['IDCW reinvested · units added, not money in', money(f.amount) + (f.units != null ? ' · ' + units3(f.units) + ' units' : '')]
+          : f.idcw === 'payout' ? ['IDCW paid to you · money out', money(f.amount)]
+          : [f.dir === 'out' ? 'money out' : 'money in', money(f.amount) + (f.switch ? ' (switch)' : '')];
+        return readLine(i, fmtDate(f.t) + (f.fund ? ' · ' + esc(f.fund) : ''), [what]);
       }).join('');
     }
     $$('[data-drop]', list).forEach(function (b) {
@@ -374,11 +390,11 @@
       }
       PF.navDoors[f.key] = D.mount(row.querySelector('#' + id + '-door'), {
         prefix: 'pfnav' + id.replace(/\D/g, ''), kind: 'nav', noun: 'fund', label: 'NAV history of ' + f.title,
-        hint: 'CSV, Excel or text · a date column and a NAV column',
-        gate: navGate,
+        hint: 'CSV, Excel, PDF or text · a date column and a NAV column',
+        gate: navGate, navFile: true,
         describe: function (res) {
           var check = schemeCheck(f, res);
-          return check && check.different ? { tag: 'Different scheme?', html: notice('warn', esc(check.message)) } : null;
+          return check && check.different ? { tag: check.variant ? 'Different plan or option?' : 'Different scheme?', html: notice('warn', esc(check.message)) } : null;
         },
         onLoaded: function (res) {
           if (!res) delete PF.nav[f.key];
@@ -435,6 +451,7 @@
     if (!flows.length) return null;
     var units = 0;
     for (var i = 0; i < flows.length; i++) {
+      if (flows[i].idcw === 'payout') continue;
       var obs = E.atOrAfter(series, flows[i].t, 7);
       if (!obs) return null;
       units += (flows[i].kind === 'out' ? -1 : 1) * flows[i].amount / obs.v;
@@ -453,7 +470,7 @@
       return readRows().filter(function (r) { return r.label === key && r.kind !== 'Worth today' && goodRow(r); })
         .map(function (r) { return { t: A.isoToTs(r.date), amount: r.amount, kind: r.kind === 'Money out' ? 'out' : 'in' }; });
     }
-    return (PF.imported || []).filter(function (f) { return (f.fund || '') === key; }).map(function (f) { return { t: f.t, amount: f.amount, kind: f.dir, units: f.units }; });
+    return (PF.imported || []).filter(function (f) { return (f.fund || '') === key; }).map(function (f) { return { t: f.t, amount: f.amount, kind: f.dir, units: f.units, idcw: f.idcw || null }; });
   }
 
   /* What a fund is worth today, and where that figure came from.
@@ -534,7 +551,7 @@
     var html = '';
     if (nav && v && v.from === 'navfile') {
       html = notice('ok', 'Valued from the NAV file: ' + units3(v.units) + ' units × ' + nav4(v.nav) + ' on ' + fmtDate(v.t) + ' = <strong>' + money(v.amount) + '</strong>.' +
-        (nav.check && nav.check.different ? ' <strong>The result is tagged: valued against a different scheme’s NAV.</strong>' : ''));
+        (nav.check && nav.check.different ? ' <strong>The result is tagged: valued against a different ' + (nav.check.variant ? 'plan or option' : 'scheme') + '’s NAV.</strong>' : ''));
     } else if (nav && navProblem(key)) {
       html = notice('warn', esc(navProblem(key)));
     } else if (PF.mode === 'typed') {
@@ -574,33 +591,47 @@
   var STOP = ['fund', 'plan', 'option', 'the', 'of', 'and', 'scheme', 'mutual', 'growth', 'direct', 'regular', 'idcw', 'dividend', 'payout',
               'reinvestment', 'reinvest', 'investment', 'formerly', 'known', 'as', 'erstwhile', 'an', 'a', 'open', 'ended', 'with', 'g', 'd', 'gr'];
   function words(n) { return String(n || '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter(function (w) { return w && STOP.indexOf(w) === -1; }); }
-  function planOf(n) { return /\bdirect\b/i.test(n) ? 'Direct' : /\bregular\b/i.test(n) ? 'Regular' : null; }
-  function optionOf(n) { return /\bidcw\b|\bdividend\b|\bpayout\b|\breinvest/i.test(n) ? 'IDCW' : /\bgrowth\b/i.test(n) ? 'Growth' : null; }
+  /* the option in words: "Growth", "Monthly IDCW payout" */
+  function optionWords(v) { return v.option === 'IDCW' ? (v.frequency ? v.frequency + ' ' : '') + 'IDCW' + (v.payout ? ' ' + v.payout.toLowerCase() : '') : v.option; }
+  function variantWhy(m, t) {
+    var why = [];
+    if (m.plan && t.plan && m.plan !== t.plan) why.push('your rows are for the ' + m.plan + ' plan and the file holds the ' + t.plan + ' plan');
+    if (m.option && t.option && (m.option !== t.option || (m.option === 'IDCW' && P.variantsDiffer({ option: 'IDCW', payout: m.payout, frequency: m.frequency }, { option: 'IDCW', payout: t.payout, frequency: t.frequency }))))
+      why.push('your rows are for the ' + optionWords(m) + ' option and the file holds the ' + optionWords(t) + ' option');
+    return why.join(', and ');
+  }
   function schemeCheck(f, res) {
-    var g = f.g, rep = res.report || {}, fileName = rep.scheme || res.name || '';
+    /* the file's scheme: its rows' name, else the fund its own title names, else the file's name */
+    var g = f.g, rep = res.report || {}, fileName = rep.scheme || rep.fund || res.name || '';
     var rowName = f.key;
+    /* the plan and option of your rows, and the file's: from its rows, its
+       headings, its titles and its name */
+    var mine = P.variantOf(rowName), theirs = rep.variant || P.variantOf(fileName);
+    /* another ISIN or code is another scheme, or the same scheme's other plan or option */
     if (g && g.isin && rep.isins && rep.isins.length) {
-      return rep.isins.indexOf(g.isin) !== -1 ? { different: false } : mismatch('the ISIN on your rows is ' + g.isin + ' and the file’s is ' + rep.isins.join(' or '));
+      return rep.isins.indexOf(g.isin) !== -1 ? { different: false } : otherVariant() || mismatch('the ISIN on your rows is ' + g.isin + ' and the file’s is ' + rep.isins.join(' or '));
     }
     if (g && g.code && rep.code) {
-      return String(g.code) === String(rep.code) ? { different: false } : mismatch('your rows carry scheme code ' + g.code + ' and the file holds code ' + rep.code);
+      return String(g.code) === String(rep.code) ? { different: false } : otherVariant() || mismatch('your rows carry scheme code ' + g.code + ' and the file holds code ' + rep.code);
     }
     if (!rowName || !fileName) return null;
     /* a scheme renamed over the years matches under any of its names */
     var older = (rep.names || []).filter(function (n) { return n && n !== fileName; });
     for (var k = 0; k < older.length; k++) {
-      if (words(older[k]).join(' ') === words(rowName).join(' ') && planOf(older[k]) === planOf(rowName) && optionOf(older[k]) === optionOf(rowName)) return { different: false };
+      if (words(older[k]).join(' ') === words(rowName).join(' ') && !P.variantsDiffer(P.variantOf(older[k]), mine)) return { different: false };
     }
     var a = words(rowName), b = words(fileName);
-    var full = a.length >= 3 || planOf(rowName) || optionOf(rowName);
-    if (!full || !b.length) return null;
-    if (a[0] !== b[0]) return mismatch('your rows are for ' + rowName + ' and the file holds ' + fileName + (rep.code ? ' (code ' + rep.code + ')' : ''));
-    var shared = a.filter(function (w) { return b.indexOf(w) !== -1; }).length;
-    if (shared / Math.min(a.length, b.length) < 0.6) return mismatch('your rows are for ' + rowName + ' and the file holds ' + fileName + (rep.code ? ' (code ' + rep.code + ')' : ''));
-    var pa = planOf(rowName), pb = planOf(fileName), oa = optionOf(rowName), ob = optionOf(fileName);
-    if (pa && pb && pa !== pb) return mismatch('your rows are for the ' + pa + ' plan and the file holds the ' + pb + ' plan');
-    if (oa && ob && oa !== ob) return mismatch('your rows are for the ' + oa + ' option and the file holds the ' + ob + ' option');
-    return { different: false };
+    var full = a.length >= 3 || mine.plan || mine.option;
+    if (!full) return null;
+    if (b.length) {
+      if (a[0] !== b[0]) return mismatch('your rows are for ' + rowName + ' and the file holds ' + fileName + (rep.code ? ' (code ' + rep.code + ')' : ''));
+      var shared = a.filter(function (w) { return b.indexOf(w) !== -1; }).length;
+      if (shared / Math.min(a.length, b.length) < 0.6) return mismatch('your rows are for ' + rowName + ' and the file holds ' + fileName + (rep.code ? ' (code ' + rep.code + ')' : ''));
+    }
+    return otherVariant() || (b.length ? { different: false } : null);
+    function otherVariant() {
+      return P.variantsDiffer(mine, theirs) ? { different: true, variant: true, message: 'This file may be a different plan or option’s NAV: ' + variantWhy(mine, theirs) + '. Each plan and option has its own NAV, so a value worked out from another one is wrong for this fund.' } : null;
+    }
     function mismatch(why) {
       return { different: true, message: 'This file may be a different scheme’s NAV: ' + why + '. Each plan and option has its own NAV, so a value worked out from another one is wrong for this fund.' };
     }
@@ -673,9 +704,10 @@
       });
     } else if (PF.kind === 'ledger') {
       PF.imported.forEach(function (f) {
+        if (f.dir === 'reinvest') return;   /* units added, no money in: not a flow */
         if (f.dir === 'out') withdrawn += f.switch ? 0 : f.amount; else invested += f.switch ? 0 : f.amount;
         if (f.switch && f.dir === 'in') switched += f.amount;   /* one switch, two legs: counted once */
-        flows.push({ t: f.t, amount: f.dir === 'out' ? f.amount : -f.amount, kind: f.dir, label: f.fund || '', units: f.units, switch: !!f.switch });
+        flows.push({ t: f.t, amount: f.dir === 'out' ? f.amount : -f.amount, kind: f.dir, label: f.fund || '', units: f.units, switch: !!f.switch, idcw: f.idcw || null });
       });
       PF.funds.forEach(function (f) {
         addName(f.key);
@@ -753,13 +785,15 @@
       var v = valueOf(key);
       var units = v && v.units ? v.units : knownUnits(key);
       var navToday = v && v.nav ? v.nav : (units && worth ? worth / units : null);
-      var lots = flowsFor(key).map(function (x) { return { t: x.t, amount: x.amount, dir: x.kind === 'out' ? 'out' : 'in', units: x.units }; });
+      /* what was paid for each unit: purchases only, not IDCW put back as units */
+      var lots = flowsFor(key).filter(function (x) { return x.kind !== 'reinvest'; }).map(function (x) { return { t: x.t, amount: x.amount, dir: x.kind === 'out' ? 'out' : 'in', units: x.units }; });
       var navFile = PF.nav[key];
       if (navFile) lots.forEach(function (l) { if (!(l.units > 0)) { var o = E.atOrAfter(navFile.series, l.t, 7); if (o) l.units = l.amount / o.v; } });
       var avg = E.averagePurchaseNav(lots);
       var info = { key: key, title: titleOf(key), flows: flows, put: put, took: took, worth: worth, rate: r, units: units, navToday: navToday,
                    avg: avg.ok ? avg.nav : null, closed: !!(fundOf(key) && fundOf(key).g && fundOf(key).g.closed),
-                   be: E.breakEven({ paidIn: put, tookOut: took, value: worth, units: units }), different: !!(navFile && navFile.check && navFile.check.different) };
+                   be: E.breakEven({ paidIn: put, tookOut: took, value: worth, units: units }), different: !!(navFile && navFile.check && navFile.check.different),
+                   differentVariant: !!(navFile && navFile.check && navFile.check.different && navFile.check.variant) };
       if (withNav.indexOf(key) !== -1) {
         var nav = navFile;
         var payments = flows.filter(function (f) { return f.kind !== 'value'; }).map(function (f) { return { t: f.t, amount: Math.abs(f.amount), kind: f.kind, units: f.units }; });
@@ -769,8 +803,10 @@
         info.nav = nav; info.payments = payments; info.valueFlow = valueFlow; info.valueDate = valueDate; info.firstT = firstT;
         info.over = E.fundOverDates(firstT, valueDate, nav.series, r.ok ? r.rate : NaN);
         info.span = info.over.ok ? E.spanPercentile(nav.series, info.over.from, info.over.to, info.over.rate) : null;
-        info.path = E.holdingPath(payments.map(function (p) { return { t: p.t, amount: p.amount, dir: p.kind, units: p.units }; }), nav.series, { valueDate: valueDate });
-        info.eq = E.benchmarkEquivalent(payments, nav.series, { valueDate: valueDate, priceRule: 'after' });
+        /* replayed in the fund's own NAV: an IDCW payout sells no units, a reinvestment buys them with no money */
+        var own = PF.mode === 'file' ? flowsFor(key).map(function (x) { return { t: x.t, amount: x.amount, kind: x.idcw === 'payout' ? 'payout' : x.kind, units: x.idcw === 'payout' ? null : x.units }; }) : payments;
+        info.path = E.holdingPath(own.map(function (p) { return { t: p.t, amount: p.amount, dir: p.kind, units: p.units }; }), nav.series, { valueDate: valueDate });
+        info.eq = E.benchmarkEquivalent(own, nav.series, { valueDate: valueDate, priceRule: 'after', own: true });
       }
       out[key] = info;
     });
@@ -797,7 +833,8 @@
     var years = (last - first) / (365.2425 * 86400000);
     var young = E.youngMoney(g.flows.filter(function (f) { return f.kind === 'in' && !f.switch; }).map(function (f) { return { t: f.t, amount: -f.amount, kind: 'in' }; }), last);
     var youngSays = young.share > 0.5 ? money(young.recent) + ' of the ' + money(young.total) + ' you put in, more than half, went in during the two years to ' + fmtDate(last) + '.' : '';
-    var different = Object.keys(info).filter(function (k) { return info[k].different; }).map(function (k) { return info[k].title; });
+    var different = Object.keys(info).filter(function (k) { return info[k].different && !info[k].differentVariant; }).map(function (k) { return info[k].title; });
+    var otherVariant = Object.keys(info).filter(function (k) { return info[k].differentVariant; }).map(function (k) { return info[k].title; });
     var html = '';
     if (res.underAYear) {
       html += '<div class="result"><div class="label">Your total gain so far</div><div class="value">' + esc(A.signedPct(abs)) + '</div>' +
@@ -812,6 +849,7 @@
         (youngSays ? '<div class="sub youngline">' + youngSays + ' With so much of it this recent, the yearly rate above leans heavily on how those two years went.</div>' : '') + '</div>';
     }
     if (different.length) html += notice('warn', '<strong>Valued against a different scheme’s NAV:</strong> ' + different.map(esc).join(', ') + '. Step 2 says why.');
+    if (otherVariant.length) html += notice('warn', '<strong>Valued against a different plan or option’s NAV:</strong> ' + otherVariant.map(esc).join(', ') + '. Step 2 says why.');
     if (res.alternatives && res.alternatives.length) {
       html += notice('warn', '<strong>A second rate also fits these entries: ' + esc(pct(res.alternatives[0])) + '.</strong> When money goes out and comes back in more than once, the arithmetic can have two answers. The one above is the one a spreadsheet gives; read both with care, and rely on the total gain.');
     }
@@ -1169,7 +1207,7 @@
       var r = U.portfolioFile(got.rows ? got.rows : got.text, {});
       if (!r.ok || r.kind !== 'ledger') { $('#pf-export-note').innerHTML = notice('bad', esc(r.message || 'That file is not a saved list of entries.')); return; }
       $('#pf-rows').innerHTML = '';
-      r.rows.forEach(function (f) { addRow({ date: A.isoOf(f.t), kind: f.dir === 'out' ? 'Money out' : 'Money in', amount: f.amount, label: f.fund || '' }); });
+      r.rows.forEach(function (f) { if (f.dir !== 'reinvest') addRow({ date: A.isoOf(f.t), kind: f.dir === 'out' ? 'Money out' : 'Money in', amount: f.amount, label: f.fund || '' }); });
       (r.valuations || []).forEach(function (v) { addRow({ date: A.isoOf(v.t), kind: 'Worth today', amount: v.amount, label: v.fund || '' }); });
       $('#pf-export-note').innerHTML = notice('ok', 'Loaded ' + (r.rows.length + (r.valuations || []).length) + ' entries from ' + esc(file.name) + '.');
       afterTyped();

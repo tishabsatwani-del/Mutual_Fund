@@ -269,20 +269,52 @@
      so the caller can say what is actually wrong with the file. */
   function readFile(file, onSeries, onError, onProgress, opts) {
     var name = (file.name || '').toLowerCase();
-    var ropts = { noun: (opts && opts.noun) || 'fund' };
+    var ropts = { noun: (opts && opts.noun) || 'fund', fileName: file.name || '' };
+    /* a slot that takes a fund's NAV history takes a fund house's download
+       as it comes: an old .xls, or a PDF with its words in it */
+    var navFile = !!(opts && opts.navFile), pdf = false;
     if (file.pastedText != null) {
       try { var pasteRows = P.parseDelimited(file.pastedText); finish(P.rowsToSeries(pasteRows, ropts), pasteRows); }
       catch (err) { onError('Those pasted rows could not be read (' + (err && err.message ? err.message : 'unknown') + ').'); }
       return;
     }
     if (onProgress) onProgress('Reading ' + file.name + '…');
-    if (/\.pdf$/.test(name)) { onError(P.NOT_TABULAR_COPY); return; }
-    if (/\.xls$/.test(name)) { onError(BINARY_COPY.oldexcel); return; }
+    if (/\.pdf$/.test(name)) {
+      if (!navFile || !root.PRCPdfRows) { onError(P.NOT_TABULAR_COPY); return; }
+      /* read on the device, held to the strict standard: a doubtful reading shows nothing */
+      pdf = true; ropts.strict = true; ropts.doubtCopy = P.PDF_COPY;
+      root.PRCPdfRows.read(file).then(function (rows) {
+        var res = P.rowsToSeries(rows, ropts);
+        if (!res.ok && res.code !== 'MANY_SCHEMES') { onError(P.PDF_COPY); return; }
+        finish(res, rows);
+      }, function () { onError(P.PDF_COPY); });
+      return;
+    }
+    if (/\.xls$/.test(name)) {
+      if (!navFile || !root.PRCXls) { onError(BINARY_COPY.oldexcel); return; }
+      file.arrayBuffer().then(function (buf) {
+        var got = root.PRCXls.read(buf);
+        if (got.kind === 'zip') { readXlsx(); return; }
+        if (got.kind === 'text') { var trows = P.parseDelimited(got.text); finish(P.rowsToSeries(trows, ropts), trows); return; }
+        var sheets = got.sheets.filter(function (sh) { return sh.rows.length; });
+        if (!sheets.length) throw new Error('the workbook is empty');
+        var first = P.rowsToSeries(sheets[0].rows, ropts);
+        if (first.ok || first.code === 'MANY_SCHEMES') { finish(first, sheets[0].rows); return; }
+        for (var k = 1; k < sheets.length; k++) {
+          var rk = P.rowsToSeries(sheets[k].rows, ropts);
+          if (rk.ok || rk.code === 'MANY_SCHEMES') { finish(rk, sheets[k].rows); return; }
+        }
+        if (sheets.length > 1) first.message = 'None of the ' + sheets.length + ' sheets in this workbook holds a readable table of dates and values. On the first sheet: ' + first.message;
+        finish(first, sheets[0].rows);
+      }).catch(function (err) { onError('That Excel file could not be read here (' + err.message + '). Open it and save it as CSV, then load that.'); });
+      return;
+    }
     if (/\.(docx?|pptx?|png|jpe?g|gif|zip|rar|7z)$/.test(name)) {
       onError('That is a ' + name.replace(/^.*\./, '.') + ' file. This screen reads a table of dates and values, so load a CSV or Excel file, or copy the two columns and paste them in.');
       return;
     }
-    if (/\.xlsx?$/.test(name)) {
+    if (/\.xlsx?$/.test(name)) { readXlsx(); return; }
+    function readXlsx() {
       WB.readWorkbook(file).then(function (rows) {
         var res = P.rowsToSeries(rows, ropts);
         if (res.ok || res.code === 'MANY_SCHEMES') { finish(res, rows); return null; }
@@ -303,7 +335,6 @@
           return tryNext();
         }).catch(function () { finish(res, rows); });
       }).catch(function (err) { onError('That Excel file could not be read here (' + err.message + '). Open it and save it as CSV, then load that.'); });
-      return;
     }
     var fr = new FileReader();
     fr.onerror = function () { onError('That file could not be opened.'); };
@@ -318,9 +349,10 @@
     function finish(res, rows) {
       if (!res.ok) {
         if (res.code === 'MANY_SCHEMES' && rows) {
-          var listed = P.listSchemes(rows);
-          if (listed) { onError(res.message, { rows: rows, schemes: listed.schemes, hasNames: listed.hasNames }); return; }
+          var listed = P.listSchemes(rows, ropts.fileName);
+          if (listed) { onError(res.message, { rows: rows, schemes: listed.schemes, hasNames: listed.hasNames, variants: listed.variants }); return; }
         }
+        if (pdf) { onError(P.PDF_COPY); return; }
         onError(res.message, { rows: rows || null });
         return;
       }
@@ -365,6 +397,8 @@
   }
 
   var FILE_ACCEPT = '.csv,.txt,.tsv,.xls,.xlsx,.json,text/csv,text/comma-separated-values,text/plain,text/tab-separated-values,application/json,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/octet-stream';
+  /* a slot that takes a fund's NAV history takes its PDF too */
+  var NAV_ACCEPT = FILE_ACCEPT + ',.pdf,application/pdf';
 
   /* the picker takes a moment, and the button says so */
   var PICK_WAIT_MS = 400, PICK_GIVE_UP_MS = 25000, activePick = null;
@@ -415,7 +449,7 @@
     relation: relation, equalWords: equalWords, EQUAL_BAND: EQUAL_BAND, stackTables: stackTables, watchTables: watchTables,
     csvCell: csvCell, fileSlug: fileSlug, downloadText: downloadText,
     show: show, initRouter: initRouter,
-    readFile: readFile, readStatement: readStatement, pickBusy: pickBusy, pickDone: pickDone, FILE_ACCEPT: FILE_ACCEPT,
+    readFile: readFile, readStatement: readStatement, pickBusy: pickBusy, pickDone: pickDone, FILE_ACCEPT: FILE_ACCEPT, NAV_ACCEPT: NAV_ACCEPT,
     inAppBrowser: inAppBrowser, IN_APP_NOTE: IN_APP_NOTE
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
