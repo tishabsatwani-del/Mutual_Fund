@@ -1330,6 +1330,58 @@
     return { nav: false, kind: s.tri ? 'TRI' : s.close ? 'PRICE' : null, signals: s };
   }
 
+  /* ======================================== step 3: an index, or a fund?
+   *
+   * Any layout: an NSE or BSE download, a sheet the reader made, values copied
+   * from a website. A fund's word in the headings, a name column or the
+   * file's name makes it a fund's file, an index fund's included: Fund, NAV,
+   * Net Asset Value, Scheme, Growth, Direct, Regular, IDCW, a scheme code
+   * column, an ISIN (INF...). An index's word with no fund's word makes it an
+   * index: Index, TRI, Total Returns, Close, Nifty, Sensex, BSE, NSE. Neither,
+   * and the reader is asked. The kind of index is read from its columns: a
+   * Total Returns (or TRI) column is the total return index; a Close column
+   * without one is the price index. NSE's "NIFTY Growth Sectors 15" is an
+   * index's name, so "Growth Sectors" is not read as a fund's Growth. */
+  var FUND_MARKS = [[/\bfunds?\b/, 'Fund'], [/\bnav\b/, 'NAV'], [/\bnet asset value\b/, 'Net Asset Value'], [/\bschemes?\b/, 'Scheme'],
+    [/\bgrowth\b(?! sectors?\b)/, 'Growth'], [/\bdirect\b/, 'Direct'], [/\bregular\b/, 'Regular'], [/\bidcw\b/, 'IDCW']];
+  var INDEX_MARKS = [[/\bindex\b/, 'Index'], [/\btri\b/, 'TRI'], [/\btotal returns?\b/, 'Total Returns'], [/\bclos(e|ing)\b/, 'Close'],
+    [/\bnifty\b/, 'Nifty'], [/\bsensex\b/, 'Sensex'], [/\bbse\b/, 'BSE'], [/\bnse\b/, 'NSE']];
+  function indexOrFund(rows, fileName) {
+    var out = { verdict: 'unknown', kind: null, fund: [], index: [] };
+    rows = rows || [];
+    /* words as the headings are read everywhere else: TotalReturnsIndex is "total returns index" */
+    var plainOf = function (t) { return normHeader(String(t == null ? '' : t).replace(/[\u2013\u2014]/g, ' ')); };
+    var filled = function (c) { return String(c == null ? '' : c).trim() !== ''; };
+    var isText = function (c) { var t = String(c == null ? '' : c).trim(); return !!t && !readsAsDate(t) && !isFinite(parseNumber(t)); };
+    var h = headingRow(rows), header = h >= 0 ? rows[h] : null, texts = [];
+    /* the headings: the heading row and any title above it */
+    rows.slice(0, h + 1).forEach(function (r) { (r || []).forEach(function (c) { if (filled(c)) texts.push(c); }); });
+    /* a heading on a line of its own between the rows, and a name column */
+    var body = rows.slice(h + 1, h + 1 + 400), width = 0;
+    body.forEach(function (r) { if (r && r.length > width) width = r.length; });
+    body.forEach(function (r) { var cells = (r || []).filter(filled); if (cells.length === 1 && isText(cells[0])) texts.push(cells[0]); });
+    for (var c = 0; c < width; c++) {
+      var n = 0, words = 0, seen = {};
+      body.forEach(function (r) { var v = r ? r[c] : null; if (!filled(v)) return; n++; if (isText(v)) { words++; seen[String(v).trim()] = true; } });
+      if (n && words >= n * 0.5) Object.keys(seen).slice(0, 60).forEach(function (t) { texts.push(t); });
+    }
+    var all = texts.map(plainOf), name = plainOf(String(fileName == null ? '' : fileName).replace(/\.[a-z0-9]{2,5}$/i, ''));
+    if (name) all.push(name);
+    function hits(marks, side) { marks.forEach(function (m) { if (all.some(function (t) { return m[0].test(t); })) out[side].push(m[1]); }); }
+    hits(FUND_MARKS, 'fund'); hits(INDEX_MARKS, 'index');
+    var heads = (header || []).map(plainOf);
+    if (heads.some(function (t) { return /\bcode\b/.test(t); })) out.fund.push('a scheme code column');
+    if (heads.some(function (t) { return /\bisin\b/.test(t); }) ||
+        rows.slice(0, 420).some(function (r) { return (r || []).some(function (v) { return /\bINF[A-Z0-9]{9}\b/.test(String(v == null ? '' : v).toUpperCase()); }); })) out.fund.push('an ISIN');
+    if (out.fund.length) { out.verdict = 'fund'; return out; }
+    if (out.index.length) {
+      out.verdict = 'index';
+      out.kind = heads.some(function (t) { return /\btotal returns?\b|\btri\b/.test(t); }) ? 'TRI'
+        : heads.some(function (t) { return /\bclos(e|ing)\b/.test(t); }) ? 'PRICE' : null;
+    }
+    return out;
+  }
+
   /* Keep only the part of a series inside a chosen window. Both bounds are
    * inclusive, and either may be left out. */
   function sliceSeries(series, fromT, toT) {
@@ -1360,6 +1412,7 @@
     headingRow: headingRow,
     pricesNotPayments: pricesNotPayments,
     indexFileKind: indexFileKind,
+    indexOrFund: indexOrFund,
     flatCopy: flatCopy,
     ISIN_RE: ISIN_RE,
     sliceSeries: sliceSeries,

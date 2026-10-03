@@ -8,7 +8,8 @@
  * are joined by date.
  *
  *   PRCDoors.mount(hostEl, { prefix, kind: 'nav'|'index'|'any', label, hint,
- *                            multiple, onLoaded(result|null), gate(rows, name) })
+ *                            multiple, onLoaded(result|null), gate(rows, name),
+ *                            ask(result) -> null or { question, refusal } })
  *   result: { series, name, report, files, gaps, kindGuess }
  *
  * The "Get your file" guides live here too, written so that they stay true
@@ -88,6 +89,8 @@
     var kind = o.kind || 'any';
     var noun = o.noun || NOUN[kind] || 'fund or index';
     var state = { pieces: [], series: null, name: '', report: null, rows: null, schemes: null, picked: null, kindGuess: null };
+    var answers = {};   /* a question a slot asks of a file, answered once for that file */
+    function keyOf(p) { return p.sig || p.name + '|' + (p.rows ? p.rows.length + '|' + JSON.stringify(p.rows.slice(0, 3)) : ''); }
 
     host.innerHTML =
       (o.label ? '<label class="fieldlabel" for="' + prefix + '-file">' + esc(o.label) + '</label>' : '') +
@@ -185,6 +188,7 @@
       return { name: file.name, refused: notice('bad', esc(err ? err.msg : 'That file could not be read.')) };
     }
     function landed(fresh) {
+      state.fresh = fresh.map(keyOf);   /* the files of this attempt: a question is about them */
       var bad = fresh.filter(function (p) { return p.refused; });
       if (bad.length) {
         empty();
@@ -247,16 +251,16 @@
         if (state.picked && byKey[state.picked]) pickScheme(state.picked);
         return;
       }
-      finish(good.map(function (p) { return { name: p.name, series: p.res.series, report: p.res.report, rows: p.rows }; }));
+      finish(good.map(function (p) { return { name: p.name, series: p.res.series, report: p.res.report, rows: p.rows, sig: p.sig }; }));
     }
     function pickScheme(key) {
       state.picked = key;
       var list = [], failed = [];
       state.pieces.forEach(function (p) {
-        if (p.res) { list.push({ name: p.name, series: p.res.series, report: p.res.report, rows: p.rows }); return; }
+        if (p.res) { list.push({ name: p.name, series: p.res.series, report: p.res.report, rows: p.rows, sig: p.sig }); return; }
         if (!p.schemes) return;
         var r = P.rowsToSeries(p.rows, { scheme: key, noun: noun });
-        if (r.ok) list.push({ name: p.name, series: r.series, report: r.report, rows: p.rows });
+        if (r.ok) list.push({ name: p.name, series: r.series, report: r.report, rows: p.rows, sig: p.sig });
         else failed.push({ name: p.name, message: r.message, code: r.code });
       });
       if (!list.length) {
@@ -280,17 +284,35 @@
       var named = files.length === 1 && files[0].replace(/\.[^.]+$/, '') === name ? '' : esc(files.join(', ')) + ' · ';
       var sub = named + report.used.toLocaleString('en-IN') + ' rows read · ' + fmtDate(report.firstDate) + ' to ' + fmtDate(report.lastDate) +
         (list.length > 1 ? ' · ' + list.length + ' files joined' : '');
-      var res = { series: state.series, name: name, report: report, files: list.length, gaps: joined.gaps, kindGuess: state.kindGuess, rows: state.rows };
-      var extra = o.describe ? o.describe(res) : null;
-      added(name, sub + (extra && extra.tag ? ' · <strong' + (extra.plain ? '' : ' class="warn-word"') + '>' + esc(extra.tag) + '</strong>' : ''));
-      var msgs = [];
-      if (extra && extra.html) msgs.push(extra.html);
-      if (missingIn) msgs.push(notice('warn', missingIn + ' file' + (missingIn === 1 ? ' does' : 's do') + ' not hold this scheme and ' + (missingIn === 1 ? 'was' : 'were') + ' left out.'));
-      if (joined.gaps.length) msgs.push(notice('warn', esc(U.MESSAGES.gap(joined.gaps[0])) + (joined.gaps.length > 1 ? ' ' + (joined.gaps.length - 1) + ' more gap' + (joined.gaps.length > 2 ? 's' : '') + ' like it.' : '')));
-      if (report.warnings.length) msgs.push(notice('warn', esc(report.warnings[0])));
-      if (/\bidcw\b|\bdividend\b|\bpayout\b/i.test(name)) msgs.push(notice('warn', 'This looks like an IDCW row. Its NAV drops at every payout, so every return on it reads low. The Growth option of the same plan carries the full growth.'));
-      say(msgs.join(''));
-      if (o.onLoaded) o.onLoaded(res);
+      var res = { series: state.series, name: name, report: report, files: list.length, gaps: joined.gaps, kindGuess: state.kindGuess, rows: state.rows,
+                  file: list[0].name, parts: list.map(function (p) { return { rows: p.rows, name: p.name }; }) };
+      function land() {
+        var extra = o.describe ? o.describe(res) : null;
+        added(name, sub + (extra && extra.tag ? ' · <strong' + (extra.plain ? '' : ' class="warn-word"') + '>' + esc(extra.tag) + '</strong>' : ''));
+        var msgs = [];
+        if (extra && extra.html) msgs.push(extra.html);
+        if (missingIn) msgs.push(notice('warn', missingIn + ' file' + (missingIn === 1 ? ' does' : 's do') + ' not hold this scheme and ' + (missingIn === 1 ? 'was' : 'were') + ' left out.'));
+        if (joined.gaps.length) msgs.push(notice('warn', esc(U.MESSAGES.gap(joined.gaps[0])) + (joined.gaps.length > 1 ? ' ' + (joined.gaps.length - 1) + ' more gap' + (joined.gaps.length > 2 ? 's' : '') + ' like it.' : '')));
+        if (report.warnings.length) msgs.push(notice('warn', esc(report.warnings[0])));
+        if (/\bidcw\b|\bdividend\b|\bpayout\b/i.test(name)) msgs.push(notice('warn', 'This looks like an IDCW row. Its NAV drops at every payout, so every return on it reads low. The Growth option of the same plan carries the full growth.'));
+        say(msgs.join(''));
+        if (o.onLoaded) o.onLoaded(res);
+      }
+      function turnDown(refusal) { empty(); refused(name); say(refusal); if (o.onLoaded) o.onLoaded(null); }
+      /* A slot may need one answer before it takes a file. It is asked once:
+         the answer is kept for that file, and a tap on Yes or No settles it. */
+      var q = o.ask ? o.ask(res) : null;
+      if (!q) { land(); return; }
+      var keys = state.fresh && state.fresh.length ? state.fresh : list.map(keyOf);
+      if (keys.some(function (k) { return answers[k] === 'no'; })) { turnDown(q.refusal); return; }
+      if (keys.every(function (k) { return answers[k] === 'yes'; })) { land(); return; }
+      setState('working', '?', name, 'One question below', 'Choose another file');
+      /* drawn as the statement slot draws its question: the line, then the answers */
+      say('<div class="notice"><span class="ic">?</span><span>' + esc(q.question) + '</span></div>' +
+        '<div class="btnrow" style="margin-top:.6rem"><button class="primary" type="button" id="' + prefix + '-ask-yes">Yes</button><button class="secondary" type="button" id="' + prefix + '-ask-no">No</button></div>');
+      if (o.onLoaded) o.onLoaded(null);
+      $('#' + prefix + '-ask-yes').addEventListener('click', function () { keys.forEach(function (k) { answers[k] = 'yes'; }); armed = true; land(); });
+      $('#' + prefix + '-ask-no').addEventListener('click', function () { keys.forEach(function (k) { answers[k] = 'no'; }); armed = true; turnDown(q.refusal); });
     }
     function mergeReports(list, joined) {
       var r = { rowsRead: 0, used: joined.series.length, skipped: { badDate: 0, badValue: 0, duplicate: 0, blank: 0 }, examples: [], warnings: [],

@@ -110,21 +110,26 @@
       readInto(text, true);
     });
 
-    /* step 3, on both modes: the benchmark index's TRI (a price index with its
-       flag), or a fund's NAV history, an index fund's say. A fund is compared as
-       the fund it is: named, tagged "a fund, costs included", never the index. */
+    /* step 3, on both modes: an index, in any layout (an NSE or BSE download,
+       a sheet the reader made, values copied from a website). A fund's file is
+       refused by its words, an index fund's included; a file whose words say
+       neither is asked about once. A price index carries its flag. */
     $('#pf-index-howto').innerHTML = D.guide('index');
     PF.indexDoor = D.mount($('#pf-index-door'), {
-      prefix: 'pfix', kind: 'index', noun: 'fund or index', label: 'The index’s total return (TRI) file, or a fund’s NAV history',
-      hint: 'CSV, Excel or text · a date column and the index value or NAV on that date',
+      prefix: 'pfix', kind: 'index', noun: 'index', label: 'The index’s total return (TRI) history file',
+      hint: 'CSV, Excel or text · a date column and the index value on that date',
       gate: indexGate,
+      ask: function (res) {
+        var parts = res.parts || [{ rows: res.rows, name: res.file }];
+        var silent = parts.every(function (p) { return P.indexOrFund(p.rows, p.name).verdict === 'unknown'; });
+        return silent ? { question: ASK_INDEX, refusal: notice('bad', esc(NOT_INDEX)) } : null;
+      },
       describe: function (res) {
-        var k = P.indexFileKind(res.rows, res.name);
-        return k.nav ? { tag: FUND_TAG, plain: true } : k.kind === 'PRICE' ? { tag: 'Price index', html: notice('warn', PRICE_FLAG) } : null;
+        return P.indexOrFund(res.rows, res.file).kind === 'PRICE' ? { tag: 'Price index', html: notice('warn', PRICE_FLAG) } : null;
       },
       onLoaded: function (res) {
-        var k = res && res.rows ? P.indexFileKind(res.rows, res.name) : null;
-        PF.index = res ? { series: res.series, name: res.name, report: res.report, kind: k ? (k.nav ? 'NAV' : k.kind) : null } : null;
+        var kind = res && res.rows ? P.indexOrFund(res.rows, res.file).kind : null;
+        PF.index = res ? { series: res.series, name: res.name, report: res.report, kind: kind, sure: !!kind } : null;
         if (PF.index && !PF.index.kind) PF.index.kind = guessKind(res.name);
         drawIndexKind();
         if (PF.ran) calcPortfolio();
@@ -133,13 +138,24 @@
   }
   /* C3: the brief's wording, with the figure left out so it never goes stale */
   var PRICE_FLAG = '<strong>Price index:</strong> dividends are left out, which flatters your side by about the index’s dividend yield each year. The Total Returns tab of the same report fixes this.';
-  /* The owner's ruling of 2 October 2026 on C3: a fund's NAV is welcome at step 3 too */
+  /* The fund-comparison words of 2 October 2026. Since the owner's word of
+     3 October 2026 step 3 takes an index only, so nothing reaches them. */
   var FUND_TAG = 'a fund, costs included';
   /* what a result's words mean, said where the figure is */
   var EXIT_LOAD = 'Exit load: a fee some funds take when units are sold soon after buying.';
   var RANK_NOTE = 'This ranks the fund’s own rate over your dates, not your money’s: it shows how kind these particular dates were to this fund compared with its other stretches of the same length.';
   var FUND_NOTE = 'A fund, costs included: its NAV is net of its own costs, as your funds’ NAVs are.';
-  function indexGate(rows) { return schemaGate(rows, 'compare'); }
+  /* The owner's word of 3 October 2026: step 3 takes an index in any layout.
+     A statement or a holdings file is refused as before; a fund's file, an
+     index fund's included, is refused by its words; the rest is read. */
+  var NOT_INDEX = 'This is not an index file. Please upload a valid index file.';
+  var ASK_INDEX = 'Is this the daily value of an index (not a fund’s NAV)?';
+  function indexGate(rows, name) {
+    var v = P.checkSchema(rows, { slot: 'index' });
+    if (!v.ok && v.code === 'TRADEBOOK') return schemaGate(rows, 'index');
+    if (P.indexOrFund(rows, name).verdict === 'fund') return notice('bad', esc(NOT_INDEX));
+    return schemaGate(rows, 'index');
+  }
   /* Step 2 values a fund's units at that fund's own NAV, so an index file is
      refused there by what its headings say it is: NSE's total return report,
      a file naming its index, NSE's price report. Two bare columns of dates and
@@ -150,7 +166,7 @@
     if (!k.nav && (k.kind === 'TRI' || /\bindex name\b/.test(head) || (k.kind === 'PRICE' && /\bshares traded\b|\bturnover\b/.test(head)))) return notice('bad', esc(INDEX_AT_NAV));
     return schemaGate(rows, 'nav');
   }
-  function fundCmp() { return !!(PF.index && PF.index.kind === 'NAV'); }
+  function fundCmp() { return !!(PF.index && PF.index.kind === 'NAV'); }   /* never, since step 3 takes an index only */
   function schemaGate(rows, slot) {
     var v = P.checkSchema(rows, { slot: slot });
     if (v.ok) return null;
@@ -168,26 +184,20 @@
   function drawIndexKind() {
     var host = $('#pf-index-kind');
     if (!host) { host = A.el('div', { id: 'pf-index-kind' }); $('#pf-index-door').appendChild(host); }
-    if (!PF.index || (PF.index.kind && PF.index.report && fromHeadings())) { host.innerHTML = ''; return; }
+    if (!PF.index || PF.index.sure) { host.innerHTML = ''; return; }
     host.innerHTML = '<div class="field" style="margin-top:.8rem"><span class="fieldlabel">Which kind of file is <strong>' + esc(PF.index.name) + '</strong>?</span>' +
       '<div class="chips" id="pf-kind-chips" role="radiogroup">' +
-      ['TRI', 'PRICE', 'NAV'].map(function (k) { return '<button class="chip" type="button" role="radio" data-kind="' + k + '" aria-checked="' + (PF.index.kind === k) + '">' + (k === 'TRI' ? 'Total return index: dividends included' : k === 'PRICE' ? 'Price index: dividends left out' : 'A fund’s NAV: costs included') + '</button>'; }).join('') +
+      ['TRI', 'PRICE'].map(function (k) { return '<button class="chip" type="button" role="radio" data-kind="' + k + '" aria-checked="' + (PF.index.kind === k) + '">' + (k === 'TRI' ? 'Total return index: dividends included' : 'Price index: dividends left out') + '</button>'; }).join('') +
       '</div><p class="hint" id="pf-kind-why"></p></div>';
     $$('#pf-kind-chips .chip').forEach(function (b) {
       b.addEventListener('click', function () { PF.index.kind = b.dataset.kind; $$('#pf-kind-chips .chip').forEach(function (c) { c.setAttribute('aria-checked', String(c === b)); }); sayKind(); if (PF.ran) calcPortfolio(); });
     });
     sayKind();
   }
-  function fromHeadings() {
-    var st = PF.indexDoor && PF.indexDoor.state;
-    var k = st && st.rows ? P.indexFileKind(st.rows, PF.index.name) : null;
-    return !!(k && (k.nav || k.kind));
-  }
   function sayKind() {
     var why = $('#pf-kind-why'); if (!why || !PF.index) return;
     why.innerHTML = PF.index.kind === 'PRICE' ? PRICE_FLAG
       : PF.index.kind === 'TRI' ? 'Dividends are counted on both sides, so the comparison is like for like.'
-      : PF.index.kind === 'NAV' ? esc(FUND_NOTE)
       : 'Not established. Until you say, the comparison cannot tell whether a gap is real or only the dividends the index leaves out.';
   }
 
