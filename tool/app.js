@@ -361,11 +361,38 @@
     }
   }
   /* A statement file: rows or text, whichever the file gives, plus the sheet list of a workbook. */
+  var EXCEL_UNREAD = 'That Excel file could not be read here. Open it and save it as CSV, then load that.';
+  var EXCEL_LOCKED = 'That Excel file is locked with a password, so nothing in it can be read. Open it with its password, save a copy as CSV or Excel without one, and load that.';
   function readStatement(file, sheet) {
     if (file.pastedText != null) return Promise.resolve({ text: file.pastedText, sheets: null });
     var name = (file.name || '').toLowerCase();
     if (/\.pdf$/.test(name)) return Promise.reject(new Error(P.NOT_TABULAR_COPY));
-    if (/\.xlsx?$/.test(name) && WB) {
+    /* An old Excel statement, in whichever of its forms (xls.js): the tab
+       asked for, else the first tab that reads as a statement, else the
+       first. A newer workbook under the old name goes the .xlsx way. */
+    if (/\.xls$/.test(name) && root.PRCXls) {
+      return file.arrayBuffer().then(function (buf) {
+        var got = root.PRCXls.read(buf);
+        if (got.kind === 'zip') return readXlsx();
+        if (got.kind === 'text') {
+          /* text under the old name is read as text; anything else that is not a workbook is not one */
+          var junk = looksBinary(got.text);
+          if (junk) { var e = new Error(junk === 'pdf' ? P.NOT_TABULAR_COPY : EXCEL_UNREAD); e.statement = true; throw e; }
+          return { text: got.text, sheets: null };
+        }
+        var tabs = got.sheets, names = tabs.map(function (sh) { return sh.name; });
+        if (!tabs.length) return { rows: [], sheetName: null, sheets: names };
+        var pick = sheet != null ? tabs.filter(function (sh) { return sh.name === sheet; })[0] : null;
+        for (var i = 0; i < tabs.length && !pick; i++) {
+          var probe = root.SimUpload.portfolioFile(tabs[i].rows, {});
+          if (probe.ok || probe.ask) pick = tabs[i];
+        }
+        pick = pick || tabs[0];
+        return { rows: pick.rows, sheetName: pick.name, sheets: names };
+      }).catch(function (err) { throw new Error(err && err.locked ? EXCEL_LOCKED : err && err.statement ? err.message : EXCEL_UNREAD); });
+    }
+    if (/\.xlsx?$/.test(name) && WB) return readXlsx();
+    function readXlsx() {
       return WB.listSheets(file).catch(function () { return []; }).then(function (sheets) {
         var order = sheet != null ? [sheet] : (sheets.length > 1 ? sheets.slice() : [undefined]);
         var i = 0, firstGot = null;
@@ -381,7 +408,11 @@
           }, attempt);
         }
         return attempt();
-      }).catch(function () { throw new Error('That Excel file could not be read here. Open it and save it as CSV, then load that.'); });
+      }).then(function (got) {
+        /* no tab could be opened at all: say so, rather than fail on nothing */
+        if (!got) { var e = new Error(EXCEL_UNREAD); e.statement = true; throw e; }
+        return got;
+      }).catch(function (err) { throw new Error(err && err.statement ? err.message : EXCEL_UNREAD); });
     }
     return new Promise(function (resolve, reject) {
       var reader = new FileReader();

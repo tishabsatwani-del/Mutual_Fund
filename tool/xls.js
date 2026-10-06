@@ -14,6 +14,8 @@
  *
  *   PRCXls.read(arrayBuffer) -> { kind, sheets: [{ name, rows }] }   (throws if unreadable)
  *   kind: 'biff' | 'html' | 'xml' | 'text' | 'zip' (the caller reads a zip as .xlsx)
+ * A workbook locked with a password throws an error marked .locked: its
+ * cells are scrambled, and nothing is read from it.
  */
 (function (root) {
   'use strict';
@@ -44,9 +46,14 @@
   function readBiff(bytes) {
     var cfb = compoundFile(bytes);
     var stream = cfb.stream('Workbook') || cfb.stream('Book');
-    if (!stream) throw new Error('no workbook inside');
+    if (!stream) {
+      /* a newer workbook saved with a password travels as an encrypted package */
+      if (cfb.has('EncryptedPackage')) throw locked();
+      throw new Error('no workbook inside');
+    }
     return biffSheets(stream);
   }
+  function locked() { var e = new Error('it is locked with a password'); e.locked = true; return e; }
   function compoundFile(bytes) {
     var view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     var u32 = function (o) { return view.getUint32(o, true); };
@@ -101,6 +108,7 @@
       chain(miniFatStart, fat).forEach(function (n) { var o = sectorOffset(n); for (var j = 0; j < secSize / 4; j++) miniFat.push(u32(o + j * 4)); });
     }
     return {
+      has: function (name) { return entries.some(function (x) { return x.type === 2 && x.name.toLowerCase() === name.toLowerCase(); }); },
       stream: function (name) {
         var hit = entries.filter(function (x) { return x.type === 2 && x.name.toLowerCase() === name.toLowerCase(); })[0];
         if (!hit) return null;
@@ -141,6 +149,7 @@
       var r = records[i];
       if (r.type === 0x0809 && i === 0) { biff8 = view.getUint16(r.at, true) === 0x0600; continue; }
       if (r.type === 0x000A) { i++; break; }
+      if (r.type === 0x002F) throw locked();   /* FILEPASS: what follows is encrypted */
       if (r.type === 0x0022) date1904 = view.getUint16(r.at, true) === 1;
       else if (r.type === 0x041E || r.type === 0x001E) {
         var id = view.getUint16(r.at, true);
