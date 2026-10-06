@@ -26,15 +26,16 @@ market references, so it does not go stale.
 | `index.html` | The whole interface. No build step. |
 | `styles.css` | One stylesheet. No framework, no font requests. |
 | `engine.js` | Every calculation: XIRR (all roots), CAGR, rolling returns, drawdown, benchmark-equivalent flows, capture ratios, information ratio, tracking, calendar and trailing returns, goal maths. Pure functions, no DOM. |
-| `parse.js` | Turns a messy CSV, text or pasted table into a clean dated series and reports what it dropped. Reads day-first and month-first dates. Picks the value column by its heading (never a code, ISIN or whole-number column) and refuses a column that never moves. Tells price data from payments, and a fund's NAV file from an index file. Reads each scheme's plan and option (Direct, Regular, Growth, IDCW and the rest) and never mixes two: a file holding several asks which one. |
-| `upload.js` | Reads a statement: a transaction ledger, a holdings file, or the tool's own saved entries. |
+| `parse.js` | Turns a messy CSV, text or pasted table into a clean dated series and reports what it dropped. Reads day-first and month-first dates. Picks the value column by its heading (never a code, ISIN or whole-number column) and refuses a column that never moves. Tells price data from payments, and a fund's NAV file from an index file. Reads each scheme's plan and option (Direct, Regular, Growth, IDCW and the rest) and never mixes two: a file holding several asks which one. Picks the daily table out of a whole page pasted or saved as text (menus, headings and NAV Range tables ignored), held to the strict standard. Calls a one-day list of every scheme a snapshot. Reads AMFI's download in its old text layout and its new one (scheme code, scheme NAV name, plan, option, ISINs, net asset value, date). |
+| `upload.js` | Reads a statement: a transaction ledger, a holdings file, or the tool's own saved entries. Lines a Status column marks rejected, failed or cancelled are left out and counted; a broker's tradebook of shares is refused as one. |
+| `pieces.js` | The rules for a history that arrives in several pieces (files, pastes, or both, in any order): one scheme by code or name, one plan and option, never a total return index with a price index, every shared date carrying the same value to its last decimal, a question once when nothing can be checked, a warning where a join jumps, the gaps between pieces. Pure functions, shared by the door and the tests. |
 | `workbook.js` | Reads `.xlsx` by unzipping it with the browser's own `DecompressionStream`; no spreadsheet library. |
-| `xls.js` | Reads an old `.xls` in each of its forms (an Excel 97-2003 workbook, an HTML table or Excel 2003 XML under that name) for the slots that take a fund's NAV history. |
-| `pdfrows.js` + `vendor/pdfjs/` | Reads the words of a fund house's NAV history PDF on the device with pdf.js, back into rows; a scanned or doubtful PDF is refused. |
+| `xls.js` | Reads an old `.xls` in each of its forms (an Excel 97-2003 workbook, an HTML table, Excel 2003 XML or a newer `.xlsx` package under that name) in every slot. |
+| `pdfrows.js` + `vendor/pdfjs/` | Reads the words of a PDF on the device with pdf.js, back into rows: a fund house's or an exchange's history in every price slot, and a statement that is one plain table of text at step 1; a scanned page, a doubtful reading or a statement laid out as several tables is refused. |
 | `format.js` | Rupees, percentages and dates, one way everywhere. |
 | `dates.js` | Spells every chosen date as dd-Mmm-yyyy under the native date control. |
 | `charts.js` | Inline SVG: histogram, growth of ₹10,000, rolling line, fan chart, goal bar. |
-| `doors.js` | The file doors: drop zone, paste box, scheme and plan picker, the how-to guides and the index download's video. |
+| `doors.js` | The file doors: drop zone, paste box (two columns or a whole page), scheme and plan picker (one choice for every piece), the list of pieces with a Remove on each, the how-to guides and the index download's video. |
 | `app.js` | Formatting helpers, routing, result tabs, file intake. |
 | `portfolio.js`, `goal.js`, `rolling.js` | The three screens. |
 | `boot.js` | Start-up and the handlers every result screen shares (tabs, rate boxes, PDF). |

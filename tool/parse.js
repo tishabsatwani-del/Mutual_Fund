@@ -1225,7 +1225,8 @@
   var AMBIGUOUS_VARIANTS_COPY = 'This file holds more than one NAV, and its headings do not say which plan and option each one is. ' +
     'Nothing has been read from it, so no NAV is mixed with another. Download one plan and option at a time.';
   /* a PDF, or any reading held to the strict standard, that is not certain */
-  var PDF_COPY = 'This PDF could not be read. Please download the Excel version instead.';
+  var PDF_COPY = 'This PDF could not be read with certainty, so nothing was taken from it. Please download the Excel version instead.';
+  var PDF_SCANNED_COPY = 'This PDF holds no text, only a picture of the page, so nothing in it can be read. Please download the Excel version instead.';
 
   /* Every choice a file offers, with its full name and the dates its values
    * cover: one per scheme, or plan and option, on its rows; one per section;
@@ -1316,8 +1317,11 @@
       return { key: x.key, name: x.name, code: x.code, rows: x.rows, first: x.first, last: x.last, names: x.names, variant: x.variant, label: x.label };
     }).sort(function (a, b) { return (a.name || a.key).localeCompare(b.name || b.key); });
     var hasNames = list.some(function (x) { return x.name; });
-    return { column: tb.sc.key, nameColumn: tb.sc.name, codeColumn: tb.sc.code, hasNames: hasNames, schemes: list, variants: variantsOnly(list, tb) };
+    /* every scheme on one day: a daily list of every fund, not a history */
+    var snapshot = list.every(function (x) { return x.rows <= 1; });
+    return { column: tb.sc.key, nameColumn: tb.sc.name, codeColumn: tb.sc.code, hasNames: hasNames, schemes: list, variants: variantsOnly(list, tb), snapshot: snapshot };
   }
+  var SNAPSHOT_COPY = 'This file is a daily snapshot: one NAV for each of its schemes, all on one day. A history needs many dates. Download the NAV history for a date range instead, and this will work.';
 
   /* ------------------------------------------------------------------ main */
 
@@ -1682,7 +1686,7 @@
    * outweighs every one of those. */
   var TYPE_WORD = /^(purchase|additional purchase|new purchase|fresh purchase|sip\b|systematic|redemption|redeem|switch|stp\b|swp\b|transfer|withdraw|money (in|out)\b|worth today|buy\b|sell\b|bought|sold|lump\s*sum|dividend|idcw|reinvest|lateral shift|segregat|gift)/i;
   var AMOUNT_HEADING = /\bamount\b|\bamt\b/;
-  var PRICE_HEADING = /\bnet asset value\b|\bnav\b|\bscheme code\b|\bindex\b|\bclos(e|ing)\b|\btotal returns?\b/;
+  var PRICE_HEADING = /\bnet asset value\b|\bnav\b|\bscheme code\b|\bindex\b|\bclos(e|ing)\b|\btotal returns?\b|\btri\b|\bsensex\b|\bnifty\b/;
   var TRI_HEADING = /\btotal returns? index\b|\btri\b/;
   var CLOSE_HEADING = /\bclos(e|ing)\b/;
 
@@ -1706,7 +1710,7 @@
 
   function rowSignals(rows) {
     var out = { header: null, typeWords: [], amountHeading: null, isin: null, priceHeadings: [],
-                identical: false, wholeBesideDecimals: false, dailyRun: false, reasons: [], dated: false, amfi: false,
+                identical: false, wholeBesideDecimals: false, dailyRun: false, weeklyRun: false, reasons: [], dated: false, amfi: false,
                 nav: false, tri: false, close: false };
     if (!rows || !rows.length) return out;
     var h = headingRow(rows);
@@ -1802,6 +1806,16 @@
       for (var g = 1; g < ts.length; g++) if ((ts[g] - ts[g - 1]) / 86400000 <= 4) short++;
       out.dailyRun = short >= (ts.length - 1) * 0.8 && !out.typeWords.length;
     }
+    /* a value on the same weekday every week, moving by small decimals: a
+       weekly sample of a price, which a fund house's page and a hand-made
+       index file both give; a weekly SIP is a round amount that stays put */
+    if (ts.length >= 8 && !out.typeWords.length && cand && cand.decimals >= 2) {
+      var weekly = 0;
+      for (var w = 1; w < ts.length; w++) { var dd = (ts[w] - ts[w - 1]) / 86400000; if (dd >= 5 && dd <= 9) weekly++; }
+      var distinct = {};
+      cand.nums.forEach(function (v) { distinct[v] = true; });
+      out.weeklyRun = weekly >= (ts.length - 1) * 0.8 && Object.keys(distinct).length >= cand.nums.length * 0.8;
+    }
     return finish();
 
     function finish() {
@@ -1810,6 +1824,7 @@
       if (out.identical) out.reasons.push('the same figure on four rows in five');
       if (out.wholeBesideDecimals) out.reasons.push('whole numbers beside a column with decimals');
       if (out.dailyRun) out.reasons.push('one row for each trading day');
+      if (out.weeklyRun) out.reasons.push('one value a week, moving by decimals');
       return out;
     }
   }
@@ -1827,7 +1842,7 @@
        heading or a run of trading days, which AMFI's and NSE's rows always
        carry. AMFI's own headings (Scheme Code, Net Asset Value) mark price
        data even on a one-day file such as NAVAll. */
-    var decisive = !!s.isin || s.priceHeadings.length > 0 || s.dailyRun;
+    var decisive = !!s.isin || s.priceHeadings.length > 0 || s.dailyRun || s.weeklyRun;
     return { prices: !statement && ((s.dated && decisive) || s.amfi), signals: s };
   }
 
@@ -1893,6 +1908,90 @@
     return out;
   }
 
+  /* ============================================== a whole page, pasted
+   *
+   * A reader on a phone selects all on a fund house's NAV history page and
+   * pastes it: menus, headings, a "NAV Range" or 52-week table, the daily
+   * table, a footer. Only the daily table is wanted. Each pasted line is cut
+   * into cells at tabs or at runs of two or more spaces (a table copied from
+   * a page keeps its cells apart that way; a line of prose does not). A line
+   * is a row of the daily table when it holds a date and a positive number
+   * with decimals; a line of words that names the columns, or a plan or
+   * option over them, is kept as a heading so side-by-side Direct and
+   * Regular columns reach the plan picker; every other line (a menu item, a
+   * sentence, a summary's figure) is dropped. The rows are then read by the
+   * same reading as any file, held to the strict standard: a date order in
+   * doubt, a line with a date and no NAV, or a day that halves or doubles the
+   * NAV, and nothing is shown. */
+  var PAGE_COPY = 'The pasted page could not be read with certainty, so nothing was taken from it. Copy only the NAV table (the rows of dates and NAVs, with their headings), or download the file instead.';
+  var PAGE_NONE_COPY = 'Nothing in the pasted text reads as a row of a date and a NAV. Copy the NAV table itself (the rows of dates and NAVs, with their headings) and paste it, or download the file instead.';
+  /* a line of heading words set one space apart ("Date NAV", "Date Direct Growth Regular Growth") */
+  var HEAD_WORD = /^(date|nav|navs|net|asset|value|values|rs|inr|per|unit|price|close|closing|index|tri|total|returns?|direct|regular|plan|option|growth|idcw|dividend|payout|reinvestment|daily|weekly|monthly|quarterly|annual|scheme|name|sale|repurchase|and|&|of|in)$/;
+  var PAGE_NOISE = /^(home|menu|login|log in|sign in|register|search|download|print|share|back|next|previous|close|help|faq|contact|about|invest now|know more|read more|view all|select|choose|apply|reset|submit)$/i;
+  function looksLikeTable(rows) {
+    if (!rows || rows.length < 3) return false;
+    var found = findHeader(rows);
+    var cols = pickColumns(found.body, found.header);
+    if (cols.dateCol === -1 || cols.valueCol === -1) return false;
+    /* most data rows carry both: a page's lines mostly carry neither */
+    var dated = 0, filled = 0;
+    found.body.forEach(function (r) { if (r && r.some(filledCell)) { filled++; if (dataRow(r)) dated++; } });
+    return filled > 0 && dated >= filled * 0.8;
+  }
+  function pageCells(line) {
+    var t = String(line == null ? '' : line).replace(/ /g, ' ').replace(/[|;]/g, '\t').trim();
+    if (!t) return [];
+    var cells = /\t/.test(t) ? t.split(/\t+/) : t.split(/\s{2,}/);
+    cells = cells.map(function (c) { return c.trim(); }).filter(Boolean);
+    /* "01-Jan-2025 45.1234" on one line with one space: a date then a number;
+       "Date NAV" on one line: the headings */
+    if (cells.length === 1) {
+      var ws = cells[0].split(/\s+/);
+      if (ws.length >= 2 && ws.length <= 8 && ws.every(function (w) { return HEAD_WORD.test(w.toLowerCase().replace(/[()\[\].:,]/g, '')); }) && /^date$/i.test(ws[0])) {
+        var out = [], cur = '', VAL = /^(nav|navs|net|asset|value|values|close|closing|index|tri|total|returns?|price|sale|repurchase)$/i, OPEN = /^(nav|navs|net|close|closing|index|tri|total|price|value|values|sale|repurchase)$/i, LINK = /^(net|total|per|asset|and|&|sale|repurchase)$/i;
+        ws.forEach(function (w) {
+          /* a new column starts at Date, at a plan word, or at a value word
+             once the heading so far already names a value ("NAV Direct NAV Regular") */
+          var prev = cur.split(' ').pop(), hasVal = cur.split(' ').some(function (x) { return VAL.test(x); });
+          if (!cur || /^(date|direct|regular)$/i.test(w) || (OPEN.test(w) && (/^date$/i.test(cur) || (hasVal && !LINK.test(prev))))) { if (cur) out.push(cur); cur = w; }
+          else cur += ' ' + w;
+        });
+        if (cur) out.push(cur);
+        return out;
+      }
+      var parts = cells[0].split(/\s+/);
+      if (parts.length >= 2 && parts.length <= 4 && readsAsDate(parts[0]) && parts.slice(1).every(function (p) { return isFinite(parseNumber(p)); })) return parts;
+      var m = /^(\d{1,2}\s+[A-Za-z]{3,9},?\s+\d{4})\s+(.+)$/.exec(cells[0]);
+      if (m) { var rest = m[2].split(/\s+/); if (rest.every(function (p) { return isFinite(parseNumber(p)); })) return [m[1]].concat(rest); }
+    }
+    return cells;
+  }
+  function pageRows(text) {
+    var lines = String(text == null ? '' : text).replace(/\r/g, '').split('\n');
+    var out = [], dropped = 0, kept = 0, headings = 0;
+    lines.forEach(function (line) {
+      var cells = pageCells(line);
+      if (!cells.length) return;
+      var isData = cells.some(readsAsDate) && cells.some(function (c) { return !readsAsDate(c) && isFinite(parseNumber(c)) && parseNumber(c) > 0; });
+      if (isData) {
+        /* a date with its NAV, nothing else on the line but numbers or a name */
+        out.push(cells); kept++; return;
+      }
+      var words = cells.filter(textCell);
+      if (!words.length || cells.length !== words.length) { dropped++; return; }
+      var joined = words.map(normHeader).join(' ');
+      if (words.every(function (w) { return PAGE_NOISE.test(w.trim()); })) { dropped++; return; }
+      /* the daily table's headings, a plan or option over its columns, or a
+         summary's heading (kept so the reading can drop the summary's rows) */
+      if (looksLikeHeader(cells) || (cells.length >= 2 && cells.every(function (c) { return variantKnown(variantOf(c)) || DATE_HEADERS.indexOf(normHeader(c)) !== -1 || /\bdate\b/.test(normHeader(c)); })) ||
+          SUMMARY_HEAD.test(joined) || (cells.length === 1 && (variantKnown(variantOf(cells[0])) || /\bfund\b|\bscheme\b/.test(joined)) && cells[0].length <= 120)) {
+        out.push(cells); headings++; return;
+      }
+      dropped++;
+    });
+    return { rows: out, kept: kept, dropped: dropped, headings: headings };
+  }
+
   /* Keep only the part of a series inside a chosen window. Both bounds are
    * inclusive, and either may be left out. */
   function sliceSeries(series, fromT, toT) {
@@ -1932,12 +2031,14 @@
     variantLabel: variantLabel,
     variantKnown: variantKnown,
     variantsDiffer: variantsDiffer,
-    PDF_COPY: PDF_COPY,
+    PDF_COPY: PDF_COPY, PDF_SCANNED_COPY: PDF_SCANNED_COPY,
     mergeVariant: mergeVariant,
     fileVariant: fileVariant,
     fundName: fundName,
     tableOf: tableOf,
-    AMBIGUOUS_VARIANTS_COPY: AMBIGUOUS_VARIANTS_COPY
+    AMBIGUOUS_VARIANTS_COPY: AMBIGUOUS_VARIANTS_COPY,
+    SNAPSHOT_COPY: SNAPSHOT_COPY,
+    pageRows: pageRows, looksLikeTable: looksLikeTable, PAGE_COPY: PAGE_COPY, PAGE_NONE_COPY: PAGE_NONE_COPY
   };
   if (typeof module === 'object' && module.exports) { module.exports = api; }
   root.PRCParse = api;

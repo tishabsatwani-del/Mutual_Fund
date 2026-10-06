@@ -38,9 +38,12 @@
      every grey in the product moves together and none of them drift apart --
      axis ticks, column headings, glosses, captions and every hint. The hue is
      unchanged; only the lightness moves. */
-  --ink-3:       #C1C9D3;   /* supporting prose: 9.9:1, was 8.1:1 */
-  --muted:       #A5B0BF;   /* captions, units, axis ticks, column headings and
-                               disabled states: 7.5:1, was 5.3:1.
+  --ink-3:       #D6DDE6;   /* supporting prose: raised again on 6 October 2026 at the
+                               owner's instruction (option labels and the lines after a
+                               file is chosen took effort to read): 12.0:1 on the card, was 9.9:1 */
+  --muted:       #BFC8D4;   /* captions, units, axis ticks, column headings and
+                               disabled states: 9.7:1 on the card, was 7.5:1 (6 October 2026;
+                               before that 5.3:1).
                                The supplied #64748B measured 3.47:1 there, which is
                                under the 4.5 floor, so it is lifted well past it. */
 
@@ -1244,6 +1247,16 @@ details.overlapinfo summary, details.teachnotes summary { color: var(--ink-2); }
 #cmp-scheme-wrap[data-folded="yes"] .picker,
 #cmp-scheme-wrap[data-folded="yes"] > p.hint:not(.pickedline) { display: none; }
 .pickedline { margin: .4rem 0 0; }
+/* The pieces of one history, each on its own line with its own Remove. */
+ul.pieces { list-style: none; margin: .6rem 0 0; padding: 0; display: grid; gap: .35rem; }
+ul.pieces .piece {
+  display: flex; align-items: center; justify-content: space-between; gap: .6rem;
+  padding: .5rem .7rem; background: var(--surface-2); border: 1px solid var(--line); border-radius: 9px;
+}
+ul.pieces .pc-t { display: block; min-width: 0; }
+ul.pieces .pc-name { display: block; font-size: .9rem; color: var(--ink); overflow-wrap: anywhere; }
+ul.pieces .pc-sub { display: block; font-size: .84rem; color: var(--ink-3); margin-top: .1rem; }
+ul.pieces .pc-remove { flex: none; min-height: 44px; }
 .waitline {
   margin: .8rem 0 0; padding: .6rem .9rem; border: 1px dashed var(--line-strong);
   border-radius: 10px; color: var(--ink-2);

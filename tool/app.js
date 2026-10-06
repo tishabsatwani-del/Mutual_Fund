@@ -272,26 +272,43 @@
     var ropts = { noun: (opts && opts.noun) || 'fund', fileName: file.name || '' };
     /* a slot that takes a fund's NAV history takes a fund house's download
        as it comes: an old .xls, or a PDF with its words in it */
-    var navFile = !!(opts && opts.navFile), pdf = false;
+    var pdf = false;
     if (file.pastedText != null) {
-      try { var pasteRows = P.parseDelimited(file.pastedText); finish(P.rowsToSeries(pasteRows, ropts), pasteRows); }
+      try {
+        var pasteRows = P.parseDelimited(file.pastedText);
+        /* two columns, or a table with its headings and nothing else: read as a
+           file is. Anything with other lines in it (menus, a title, a summary)
+           is taken for a whole page, and the daily table is picked out of it. */
+        var picked = P.pageRows(file.pastedText);
+        /* bare rows with nothing else in them are rows, whatever they hold: the
+           slot's own gate says what they are (a statement, prices) */
+        if (!picked.dropped) { finish(P.rowsToSeries(pasteRows, ropts), pasteRows); return; }
+        if (picked.kept < 2) { onError(picked.kept ? P.PAGE_COPY : P.PAGE_NONE_COPY, { page: picked }); return; }
+        ropts.strict = true; ropts.doubtCopy = P.PAGE_COPY;
+        var pres = P.rowsToSeries(picked.rows, ropts);
+        if (pres.ok || pres.code === 'MANY_SCHEMES') pres.page = picked;
+        if (!pres.ok && pres.code !== 'MANY_SCHEMES') { onError(/^(DOUBTFUL|NO_COLUMNS|TOO_FEW_ROWS|FLAT|MIXED_SERIES)$/.test(pres.code) ? P.PAGE_COPY : pres.message, { page: picked }); return; }
+        finish(pres, picked.rows);
+      }
       catch (err) { onError('Those pasted rows could not be read (' + (err && err.message ? err.message : 'unknown') + ').'); }
       return;
     }
     if (onProgress) onProgress('Reading ' + file.name + '…');
+    /* every slot that takes a price history takes a fund house's or an
+       exchange's download as it comes: a PDF with its words in it, or an old .xls */
     if (/\.pdf$/.test(name)) {
-      if (!navFile || !root.PRCPdfRows) { onError(P.NOT_TABULAR_COPY); return; }
+      if (!root.PRCPdfRows) { onError(P.NOT_TABULAR_COPY); return; }
       /* read on the device, held to the strict standard: a doubtful reading shows nothing */
       pdf = true; ropts.strict = true; ropts.doubtCopy = P.PDF_COPY;
       root.PRCPdfRows.read(file).then(function (rows) {
         var res = P.rowsToSeries(rows, ropts);
-        if (!res.ok && res.code !== 'MANY_SCHEMES') { onError(P.PDF_COPY); return; }
+        if (!res.ok && res.code !== 'MANY_SCHEMES') { onError(pdfWhy(rows, res)); return; }
         finish(res, rows);
-      }, function () { onError(P.PDF_COPY); });
+      }, function (err) { onError(err && err.scanned ? P.PDF_SCANNED_COPY : P.PDF_COPY); });
       return;
     }
     if (/\.xls$/.test(name)) {
-      if (!navFile || !root.PRCXls) { onError(BINARY_COPY.oldexcel); return; }
+      if (!root.PRCXls) { onError(BINARY_COPY.oldexcel); return; }
       file.arrayBuffer().then(function (buf) {
         var got = root.PRCXls.read(buf);
         if (got.kind === 'zip') { readXlsx(); return; }
@@ -342,7 +359,20 @@
       var kind = looksBinary(fr.result);
       if (kind === 'pdf') { onError(P.NOT_TABULAR_COPY); return; }
       if (kind) { onError(BINARY_COPY[kind] || BINARY_COPY.binary); return; }
-      try { var rows = P.parseDelimited(fr.result); finish(P.rowsToSeries(rows, ropts), rows); }
+      try {
+        var rows = P.parseDelimited(fr.result);
+        /* a page saved as text (select all, copy, save) is read as a pasted page is */
+        var pk = P.pageRows(fr.result);
+        if (!P.looksLikeTable(rows) || (pk.dropped && pk.kept >= 2 && /\.txt$/.test(name))) {
+          if (pk.kept >= 2) {
+            ropts.strict = true; ropts.doubtCopy = P.PAGE_COPY;
+            var pr = P.rowsToSeries(pk.rows, ropts);
+            if (pr.ok || pr.code === 'MANY_SCHEMES') { pr.page = pk; finish(pr, pk.rows); return; }
+            if (/^(DOUBTFUL|FLAT|MIXED_SERIES)$/.test(pr.code)) { onError(P.PAGE_COPY, { page: pk }); return; }
+          }
+        }
+        finish(P.rowsToSeries(rows, ropts), rows);
+      }
       catch (err) { onError('That file could not be read (' + (err && err.message ? err.message : 'unknown') + ').'); }
     };
     fr.readAsText(file);
@@ -350,9 +380,11 @@
       if (!res.ok) {
         if (res.code === 'MANY_SCHEMES' && rows) {
           var listed = P.listSchemes(rows, ropts.fileName);
-          if (listed) { onError(res.message, { rows: rows, schemes: listed.schemes, hasNames: listed.hasNames, variants: listed.variants }); return; }
+          /* every scheme on one day: a daily list, refused as one before any pick */
+          if (listed && listed.snapshot) { onError(P.SNAPSHOT_COPY, { rows: rows, snapshot: true }); return; }
+          if (listed) { onError(res.message, { rows: rows, schemes: listed.schemes, hasNames: listed.hasNames, variants: listed.variants, page: res.page || null }); return; }
         }
-        if (pdf) { onError(P.PDF_COPY); return; }
+        if (pdf) { onError(pdfWhy(rows, res)); return; }
         onError(res.message, { rows: rows || null });
         return;
       }
@@ -360,13 +392,41 @@
       onSeries(res);
     }
   }
+  /* why a PDF was turned down, where its words say: a statement or an index
+     in a NAV slot keeps its own sentence; a one-day list is called one;
+     anything doubtful is the strict refusal */
+  function pdfWhy(rows, res) {
+    if (res && res.code === 'ONE_DAY_ONLY') return P.SNAPSHOT_COPY;
+    return P.PDF_COPY;
+  }
   /* A statement file: rows or text, whichever the file gives, plus the sheet list of a workbook. */
   var EXCEL_UNREAD = 'That Excel file could not be read here. Open it and save it as CSV, then load that.';
   var EXCEL_LOCKED = 'That Excel file is locked with a password, so nothing in it can be read. Open it with its password, save a copy as CSV or Excel without one, and load that.';
+  /* A statement that comes as a PDF: read on the device (pdfrows.js) when it
+     is one table of text with its headings, every row under them; refused in a
+     sentence when it is a scanned picture, holds several tables laid out
+     differently (two headings that do not match), or is locked. Nothing is
+     guessed out of a page. */
+  var PDF_STATEMENT_TABLES = 'This PDF holds more than one table, each with different columns, so its lines cannot be read as one statement with certainty. Download the same statement as Excel or CSV instead.';
+  var PDF_STATEMENT_SCANNED = 'This PDF holds no text, only a picture of the page, so nothing in it can be read. Download the statement as Excel or CSV, or a PDF with selectable text.';
+  var PDF_STATEMENT_NONE = 'No table of dated transactions was found in this PDF. Download the same statement as Excel or CSV instead, or copy its rows and paste them in.';
+  function readStatementPdf(file) {
+    if (!root.PRCPdfRows) return Promise.reject(new Error(P.NOT_TABULAR_COPY));
+    return root.PRCPdfRows.read(file, { statement: true }).then(function (rows) {
+      if (rows.tables && rows.tables > 1) throw new Error(PDF_STATEMENT_TABLES);
+      return { rows: rows, sheets: null, pdf: true };
+    }, function (err) {
+      var e = new Error(err && err.scanned ? PDF_STATEMENT_SCANNED : err && err.locked ? EXCEL_LOCKED.replace('Excel file', 'PDF') : PDF_STATEMENT_NONE);
+      e.statement = true; throw e;
+    });
+  }
   function readStatement(file, sheet) {
     if (file.pastedText != null) return Promise.resolve({ text: file.pastedText, sheets: null });
     var name = (file.name || '').toLowerCase();
-    if (/\.pdf$/.test(name)) return Promise.reject(new Error(P.NOT_TABULAR_COPY));
+    if (/\.(docx?|pptx?|png|jpe?g|gif|webp|heic|zip|rar|7z)$/.test(name)) {
+      return Promise.reject(new Error('That is a ' + name.replace(/^.*\./, '.') + ' file. This screen reads a statement of your payments as a table, so load the CSV or Excel your fund house, registrar or app gives, or copy the rows and paste them in.'));
+    }
+    if (/\.pdf$/.test(name)) return readStatementPdf(file);
     /* An old Excel statement, in whichever of its forms (xls.js): the tab
        asked for, else the first tab that reads as a statement, else the
        first. A newer workbook under the old name goes the .xlsx way. */
@@ -427,9 +487,9 @@
     });
   }
 
-  var FILE_ACCEPT = '.csv,.txt,.tsv,.xls,.xlsx,.json,text/csv,text/comma-separated-values,text/plain,text/tab-separated-values,application/json,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/octet-stream';
-  /* a slot that takes a fund's NAV history takes its PDF too */
-  var NAV_ACCEPT = FILE_ACCEPT + ',.pdf,application/pdf';
+  var FILE_ACCEPT = '.csv,.txt,.tsv,.xls,.xlsx,.json,.pdf,text/csv,text/comma-separated-values,text/plain,text/tab-separated-values,application/json,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/pdf,application/octet-stream';
+  /* every slot takes the same files now: a PDF with its words in it is read in each */
+  var NAV_ACCEPT = FILE_ACCEPT;
 
   /* the picker takes a moment, and the button says so */
   var PICK_WAIT_MS = 400, PICK_GIVE_UP_MS = 25000, activePick = null;

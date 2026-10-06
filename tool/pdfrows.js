@@ -53,10 +53,15 @@
       return { str: it.str, x: it.transform[4], y: it.transform[5], w: it.width || 0, h: Math.abs(it.transform[3]) || it.height || 10 };
     });
   }
-  function read(file) {
+  function read(file, opts) {
     return file.arrayBuffer().then(function (buf) {
       return lib().then(function (pdfjs) { return pagesOf(new Uint8Array(buf), pdfjs); });
-    }).then(rowsFromPages);
+    }, function (err) {
+      /* pdf.js names a locked file; anything else is not a PDF that can be opened */
+      var e = new Error(err && err.name === 'PasswordException' ? 'locked' : 'unreadable');
+      if (err && err.name === 'PasswordException') e.locked = true;
+      throw e;
+    }).then(function (pages) { return rowsFromPages(pages, opts); });
   }
 
   /* ------------------------------------------------------------ words into lines */
@@ -108,13 +113,16 @@
   }
 
   var DATE_WORD = /\bdate\b|\bas on\b|\bperiod\b|\bday\b/;
-  var VALUE_WORD = /\bnav\b|\bnet asset value\b|\bvalue\b|\bprice\b|\bclos(e|ing)\b|\brepurchase\b|\bindex\b|\bgrowth\b|\bidcw\b|\bdirect\b|\bregular\b/;
+  var VALUE_WORD = /\bnav\b|\bnet asset value\b|\bvalue\b|\bprice\b|\bclos(e|ing)\b|\brepurchase\b|\bindex\b|\bgrowth\b|\bidcw\b|\bdirect\b|\bregular\b|\btri\b|\btotal returns?\b/;
+  /* a statement's headings name an amount, units or what happened */
+  var STATEMENT_WORD = /\bamount\b|\bamt\b|\bunits?\b|\btransaction\b|\btype\b|\bdescription\b|\bparticulars\b|\bnarration\b|\bfolio\b|\bscheme\b|\bcash flow\b/;
   function isText(t) { return !P.readsAsDate(t) && !isFinite(P.parseNumber(t)); }
-  function headerLine(line) {
+  function headerLine(line, statement) {
     var segs = line.segs;
     if (segs.length < 2 || !segs.every(function (s) { return isText(s.text); })) return false;
     var words = segs.map(function (s) { return P.normHeader(s.text); });
-    return words.some(function (w) { return DATE_WORD.test(w); }) && words.some(function (w) { return !DATE_WORD.test(w) && VALUE_WORD.test(w); });
+    var named = statement ? function (w) { return VALUE_WORD.test(w) || STATEMENT_WORD.test(w); } : function (w) { return VALUE_WORD.test(w); };
+    return words.some(function (w) { return DATE_WORD.test(w); }) && words.some(function (w) { return !DATE_WORD.test(w) && named(w); });
   }
   function dataLine(line) {
     var segs = [];
@@ -160,14 +168,22 @@
   }
   function joined(line) { return [line.segs.map(function (s) { return s.text; }).join(' ')]; }
 
-  function rowsFromPages(pages) {
-    var rows = [], layout = null, words = 0;
+  function rowsFromPages(pages, opts) {
+    var statement = !!(opts && opts.statement);
+    var rows = [], layout = null, words = 0, heads = [];
+    var SUMMARY = /\bnav range\b|\b52\s*weeks?\b|\bhighest\b|\blowest\b/;
+    function noteHead(line) {
+      var key = line.segs.map(function (s) { return P.normHeader(s.text); }).join('|');
+      /* a summary's headings (a year's highest and lowest NAV) are not another table */
+      if (SUMMARY.test(key)) return;
+      if (heads.indexOf(key) === -1) heads.push(key);
+    }
     (pages || []).forEach(function (items) {
       var lines = linesOf(items);
       words += lines.length;
       var at = -1;
-      for (var i = 0; i < lines.length && at === -1; i++) if (headerLine(lines[i])) at = i;
-      if (at !== -1) layout = columnsOf(lines[at]);
+      for (var i = 0; i < lines.length && at === -1; i++) if (headerLine(lines[i], statement)) at = i;
+      if (at !== -1) { layout = columnsOf(lines[at]); noteHead(lines[at]); }
       lines.forEach(function (line, i) {
         if (at !== -1 && i < at) {
           /* the line just over the headings may name their groups */
@@ -176,13 +192,15 @@
           rows.push(near ? placeGroups(line.segs, layout) : joined(line));
           return;
         }
-        if (i === at || (layout && headerLine(line))) { rows.push(layout ? place(line.segs, columnsOf(line)) : joined(line)); return; }
+        if (i === at || (layout && headerLine(line, statement))) { if (i !== at) noteHead(line); rows.push(layout ? place(line.segs, columnsOf(line)) : joined(line)); return; }
         var segs = layout ? dataLine(line) : null;
         rows.push(segs ? place(segs, layout) : joined(line));
       });
     });
-    if (!words) throw new Error('no words in this PDF');
+    if (!words) { var scanned = new Error('no words in this PDF'); scanned.scanned = true; throw scanned; }
     if (!layout) throw new Error('no table of dates and values in this PDF');
+    /* how many differently headed tables the pages hold: a statement is read only from one */
+    rows.tables = heads.length;
     return rows;
   }
 

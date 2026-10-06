@@ -117,7 +117,7 @@
     $('#pf-index-howto').innerHTML = D.guide('index');
     PF.indexDoor = D.mount($('#pf-index-door'), {
       prefix: 'pfix', kind: 'index', noun: 'index', label: 'The index’s total return (TRI) history file',
-      hint: 'CSV, Excel or text · a date column and the index value on that date',
+      hint: 'CSV, Excel, PDF or text · a date column and the index value on that date · several pieces of one history are joined',
       gate: indexGate,
       ask: function (res) {
         var parts = res.parts || [{ rows: res.rows, name: res.file }];
@@ -162,8 +162,12 @@
      values say nothing, and are read, as a NAV history's must be. */
   var INDEX_AT_NAV = 'This is an index file, not a fund’s NAV. Your units are valued at the fund’s own NAV: load that fund’s NAV history here. An index goes in step 3, to compare with.';
   function navGate(rows, name) {
+    /* a statement or a tradebook is named as one first; then an index by its
+       headings (TRI, Close, Index, Sensex, Nifty, BSE, NSE) with no fund's word, never a fund's NAV */
+    var v = P.checkSchema(rows, { slot: 'nav' });
+    if (!v.ok && v.code === 'TRADEBOOK') return schemaGate(rows, 'nav');
     var k = P.indexFileKind(rows, name), head = (P.rowSignals(rows).header || []).map(P.normHeader).join(' | ');
-    if (!k.nav && (k.kind === 'TRI' || /\bindex name\b/.test(head) || (k.kind === 'PRICE' && /\bshares traded\b|\bturnover\b/.test(head)))) return notice('bad', esc(INDEX_AT_NAV));
+    if (!k.nav && (k.kind === 'TRI' || k.kind === 'PRICE' || /\bindex name\b/.test(head) || P.indexOrFund(rows, name).verdict === 'index')) return notice('bad', esc(INDEX_AT_NAV));
     return schemaGate(rows, 'nav');
   }
   function fundCmp() { return !!(PF.index && PF.index.kind === 'NAV'); }   /* never, since step 3 takes an index only */
@@ -204,7 +208,7 @@
   /* The payments card, drawn like every other file slot's: the file's name with
      a tick when it is read, with the mark when it is refused, and the same
      file chosen again is not read again. */
-  var PF_IDLE = '<span class="filewrap"><input type="file" class="filepick" id="pf-file" accept="' + A.FILE_ACCEPT + '" aria-label="Choose your statement file" title="Choose a file"></span><p>or drop it here · CSV or Excel</p>';
+  var PF_IDLE = '<span class="filewrap"><input type="file" class="filepick" id="pf-file" accept="' + A.FILE_ACCEPT + '" aria-label="Choose your statement file" title="Choose a file"></span><p>or drop it here · CSV, Excel or a PDF with selectable text</p>';
   function card(state, name) {
     var drop = $('#pf-drop'); if (!drop) return;
     drop.className = 'filebox' + (state ? ' ' + state : '');
@@ -325,7 +329,8 @@
         (PF.switches ? ' ' + PF.switches + (PF.switches === 1 ? ' switch between funds was' : ' switches between funds were') + ' recognised and left out of the totals of money put in and taken out.' : '') +
         (!r.dateCertain && r.example ? ' These dates read two ways; ' + esc(r.example.raw) + ' has been read as ' + esc(r.example.dayFirst) + '. Check the lines below.' : '') +
         (nPaid ? ' IDCW paid to you: ' + nPaid + (nPaid === 1 ? ' line, ' : ' lines, ') + money(paid) + ', counted as money out.' : '') +
-        (nRe ? ' IDCW reinvested: ' + nRe + (nRe === 1 ? ' line, ' : ' lines, ') + money(re) + ', counted as units added, not as money in.' : '') + '</p>' +
+        (nRe ? ' IDCW reinvested: ' + nRe + (nRe === 1 ? ' line, ' : ' lines, ') + money(re) + ', counted as units added, not as money in.' : '') +
+        (r.failed && r.failed.length ? ' <strong>' + r.failed.length + (r.failed.length === 1 ? ' line' : ' lines') + ' marked ' + esc(failedWords(r.failed)) + ' left out</strong>: ' + money(r.failed.reduce(function (a, f) { return a + f.amount; }, 0)) + ' that never moved.' : '') + '</p>' +
         '<div class="stats">' + stat('Money in', money(ins) + (nIn ? ' · ' + nIn : '')) + stat('Money out', nOut ? money(outs) + ' · ' + nOut : 'none') +
         (named ? stat('Funds named', String(groups.length)) : '') + '</div>' +
         (named ? '<div class="fundcards">' + groups.map(function (g) {
@@ -348,6 +353,12 @@
       });
     });
     drawFundCards();
+  }
+  /* the words a statement used for the lines it did not put through: "rejected or failed" */
+  function failedWords(list) {
+    var seen = [];
+    list.forEach(function (f) { var w = (/\b(rejected|failed|cancelled|canceled|reversed|bounced|declined|unsuccessful|pending|returned|expired)\b/i.exec(f.status) || [f.status])[0].toLowerCase(); if (seen.indexOf(w) === -1) seen.push(w); });
+    return seen.slice(0, 3).join(' or ');
   }
   function fig(k, v) { return '<span class="fc-fig"><span class="k">' + esc(k) + '</span> <b>' + v + '</b></span>'; }
   function readLine(i, title, pairs) {

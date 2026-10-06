@@ -141,7 +141,24 @@
   var PRICE_HEADERS = /\bnav\b|net\s*asset|\bprice\b|\bclose\b|\bclosing\b|repurchase/i;
   var ISIN_HEADERS = /\bisin\b/;
   var CODE_HEADERS = /^(scheme code|amfi code|amfi scheme code|amfi)$/;
+  /* a column that says whether a line went through; a line that did not is not a payment */
+  var STATUS_HEADERS = /^(status|txn status|transaction status|payment status|order status|state|result)$/;
+  var FAILED_STATUS = /\b(rejected|reject|failed|failure|fail|cancelled|canceled|reversed|reversal|bounced|bounce|declined|unsuccessful|not processed|pending|in process|processing|initiated|awaiting|returned|expired)\b/i;
   function plain(h) { return P.normHeader(h); }
+
+  /* A broker's tradebook of shares: an exchange, a symbol, a buy/sell side,
+     a quantity, an order or trade id, a brokerage. None of those is on a
+     mutual fund statement, which names a scheme, a folio, units and a NAV. */
+  var BROKER_HEADING = /\bexchange\b|\bsymbol\b|\bsegment\b|\border[ _-]*(id|no|number)\b|\btrade[ _-]*(id|no|number)\b|\bbrokerage\b|\bbuy[ _\/-]*sell\b|\bside\b|\bticker\b|\bscrip\b|\bstock\b|\bseries\b/;
+  var MF_HEADING = /\bscheme\b|\bfund\b|\bfolio\b|\bunits?\b|\bnav\b|\bamfi\b|\bisin\b|\bsip\b|\bplan\b|\boption\b|\bamc\b/;
+  function brokerTradebook(rows) {
+    var h = P.headingRow(rows);
+    if (h < 0) return false;
+    var heads = rows[h].map(plain).filter(Boolean);
+    var broker = heads.filter(function (x) { return BROKER_HEADING.test(x); }).length;
+    var mf = heads.some(function (x) { return MF_HEADING.test(x); });
+    return broker >= 2 && !mf;
+  }
 
   /* ----------------------------------------------------- a transaction statement */
   function ledgerRows(input, options) {
@@ -172,11 +189,12 @@
     if (amountCol < 0) return ledgerFail('NO-AMOUNT', MESSAGES.ledgerNoAmount);
     var fundCol = fundColumn(header, width, dateCol, amountCol);
     var unitsCol = unitsColumn(header, width, dateCol, amountCol, fundCol);
-    var isinCol = -1, codeCol = -1;
+    var isinCol = -1, codeCol = -1, statusCol = -1;
     if (header) header.forEach(function (h, i) {
       var p = plain(h);
       if (isinCol === -1 && ISIN_HEADERS.test(p)) isinCol = i;
       if (codeCol === -1 && CODE_HEADERS.test(p)) codeCol = i;
+      if (statusCol === -1 && i !== dateCol && i !== amountCol && i !== fundCol && STATUS_HEADERS.test(p)) statusCol = i;
     });
 
     var signed = false;
@@ -218,11 +236,16 @@
       }
     }
 
-    var out = [], valuations = [], skipped = 0;
+    var out = [], valuations = [], skipped = 0, failed = [];
     for (var i = 0; i < body.length; i++) {
       var t = dateOf(body[i][dateCol], dayFirst);
       var n = ledgerAmount(body[i][amountCol]);
       if (!isFinite(t) || !isFinite(n) || n === 0) { skipped++; continue; }
+      /* a line the bank or the registrar did not put through moved no money */
+      if (statusCol >= 0) {
+        var st = String(body[i][statusCol] == null ? '' : body[i][statusCol]).trim();
+        if (st && FAILED_STATUS.test(st)) { failed.push({ t: t, amount: Math.abs(n), status: st, line: i + (header ? 2 : 1) }); continue; }
+      }
       var dir = n < 0 ? 'out' : 'in';
       var fund = fundCol >= 0 ? String(body[i][fundCol] == null ? '' : body[i][fundCol]).trim() : '';
       var ik = typeCol >= 0 ? idcwKind(body[i][typeCol]) : null;
@@ -244,10 +267,10 @@
                  fund: fund, isin: P.ISIN_RE.test(isin) ? isin : '', code: code, line: i + (header ? 2 : 1) });
     }
     return {
-      ok: out.length > 0, rows: out, valuations: valuations, skipped: skipped, header: header,
-      dateCol: dateCol, amountCol: amountCol, fundCol: fundCol, unitsCol: unitsCol, typeCol: typeCol,
+      ok: out.length > 0, rows: out, valuations: valuations, skipped: skipped, failed: failed, header: header,
+      dateCol: dateCol, amountCol: amountCol, fundCol: fundCol, unitsCol: unitsCol, typeCol: typeCol, statusCol: statusCol,
       words: words, dayFirst: dayFirst, dateCertain: dateCertain, example: example,
-      code: out.length ? null : 'NO-ROWS', message: out.length ? null : MESSAGES.ledgerNoRows
+      code: out.length ? null : 'NO-ROWS', message: out.length ? null : (failed.length ? MESSAGES.allFailed : MESSAGES.ledgerNoRows)
     };
   }
 
@@ -525,7 +548,8 @@
      NAV, and rows that say nothing of what they are, keep the brief's sentence. */
   function pricesMessage(rows) {
     var k = P.indexFileKind ? P.indexFileKind(rows, '') : null;
-    return k && !k.nav && k.kind ? MESSAGES.indexNotPayments : MESSAGES.pricesNotPayments;
+    if (k && !k.nav && (k.kind || (P.indexOrFund && P.indexOrFund(rows, '').verdict === 'index'))) return MESSAGES.indexNotPayments;
+    return MESSAGES.pricesNotPayments;
   }
 
   /* ------------------------------------------------ which file is this? */
@@ -539,6 +563,10 @@
     if (looks.prices) {
       return { ok: false, kind: 'prices', rows: [], valuations: [], skipped: 0, code: 'PRICES',
                message: pricesMessage(rows), reasons: looks.signals.reasons };
+    }
+    /* a broker's record of shares traded is not a mutual fund statement */
+    if (brokerTradebook(rows)) {
+      return { ok: false, kind: 'tradebook', rows: [], valuations: [], skipped: 0, code: 'TRADEBOOK', message: MESSAGES.brokerTradebook };
     }
     var holdings = holdingsRows(rows, options);
     if (holdings.ok) return holdings;
@@ -619,6 +647,10 @@
                        'would produce a confident and completely wrong figure, so it is refused here. ' +
                        'This screen wants your holdings or your transaction statement. To measure the ' +
                        'fund itself, use Rolling returns, which is the screen this file belongs to.',
+    brokerTradebook: 'This looks like a broker’s tradebook of shares: an exchange, a symbol, a buy or sell side and a quantity. ' +
+                     'It is not a mutual fund statement, and its quantities and prices are not payments. This screen wants ' +
+                     'your mutual fund transaction statement or holdings statement, from the fund house, the registrar or the app you invest through.',
+    allFailed: 'Every line in this statement is marked rejected, failed or cancelled, so none of them moved any money. There is nothing to measure.',
     neitherShape: 'I could not read this as either kind of file. Two downloads work here: your holdings ' +
                   'or portfolio statement, which lists each fund with what you put in and what it is ' +
                   'worth; or your transaction statement, which lists each payment with its date. A ' +
