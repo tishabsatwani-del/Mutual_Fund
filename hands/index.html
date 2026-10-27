@@ -9,19 +9,21 @@
 <link rel="icon" href="data:,">
 <style>
 :root {
-  --paper: #F6F8FF;
-  --ink: #14203F;
-  --ink-2: #4B5675;
-  --accent: #3A4BC0;
-  --rule: #D3DAF3;
+  --paper: #F6F7FC;
+  --paper-2: #E9ECF8;
+  --ink: #23263A;
+  --ink-2: #5C6280;
+  --accent: #535FC0;
+  --rule: #DCE0F0;
   --sans: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 @media (prefers-color-scheme: dark) {
-  :root { --paper: #0D1430; --ink: #DEE5FF; --ink-2: #AEB7D9; --accent: #9AA8FF; --rule: #2A3460; }
+  :root { --paper: #0E1020; --paper-2: #171B33; --ink: #E4E8FA; --ink-2: #A3A9C7; --accent: #A5B0FF; --rule: #272C4A; }
 }
 * { box-sizing: border-box; }
-html { background: var(--paper); -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
-body { margin: 0; background: var(--paper); color: var(--ink); font: 17px/1.55 var(--sans); }
+html { background: var(--paper) linear-gradient(170deg, var(--paper), var(--paper-2)) no-repeat; min-height: 100%;
+  -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+body { margin: 0; color: var(--ink); font: 17px/1.55 var(--sans); }
 main { max-width: 34rem; margin: 0 auto; padding: 2.4rem 1.25rem 2.75rem; }
 h1 { font: 400 1.7rem/1.2 var(--sans); letter-spacing: .08em; margin: 0 0 .55rem; }
 .line { font: italic 1.15rem/1.45 var(--sans); margin: 0 0 1.6rem; color: var(--ink-2); }
