@@ -141,8 +141,25 @@
   var PRICE_HEADERS = /\bnav\b|net\s*asset|\bprice\b|\bclose\b|\bclosing\b|repurchase/i;
   var ISIN_HEADERS = /\bisin\b/;
   var CODE_HEADERS = /^(scheme code|amfi code|amfi scheme code|amfi)$/;
+  /* the net of a line (amount less stamp duty, or less STT and TDS), the taxes as columns,
+     the folio, the running unit balance after the line */
+  var NET_HEADERS = /^(net amount|net amt|net amount inr|net amount rs|net)$/;
+  var STAMP_HEADERS = /\bstamp\b/;
+  var STT_HEADERS = /^(stt|stt inr|stt rs|securities transaction tax)$/;
+  var TDS_HEADERS = /^(tds|tds inr|tds rs|tax deducted at source)$/;
+  var FOLIO_HEADERS = /^(folio|folio no|folio number|folio num|folio_no|folio id)$/;
+  var BALANCE_HEADERS = /^(unit balance|units? balance|balance units?|closing (unit )?balance|cumulative units?|cum units?|running (unit )?balance|balance)$/;
+  /* a line that is a tax on another line, not a payment of its own */
+  function taxKind(word) {
+    var t = P.normHeader(word);
+    if (!t) return null;
+    if (/\bstamp\s*duty\b/.test(t)) return 'stamp';
+    if (/\bstt\b|securities transaction tax/.test(t)) return 'stt';
+    if (/\btds\b|tax deducted/.test(t)) return 'tds';
+    return null;
+  }
   /* a column that says whether a line went through; a line that did not is not a payment */
-  var STATUS_HEADERS = /^(status|txn status|transaction status|payment status|order status|state|result)$/;
+  var STATUS_HEADERS = /^(status|txn status|trxn status|transaction status|payment status|order status|state|result)$/;
   var FAILED_STATUS = /\b(rejected|reject|failed|failure|fail|cancelled|canceled|reversed|reversal|bounced|bounce|declined|unsuccessful|not processed|pending|in process|processing|initiated|awaiting|returned|expired)\b/i;
   function plain(h) { return P.normHeader(h); }
 
@@ -189,12 +206,19 @@
     if (amountCol < 0) return ledgerFail('NO-AMOUNT', MESSAGES.ledgerNoAmount);
     var fundCol = fundColumn(header, width, dateCol, amountCol);
     var unitsCol = unitsColumn(header, width, dateCol, amountCol, fundCol);
-    var isinCol = -1, codeCol = -1, statusCol = -1;
+    var isinCol = -1, codeCol = -1, statusCol = -1, netCol = -1, stampCol = -1, sttCol = -1, tdsCol = -1, folioCol = -1, balanceCol = -1;
     if (header) header.forEach(function (h, i) {
       var p = plain(h);
+      if (i === dateCol || i === amountCol) return;
       if (isinCol === -1 && ISIN_HEADERS.test(p)) isinCol = i;
       if (codeCol === -1 && CODE_HEADERS.test(p)) codeCol = i;
-      if (statusCol === -1 && i !== dateCol && i !== amountCol && i !== fundCol && STATUS_HEADERS.test(p)) statusCol = i;
+      if (statusCol === -1 && i !== fundCol && STATUS_HEADERS.test(p)) statusCol = i;
+      if (netCol === -1 && NET_HEADERS.test(p)) netCol = i;
+      if (stampCol === -1 && STAMP_HEADERS.test(p)) stampCol = i;
+      if (sttCol === -1 && STT_HEADERS.test(p)) sttCol = i;
+      if (tdsCol === -1 && TDS_HEADERS.test(p)) tdsCol = i;
+      if (folioCol === -1 && FOLIO_HEADERS.test(p)) folioCol = i;
+      if (balanceCol === -1 && i !== unitsCol && BALANCE_HEADERS.test(p)) balanceCol = i;
     });
 
     var signed = false;
@@ -236,7 +260,7 @@
       }
     }
 
-    var out = [], valuations = [], skipped = 0, failed = [];
+    var out = [], valuations = [], skipped = 0, failed = [], taxes = [];
     for (var i = 0; i < body.length; i++) {
       var t = dateOf(body[i][dateCol], dayFirst);
       var n = ledgerAmount(body[i][amountCol]);
@@ -249,6 +273,11 @@
       var dir = n < 0 ? 'out' : 'in';
       var fund = fundCol >= 0 ? String(body[i][fundCol] == null ? '' : body[i][fundCol]).trim() : '';
       var ik = typeCol >= 0 ? idcwKind(body[i][typeCol]) : null;
+      var u = unitsCol >= 0 ? ledgerAmount(body[i][unitsCol]) : NaN;
+      var folio = folioCol >= 0 ? String(body[i][folioCol] == null ? '' : body[i][folioCol]).trim() : '';
+      /* a line that is only a tax on another line of the same day needs no direction: folded into it below */
+      var tk = typeCol >= 0 ? taxKind(body[i][typeCol]) : null;
+      if (tk && !(isFinite(u) && Math.abs(u) > 0)) { taxes.push({ t: t, kind: tk, amount: Math.abs(n), fund: fund, folio: folio, line: i + (header ? 2 : 1) }); continue; }
       if (dirMap && !ik) {
         var word = String(body[i][typeCol] == null ? '' : body[i][typeCol]).trim().toLowerCase();
         var said = dirMap[word];
@@ -256,22 +285,104 @@
         if (said === 'value') { valuations.push({ t: t, amount: Math.abs(n), fund: fund, line: i + (header ? 2 : 1) }); continue; }
         if (said) dir = said;
       }
-      var u = unitsCol >= 0 ? ledgerAmount(body[i][unitsCol]) : NaN;
       if (ik === 'idcw') ik = isFinite(u) && Math.abs(u) > 0 ? 'reinvest' : 'payout';
       /* a payout leaves the units as they were; a reinvestment adds units, and no money */
       if (ik === 'payout') { dir = 'out'; u = NaN; }
       else if (ik === 'reinvest') dir = 'reinvest';
       var isin = isinCol >= 0 ? String(body[i][isinCol] == null ? '' : body[i][isinCol]).trim().toUpperCase() : '';
       var code = codeCol >= 0 ? String(body[i][codeCol] == null ? '' : body[i][codeCol]).trim() : '';
-      out.push({ t: t, amount: Math.abs(n), dir: dir, units: isFinite(u) ? Math.abs(u) : null, idcw: ik || null,
-                 fund: fund, isin: P.ISIN_RE.test(isin) ? isin : '', code: code, line: i + (header ? 2 : 1) });
+      var gross = Math.abs(n), cash = gross;
+      /* what moved in cash: the amount column, which a registrar's export fills with the money
+         paid or received. Where the statement also prints a Net Amount, the two together settle
+         it: a purchase cost the larger (its stamp duty is inside the gross), a redemption paid out
+         the smaller (less STT and TDS). A stamp duty or STT column on its own is never added or
+         taken off: the amount already says what moved, and a guess either way would be a guess. */
+      var net = netCol >= 0 ? ledgerAmount(body[i][netCol]) : NaN;
+      if (isFinite(net) && net > 0 && ik !== 'reinvest') cash = dir === 'out' ? Math.min(gross, Math.abs(net)) : Math.max(gross, Math.abs(net));
+      var bal = balanceCol >= 0 ? ledgerAmount(body[i][balanceCol]) : NaN;
+      out.push({ t: t, amount: cash, gross: gross, dir: dir, units: isFinite(u) ? Math.abs(u) : null, idcw: ik || null,
+                 fund: fund, folio: folio, isin: P.ISIN_RE.test(isin) ? isin : '', code: code, line: i + (header ? 2 : 1), balance: isFinite(bal) ? bal : null, order: i });
     }
+    var taxLines = foldTaxes(out, taxes);
+    var openings = balanceCol >= 0 ? openingsFrom(out) : [];
     return {
-      ok: out.length > 0, rows: out, valuations: valuations, skipped: skipped, failed: failed, header: header,
-      dateCol: dateCol, amountCol: amountCol, fundCol: fundCol, unitsCol: unitsCol, typeCol: typeCol, statusCol: statusCol,
+      ok: out.length > 0, rows: out, valuations: valuations, skipped: skipped, failed: failed, header: header, taxLines: taxLines, openings: openings,
+      dateCol: dateCol, amountCol: amountCol, fundCol: fundCol, unitsCol: unitsCol, typeCol: typeCol, statusCol: statusCol, folioCol: folioCol, balanceCol: balanceCol,
       words: words, dayFirst: dayFirst, dateCertain: dateCertain, example: example,
       code: out.length ? null : 'NO-ROWS', message: out.length ? null : (failed.length ? MESSAGES.allFailed : MESSAGES.ledgerNoRows)
     };
+  }
+
+  /* A tax line (stamp duty, STT, TDS) belongs to a payment of the same day in
+     the same fund: stamp duty adds to the money out of pocket for a purchase,
+     STT and TDS come off the money received on a redemption. One with no line
+     to belong to is money out of pocket on its own. */
+  function foldTaxes(rows, taxes) {
+    var n = 0;
+    taxes.forEach(function (x) {
+      var wantOut = x.kind !== 'stamp', host = null;
+      for (var i = rows.length - 1; i >= 0; i--) {
+        var r = rows[i];
+        if (r.t !== x.t || r.taxOnly || r.idcw === 'reinvest') continue;
+        if ((r.fund || '') !== (x.fund || '') && r.fund && x.fund) continue;
+        if (wantOut ? r.dir !== 'out' : r.dir !== 'in') continue;
+        host = r; break;
+      }
+      if (host) {
+        if (wantOut) host.amount = Math.max(0, host.amount - x.amount); else host.amount += x.amount;
+        host.tax = host.tax || {}; host.tax[x.kind] = (host.tax[x.kind] || 0) + x.amount;
+        n++;
+      } else rows.push({ t: x.t, amount: x.amount, gross: 0, dir: 'in', units: null, idcw: null, fund: x.fund, folio: x.folio, isin: '', code: '', line: x.line, taxOnly: true, taxKind: x.kind });
+    });
+    return n;
+  }
+  /* A statement that prints the unit balance after each line says, on its
+     first line for a fund, whether units were held before it: the balance less
+     that line's own units. Such a fund starts with units bought earlier. */
+  function openingsFrom(rows) {
+    var first = {}, out = [];
+    rows.forEach(function (r) {
+      if (r.balance == null || r.units == null) return;
+      var key = (r.folio || '') + '|' + (r.fund || '');
+      var f = first[key];
+      if (!f || r.t < f.t || (r.t === f.t && r.order < f.order)) first[key] = r;
+    });
+    Object.keys(first).forEach(function (k) {
+      var r = first[k], signed = r.dir === 'out' ? -r.units : r.units, opening = r.balance - signed;
+      if (opening > 0.0005) out.push({ fund: r.fund || '', folio: r.folio || '', units: Math.round(opening * 1000) / 1000, t: r.t });
+    });
+    return out;
+  }
+  /* The same money twice: a transaction already read from one file, met again
+     in another (a CAS beside a transaction statement, a statement beside an
+     app's export). Two rows are one when they fall on the same date, move the
+     same way, carry the same units (where both carry units), name the same
+     folio (where both name one) and the same fund (where both name one), and
+     agree on the money in either of its figures (the cash that moved, or the
+     statement's gross). Each kept row matches at most once. */
+  /* a folio as a key: "12345678 / 0" and "12345678" are one folio */
+  function folioKey(f) { return P.normHeader(String(f).replace(/\s*\/\s*\d+\s*$/, '')); }
+  function sameMoney(a, b) {
+    var eps = 0.006;
+    var figs = [a.amount, a.gross == null ? a.amount : a.gross], others = [b.amount, b.gross == null ? b.amount : b.gross];
+    return figs.some(function (x) { return others.some(function (y) { return Math.abs(x - y) < eps; }); });
+  }
+  function dedupe(kept, fresh) {
+    var taken = {}, add = [], matched = 0;
+    fresh.forEach(function (r) {
+      var hit = -1;
+      for (var i = 0; i < kept.length && hit === -1; i++) {
+        var k = kept[i];
+        if (taken[i] || k.t !== r.t || k.dir !== r.dir || (k.idcw || null) !== (r.idcw || null)) continue;
+        if (k.units != null && r.units != null && Math.abs(k.units - r.units) > 0.0015) continue;
+        if (k.folio && r.folio && folioKey(k.folio) !== folioKey(r.folio)) continue;
+        if (k.fund && r.fund && P.normHeader(k.fund) !== P.normHeader(r.fund)) continue;
+        if (!sameMoney(k, r)) continue;
+        hit = i;
+      }
+      if (hit === -1) add.push(r); else { taken[hit] = true; matched++; }
+    });
+    return { kept: kept.concat(add), added: add, matched: matched };
   }
 
   function typeColumn(header, body, width, dateCol, amountCol, fundCol) {
@@ -416,6 +527,7 @@
     var byKey = {};
     rows.forEach(function (r, i) {
       var key = r.t + '|' + Math.round(r.amount * 100);
+      if (r.taxOnly) return;
       (byKey[key] = byKey[key] || []).push(i);
     });
     var n = 0;
@@ -672,7 +784,7 @@
     rowsFrom: rowsFrom, jsonRows: jsonRows,
     ledgerRows: ledgerRows, ledgerAmount: ledgerAmount, typeColumn: typeColumn, ownWord: ownWord,
     guessDirection: guessDirection, idcwKind: idcwKind, holdingsRows: holdingsRows, portfolioFile: portfolioFile,
-    schemeTotals: schemeTotals, markSwitches: markSwitches, firstAmbiguousDate: firstAmbiguousDate,
+    schemeTotals: schemeTotals, markSwitches: markSwitches, firstAmbiguousDate: firstAmbiguousDate, dedupe: dedupe, taxKind: taxKind, openingsFrom: openingsFrom,
     stitch: stitch, gapsIn: gapsIn, MESSAGES: MESSAGES, GAP_DAYS: GAP_DAYS
   };
   if (typeof module === 'object' && module.exports) module.exports = api;

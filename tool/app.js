@@ -8,7 +8,6 @@
   'use strict';
 
   var E = root.PRCEngine, P = root.PRCParse, F = root.SimFormat, WB = root.SimWorkbook;
-  var VERSION = '3.0';
   var HORIZONS = [1, 3, 5, 7, 10];
 
   /* ------------------------------------------------------------ formatting */
@@ -265,6 +264,10 @@
     oldexcel: 'That is an old .xls workbook, which this tool cannot open. Open it in Excel or Google Sheets and save it as .xlsx or CSV, then load that.',
     binary: 'That file is not a spreadsheet: it is not text at all. This screen reads a table of dates and values, so load a CSV or Excel file, or copy the two columns and paste them in.'
   };
+  /* a locked file in a slot that reads a price history: it is a statement, and
+     a statement goes in step 1 with its password */
+  var LOCKED_PRICE_COPY = 'This file is locked with a password. A locked file is a statement, and a statement is read in step 1 of Check my portfolio, where you type its password. This slot takes a history of dates and values, which is never locked.';
+  var CAS_PRICE_COPY = 'This looks like a statement of your own payments: a consolidated account statement. It is not a price history. Your statement goes in step 1 of Check my portfolio.';
   /* A NAV or index file becomes a series here; every refusal carries the rows
      so the caller can say what is actually wrong with the file. */
   function readFile(file, onSeries, onError, onProgress, opts) {
@@ -298,20 +301,38 @@
        exchange's download as it comes: a PDF with its words in it, or an old .xls */
     if (/\.pdf$/.test(name)) {
       if (!root.PRCPdfRows) { onError(P.NOT_TABULAR_COPY); return; }
-      /* read on the device, held to the strict standard: a doubtful reading shows nothing */
+      /* read on the device, held to the strict standard: a doubtful reading shows
+         nothing. A consolidated account statement is named as a statement; a
+         locked PDF is named as locked, and sent to step 1 */
       pdf = true; ropts.strict = true; ropts.doubtCopy = P.PDF_COPY;
-      root.PRCPdfRows.read(file).then(function (rows) {
-        var res = P.rowsToSeries(rows, ropts);
-        if (!res.ok && res.code !== 'MANY_SCHEMES') { onError(pdfWhy(rows, res)); return; }
-        finish(res, rows);
-      }, function (err) { onError(err && err.scanned ? P.PDF_SCANNED_COPY : P.PDF_COPY); });
+      root.PRCPdfRows.read(file, { lines: true }).then(function (pages) {
+        var kind = root.PRCCas ? root.PRCCas.kind(pages) : null;
+        if (kind) { onError(CAS_PRICE_COPY, { locked: false, statement: true }); return null; }
+        return root.PRCPdfRows.read(file).then(function (rows) {
+          var res = P.rowsToSeries(rows, ropts);
+          if (!res.ok && res.code !== 'MANY_SCHEMES') { onError(pdfWhy(rows, res)); return; }
+          finish(res, rows);
+        });
+      }).catch(function (err) { onError(err && err.locked ? LOCKED_PRICE_COPY : err && err.scanned ? P.PDF_SCANNED_COPY : P.PDF_COPY, err && err.locked ? { locked: true } : undefined); });
       return;
     }
-    if (/\.xls$/.test(name)) {
-      if (!root.PRCXls) { onError(BINARY_COPY.oldexcel); return; }
+    if (/\.xlsx?$/.test(name) && root.PRCXls) {
+      /* an old workbook, a newer one under the old name, or a newer one saved
+         with a password (a compound file): the first bytes decide */
       file.arrayBuffer().then(function (buf) {
-        var got = root.PRCXls.read(buf);
+        var head = new Uint8Array(buf.slice(0, 8));
+        var cfb = head.length >= 4 && head[0] === 0xD0 && head[1] === 0xCF && head[2] === 0x11 && head[3] === 0xE0;
+        if (!cfb) { if (/\.xls$/.test(name)) { var g0 = root.PRCXls.read(buf); if (g0.kind === 'zip') { readXlsx(); return; } return readXlsSheets(g0); } readXlsx(); return; }
+        var got;
+        try { got = root.PRCXls.read(buf); }
+        catch (err) { onError(err && err.locked ? LOCKED_PRICE_COPY : 'That Excel file could not be read here (' + err.message + '). Open it and save it as CSV, then load that.', err && err.locked ? { locked: true } : undefined); return; }
         if (got.kind === 'zip') { readXlsx(); return; }
+        return readXlsSheets(got);
+      }).catch(function (err) { onError('That Excel file could not be read here (' + err.message + '). Open it and save it as CSV, then load that.'); });
+      return;
+    }
+    function readXlsSheets(got) {
+      try {
         if (got.kind === 'text') { var trows = P.parseDelimited(got.text); finish(P.rowsToSeries(trows, ropts), trows); return; }
         var sheets = got.sheets.filter(function (sh) { return sh.rows.length; });
         if (!sheets.length) throw new Error('the workbook is empty');
@@ -323,10 +344,17 @@
         }
         if (sheets.length > 1) first.message = 'None of the ' + sheets.length + ' sheets in this workbook holds a readable table of dates and values. On the first sheet: ' + first.message;
         finish(first, sheets[0].rows);
-      }).catch(function (err) { onError('That Excel file could not be read here (' + err.message + '). Open it and save it as CSV, then load that.'); });
+      } catch (err) { onError('That Excel file could not be read here (' + err.message + '). Open it and save it as CSV, then load that.'); }
+    }
+    if (/\.zip$/.test(name) && root.PRCLocked) {
+      /* an archive: a locked one is a statement, for step 1 */
+      file.arrayBuffer().then(function (buf) {
+        if (root.PRCLocked.zipLooksLocked(new Uint8Array(buf))) onError(LOCKED_PRICE_COPY, { locked: true });
+        else onError(BINARY_COPY.zip);
+      }).catch(function () { onError(BINARY_COPY.zip); });
       return;
     }
-    if (/\.(docx?|pptx?|png|jpe?g|gif|zip|rar|7z)$/.test(name)) {
+    if (/\.(docx?|pptx?|png|jpe?g|gif|zip|rar|7z|exe)$/.test(name)) {
       onError('That is a ' + name.replace(/^.*\./, '.') + ' file. This screen reads a table of dates and values, so load a CSV or Excel file, or copy the two columns and paste them in.');
       return;
     }
@@ -402,42 +430,84 @@
   /* A statement file: rows or text, whichever the file gives, plus the sheet list of a workbook. */
   var EXCEL_UNREAD = 'That Excel file could not be read here. Open it and save it as CSV, then load that.';
   var EXCEL_LOCKED = 'That Excel file is locked with a password, so nothing in it can be read. Open it with its password, save a copy as CSV or Excel without one, and load that.';
-  /* A statement that comes as a PDF: read on the device (pdfrows.js) when it
-     is one table of text with its headings, every row under them; refused in a
-     sentence when it is a scanned picture, holds several tables laid out
-     differently (two headings that do not match), or is locked. Nothing is
-     guessed out of a page. */
+  /* A statement that comes as a PDF: the detailed or summary CAS read line by
+     line (cas.js), a statement that is one plain table of text read on the
+     device (pdfrows.js), a statement that is not a complete history refused by
+     its title. A locked PDF is opened with the password the reader types, once,
+     on the device (the error marked .locked asks for it; .wrong says it did not
+     open the file). A scanned picture of a page is refused in a sentence. */
   var PDF_STATEMENT_TABLES = 'This PDF holds more than one table, each with different columns, so its lines cannot be read as one statement with certainty. Download the same statement as Excel or CSV instead.';
   var PDF_STATEMENT_SCANNED = 'This PDF holds no text, only a picture of the page, so nothing in it can be read. Download the statement as Excel or CSV, or a PDF with selectable text.';
   var PDF_STATEMENT_NONE = 'No table of dated transactions was found in this PDF. Download the same statement as Excel or CSV instead, or copy its rows and paste them in.';
-  function readStatementPdf(file) {
-    if (!root.PRCPdfRows) return Promise.reject(new Error(P.NOT_TABULAR_COPY));
-    return root.PRCPdfRows.read(file, { statement: true }).then(function (rows) {
-      if (rows.tables && rows.tables > 1) throw new Error(PDF_STATEMENT_TABLES);
-      return { rows: rows, sheets: null, pdf: true };
-    }, function (err) {
-      var e = new Error(err && err.scanned ? PDF_STATEMENT_SCANNED : err && err.locked ? EXCEL_LOCKED.replace('Excel file', 'PDF') : PDF_STATEMENT_NONE);
-      e.statement = true; throw e;
+  var EXE_COPY = 'This is a self-extracting program (.exe), not a statement. Open this file on a computer with your password first, then upload the statement inside it.';
+  var ZIP_EMPTY = 'This zip archive holds no statement file (no PDF, Excel, CSV, text or JSON file inside it), so there is nothing here to read.';
+  var LOCKED_STATEMENT = 'This file is locked with a password.';
+  function lockedError(wrong, what) { var e = new Error(wrong ? 'That password did not open ' + (what || 'the file') + '. Check it and try again.' : LOCKED_STATEMENT); if (wrong) e.wrong = true; else e.locked = true; e.statement = true; return e; }
+  function statementError(msg) { var e = new Error(msg); e.statement = true; return e; }
+  function readStatementPdf(file, password) {
+    if (!root.PRCPdfRows) return Promise.reject(statementError(P.NOT_TABULAR_COPY));
+    var CAS = root.PRCCas;
+    return root.PRCPdfRows.read(file, { lines: true, password: password }).then(function (pages) {
+      var kind = CAS ? CAS.kind(pages) : null;
+      if (kind === 'detailed') { var cas = CAS.readDetailed(pages); if (!cas.ok) throw statementError(cas.message); return { cas: cas, kind: 'cas', sheets: null }; }
+      if (kind === 'summary') { var sum = CAS.readSummary(pages); if (!sum.ok) throw statementError(sum.message); return { cas: sum, kind: 'cas-summary', sheets: null }; }
+      if (kind && kind !== 'cas-plain' && CAS.MESSAGES[kind]) throw statementError(CAS.MESSAGES[kind]);
+      /* not a CAS in the registrars' layout: one plain table of text, as before. A statement that
+         merely calls itself a consolidated statement but is laid out as one plain table with its
+         scheme on every line is still read as that table; one that is not is refused as a CAS in
+         another layout. */
+      var other = kind === 'cas-plain';
+      return root.PRCPdfRows.read(file, { statement: true, password: password }).then(function (rows) {
+        if (rows.tables && rows.tables > 1) throw statementError(other ? CAS.MESSAGES['cas-other'] : PDF_STATEMENT_TABLES);
+        /* a consolidated statement read as a plain table must name the scheme on every line: one
+           whose schemes stand as headings between its tables cannot attribute a payment with
+           certainty, and is refused as a CAS in another layout */
+        if (other) { var probe = root.SimUpload.portfolioFile(rows, {}); if ((!probe.ok && !probe.ask) || !(probe.fundCol >= 0)) throw statementError(CAS.MESSAGES['cas-other']); }
+        return { rows: rows, sheets: null, pdf: true };
+      }, function (err) { throw err && err.scanned ? statementError(PDF_STATEMENT_SCANNED) : err && err.statement ? err : statementError(other ? CAS.MESSAGES['cas-other'] : PDF_STATEMENT_NONE); });
+    }).catch(function (err) {
+      if (err && err.statement) throw err;
+      if (err && err.locked) throw lockedError(false, file.name);
+      if (err && err.wrong) throw lockedError(true, file.name);
+      throw statementError(err && err.scanned ? PDF_STATEMENT_SCANNED : PDF_STATEMENT_NONE);
     });
   }
-  function readStatement(file, sheet) {
+  var STATEMENT_ENTRY = /\.(pdf|xlsx?|xlsm|csv|tsv|txt|json)$/i;
+  function fileFrom(bytes, name) {
+    try { return new File([bytes], name); }
+    catch (e) { var b = new Blob([bytes]); b.name = name; b.lastModified = Date.now(); return b; }
+  }
+  /* readStatement(file, sheet, password) -> Promise of
+       { rows | text, sheets, sheetName }       a statement's rows (or its text), the tabs of a workbook
+       { cas, kind: 'cas' | 'cas-summary' }     a consolidated account statement, read (cas.js)
+       { zip: [File, ...] }                     the statement files inside an archive, opened
+     or a rejection whose .message says why; .locked asks for the password, .wrong says the one given did not open it. */
+  function readStatement(file, sheet, password) {
     if (file.pastedText != null) return Promise.resolve({ text: file.pastedText, sheets: null });
-    var name = (file.name || '').toLowerCase();
-    if (/\.(docx?|pptx?|png|jpe?g|gif|webp|heic|zip|rar|7z)$/.test(name)) {
-      return Promise.reject(new Error('That is a ' + name.replace(/^.*\./, '.') + ' file. This screen reads a statement of your payments as a table, so load the CSV or Excel your fund house, registrar or app gives, or copy the rows and paste them in.'));
+    var name = (file.name || '').toLowerCase(), L = root.PRCLocked;
+    if (/\.exe$/.test(name)) return Promise.reject(statementError(EXE_COPY));
+    if (/\.(docx?|pptx?|png|jpe?g|gif|webp|heic|rar|7z)$/.test(name)) {
+      return Promise.reject(statementError('That is a ' + name.replace(/^.*\./, '.') + ' file. This screen reads a statement of your payments as a table, so load the CSV, Excel or PDF your fund house, registrar or app gives, or copy the rows and paste them in.'));
     }
-    if (/\.pdf$/.test(name)) return readStatementPdf(file);
-    /* An old Excel statement, in whichever of its forms (xls.js): the tab
-       asked for, else the first tab that reads as a statement, else the
-       first. A newer workbook under the old name goes the .xlsx way. */
-    if (/\.xls$/.test(name) && root.PRCXls) {
-      return file.arrayBuffer().then(function (buf) {
-        var got = root.PRCXls.read(buf);
-        if (got.kind === 'zip') return readXlsx();
+    if (/\.pdf$/.test(name)) return readStatementPdf(file, password);
+    return file.arrayBuffer().then(function (buf) {
+      var bytes = new Uint8Array(buf), magic = L ? L.magic(bytes) : null;
+      if (magic === 'exe') throw statementError(EXE_COPY);
+      if (magic === 'pdf') return readStatementPdf(file, password);
+      /* an old workbook in any of its forms, or a newer one saved with a password:
+         a compound file (xls.js, locked.js) */
+      if ((magic === 'cfb' || /\.xls$/.test(name)) && root.PRCXls && magic !== 'zip') {
+        var got;
+        try { got = root.PRCXls.read(buf, { password: password }); }
+        catch (err) {
+          if (err && err.locked) throw lockedError(false, file.name);
+          if (err && err.wrong) throw lockedError(true, file.name);
+          throw statementError(err && err.unsupported ? 'This file is locked in a form that cannot be opened here. Open it with its password on a computer, save a copy without one, and load that.' : EXCEL_UNREAD);
+        }
+        if (got.kind === 'zip') return readXlsx(fileFrom(got.bytes, file.name.replace(/\.xls$/i, '.xlsx')));
         if (got.kind === 'text') {
-          /* text under the old name is read as text; anything else that is not a workbook is not one */
           var junk = looksBinary(got.text);
-          if (junk) { var e = new Error(junk === 'pdf' ? P.NOT_TABULAR_COPY : EXCEL_UNREAD); e.statement = true; throw e; }
+          if (junk) throw statementError(junk === 'pdf' ? P.NOT_TABULAR_COPY : EXCEL_UNREAD);
           return { text: got.text, sheets: null };
         }
         var tabs = got.sheets, names = tabs.map(function (sh) { return sh.name; });
@@ -449,17 +519,51 @@
         }
         pick = pick || tabs[0];
         return { rows: pick.rows, sheetName: pick.name, sheets: names };
-      }).catch(function (err) { throw new Error(err && err.locked ? EXCEL_LOCKED : err && err.statement ? err.message : EXCEL_UNREAD); });
+      }
+      if (magic === 'zip') {
+        if (/\.(xlsx|xlsm)$/.test(name)) return readXlsx(file);
+        /* an archive: every statement file inside it, each opened with the password when it is locked */
+        if (!L) throw statementError(BINARY_COPY.zip);
+        var entries;
+        try { entries = L.zipEntries(bytes).filter(function (e) { return !e.dir && STATEMENT_ENTRY.test(e.name) && !/(^|\/)\./.test(e.name); }); }
+        catch (err) { throw statementError(BINARY_COPY.zip); }
+        if (!entries.length) {
+          /* a workbook under another name, or an empty archive */
+          var hasSheet = false;
+          try { hasSheet = L.zipEntries(bytes).some(function (e) { return /^xl\/workbook\.xml$/.test(e.name); }); } catch (e2) { hasSheet = false; }
+          if (hasSheet) return readXlsx(file);
+          throw statementError(ZIP_EMPTY);
+        }
+        if (entries.some(function (e) { return e.encrypted; }) && password == null) throw lockedError(false, file.name);
+        return Promise.all(entries.map(function (e) {
+          return L.openEntry(e, password).then(function (data) { return fileFrom(data, e.name.replace(/^.*\//, '')); }, function (err) {
+            if (err && err.wrong) throw lockedError(true, file.name);
+            throw statementError('A file inside this zip could not be opened (' + e.name + ').');
+          });
+        })).then(function (files) { return { zip: files, sheets: null }; });
+      }
+      if (/\.xlsx?$/.test(name) && WB) return readXlsx(file);
+      /* text: CSV, TSV, JSON, a page saved as text */
+      var kind = looksBinary(decodeText(bytes));
+      if (kind === 'pdf') throw statementError(P.NOT_TABULAR_COPY);
+      if (kind) throw statementError(BINARY_COPY[kind] || BINARY_COPY.binary);
+      return { text: decodeText(bytes), sheets: null };
+    });
+    function decodeText(bytes) {
+      if (bytes[0] === 0xFF && bytes[1] === 0xFE) return new TextDecoder('utf-16le').decode(bytes.subarray(2));
+      if (bytes[0] === 0xFE && bytes[1] === 0xFF) return new TextDecoder('utf-16be').decode(bytes.subarray(2));
+      var t = new TextDecoder('utf-8').decode(bytes);
+      if (t.indexOf('�') !== -1) { try { t = new TextDecoder('windows-1252').decode(bytes); } catch (e) { /* keep utf-8 */ } }
+      return t.replace(/^﻿/, '');
     }
-    if (/\.xlsx?$/.test(name) && WB) return readXlsx();
-    function readXlsx() {
-      return WB.listSheets(file).catch(function () { return []; }).then(function (sheets) {
+    function readXlsx(f) {
+      return WB.listSheets(f).catch(function () { return []; }).then(function (sheets) {
         var order = sheet != null ? [sheet] : (sheets.length > 1 ? sheets.slice() : [undefined]);
         var i = 0, firstGot = null;
         function attempt() {
           if (i >= order.length) return Promise.resolve(firstGot);
           var nm = order[i++];
-          return WB.readWorkbook(file, nm).then(function (rows) {
+          return WB.readWorkbook(f, nm).then(function (rows) {
             var got = { rows: rows, sheetName: rows.sheetName || nm, sheets: sheets };
             if (!firstGot) firstGot = got;
             var probe = root.SimUpload.portfolioFile(rows, {});
@@ -470,23 +574,11 @@
         return attempt();
       }).then(function (got) {
         /* no tab could be opened at all: say so, rather than fail on nothing */
-        if (!got) { var e = new Error(EXCEL_UNREAD); e.statement = true; throw e; }
+        if (!got) throw statementError(EXCEL_UNREAD);
         return got;
-      }).catch(function (err) { throw new Error(err && err.statement ? err.message : EXCEL_UNREAD); });
+      }).catch(function (err) { throw err && err.statement ? err : statementError(EXCEL_UNREAD); });
     }
-    return new Promise(function (resolve, reject) {
-      var reader = new FileReader();
-      reader.onerror = function () { reject(new Error('That file could not be opened.')); };
-      reader.onload = function () {
-        var kind = looksBinary(reader.result);
-        if (kind === 'pdf') { reject(new Error(P.NOT_TABULAR_COPY)); return; }
-        if (kind) { reject(new Error(BINARY_COPY[kind] || BINARY_COPY.binary)); return; }
-        resolve({ text: String(reader.result), sheets: null });
-      };
-      reader.readAsText(file);
-    });
   }
-
   var FILE_ACCEPT = '.csv,.txt,.tsv,.xls,.xlsx,.json,.pdf,text/csv,text/comma-separated-values,text/plain,text/tab-separated-values,application/json,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/pdf,application/octet-stream';
   /* every slot takes the same files now: a PDF with its words in it is read in each */
   var NAV_ACCEPT = FILE_ACCEPT;
@@ -531,7 +623,7 @@
   var IN_APP_NOTE = '<strong>This page seems to be open inside another app’s browser, not your phone’s browser.</strong> There, Choose a file and Save as PDF may do nothing. Open this address in your browser (Safari, Chrome or the browser you use) and both work.';
 
   root.PRCApp = {
-    E: E, P: P, F: F, VERSION: VERSION, HORIZONS: HORIZONS,
+    E: E, P: P, F: F, HORIZONS: HORIZONS,
     money: money, moneyLong: moneyLong, moneyWords: moneyWords, short: short, signedMoney: signedMoney, count: count,
     pct: pct, signedPct: signedPct, share: share, shortName: shortName, chime: chime, echo: F.echo, checkInput: F.checkInput,
     fmtDate: fmtDate, fmtYears: fmtYears, months: months, monthsText: monthsText,
@@ -540,7 +632,7 @@
     relation: relation, equalWords: equalWords, EQUAL_BAND: EQUAL_BAND, stackTables: stackTables, watchTables: watchTables,
     csvCell: csvCell, fileSlug: fileSlug, downloadText: downloadText,
     show: show, initRouter: initRouter,
-    readFile: readFile, readStatement: readStatement, pickBusy: pickBusy, pickDone: pickDone, FILE_ACCEPT: FILE_ACCEPT, NAV_ACCEPT: NAV_ACCEPT,
+    readFile: readFile, readStatement: readStatement, LOCKED_PRICE_COPY: LOCKED_PRICE_COPY, CAS_PRICE_COPY: CAS_PRICE_COPY, pickBusy: pickBusy, pickDone: pickDone, FILE_ACCEPT: FILE_ACCEPT, NAV_ACCEPT: NAV_ACCEPT,
     inAppBrowser: inAppBrowser, IN_APP_NOTE: IN_APP_NOTE
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

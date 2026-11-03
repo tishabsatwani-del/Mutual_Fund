@@ -80,8 +80,10 @@
 
     <div id="pf-filemode" hidden>
       <p class="hint tight">Either of two downloads works, and you do not have to know which you have.
-      <strong>Transactions</strong>: every payment with its date. <strong>Holdings</strong>: each fund with
-      what you put in and what it is worth now. CSV or Excel.</p>
+      <strong>Transactions</strong>: every payment with its date, including the detailed Consolidated Account
+      Statement (CAS) from CAMS or KFintech. <strong>Holdings</strong>: each fund with what you put in and what it
+      is worth now. CSV, Excel, PDF or a zip; a locked statement asks for its password, which stays on your device.
+      Several statements can be added, and the same transaction in two of them is counted once.</p>
       <div id="pf-howto"></div>
       <div id="pf-statement-door"></div>
       <div id="pf-door-out" aria-live="polite"></div>
@@ -315,7 +317,7 @@
       <dt>Where does the arithmetic run?</dt><dd>In this page, on your device.</dd>
       <dt>What does this page request?</dt><dd>Only its own files, from this address. Nothing from any other site, at any point.</dd>
       <dt>Where do a fund&rsquo;s or an index&rsquo;s prices come from?</dt><dd>A file you download and choose yourself.</dd>
-      <dt>Are password-protected files read?</dt><dd>No. There is no decryption here.</dd>
+      <dt>Are password-protected files read?</dt><dd>Yes, statements only, with the password you type. The password stays on your device and is never stored.</dd>
       <dt>What is sent anywhere?</dt><dd>Nothing.</dd>
       <dt>Is there an account, a sign-up or an email?</dt><dd>None.</dd>
       <dt>What do the figures leave out?</dt><dd>Exit load and tax. A fund&rsquo;s NAV already includes its expense ratio.</dd>
@@ -328,8 +330,9 @@
       <li>A window of N years ends on the same calendar date N years later, or on the last value up to seven days before it; beyond that the window is dropped, never stretched. Each window&rsquo;s figure is the value at its end divided by the value at its start, raised to the power 365 divided by its days, minus 1.</li>
       <li>Weekly and monthly start frequencies thin the start dates only; every window is still measured first value to last.</li>
       <li>Percentiles use linear interpolation between neighbours, the spreadsheet PERCENTILE rule. Where your own stretch sits among a fund&rsquo;s stretches of the same length is the share of those stretches that returned less than the fund did over your dates, ties counted half.</li>
-      <li>The same rupees in the index: each payment buys index units at the index value on that date, or the last value on or before it; withdrawals sell units; the units left are valued on the valuation date.</li>
-      <li>Units from a NAV file: amount divided by the NAV on the payment date, or the next NAV on or after it.</li>
+      <li>The same rupees in the index: each payment buys index units at the index value on that date, or the next value on or after it, the same rule as a fund&rsquo;s units; withdrawals sell units the same way; the units left are valued on the valuation date. The index carries no costs, so no stamp duty is taken from it.</li>
+      <li>Units from a NAV file: the amount less stamp duty, divided by the NAV on the payment date, or the next NAV on or after it. Stamp duty is 0.005 percent of every purchase from 1 July 2020, rounded to the paisa; a purchase before that date carries none. Where a statement prints its own units, they are used exactly and never recalculated.</li>
+      <li>A statement: money out of pocket for a purchase is the amount plus its stamp duty line; money received on a redemption is the amount less its STT and TDS lines. An IDCW payout is money received; an IDCW reinvestment adds units and no money. A scheme whose opening units plus every transaction do not equal its closing units is not read. A statement that starts with units bought earlier shows no yearly rate.</li>
       <li>Volatility is the standard deviation of day-to-day log returns times the square root of the observations per year in the file.</li>
       <li>Capture ratios use month-end values. The information ratio uses daily arithmetic returns and the standard deviation of daily excess returns, the basis SEBI set in circular SEBI/HO/IMD/IMD-PoD-2/P/CIR/2025/6 of 17 January 2025.</li>
       <li>Dates are read day first; a file whose dates only make sense month first is read month first; a file that reads both ways says so.</li>
@@ -350,10 +353,6 @@
     switch. Figures are before exit load and before tax. It is an educational tool, not investment advice.</p>
     <p class="cardtext">Mutual fund investments are subject to market risks, read all scheme related documents carefully. Past performance may or may not be sustained in future.</p>
   </div>
-  <div class="card">
-    <h2>Version</h2>
-    <p class="cardtext">Tool version <strong id="ver">3.0</strong>. The spreadsheet carries the same number on its About tab.</p>
-  </div>
 </section>
 
 <footer class="foot">
@@ -371,7 +370,9 @@
 <script src="xls.js?v=17"></script>
 <script src="engine.js?v=17"></script>
 <script src="parse.js?v=17"></script>
+<script src="locked.js?v=18"></script>
 <script src="pdfrows.js?v=17"></script>
+<script src="cas.js?v=18"></script>
 <script src="upload.js?v=17"></script>
 <script src="app.js?v=17"></script>
 <script src="dates.js?v=17"></script>

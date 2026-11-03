@@ -12,6 +12,10 @@
  *                            onLoaded(result|null), gate(rows, name),
  *                            ask(result) -> null or { question, refusal },
  *                            describe(result) -> null or { tag, html, plain },
+ *                            refuseCopy(file, err) -> null or the slot's own sentence for a file
+ *                              refused before any rows came out of it (locked, a PDF),
+ *                            accept(result) -> null or a refusal notice, the slot's last word
+ *                              once every question is answered,
  *                            idcwFlag: flags an IDCW option's NAV on the card })
  *   result: { series, name, report, files, gaps, kindGuess, rows, file, parts, pieces }
  *
@@ -76,8 +80,8 @@
     statement: function () {
       return '<details class="explain howto"><summary>Get your statement: where, which file, what it looks like</summary><div class="body">' +
         '<p><strong>Two files work.</strong> A <em>transaction statement</em> lists every payment with its date, and gives you the yearly rate. A <em>holdings statement</em> lists each fund with what you put in and what it is worth now, and gives you the total gain but no yearly rate, because it holds no dates.</p>' +
-        '<p><strong>Where:</strong> wherever you invest, under <em>Reports</em>, <em>Statements</em> or <em>Transactions</em>: your fund house’s website or app, the app or platform you buy through, or the registrar’s portal. Choose <strong>Excel or CSV</strong>, not PDF, and the widest date range offered, from your first purchase to today.</p>' +
-        '<p><strong>The consolidated statement that arrives by email is a PDF.</strong> A PDF is read here only when it is one plain table of text with its headings; a scanned page, a locked file or a statement laid out as several tables is refused, and the site that sends it offers the same transactions as Excel or CSV. If you cannot find a download, type your entries in instead: it takes a few minutes.</p>' +
+        '<p><strong>Where:</strong> wherever you invest, under <em>Reports</em>, <em>Statements</em> or <em>Transactions</em>: your fund house’s website or app, the app or platform you buy through, or the registrar’s portal. Choose <strong>Excel or CSV</strong>, or the registrar’s detailed CAS PDF, and the widest date range offered, from your first purchase to today.</p>' +
+        '<p><strong>The consolidated account statement (CAS) that arrives by email is a locked PDF.</strong> Ask CAMS or KFintech for the <em>Detailed</em> CAS covering the period from your first investment to today, and load it here with the password you set when you requested it: the password is used on your device to open the file and is kept nowhere. A locked Excel statement or a locked zip opens the same way. A Summary CAS lists holdings only, so it gives no yearly rate; a statement of part of your history (a Single Folio statement, a Capital Gain statement) is refused and named. A scanned page is refused. If you cannot find a download, type your entries in instead: it takes a few minutes.</p>' +
         '<p><strong>What a good transaction file looks like:</strong></p>' + sampleBlock(SAMPLE.ledger) +
         '<p><strong>What a good holdings file looks like:</strong></p>' + sampleBlock(SAMPLE.holdings) +
         '<p><strong>If it fails:</strong> the box says why. A file with unsigned amounts asks you once which words mean money out. A fund’s daily price file belongs on the Rolling returns screen, not here.</p>' +
@@ -207,6 +211,8 @@
       var rows = res ? res.rows : (err && err.extra && err.extra.rows) || null;
       var refusal = rows ? (o.gate ? o.gate(rows, file.name) : schemaRefusal(rows)) : null;
       if (refusal) return { name: file.name, refused: refusal };
+      /* a slot's own words for a file refused before any rows came out of it */
+      if (err && o.refuseCopy) { var alt = o.refuseCopy(file, err); if (alt) return { name: file.name, refused: notice('bad', esc(alt)) }; }
       if (res) return { name: file.name, res: res, rows: rows, page: res.page || null };
       if (err && err.extra && err.extra.schemes && rows) return { name: file.name, rows: rows, schemes: err.extra.schemes, hasNames: err.extra.hasNames !== false, variants: !!err.extra.variants, page: err.extra.page || null };
       return { name: file.name, refused: notice('bad', esc(err ? err.msg : 'That file could not be read.')) };
@@ -368,6 +374,9 @@
       var res = { series: state.series, name: name, report: report, files: list.length, gaps: joined.gaps, kindGuess: state.kindGuess, rows: state.rows,
                   file: list[0].name, parts: list.map(function (p) { return { rows: p.rows, name: p.name }; }), pieces: check.summary };
       function land() {
+        /* the slot's last word, once every question is answered: a file it still cannot take */
+        var veto = o.accept ? o.accept(res) : null;
+        if (veto) { turnDown(veto); return; }
         var extra = o.describe ? o.describe(res) : null;
         added(name, sub + (extra && extra.tag ? ' · <strong' + (extra.plain ? '' : ' class="warn-word"') + '>' + esc(extra.tag) + '</strong>' : '') +
           (idcw ? ' · <strong class="warn-word">IDCW option</strong>' : ''));

@@ -30,8 +30,8 @@
     return loading;
   }
   /* every page's words, each with its place: x from the left, y from the bottom */
-  function pagesOf(data, pdfjs) {
-    var task = pdfjs.getDocument({ data: data, isEvalSupported: false, disableFontFace: true, useSystemFonts: false, enableXfa: false, verbosity: 0 });
+  function pagesOf(data, pdfjs, password) {
+    var task = pdfjs.getDocument({ data: data, password: password == null ? undefined : String(password), isEvalSupported: false, disableFontFace: true, useSystemFonts: false, enableXfa: false, verbosity: 0 });
     return task.promise.then(function (doc) {
       var out = [], n = doc.numPages, i = 0;
       function next() {
@@ -53,15 +53,34 @@
       return { str: it.str, x: it.transform[4], y: it.transform[5], w: it.width || 0, h: Math.abs(it.transform[3]) || it.height || 10 };
     });
   }
+  /* opts.password: the reader's password for a locked PDF, handed to pdf.js once
+     and kept nowhere. A locked PDF without one rejects with an error marked
+     .locked; a wrong password with one marked .wrong. opts.lines: the pages as
+     lines of text (for a statement read line by line, cas.js) instead of rows. */
   function read(file, opts) {
+    var o = opts || {};
     return file.arrayBuffer().then(function (buf) {
-      return lib().then(function (pdfjs) { return pagesOf(new Uint8Array(buf), pdfjs); });
-    }, function (err) {
-      /* pdf.js names a locked file; anything else is not a PDF that can be opened */
-      var e = new Error(err && err.name === 'PasswordException' ? 'locked' : 'unreadable');
-      if (err && err.name === 'PasswordException') e.locked = true;
+      return lib().then(function (pdfjs) { return pagesOf(new Uint8Array(buf), pdfjs, o.password); });
+    }).then(function (pages) { return o.lines ? linesFromPages(pages) : rowsFromPages(pages, opts); }, function (err) {
+      if (err && (err.scanned || err.locked || err.wrong)) throw err;
+      /* pdf.js names a locked file (code 1: no password; code 2: the wrong one);
+         anything else is not a PDF that can be opened */
+      var e = new Error(err && err.name === 'PasswordException' ? (err.code === 2 ? 'wrong password' : 'locked') : 'unreadable');
+      if (err && err.name === 'PasswordException') { if (err.code === 2) e.wrong = true; else e.locked = true; }
       throw e;
-    }).then(function (pages) { return rowsFromPages(pages, opts); });
+    });
+  }
+  /* every page as its lines of text: the words of one line, left to right, a
+     space between cells. A statement read line by line (the CAS) starts here. */
+  function linesFromPages(pages) {
+    var out = [], words = 0;
+    (pages || []).forEach(function (items) {
+      var lines = linesOf(items);
+      words += lines.length;
+      out.push(lines.map(function (l) { return l.segs.map(function (s) { return s.text; }).join(' ').replace(/\s+/g, ' ').trim(); }).filter(Boolean));
+    });
+    if (!words) { var scanned = new Error('no words in this PDF'); scanned.scanned = true; throw scanned; }
+    return out;
   }
 
   /* ------------------------------------------------------------ words into lines */
@@ -204,7 +223,7 @@
     return rows;
   }
 
-  var api = { read: read, rowsFromPages: rowsFromPages, itemsOf: itemsOf, linesOf: linesOf };
+  var api = { read: read, rowsFromPages: rowsFromPages, linesFromPages: linesFromPages, itemsOf: itemsOf, linesOf: linesOf };
   if (typeof module === 'object' && module.exports) module.exports = api;
   root.PRCPdfRows = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

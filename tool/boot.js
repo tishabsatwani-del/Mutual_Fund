@@ -168,7 +168,6 @@
     shared();
     A.watchTables();
     if (root.PRCDates) root.PRCDates.decorate(document);
-    var ver = $('#ver'); if (ver) ver.textContent = A.VERSION;
     if (A.inAppBrowser()) {
       ['#pf-step1', '#step-source', '#g-history-card'].forEach(function (sel) {
         var card = $(sel); if (!card) return;

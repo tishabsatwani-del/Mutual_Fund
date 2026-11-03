@@ -20,10 +20,13 @@
 (function (root) {
   'use strict';
 
-  function read(buf) {
+  /* opts.password: the reader's password for a locked workbook, used once here
+     and kept nowhere; without it a locked file throws an error marked .locked,
+     and a wrong one throws an error marked .wrong (locked.js) */
+  function read(buf, opts) {
     var bytes = new Uint8Array(buf);
     if (bytes.length >= 8 && bytes[0] === 0xD0 && bytes[1] === 0xCF && bytes[2] === 0x11 && bytes[3] === 0xE0) {
-      return { kind: 'biff', sheets: readBiff(bytes) };
+      return readBiff(bytes, opts || {});
     }
     if (bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4B && bytes[2] === 3 && bytes[3] === 4) return { kind: 'zip', sheets: [] };
     var text = decode(bytes);
@@ -43,15 +46,19 @@
 
   /* ============================================== the compound file around a workbook */
   var END = 0xFFFFFFFE, FREE = 0xFFFFFFFF;
-  function readBiff(bytes) {
+  function readBiff(bytes, opts) {
     var cfb = compoundFile(bytes);
     var stream = cfb.stream('Workbook') || cfb.stream('Book');
     if (!stream) {
-      /* a newer workbook saved with a password travels as an encrypted package */
-      if (cfb.has('EncryptedPackage')) throw locked();
+      /* a newer workbook saved with a password travels as an encrypted package:
+         opened here with the password, into the .xlsx bytes it wraps */
+      if (cfb.has('EncryptedPackage')) {
+        if (!opts.password || !root.PRCLocked) throw locked();
+        return { kind: 'zip', sheets: [], bytes: root.PRCLocked.ooxml(cfb.stream('EncryptionInfo'), cfb.stream('EncryptedPackage'), opts.password) };
+      }
       throw new Error('no workbook inside');
     }
-    return biffSheets(stream);
+    return { kind: 'biff', sheets: biffSheets(stream, opts) };
   }
   function locked() { var e = new Error('it is locked with a password'); e.locked = true; return e; }
   function compoundFile(bytes) {
@@ -134,7 +141,8 @@
     if (/[#0?]/.test(c)) return false;
     return /[dy]/.test(c) || (/m/.test(c) && !/[hs]/.test(c));
   }
-  function biffSheets(s) {
+  function biffSheets(s, opts) {
+    opts = opts || {};
     var view = new DataView(s.buffer, s.byteOffset, s.byteLength);
     var records = [], pos = 0;
     while (pos + 4 <= s.length) {
@@ -149,7 +157,13 @@
       var r = records[i];
       if (r.type === 0x0809 && i === 0) { biff8 = view.getUint16(r.at, true) === 0x0600; continue; }
       if (r.type === 0x000A) { i++; break; }
-      if (r.type === 0x002F) throw locked();   /* FILEPASS: what follows is encrypted */
+      if (r.type === 0x002F) {
+        /* FILEPASS: what follows is encrypted; with the password the stream is
+           opened (locked.js) and read again from the top, the record skipped */
+        if (opts.decrypted) continue;
+        if (!opts.password || !root.PRCLocked) throw locked();
+        return biffSheets(root.PRCLocked.biff(s, opts.password), { decrypted: true });
+      }
       if (r.type === 0x0022) date1904 = view.getUint16(r.at, true) === 1;
       else if (r.type === 0x041E || r.type === 0x001E) {
         var id = view.getUint16(r.at, true);

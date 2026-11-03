@@ -70,6 +70,23 @@
     return series[best];
   }
 
+  /* ---------------------------------------------------------- stamp duty
+   * Every mutual fund purchase from 1 July 2020 carries stamp duty of 0.005%,
+   * and the units are allotted on the amount less the duty, rounded to the
+   * paisa. Where the tool itself works out units from a NAV file (typed rows,
+   * or a statement that prints no units) it takes the duty off first; where a
+   * statement prints its units, they stand. An index carries no costs, so the
+   * same rupees in the index take none. */
+  var STAMP_DUTY_FROM = utc(2020, 7, 1), STAMP_DUTY_RATE = 0.00005;
+  function stampDuty(amount, t) {
+    if (!(amount > 0) || !isValidDate(t) || t < STAMP_DUTY_FROM) return 0;
+    return Math.round(amount * 5 / 1000) / 100;   /* 0.005% as 5 per 1,000 of 100ths: exact for whole paise */
+  }
+  function unitsBought(amount, nav, t) {
+    if (!(amount > 0) || !(nav > 0)) return NaN;
+    return (amount - stampDuty(amount, t)) / nav;
+  }
+
   /* ----------------------------------------------------------------- XIRR */
 
   /* Net present value of dated cash flows at an annual rate, Excel's XNPV. */
@@ -709,10 +726,13 @@
   function benchmarkEquivalent(flows, series, opts) {
     var o = opts || {};
     var tol = o.toleranceDays == null ? 7 : o.toleranceDays;
-    /* An index is bought at its value on the date, or the last value before
-       it. A fund's units are allotted at the NAV of the date, or the next NAV
-       after it: priceRule 'after' replays a fund's own NAV file that way. */
-    var priceAt = o.priceRule === 'after' ? atOrAfter : atOrBefore;
+    /* One pricing rule for fund and index: a payment is priced at the value on
+       its date, or the next value on or after it, as a fund allots units at the
+       NAV of the date or the next NAV. priceRule 'before' (the last value on or
+       before the date) is kept only so the two can be compared.
+       opts.stampDuty: units from a purchase are allotted on the amount less
+       stamp duty (a fund's own NAV replayed); an index takes none. */
+    var priceAt = o.priceRule === 'before' ? atOrBefore : atOrAfter;
     if (!series || series.length < 2) return fail('TOO_SHORT', 'This file does not hold enough history.');
     var list = (flows || []).filter(function (f) { return f && isValidDate(f.t) && f.amount > 0 && f.kind !== 'value'; })
       .slice().sort(function (a, b) { return a.t - b.t; });
@@ -724,7 +744,7 @@
       if (f.t > valueDate) { skipped.push({ t: f.t, amount: f.amount, why: 'after the valuation date' }); continue; }
       var obs = priceAt(series, f.t, tol);
       if (!obs || obs.t > valueDate) { skipped.push({ t: f.t, amount: f.amount, why: 'no value in the file near this date' }); continue; }
-      var u = f.amount / obs.v;
+      var u = o.stampDuty && f.kind !== 'out' && f.kind !== 'payout' && f.kind !== 'reinvest' ? unitsBought(f.amount, obs.v, f.t) : f.amount / obs.v;
       if (f.kind === 'reinvest') { if (!o.own) continue; units += u; }
       else if (f.kind === 'payout' && o.own) { u = 0; tookOut += f.amount; eq.push({ t: f.t, amount: f.amount }); }
       else if (f.kind === 'out' || f.kind === 'payout') { units -= u; tookOut += f.amount; eq.push({ t: f.t, amount: f.amount }); }
@@ -774,7 +794,8 @@
          at the NAV of the date, or the next NAV after it */
       var obs = atOrAfter(series, l.t, tol);
       if (l.dir === 'payout') return { t: l.t, dir: 'payout', amount: l.amount, units: 0, ok: true };
-      var units = l.units != null && l.units > 0 ? l.units : (obs ? l.amount / obs.v : null);
+      /* a purchase without its units: allotted on the amount less stamp duty */
+      var units = l.units != null && l.units > 0 ? l.units : (obs ? (l.dir === 'out' || l.dir === 'reinvest' ? l.amount / obs.v : unitsBought(l.amount, obs.v, l.t)) : null);
       return { t: l.t, dir: l.dir === 'out' || l.dir === 'reinvest' ? l.dir : 'in', amount: l.amount, units: units, ok: !!units };
     }).filter(function (l) { return l.ok; });
     if (!resolved.length) return fail('NO_MATCH', 'None of the payment dates fall inside this file’s history.');
@@ -1026,6 +1047,7 @@
   var api = {
     MS_PER_DAY: MS_PER_DAY, DAY_BASIS: DAY_BASIS, utc: utc, dayCount: dayCount, yearsBetween: yearsBetween,
     addYears: addYears, addMonths: addMonths, atOrBefore: atOrBefore, atOrAfter: atOrAfter,
+    STAMP_DUTY_FROM: STAMP_DUTY_FROM, STAMP_DUTY_RATE: STAMP_DUTY_RATE, stampDuty: stampDuty, unitsBought: unitsBought,
     xnpv: xnpv, xirr: xirr, allRoots: allRoots, cagr: cagr, absoluteReturn: absoluteReturn, doublingTime: doublingTime,
     rollingReturns: rollingReturns, measureWindows: measureWindows, FREQUENCY: FREQUENCY,
     describe: describe, quantile: quantile, median: median, stdevOf: stdevOf, meanOf: meanOf, correlation: correlation,

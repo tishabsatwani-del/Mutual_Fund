@@ -27,11 +27,13 @@ market references, so it does not go stale.
 | `styles.css` | One stylesheet. No framework, no font requests. |
 | `engine.js` | Every calculation: XIRR (all roots), CAGR, rolling returns, drawdown, benchmark-equivalent flows, capture ratios, information ratio, tracking, calendar and trailing returns, goal maths. Pure functions, no DOM. |
 | `parse.js` | Turns a messy CSV, text or pasted table into a clean dated series and reports what it dropped. Reads day-first and month-first dates. Picks the value column by its heading (never a code, ISIN or whole-number column) and refuses a column that never moves. Tells price data from payments, and a fund's NAV file from an index file. Reads each scheme's plan and option (Direct, Regular, Growth, IDCW and the rest) and never mixes two: a file holding several asks which one. Picks the daily table out of a whole page pasted or saved as text (menus, headings and NAV Range tables ignored), held to the strict standard. Calls a one-day list of every scheme a snapshot. Reads AMFI's download in its old text layout and its new one (scheme code, scheme NAV name, plan, option, ISINs, net asset value, date). |
-| `upload.js` | Reads a statement: a transaction ledger, a holdings file, or the tool's own saved entries. Lines a Status column marks rejected, failed or cancelled are left out and counted; a broker's tradebook of shares is refused as one. |
+| `upload.js` | Reads a statement: a transaction ledger, a holdings file, or the tool's own saved entries. Lines a Status column marks rejected, failed or cancelled are left out and counted; a broker's tradebook of shares is refused as one. A stamp duty, STT or TDS line is folded into the payment it belongs to; a Net Amount column settles what moved in cash; a unit-balance column that shows units held before the first row marks the fund as starting with units bought earlier; the same transaction met in two statements is counted once. |
+| `cas.js` | Reads the Consolidated Account Statement (CAS) that CAMS and KFintech issue jointly, line by line in its documented layout: folio, scheme, ISIN, registrar, opening units, every transaction with its running balance, the stamp duty, STT and TDS lines, closing units, NAV and market value. A scheme whose units do not add up is named and not read; a Summary CAS is read as holdings; a CAS in another layout, a depository's demat statement, and the statements that are not a complete history (Single Folio, Capital Gain, Pay-In Pay-Out, IDCW, ELSS One View, SFT, Exit Load, Grandfathered) are refused by name. |
+| `locked.js` | Opens a locked statement on the device with the password the reader types, which is used once and kept nowhere: an Excel workbook locked by Office (the standard and agile forms), an old `.xls` with a FILEPASS record (RC4, the Excel 97 and CryptoAPI ways), a zip (the traditional cipher or WinZip AES). The hashes, AES and RC4 are written out here and checked against Node's crypto in `../tests/locked.test.js`. A locked PDF is opened by pdf.js with the same password. |
 | `pieces.js` | The rules for a history that arrives in several pieces (files, pastes, or both, in any order): one scheme by code or name, one plan and option, never a total return index with a price index, every shared date carrying the same value to its last decimal, a question once when nothing can be checked, a warning where a join jumps, the gaps between pieces. Pure functions, shared by the door and the tests. |
 | `workbook.js` | Reads `.xlsx` by unzipping it with the browser's own `DecompressionStream`; no spreadsheet library. |
 | `xls.js` | Reads an old `.xls` in each of its forms (an Excel 97-2003 workbook, an HTML table, Excel 2003 XML or a newer `.xlsx` package under that name) in every slot. |
-| `pdfrows.js` + `vendor/pdfjs/` | Reads the words of a PDF on the device with pdf.js, back into rows: a fund house's or an exchange's history in every price slot, and a statement that is one plain table of text at step 1; a scanned page, a doubtful reading or a statement laid out as several tables is refused. |
+| `pdfrows.js` + `vendor/pdfjs/` | Reads the words of a PDF on the device with pdf.js, back into rows (a fund house's or an exchange's history in every price slot, a statement that is one plain table of text at step 1) or into lines (the CAS, for `cas.js`); a locked PDF takes the reader's password; a scanned page, a doubtful reading or a statement laid out as several tables is refused. |
 | `format.js` | Rupees, percentages and dates, one way everywhere. |
 | `dates.js` | Spells every chosen date as dd-Mmm-yyyy under the native date control. |
 | `charts.js` | Inline SVG: histogram, growth of ₹10,000, rolling line, fan chart, goal bar. |
@@ -52,7 +54,12 @@ screen is only worth making if something checks it.
 ## Conventions
 
 XIRR on a 365-day year, the convention of a spreadsheet's XIRR and of the CAGR
-funds publish. Rolling windows end on the same calendar date years later, or
+funds publish. One pricing rule for fund and index: a payment is priced at the
+value on its date, or the next value on or after it. Where the tool works out
+units from a NAV file (typed rows, a statement without units), the purchase
+carries stamp duty of 0.005% from 1 July 2020, rounded to the paisa, taken off
+before dividing; where a statement prints its units they stand; the index takes
+none. Rolling windows end on the same calendar date years later, or
 the last value up to seven days before it; never stretched. Real return is
 (1 + return) ÷ (1 + inflation) − 1. Monthly instalments are added at the start
 of each month; a step-up applies once a year. Every figure is before tax and

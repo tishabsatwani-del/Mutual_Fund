@@ -21,6 +21,13 @@
     mode: null,            /* 'file' | 'typed' */
     kind: null,            /* 'holdings' | 'ledger' when a file was read */
     holdings: null, imported: null, valuations: [], switches: 0, source: '', answers: {},
+    files: [],             /* the statements added, each read on its own: { id, name, sig, file, result, matched } */
+    openings: [],          /* funds that start with units bought earlier: { fund, folio, units, t } */
+    matched: 0,            /* rows met in a second statement and counted once */
+    pending: null,         /* a locked file waiting for its password: { file, sheet } */
+    asking: null,          /* the file whose direction question stands open */
+    batch: null,           /* while a zip's files are read: the refusals, listed on the zip's card */
+    lastDirection: null,   /* the words the reader has answered this session: a second file with the same words is not asked again */
     file: null, sheet: null, sheets: null, sheetName: null, last: null,
     funds: [],             /* [{ key, title, g }]: the funds step 2 values */
     navDoors: {},          /* fund key -> door handle */
@@ -82,13 +89,24 @@
     drawFundCards();
   }
 
-  /* ==================================================== step 1: the statement */
+  /* ==================================================== step 1: the statement
+     One or several files: a transaction statement, the detailed CAS (a locked
+     PDF, opened with the password the reader types), an app's export, a zip
+     holding any of them. Each file is read on its own and kept in PF.files;
+     the rows of all of them are merged, the same transaction met twice counted
+     once (upload.js dedupe), and every file can be removed on its own. A
+     holdings file stands alone: it cannot sit beside a transaction statement. */
+  var PF_IDLE = '<span class="filewrap"><input type="file" class="filepick" id="pf-file" accept="' + A.FILE_ACCEPT + ',.zip,application/zip" multiple aria-label="Choose your statement file" title="Choose a file"></span><p>or drop it here · CSV, Excel, PDF or zip · a locked statement asks for its password</p>';
+  var PASS_LABEL = 'The password you set when you requested this statement';
+  var PASS_HINT = 'Used once, here on your device, to open this file. It is not stored and not sent anywhere.';
+  var MIXED_KINDS = 'Step 1 already holds a statement of a different kind. A holdings statement (what you own now) and a transaction statement (every payment) cannot be read together: remove the file already added, or start again.';
   function mountDoors() {
     $('#pf-howto').innerHTML = D.guide('statement');
     var host = $('#pf-statement-door');
     host.innerHTML =
       '<div class="filebox" id="pf-drop">' + PF_IDLE + '</div>' +
       '<p class="hint tight" id="pf-dup" aria-live="polite" hidden>This file is already added.</p>' +
+      '<div id="pf-files"></div>' +
       '<button class="secondary pastebtn" type="button" id="pf-paste-open">Paste the rows instead</button>' +
       '<div class="pastebox" id="pf-paste-box" hidden><label class="fieldlabel" for="pf-paste-text">Copy the rows out of your statement and paste them here</label>' +
       '<textarea id="pf-paste-text" rows="6" spellcheck="false"></textarea><div class="btnrow"><button class="primary" type="button" id="pf-paste-read">Read these</button></div></div>';
@@ -99,26 +117,40 @@
     drop.addEventListener('dragenter', function (e) { allow(e); depth++; drop.classList.add('over'); });
     drop.addEventListener('dragover', allow);
     drop.addEventListener('dragleave', function () { if (--depth <= 0) { depth = 0; drop.classList.remove('over'); } });
-    drop.addEventListener('drop', function (e) { e.preventDefault(); depth = 0; drop.classList.remove('over'); var files = Array.prototype.slice.call((e.dataTransfer && e.dataTransfer.files) || []); if (files.length) takeFile(files[0]); });
-    drop.addEventListener('change', function (e) { var input = e.target; if (!input || input.type !== 'file') return; var files = Array.prototype.slice.call(input.files || []); try { input.value = ''; } catch (err) { /* harmless */ } if (files.length) takeFile(files[0]); });
+    drop.addEventListener('drop', function (e) { e.preventDefault(); depth = 0; drop.classList.remove('over'); var files = Array.prototype.slice.call((e.dataTransfer && e.dataTransfer.files) || []); if (files.length) takeFiles(files); });
+    drop.addEventListener('change', function (e) { var input = e.target; if (!input || input.type !== 'file') return; var files = Array.prototype.slice.call(input.files || []); try { input.value = ''; } catch (err) { /* harmless */ } if (files.length) takeFiles(files); });
     $('#pf-paste-open').addEventListener('click', function () { var box = $('#pf-paste-box'); box.hidden = !box.hidden; if (!box.hidden) $('#pf-paste-text').focus(); });
     $('#pf-paste-read').addEventListener('click', function () {
       var text = $('#pf-paste-text').value;
       if (!text.trim()) return;
-      PF.answers = {}; PF.source = 'pasted rows'; PF.file = null; PF.sheets = null; PF.accepted = false;
-      dupLine(false); card(null);
-      readInto(text, true);
+      var n = PF.files.filter(function (f) { return f.isPaste; }).length;
+      takeFile({ name: n ? 'pasted rows ' + (n + 1) : 'pasted rows', size: text.length, pastedText: text });
+      $('#pf-paste-text').value = '';
     });
+    $('#pf-files').addEventListener('click', function (e) {
+      var b = e.target && e.target.closest ? e.target.closest('[data-remove]') : null;
+      if (b) removeFile(b.dataset.remove);
+    });
+    $('#pf-door-out').addEventListener('click', function (e) {
+      var t = e.target;
+      if (!t || !t.id) return;
+      if (t.id === 'pf-pass-go') submitPassword();
+      if (t.id === 'pf-pass-cancel') { PF.pending = null; card(PF.files.length ? 'loaded' : null, PF.files.length ? PF.files[PF.files.length - 1].name : ''); say('pf-door-out', '', ''); refreshGate(); }
+    });
+    $('#pf-door-out').addEventListener('keydown', function (e) { if (e.key === 'Enter' && e.target && e.target.id === 'pf-pass') { e.preventDefault(); submitPassword(); } });
 
     /* step 3, on both modes: an index, in any layout (an NSE or BSE download,
        a sheet the reader made, values copied from a website). A fund's file is
        refused by its words, an index fund's included; a file whose words say
-       neither is asked about once. A price index carries its flag. */
+       neither is asked about once; every PDF and every locked file is refused.
+       A price index carries its flag. */
     $('#pf-index-howto').innerHTML = D.guide('index');
     PF.indexDoor = D.mount($('#pf-index-door'), {
       prefix: 'pfix', kind: 'index', noun: 'index', label: 'The index’s total return (TRI) history file',
-      hint: 'CSV, Excel, PDF or text · a date column and the index value on that date · several pieces of one history are joined',
+      hint: 'CSV, Excel or text · a date column and the index value on that date · several pieces of one history are joined',
       gate: indexGate,
+      refuseCopy: function (file, err) { return /\.pdf$/i.test(file && file.name || '') || (err && err.extra && err.extra.locked) || /locked with a password/.test(err && err.msg || '') ? NOT_INDEX : null; },
+      accept: function (res) { var twin = sameAsNavFile(res); return twin ? notice('bad', esc(NOT_INDEX) + ' Its values are the NAV of <strong>' + esc(twin) + '</strong>, the file loaded in step 2.') : null; },
       ask: function (res) {
         var parts = res.parts || [{ rows: res.rows, name: res.file }];
         var silent = parts.every(function (p) { return P.indexOrFund(p.rows, p.name).verdict === 'unknown'; });
@@ -136,6 +168,22 @@
       }
     });
   }
+  /* A file of dates and values answered "Yes, an index" whose values are a
+     fund's NAV loaded in step 2 is that fund, not an index: every shared date
+     carries the same value, and the two share most of their dates. */
+  function sameAsNavFile(res) {
+    var s = res && res.series;
+    if (!s || s.length < 5) return null;
+    var keys = Object.keys(PF.nav || {});
+    for (var k = 0; k < keys.length; k++) {
+      var nav = PF.nav[keys[k]]; if (!nav || !nav.series) continue;
+      var by = {}; nav.series.forEach(function (p) { by[p.t] = p.v; });
+      var shared = 0, equal = 0;
+      s.forEach(function (p) { if (by[p.t] != null) { shared++; if (Math.abs(by[p.t] - p.v) <= 0.00051) equal++; } });
+      if (shared >= Math.min(10, Math.ceil(Math.min(s.length, nav.series.length) * 0.8)) && equal === shared && shared >= Math.min(s.length, nav.series.length) * 0.8) return nav.name || titleOf(keys[k]);
+    }
+    return null;
+  }
   /* C3: the brief's wording, with the figure left out so it never goes stale */
   var PRICE_FLAG = '<strong>Price index:</strong> dividends are left out, which flatters your side by about the index’s dividend yield each year. The Total Returns tab of the same report fixes this.';
   /* The fund-comparison words of 2 October 2026. Since the owner's word of
@@ -147,10 +195,12 @@
   var FUND_NOTE = 'A fund, costs included: its NAV is net of its own costs, as your funds’ NAVs are.';
   /* The owner's word of 3 October 2026: step 3 takes an index in any layout.
      A statement or a holdings file is refused as before; a fund's file, an
-     index fund's included, is refused by its words; the rest is read. */
+     index fund's included, is refused by its words; every PDF and every locked
+     file is refused (November 2026); the rest is read. */
   var NOT_INDEX = 'This is not an index file. Please upload a valid index file.';
   var ASK_INDEX = 'Is this the daily value of an index (not a fund’s NAV)?';
   function indexGate(rows, name) {
+    if (/\.pdf$/i.test(String(name || ''))) return notice('bad', esc(NOT_INDEX));
     var v = P.checkSchema(rows, { slot: 'index' });
     if (!v.ok && v.code === 'TRADEBOOK') return schemaGate(rows, 'index');
     if (P.indexOrFund(rows, name).verdict === 'fund') return notice('bad', esc(NOT_INDEX));
@@ -206,90 +256,221 @@
   }
 
   /* The payments card, drawn like every other file slot's: the file's name with
-     a tick when it is read, with the mark when it is refused, and the same
-     file chosen again is not read again. */
-  var PF_IDLE = '<span class="filewrap"><input type="file" class="filepick" id="pf-file" accept="' + A.FILE_ACCEPT + '" aria-label="Choose your statement file" title="Choose a file"></span><p>or drop it here · CSV, Excel or a PDF with selectable text</p>';
-  function card(state, name) {
+     a tick when it is read, with the mark when it is refused, a question mark
+     while a password is needed; the same file chosen again is not read again. */
+  function card(state, name, sub) {
     var drop = $('#pf-drop'); if (!drop) return;
     drop.className = 'filebox' + (state ? ' ' + state : '');
+    var line = state === 'loaded' ? (sub || '<strong class="ok-word">File added</strong>' + (PF.files.length > 1 ? ': ' + PF.files.length + ' statements read together' : ''))
+      : state === 'working' ? (sub || 'Locked: the password is needed below')
+      : '<strong class="bad-word">Not added.</strong> The reason is below.';
     drop.innerHTML = !state ? PF_IDLE :
-      '<div class="fileok"><span class="fileok-ic" aria-hidden="true">' + (state === 'loaded' ? '✓' : '!') + '</span><span class="fileok-t"><strong class="fileok-name">' + esc(name) + '</strong><span class="fileok-sub">' +
-      (state === 'loaded' ? '<strong class="ok-word">File added</strong>' : '<strong class="bad-word">Not added.</strong> The reason is below.') + '</span></span></div>' +
-      '<span class="filewrap"><input type="file" class="filepick" id="pf-file" accept="' + A.FILE_ACCEPT + '" aria-label="Choose your statement file" title="' + (state === 'loaded' ? 'Choose a different file' : 'Choose another file') + '"></span>';
+      '<div class="fileok"><span class="fileok-ic" aria-hidden="true">' + (state === 'loaded' ? '✓' : state === 'working' ? '?' : '!') + '</span><span class="fileok-t"><strong class="fileok-name">' + esc(name) + '</strong><span class="fileok-sub">' + line + '</span></span></div>' +
+      '<span class="filewrap"><input type="file" class="filepick" id="pf-file" accept="' + A.FILE_ACCEPT + ',.zip,application/zip" multiple aria-label="Choose your statement file" title="' + (state === 'loaded' ? 'Add another statement, or a different file' : 'Choose another file') + '"></span>';
   }
   function dupLine(show) { var d = $('#pf-dup'); if (d) d.hidden = !show; }
-  function sigOf(f) { return f ? f.name + '|' + f.size : ''; }
-  function takeFile(file, sheet) {
-    var again = sheet == null && PF.file && PF.accepted && sigOf(file) === sigOf(PF.file);
-    dupLine(!!again);
-    if (again) return;
-    PF.accepted = false;
-    PF.answers = {}; PF.file = file; PF.source = file.name || 'that file'; PF.sheet = sheet == null ? null : sheet;
-    say('pf-door-out', 'Reading ' + esc(PF.source) + '…');
-    A.readStatement(file, PF.sheet).then(function (got) {
-      PF.sheets = got.sheets || null; PF.sheetName = got.sheetName || null;
-      readInto(got.rows ? got.rows : got.text, true);
-      if (got.sheets && got.sheets.length > 1) offerSheets(got.sheets, got.sheetName);
-    }).catch(function (err) { forget(); card('refused', PF.source); A.chime('no'); say('pf-door-out', '', notice('bad', esc(err.message))); refreshGate(); });
+  function sigOf(f) { return f ? (f.pastedText != null ? 'paste|' + f.pastedText.length + '|' + f.pastedText.slice(0, 200) : f.name + '|' + f.size) : ''; }
+  var fileSeq = 0;
+  function takeFiles(list, password) {
+    var files = Array.prototype.slice.call(list || []), i = 0;
+    function next() { if (i >= files.length) return Promise.resolve(); var f = files[i++]; return takeFile(f, null, password).then(next, next); }
+    return next();
   }
-  function offerSheets(sheets, current) {
+  /* one file, one read: a locked file stops at the password box and comes back
+     here with the password, used for this read only and then let go */
+  function takeFile(file, sheet, password) {
+    var sig = sigOf(file), have = PF.files.filter(function (f) { return f.sig === sig; })[0] || (PF.asking && PF.asking.sig === sig ? PF.asking : null);
+    var again = sheet == null && have && have.sheet == null;
+    dupLine(!!again);
+    if (again) return Promise.resolve();
+    PF.pending = null;
+    var name = file.name || 'that file';
+    say('pf-door-out', 'Reading ' + name + '…');
+    return A.readStatement(file, sheet, password).then(function (got) {
+      if (got.zip) {
+        if (!got.zip.length) { refuse(name, 'This zip archive holds no statement file.'); return; }
+        /* every statement file inside, one after the other; then the archive's own card:
+           what was added and what was not */
+        var before = PF.files.length, refusals = [];
+        PF.batch = refusals;
+        return takeFiles(got.zip, password).then(function () {
+          PF.batch = null;
+          var added = PF.files.slice(before);
+          if (added.length) {
+            card('loaded', name, '<strong class="ok-word">' + added.length + (added.length === 1 ? ' statement' : ' statements') + ' added</strong> from this zip' + (refusals.length ? '; ' + refusals.length + (refusals.length === 1 ? ' file was' : ' files were') + ' not' : ''));
+            say('pf-door-out', '', notice('ok', 'From <strong>' + esc(name) + '</strong>: ' + added.map(function (f) { return esc(f.name) + (f.matched ? ' (' + f.matched + ' rows matched another statement, counted once)' : ''); }).join(', ') + '.') +
+              refusals.map(function (x) { return notice('bad', '<strong>' + esc(x.name) + '</strong> was not added. ' + esc(x.message)); }).join(''));
+          } else refuse(name, 'None of the ' + refusals.length + ' files inside this zip could be read as a statement. ' + refusals.map(function (x) { return x.name + ': ' + x.message; }).join(' '));
+        });
+      }
+      var entry = { id: 'f' + (fileSeq++), name: name, sig: sig, file: file, isPaste: file.pastedText != null, sheet: sheet == null ? null : sheet, sheetName: got.sheetName || null, sheets: got.sheets || null, answers: {} };
+      if (got.cas) { addFile(entry, fromCas(got.cas, got.kind)); return; }
+      entry.source = got.rows ? got.rows : got.text;
+      return readEntry(entry);
+    }).catch(function (err) {
+      if (err && (err.locked || err.wrong)) { askPassword(file, sheet, err); return; }
+      refuse(name, err && err.message ? err.message : 'That file could not be read.');
+    });
+  }
+  /* the detailed CAS's rows and valuations, or the summary CAS's holdings, in the shape a statement's take */
+  function fromCas(cas, kind) {
+    if (kind === 'cas-summary') return { ok: true, kind: 'holdings', rows: cas.rows, skipped: 0, totalsDropped: 0, summary: true };
+    return { ok: true, kind: 'ledger', rows: cas.rows, valuations: cas.valuations, openings: cas.openings, problems: cas.problems, skipped: 0, failed: [], dateCertain: true, cas: true, period: cas.period, taxLines: 0 };
+  }
+  /* resolves once the file is added or refused; a direction question waits for its answer */
+  function readEntry(entry) {
+    var rows = U.rowsFrom(entry.source);
+    var named = root.PRCCas ? root.PRCCas.kindOfRows(rows) : null;
+    if (named) { refuse(entry.name, root.PRCCas.MESSAGES[named]); return Promise.resolve(); }
+    var r = U.portfolioFile(entry.source, entry.answers);
+    if (r.ask === 'direction') {
+      /* the words a reader has already answered for another file of this session need no second question */
+      var known = PF.lastDirection, words = r.words.filter(function (w) { return !w.idcw && !(U.taxKind && U.taxKind(w.word)); });
+      if (known && words.length && words.every(function (w) { return known[w.word] != null; })) {
+        entry.answers.direction = {}; words.forEach(function (w) { entry.answers.direction[w.word] = known[w.word]; });
+        return readEntry(entry);
+      }
+      return new Promise(function (resolve) {
+        askDirection(entry, r, resolve);
+        if (entry.sheets && entry.sheets.length > 1 && !PF.batch) offerSheets(entry);
+      });
+    }
+    PF.asking = null;
+    /* the tab chooser stays whatever the tab read to: a cover tab refused is one tap from the right one */
+    if (!r.ok) { refuse(entry.name, r.message); if (entry.sheets && entry.sheets.length > 1 && !PF.batch) offerSheets(entry); return Promise.resolve(); }
+    addFile(entry, r);
+    if (entry.sheets && entry.sheets.length > 1 && !PF.batch) offerSheets(entry);
+    return Promise.resolve();
+  }
+  function addFile(entry, r) {
+    var kinds = PF.files.map(function (f) { return f.result.kind; });
+    if (kinds.length && kinds.indexOf(r.kind) === -1) { refuse(entry.name, MIXED_KINDS); return; }
+    entry.result = r;
+    PF.files = PF.files.filter(function (f) { return f.sig !== entry.sig; });
+    PF.files.push(entry);
+    if (PF.batch) { rebuild(); return; }
+    card('loaded', entry.name);
+    if (!entry.asked) A.chime('ok');   /* a file that asked its question sounded when it was taken */
+    $('#pf-paste-box').hidden = true;
+    rebuild();
+    var msgs = [notice('ok', 'Read <strong>' + esc(entry.name) + '</strong>' + (entry.sheetName ? ', tab ' + esc(entry.sheetName) : '') + '.')];
+    if (entry.matched) msgs.push(notice('warn', entry.matched + (entry.matched === 1 ? ' row of ' : ' rows of ') + esc(entry.name) + ' matched rows already read from another statement (same folio, date, amount and units), and ' + (entry.matched === 1 ? 'is' : 'are') + ' counted once.'));
+    (r.problems || []).forEach(function (p) { msgs.push(notice('bad', esc(p.message))); });
+    say('pf-door-out', '', msgs.join(''));
+  }
+  function refuse(name, message) {
+    PF.pending = null; PF.asking = null;
+    if (PF.batch) { PF.batch.push({ name: name, message: message }); return; }
+    card('refused', name); A.chime('no');
+    say('pf-door-out', '', notice('bad', esc(message)) + (PF.files.length ? '<p class="hint">' + (PF.files.length === 1 ? 'The statement already added stays as it was.' : 'The ' + PF.files.length + ' statements already added stay as they were.') + '</p>' : ''));
+    refreshGate();
+  }
+  function removeFile(id) {
+    PF.files = PF.files.filter(function (f) { return f.id !== id; });
+    card(PF.files.length ? 'loaded' : null, PF.files.length ? PF.files[PF.files.length - 1].name : '');
+    say('pf-door-out', '', '');
+    rebuild();
+  }
+  /* The password box: the reader types the password they set when they asked
+     for the statement; it opens this one file, here, and is kept nowhere. */
+  function askPassword(file, sheet, err) {
+    PF.pending = { file: file, sheet: sheet };
+    card('working', file.name || 'that file', err.wrong ? '<strong class="bad-word">Not opened.</strong> The password did not match' : 'Locked: the password is needed below');
+    if (err.wrong) A.chime('no');
+    say('pf-door-out', '', '<div class="notice' + (err.wrong ? ' bad' : '') + '"><span class="ic">' + (err.wrong ? '!' : '?') + '</span><span>' + esc(err.wrong ? err.message : 'This statement is locked with a password.') + '</span></div>' +
+      '<div class="field" style="max-width:24rem;margin-top:.7rem"><label for="pf-pass">' + PASS_LABEL + '</label><input type="password" id="pf-pass" autocomplete="off" autocapitalize="off" spellcheck="false"><p class="hint">' + PASS_HINT + '</p></div>' +
+      '<div class="btnrow"><button class="primary" type="button" id="pf-pass-go">Open the file</button><button class="secondary" type="button" id="pf-pass-cancel">Choose another file</button></div>');
+    var box = $('#pf-pass'); if (box) box.focus();
+    refreshGate();
+  }
+  function submitPassword() {
+    var box = $('#pf-pass'), p = PF.pending;
+    if (!box || !p) return;
+    var pw = box.value;
+    if (!pw) { box.focus(); return; }
+    box.value = '';
+    PF.pending = null;
+    takeFile(p.file, p.sheet, pw);
+  }
+  function offerSheets(entry) {
     var host = $('#pf-door-out');
     var wrap = document.createElement('div');
     wrap.className = 'field'; wrap.style.marginTop = '.8rem';
-    wrap.innerHTML = '<label for="pf-sheet">This file has ' + sheets.length + ' tabs. Reading <strong>' + esc(current) + '</strong>.</label><select id="pf-sheet">' +
-      sheets.map(function (n) { return '<option' + (n === current ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('') + '</select><p class="hint">On a consolidated statement the transactions are usually not the first tab.</p>';
+    wrap.innerHTML = '<label for="pf-sheet">' + esc(entry.name) + ' has ' + entry.sheets.length + ' tabs. Reading <strong>' + esc(entry.sheetName) + '</strong>.</label><select id="pf-sheet">' +
+      entry.sheets.map(function (n) { return '<option' + (n === entry.sheetName ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('') + '</select><p class="hint">On a consolidated statement the transactions are usually not the first tab. A locked workbook asks for its password again.</p>';
     host.appendChild(wrap);
-    $('#pf-sheet').addEventListener('change', function () { takeFile(PF.file, this.value); });
+    $('#pf-sheet').addEventListener('change', function () { takeFile(entry.file, this.value); });
   }
-  /* what was read is forgotten before a new attempt is reported */
-  function forget() {
-    PF.kind = null; PF.holdings = null; PF.imported = null; PF.valuations = []; PF.switches = 0; PF.funds = [];
-    $('#pf-read').hidden = true; $('#pf-out').innerHTML = ''; PF.ran = false;
-    drawFundCards();
-  }
-  function readInto(source, fresh) {
-    PF.last = source;
-    var r = U.portfolioFile(source, PF.answers);
-    if (fresh) {
-      var ok = r.ok || r.ask === 'direction';
-      PF.accepted = ok;
-      if (PF.file) card(ok ? 'loaded' : 'refused', PF.source);
-      A.chime(ok ? 'ok' : 'no');
+  /* every file's rows, merged: later files matched against what is already read */
+  function rebuild() {
+    var ledgers = PF.files.filter(function (f) { return f.result.kind === 'ledger'; }), holds = PF.files.filter(function (f) { return f.result.kind === 'holdings'; });
+    PF.kind = null; PF.holdings = null; PF.imported = null; PF.valuations = []; PF.openings = []; PF.switches = 0; PF.matched = 0; PF.funds = [];
+    PF.ran = false; $('#pf-out').innerHTML = '';
+    var summary = null;
+    if (holds.length && !ledgers.length) {
+      PF.kind = 'holdings';
+      PF.holdings = [];
+      holds.forEach(function (f) { f.result.rows.forEach(function (h) { PF.holdings.push(h); }); f.matched = 0; });
+      summary = { kind: 'holdings', skipped: holds.reduce(function (a, f) { return a + (f.result.skipped || 0); }, 0), totalsDropped: holds.reduce(function (a, f) { return a + (f.result.totalsDropped || 0); }, 0), summaryCas: holds.some(function (f) { return f.result.summary; }) };
+    } else if (ledgers.length) {
+      PF.kind = 'ledger';
+      var kept = [], failed = [], skipped = 0, taxLines = 0, problems = [], seenOpen = {}, example = null, certain = true;
+      ledgers.forEach(function (f) {
+        var r = f.result;
+        var rows = r.rows.map(function (x) { var y = {}; Object.keys(x).forEach(function (k) { y[k] = x[k]; }); y.src = f.id; delete y.switch; return y; });
+        var d = U.dedupe(kept, rows);
+        f.matched = d.matched; PF.matched += d.matched; kept = d.kept;
+        (r.failed || []).forEach(function (x) { failed.push(x); }); skipped += r.skipped || 0; taxLines += r.taxLines || 0;
+        (r.problems || []).forEach(function (p) { problems.push(p); });
+        (r.valuations || []).forEach(function (v) { PF.valuations = PF.valuations.filter(function (q) { return (q.fund || '') !== (v.fund || ''); }); PF.valuations.push(v); });
+        (r.openings || []).forEach(function (o) { var k = (o.folio || '') + '|' + (o.fund || ''); if (!seenOpen[k]) { seenOpen[k] = true; PF.openings.push(o); } });
+        if (r.dateCertain === false && !example) { certain = false; example = r.example; }
+      });
+      kept.sort(function (a, b) { return a.t - b.t || (a.order || 0) - (b.order || 0); });
+      PF.imported = kept;
+      PF.switches = U.markSwitches(PF.imported);
+      summary = { kind: 'ledger', skipped: skipped, failed: failed, dateCertain: certain, example: example, taxLines: taxLines, problems: problems, matched: PF.matched };
     }
-    if (r.ask === 'direction') { forget(); return askDirection(r); }
-    if (!r.ok) {
-      forget();
-      say('pf-door-out', '', notice('bad', esc(r.message)));
-      refreshGate();
-      return;
-    }
-    PF.kind = r.kind;
-    PF.holdings = r.kind === 'holdings' ? r.rows : null;
-    PF.imported = r.kind === 'ledger' ? r.rows : null;
-    PF.valuations = r.valuations || [];
-    PF.switches = r.switches || 0;
-    $('#pf-paste-box').hidden = true;
-    say('pf-door-out', '', notice('ok', 'Read <strong>' + esc(PF.source) + '</strong>.'));
-    drawRead(r);
+    renderFiles();
+    if (summary) drawRead(summary); else { $('#pf-read').hidden = true; drawFundCards(); }
+    refreshGate();
   }
-  function askDirection(r) {
+  function renderFiles() {
+    var host = $('#pf-files'); if (!host) return;
+    if (!PF.files.length) { host.innerHTML = ''; return; }
+    host.innerHTML = '<ul class="readlist" aria-label="Statements added">' + PF.files.map(function (f) {
+      var n = f.result.rows.length;
+      var what = f.result.kind === 'holdings' ? n + (n === 1 ? ' holding' : ' holdings') : n + (n === 1 ? ' line' : ' lines');
+      return '<li><span class="rl-h"><strong>' + esc(f.name) + '</strong>' + (f.sheetName ? ' · ' + esc(f.sheetName) : '') + (f.result.cas ? ' · detailed CAS' : f.result.summary ? ' · summary CAS' : '') + '</span>' +
+        '<div class="rl-figs"><span class="rl-fig"><span class="qsub">' + what + '</span>' + (f.matched ? ' <b>' + f.matched + ' matched another statement, counted once</b>' : '') + '</span>' +
+        '<button class="link" type="button" data-remove="' + f.id + '">Remove</button></div></li>';
+    }).join('') + '</ul>';
+  }
+  function askDirection(entry, r, done) {
     var guessed = 0;
     var words = r.words.map(function (w, i) {
       var lines = w.count + (w.count === 1 ? ' line' : ' lines');
       /* an IDCW line means one thing, and is shown, not asked */
       if (w.idcw) return '<p class="tick fixed"><span>' + esc(w.word) + ' <span class="qsub">' + lines + ' · ' + IDCW_SAYS[w.idcw] + '</span></span></p>';
+      if (U.taxKind && U.taxKind(w.word)) return '<p class="tick fixed"><span>' + esc(w.word) + ' <span class="qsub">' + lines + ' · a tax line, folded into its payment</span></span></p>';
       if (w.guess) guessed++;
       return '<label class="tick"><input type="checkbox" data-word="' + esc(w.word) + '" id="pf-dir-' + i + '"' + (w.guess === 'out' ? ' checked' : '') + '><span>' + esc(w.word) +
         ' <span class="qsub">' + lines + (w.guess ? ' · read as money ' + w.guess : ' · not recognised') + '</span></span></label>';
     }).join('');
-    say('pf-door-out', '', '<div class="notice"><span class="ic">?</span><span>' + esc(r.message) + '</span></div><div class="ticks">' + words + '</div>' +
+    /* the file is taken, with a tick and one sound, and the question stands below it */
+    if (!entry.asked) { entry.asked = true; A.chime('ok'); }
+    PF.asking = entry;
+    card('loaded', entry.name);
+    say('pf-door-out', '', '<div class="notice"><span class="ic">?</span><span>' + esc(entry.name) + ': ' + esc(r.message) + '</span></div><div class="ticks">' + words + '</div>' +
       '<p class="hint">' + (guessed ? 'Ticked from what these words usually mean. Change anything that is wrong for your statement. ' : '') + 'Anything left unticked is read as money in.</p>' +
       '<div class="btnrow"><button class="primary" type="button" id="pf-dir-go">Read them this way</button></div>');
     $('#pf-dir-go').addEventListener('click', function () {
       var map = {};
       $$('[data-word]', $('#pf-door-out')).forEach(function (b) { map[b.dataset.word] = b.checked ? 'out' : 'in'; });
-      PF.answers.direction = map;
-      readInto(PF.last);
+      entry.answers.direction = map;
+      PF.lastDirection = PF.lastDirection || {};
+      Object.keys(map).forEach(function (k) { PF.lastDirection[k] = map[k]; });
+      readEntry(entry).then(function () { if (done) done(); });
     });
     refreshGate();
   }
@@ -297,18 +478,20 @@
   var IDCW_SAYS = { payout: 'IDCW paid to you: money out', reinvest: 'IDCW reinvested: units added, not money in',
                    idcw: 'IDCW: money out when the line has no units, units added when it has' };
   /* ---------------------------------------------- what was read, as a summary */
+  function sourcesLine() { return PF.files.map(function (f) { return f.name; }).join(', '); }
   function drawRead(r) {
-    var card = $('#pf-read'), summary = $('#pf-read-summary'), list = $('#pf-read-list'), head = $('#pf-read-h');
-    card.hidden = false;
+    var card_ = $('#pf-read'), summary = $('#pf-read-summary'), list = $('#pf-read-list'), head = $('#pf-read-h');
+    card_.hidden = false;
     if (r.kind === 'holdings') {
       head.textContent = 'What you hold';
       var inv = 0, cur = 0;
       PF.holdings.forEach(function (h) { inv += h.invested || 0; cur += h.current || 0; });
-      summary.innerHTML = '<p class="hint tight">' + PF.holdings.length + (PF.holdings.length === 1 ? ' fund' : ' funds') + ' read from ' + esc(PF.source) +
-        (r.skipped ? ', ' + r.skipped + ' line' + (r.skipped === 1 ? '' : 's') + ' skipped' : '') + (r.totalsDropped ? ', a totals row left out so it is not counted twice' : '') + '.</p>' +
+      summary.innerHTML = '<p class="hint tight">' + PF.holdings.length + (PF.holdings.length === 1 ? ' fund' : ' funds') + ' read from ' + esc(sourcesLine()) +
+        (r.skipped ? ', ' + r.skipped + ' line' + (r.skipped === 1 ? '' : 's') + ' skipped' : '') + (r.totalsDropped ? ', a totals row left out so it is not counted twice' : '') + '.' +
+        (r.summaryCas ? ' A Summary CAS lists what you hold, not when you bought it, so there are no dates and no yearly rate; the Detailed CAS has them.' : '') + '</p>' +
         '<div class="stats">' + stat('Funds', String(PF.holdings.length)) + stat('You put in', money(inv)) + stat('Worth now', money(cur)) + '</div>';
       list.innerHTML = PF.holdings.map(function (h, i) {
-        return readLine(i, esc(h.name), [['put in', h.invested == null ? 'not in the file' : money(h.invested)], ['worth now', h.current == null ? 'not in the file' : money(h.current)]]);
+        return readLine(i, esc(h.name) + (h.folio ? ' · folio ' + esc(h.folio) : ''), [['put in', h.invested == null ? 'not in the file' : money(h.invested)], ['worth now', h.current == null ? 'not in the file' : money(h.current)]].concat(h.units != null ? [['units', units3(h.units)]] : []));
       }).join('');
       PF.funds = [];
     } else {
@@ -324,13 +507,19 @@
       var groups = U.schemeTotals(PF.imported);
       var named = groups.some(function (g) { return g.name; });
       PF.funds = groups.map(function (g) { return { key: g.name, title: titleOf(g.name), g: g }; });
-      summary.innerHTML = '<p class="hint tight">' + nPay + (nPay === 1 ? ' payment' : ' payments') + (nRe ? ' and ' + nRe + (nRe === 1 ? ' IDCW reinvestment' : ' IDCW reinvestments') : '') + ' read from ' + esc(PF.source) +
+      var casValued = PF.valuations.filter(function (v) { return v.fromCas; });
+      summary.innerHTML = '<p class="hint tight">' + nPay + (nPay === 1 ? ' payment' : ' payments') + (nRe ? ' and ' + nRe + (nRe === 1 ? ' IDCW reinvestment' : ' IDCW reinvestments') : '') + ' read from ' + esc(sourcesLine()) +
         (r.skipped ? ', ' + r.skipped + ' line' + (r.skipped === 1 ? '' : 's') + ' skipped' : '') + ', ' + fmtDate(first) + ' to ' + fmtDate(last) + '.' +
+        (r.matched ? ' <strong>' + r.matched + (r.matched === 1 ? ' row' : ' rows') + ' matched ' + (r.matched === 1 ? 'a row' : 'rows') + ' already read from another statement</strong> (same folio, date, amount and units) and ' + (r.matched === 1 ? 'is' : 'are') + ' counted once.' : '') +
         (PF.switches ? ' ' + PF.switches + (PF.switches === 1 ? ' switch between funds was' : ' switches between funds were') + ' recognised and left out of the totals of money put in and taken out.' : '') +
         (!r.dateCertain && r.example ? ' These dates read two ways; ' + esc(r.example.raw) + ' has been read as ' + esc(r.example.dayFirst) + '. Check the lines below.' : '') +
         (nPaid ? ' IDCW paid to you: ' + nPaid + (nPaid === 1 ? ' line, ' : ' lines, ') + money(paid) + ', counted as money out.' : '') +
         (nRe ? ' IDCW reinvested: ' + nRe + (nRe === 1 ? ' line, ' : ' lines, ') + money(re) + ', counted as units added, not as money in.' : '') +
-        (r.failed && r.failed.length ? ' <strong>' + r.failed.length + (r.failed.length === 1 ? ' line' : ' lines') + ' marked ' + esc(failedWords(r.failed)) + ' left out</strong>: ' + money(r.failed.reduce(function (a, f) { return a + f.amount; }, 0)) + ' that never moved.' : '') + '</p>' +
+        (r.taxLines ? ' ' + r.taxLines + (r.taxLines === 1 ? ' tax line' : ' tax lines') + ' (stamp duty, STT, TDS) folded into the payments they belong to.' : '') +
+        (r.failed && r.failed.length ? ' <strong>' + r.failed.length + (r.failed.length === 1 ? ' line' : ' lines') + ' marked ' + esc(failedWords(r.failed)) + ' left out</strong>: ' + money(r.failed.reduce(function (a, f) { return a + f.amount; }, 0)) + ' that never moved.' : '') +
+        (casValued.length ? ' The statement values ' + (casValued.length === 1 ? 'its fund' : 'its ' + casValued.length + ' funds') + ' at its own closing NAV on ' + fmtDate(casValued[0].t) + '; that stands as worth today unless a NAV file is loaded in step 2.' : '') + '</p>' +
+        (r.problems || []).map(function (p) { return notice('bad', esc(p.message)); }).join('') +
+        PF.openings.map(function (o) { return notice('warn', '<strong>' + esc(titleOf(o.fund)) + '.</strong> ' + esc(openingSentence(o))); }).join('') +
         '<div class="stats">' + stat('Money in', money(ins) + (nIn ? ' · ' + nIn : '')) + stat('Money out', nOut ? money(outs) + ' · ' + nOut : 'none') +
         (named ? stat('Funds named', String(groups.length)) : '') + '</div>' +
         (named ? '<div class="fundcards">' + groups.map(function (g) {
@@ -340,7 +529,8 @@
       list.innerHTML = PF.imported.map(function (f, i) {
         var what = f.dir === 'reinvest' ? ['IDCW reinvested · units added, not money in', money(f.amount) + (f.units != null ? ' · ' + units3(f.units) + ' units' : '')]
           : f.idcw === 'payout' ? ['IDCW paid to you · money out', money(f.amount)]
-          : [f.dir === 'out' ? 'money out' : 'money in', money(f.amount) + (f.switch ? ' (switch)' : '')];
+          : f.taxOnly ? ['a tax line with no payment of its own that day · money out of pocket', money(f.amount)]
+          : [f.dir === 'out' ? 'money out' : 'money in', money(f.amount) + (f.switch ? ' (switch)' : '') + (f.tax && (f.tax.stamp || f.tax.stt || f.tax.tds) ? ' · ' + taxWords(f.tax) : '')];
         return readLine(i, fmtDate(f.t) + (f.fund ? ' · ' + esc(f.fund) : ''), [what]);
       }).join('');
     }
@@ -354,6 +544,18 @@
     });
     drawFundCards();
   }
+  function taxWords(tax) {
+    var parts = [];
+    if (tax.stamp) parts.push('stamp duty ' + money(tax.stamp) + ' inside it');
+    if (tax.stt) parts.push('STT ' + money(tax.stt) + ' taken off');
+    if (tax.tds) parts.push('TDS ' + money(tax.tds) + ' taken off');
+    return parts.join(', ');
+  }
+  /* the brief's sentence for a scheme that starts with units bought earlier */
+  function openingSentence(o) {
+    return 'This statement starts on ' + fmtDate(o.t) + ' with ' + units3(o.units) + ' units bought earlier. For your full return, the statement must cover the period from your first investment.';
+  }
+  function openingOf(key) { return PF.openings.filter(function (o) { return (o.fund || '') === key; })[0] || null; }
   /* the words a statement used for the lines it did not put through: "rejected or failed" */
   function failedWords(list) {
     var seen = [];
@@ -379,7 +581,7 @@
       if (row) { row.querySelector('.val-name').innerHTML = cardHead(f); return; }
       row = A.el('div', { class: 'valrow', 'data-scheme': f.key });
       var id = 'pfv-' + (rowSeq++);
-      var closed = f.g && f.g.closed;
+      var closed = f.g && f.g.closed && !openingOf(f.key);
       var typedFile = PF.mode === 'file';
       row.innerHTML = '<div class="val-name">' + cardHead(f) + '</div>' + (closed ? '' :
         '<div class="val-door" id="' + id + '-door"></div>' +
@@ -394,7 +596,7 @@
       var amt = row.querySelector('.val-amt'), sw = row.querySelector('.val-navswitch');
       if (amt) {
         /* a statement that carried its own valuation row for this fund */
-        var vrow = PF.valuations.filter(function (x) { return (x.fund || '') === f.key; });
+        var vrow = PF.valuations.filter(function (x) { return (x.fund || '') === f.key && !x.fromCas; });
         if (vrow.length) { amt.value = vrow[vrow.length - 1].amount; row.dataset.valueDate = vrow[vrow.length - 1].t; row.querySelector('.val-typed').open = true; }
         amt.addEventListener('input', function () { delete row.dataset.valueDate; valuesChanged(f.key); });
         sw.addEventListener('change', function () { amt.value = ''; valuesChanged(f.key); });
@@ -423,8 +625,10 @@
   function cardHead(f) {
     var g = f.g, sub = '';
     if (g) {
-      sub = g.closed ? 'units net to zero: you are out of it, so its ending is already in the statement'
-        : (g.hasUnits && g.units > 0 ? units3(g.units) + ' units left · ' : '') + money(g.paidIn - g.tookOut) + ' net in' + (g.hasUnits ? '' : ' · no units in this file');
+      var op = openingOf(f.key);
+      sub = g.closed && !op ? 'units net to zero: you are out of it, so its ending is already in the statement'
+        : (g.hasUnits && g.units + (op ? op.units : 0) > 0 ? units3(g.units + (op ? op.units : 0)) + ' units left · ' : '') + money(g.paidIn - g.tookOut) + ' net in' + (g.hasUnits ? '' : ' · no units in this file') +
+          (op ? ' · <strong class="warn-word">starts with ' + units3(op.units) + ' units bought earlier: no yearly rate</strong>' : '');
     } else {
       var t = typedTotals(f.key);
       sub = money(t.paidIn) + ' in' + (t.tookOut ? ', ' + money(t.tookOut) + ' out' : '');
@@ -456,7 +660,7 @@
      payment divided by the NAV of its date, or the next NAV after it. */
   function unitsFor(key, series) {
     var f = fundOf(key);
-    if (f && f.g && f.g.hasUnits) return f.g.units;
+    if (f && f.g && f.g.hasUnits) return f.g.units + (openingOf(key) ? openingOf(key).units : 0);
     if (!series) return null;
     var flows = flowsFor(key);
     if (!flows.length) return null;
@@ -465,7 +669,8 @@
       if (flows[i].idcw === 'payout') continue;
       var obs = E.atOrAfter(series, flows[i].t, 7);
       if (!obs) return null;
-      units += (flows[i].kind === 'out' ? -1 : 1) * flows[i].amount / obs.v;
+      /* a purchase without its units is allotted on the amount less stamp duty (engine.js) */
+      units += flows[i].kind === 'out' ? -flows[i].amount / obs.v : flows[i].kind === 'reinvest' ? flows[i].amount / obs.v : E.unitsBought(flows[i].amount, obs.v, flows[i].t);
     }
     return units;
   }
@@ -500,7 +705,7 @@
     if (!row) return null;
     var amt = row.querySelector('.val-amt'), sw = row.querySelector('.val-navswitch');
     var n = amt ? parseFloat(amt.value) : NaN;
-    if (!isFinite(n) || n <= 0) return null;
+    if (!isFinite(n) || n <= 0) return casValue(key);
     var when = row.dataset.valueDate ? +row.dataset.valueDate : A.todayTs();
     if (sw && sw.checked) {
       var units = knownUnits(key);
@@ -509,6 +714,11 @@
     return { amount: n, t: when, from: 'typed' };
   }
   function rowFor(key) { return $('#pf-values [data-scheme="' + CSS.escape(key) + '"]'); }
+  /* the CAS's own closing NAV and market value for a fund, as worth today, until a NAV file says otherwise */
+  function casValue(key) {
+    var v = PF.valuations.filter(function (x) { return x.fromCas && (x.fund || '') === key; })[0];
+    return v ? { amount: v.amount, t: v.t, from: 'cas', units: v.units, nav: v.nav } : null;
+  }
   /* Why a loaded NAV file cannot value its fund, or null. Its last NAV must
      fall on or after the last payment, and the units must come to a holding. */
   function navProblem(key) {
@@ -565,6 +775,8 @@
         (nav.check && nav.check.different ? ' <strong>The result is tagged: valued against a different ' + (nav.check.variant ? 'plan or option' : 'scheme') + '’s NAV.</strong>' : ''));
     } else if (nav && navProblem(key)) {
       html = notice('warn', esc(navProblem(key)));
+    } else if (v && v.from === 'cas') {
+      html = notice('ok', 'Valued by the statement itself: ' + units3(v.units) + ' units × ' + nav4(v.nav) + ' on ' + fmtDate(v.t) + ' = <strong>' + money(v.amount) + '</strong>, its closing NAV and market value. Load this fund’s NAV file above to value it on a later date.');
     } else if (PF.mode === 'typed') {
       html = v ? notice('ok', 'Valued by your <em>Worth today</em> row: ' + money(v.amount) + (v.t ? ' on ' + fmtDate(v.t) : '') + '.')
         : (f && !(f.g && f.g.closed) ? notice('', 'Not valued yet. Load this fund’s NAV file above, or add a <em>Worth today</em> row for it in step 1.') : '');
@@ -654,7 +866,7 @@
     if (PF.mode === 'file') {
       if (PF.kind === 'holdings') return { one: true, two: true, holdings: true };
       if (PF.kind !== 'ledger') return { one: false, two: false };
-      var open = PF.funds.filter(function (f) { return !(f.g && f.g.closed); });
+      var open = PF.funds.filter(function (f) { return !(f.g && f.g.closed && !openingOf(f.key)); });
       var valued = open.filter(function (f) { return !!valueOf(f.key); });
       var odd = open.filter(function (f) { return !!implausible(f.key); });
       return { one: true, two: valued.length === open.length && !odd.length, open: open.length, valued: valued.length, odd: odd.length };
@@ -722,7 +934,7 @@
       });
       PF.funds.forEach(function (f) {
         addName(f.key);
-        if (f.g && f.g.closed) return;
+        if (f.g && f.g.closed && !openingOf(f.key)) return;
         var v = valueOf(f.key);
         if (!v) { missing.push(f.title); return; }
         if (implausible(f.key)) odd.push(f.title);
@@ -751,6 +963,7 @@
     if (PF.mode === 'file' && PF.kind === 'holdings') { PF.ran = true; out.innerHTML = holdingsAnswer(); return; }
     var g = gather();
     if (g.problems.length) { out.innerHTML = notice('bad', g.problems.slice(0, 4).map(esc).join('<br>')); return; }
+    if (PF.mode === 'file' && PF.openings.length) { PF.ran = true; out.innerHTML = openingAnswer(g); return; }
     if (g.flat) { out.innerHTML = notice('bad', esc(P.flatCopy(g.flat.report && g.flat.report.headers))); return; }
     if (g.odd.length) {
       out.innerHTML = notice('bad', '<strong>No result yet.</strong> Check the value of <strong>' + g.odd.map(esc).join('</strong>, <strong>') + '</strong> in step 2: it is far from what went in, which is what a NAV typed as a value looks like.');
@@ -799,7 +1012,7 @@
       /* what was paid for each unit: purchases only, not IDCW put back as units */
       var lots = flowsFor(key).filter(function (x) { return x.kind !== 'reinvest'; }).map(function (x) { return { t: x.t, amount: x.amount, dir: x.kind === 'out' ? 'out' : 'in', units: x.units }; });
       var navFile = PF.nav[key];
-      if (navFile) lots.forEach(function (l) { if (!(l.units > 0)) { var o = E.atOrAfter(navFile.series, l.t, 7); if (o) l.units = l.amount / o.v; } });
+      if (navFile) lots.forEach(function (l) { if (!(l.units > 0)) { var o = E.atOrAfter(navFile.series, l.t, 7); if (o) l.units = l.dir === 'out' ? l.amount / o.v : E.unitsBought(l.amount, o.v, l.t); } });
       var avg = E.averagePurchaseNav(lots);
       var info = { key: key, title: titleOf(key), flows: flows, put: put, took: took, worth: worth, rate: r, units: units, navToday: navToday,
                    avg: avg.ok ? avg.nav : null, closed: !!(fundOf(key) && fundOf(key).g && fundOf(key).g.closed),
@@ -817,7 +1030,7 @@
         /* replayed in the fund's own NAV: an IDCW payout sells no units, a reinvestment buys them with no money */
         var own = PF.mode === 'file' ? flowsFor(key).map(function (x) { return { t: x.t, amount: x.amount, kind: x.idcw === 'payout' ? 'payout' : x.kind, units: x.idcw === 'payout' ? null : x.units }; }) : payments;
         info.path = E.holdingPath(own.map(function (p) { return { t: p.t, amount: p.amount, dir: p.kind, units: p.units }; }), nav.series, { valueDate: valueDate });
-        info.eq = E.benchmarkEquivalent(own, nav.series, { valueDate: valueDate, priceRule: 'after', own: true });
+        info.eq = E.benchmarkEquivalent(own, nav.series, { valueDate: valueDate, priceRule: 'after', own: true, stampDuty: true });
       }
       out[key] = info;
     });
@@ -1038,8 +1251,8 @@
     var payments = g.flows.filter(function (f) { return f.kind !== 'value'; }).map(function (f) { return { t: f.t, amount: Math.abs(f.amount), kind: f.kind }; });
     var valueDate = g.flows.filter(function (f) { return f.kind === 'value'; }).reduce(function (m, f) { return Math.max(m, f.t); }, -Infinity);
     if (!isFinite(valueDate)) valueDate = ix.series[ix.series.length - 1].t;
-    /* a fund's units are allotted at the NAV of the date or the next one, as the reader's are */
-    return { payments: payments, eq: E.benchmarkEquivalent(payments, ix.series, { valueDate: valueDate, priceRule: ix.kind === 'NAV' ? 'after' : null }) };
+    /* one pricing rule for fund and index: the value on the date, or the next value on or after it */
+    return { payments: payments, eq: E.benchmarkEquivalent(payments, ix.series, { valueDate: valueDate, priceRule: 'after' }) };
   }
   function indexSentence(res, eq) {
     var rel = A.relation(res.rate, eq.rate);
@@ -1153,6 +1366,25 @@
       '<p class="hint">Share is each holding’s part of what the whole is worth now.</p></div>';
     return html + A.pdfFoot('portfolio', 'My holdings');
   }
+  /* A statement for a period that starts with units bought earlier: the money
+     inside the period is known, the units today are valued, but a rate from the
+     two would price units bought before the statement as if they were bought on
+     its first day. So no yearly rate, for the scheme or for the whole; what the
+     figures do say is shown, and each such scheme is named with the sentence. */
+  function openingAnswer(g) {
+    var html = '<div class="result"><div class="label">No yearly rate from this statement</div>' +
+      '<div class="sub">' + PF.openings.map(function (o) { return '<p class="cardtext"><strong>' + esc(titleOf(o.fund)) + '.</strong> ' + esc(openingSentence(o)) + '</p>'; }).join('') + '</div></div>';
+    html += partialAnswer(g.invested, g.withdrawn, g.current);
+    var whole = g.names.filter(function (k) { return !openingOf(k); });
+    if (whole.length) {
+      html += '<div class="card"><h2>Funds this statement covers from their first purchase</h2><div class="fundcards">' + whole.map(function (k) {
+        var flows = g.flows.filter(function (f) { return (f.label || '') === k; }), r = E.xirr(flows);
+        var put = 0, took = 0, worth = 0; flows.forEach(function (f) { if (f.kind === 'in') put += -f.amount; else if (f.kind === 'out') took += f.amount; else worth += f.amount; });
+        return '<div class="fundcard"><div class="fc-name">' + esc(titleOf(k)) + '</div><div class="fc-figs">' + fig('Yearly rate (XIRR)', r.ok ? esc(A.signedPct(r.rate)) : 'not known') + fig('Put in', money(put)) + fig('Taken out', took ? money(took) : 'none') + fig('Worth now', money(worth)) + '</div></div>';
+      }).join('') + '</div><p class="hint">Each of these funds has every payment from its first purchase inside this statement, so its own rate stands. The whole portfolio’s rate waits for a statement that covers every fund from the start.</p></div>';
+    }
+    return html + A.pdfFoot('portfolio', 'My portfolio');
+  }
   function partialAnswer(invested, withdrawn, current) {
     if (!invested && !withdrawn && !current) return '';
     var net = current + withdrawn - invested, abs = invested > 0 && current > 0 ? net / invested : null;
@@ -1238,16 +1470,16 @@
       if (!$$('#pf-rows .entry').length) blankRows(); else afterTyped();
     } else if (mode === 'file') {
       PF.funds = [];
-      if (PF.kind === 'ledger') drawRead({ kind: 'ledger', skipped: 0, dateCertain: true });
-      drawFundCards();
+      if (PF.files.length) rebuild(); else drawFundCards();
     }
     refreshGate();
   }
   function say(id, text, html) { var e = $('#' + id); if (!e) return; if (html) e.innerHTML = html; else e.textContent = text; }
   function resetPortfolio() {
     PF.kind = null; PF.holdings = null; PF.imported = null; PF.valuations = []; PF.switches = 0; PF.source = ''; PF.answers = {}; PF.last = null;
+    PF.files = []; PF.openings = []; PF.matched = 0; PF.pending = null; PF.asking = null; PF.batch = null; PF.lastDirection = null;
     PF.funds = []; PF.nav = {}; PF.navDoors = {}; PF.confirmed = {}; PF.ran = false;
-    $('#pf-read').hidden = true; $('#pf-values').innerHTML = '';
+    $('#pf-read').hidden = true; $('#pf-values').innerHTML = ''; $('#pf-files').innerHTML = '';
     $('#pf-out').innerHTML = ''; $('#pf-door-out').innerHTML = ''; $('#pf-paste-text').value = ''; $('#pf-paste-box').hidden = true;
     PF.file = null; PF.accepted = false; card(null); dupLine(false);
     if (PF.indexDoor) PF.indexDoor.clear();
