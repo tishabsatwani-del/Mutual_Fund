@@ -158,6 +158,19 @@
     if (/\btds\b|tax deducted/.test(t)) return 'tds';
     return null;
   }
+  /* "Gross Amount: Rs.1500/-; Stamp Duty 0.07 charges Levied" in any cell of a line (November
+     2026): money out of pocket for the purchase is the gross the line names, and the duty is kept
+     on the row, as a stamp duty line of its own would be */
+  var INLINE_GROSS = /\bgross\s+amount\s*:?\s*(?:INR|Rs\.?|₹)?\s*([\d,]*\.?\d+)\s*(?:\/-)?/i;
+  var INLINE_STAMP = /\bstamp\s+duty\s*(?:charges?)?\s*:?\s*(?:of\s+)?(?:INR|Rs\.?|₹)?\s*([\d,]*\.?\d+)/i;
+  function inlineStamp(row) {
+    var text = (row || []).map(function (c) { return String(c == null ? '' : c); }).join(' ');
+    if (!/stamp\s*duty|gross\s+amount/i.test(text)) return null;
+    var g = INLINE_GROSS.exec(text), s = INLINE_STAMP.exec(text);
+    var gross = g ? ledgerAmount(g[1]) : NaN, stamp = s ? ledgerAmount(s[1]) : NaN;
+    if (!isFinite(gross) && !isFinite(stamp)) return null;
+    return { gross: isFinite(gross) ? gross : null, stamp: isFinite(stamp) ? stamp : null };
+  }
   /* a column that says whether a line went through; a line that did not is not a payment */
   var STATUS_HEADERS = /^(status|txn status|trxn status|transaction status|payment status|order status|state|result)$/;
   var FAILED_STATUS = /\b(rejected|reject|failed|failure|fail|cancelled|canceled|reversed|reversal|bounced|bounce|declined|unsuccessful|not processed|pending|in process|processing|initiated|awaiting|returned|expired)\b/i;
@@ -260,7 +273,7 @@
       }
     }
 
-    var out = [], valuations = [], skipped = 0, failed = [], taxes = [];
+    var out = [], valuations = [], skipped = 0, failed = [], taxes = [], inlineLines = 0;
     for (var i = 0; i < body.length; i++) {
       var t = dateOf(body[i][dateCol], dayFirst);
       var n = ledgerAmount(body[i][amountCol]);
@@ -300,13 +313,19 @@
       var net = netCol >= 0 ? ledgerAmount(body[i][netCol]) : NaN;
       if (isFinite(net) && net > 0 && ik !== 'reinvest') cash = dir === 'out' ? Math.min(gross, Math.abs(net)) : Math.max(gross, Math.abs(net));
       var bal = balanceCol >= 0 ? ledgerAmount(body[i][balanceCol]) : NaN;
+      var inl = dir === 'in' && ik !== 'reinvest' ? inlineStamp(body[i]) : null, tax = null;
+      if (inl) {
+        if (inl.gross != null && inl.gross >= cash) cash = inl.gross;
+        if (inl.stamp != null) tax = { stamp: inl.stamp };
+        inlineLines++;
+      }
       out.push({ t: t, amount: cash, gross: gross, dir: dir, units: isFinite(u) ? Math.abs(u) : null, idcw: ik || null,
-                 fund: fund, folio: folio, isin: P.ISIN_RE.test(isin) ? isin : '', code: code, line: i + (header ? 2 : 1), balance: isFinite(bal) ? bal : null, order: i });
+                 fund: fund, folio: folio, isin: P.ISIN_RE.test(isin) ? isin : '', code: code, line: i + (header ? 2 : 1), balance: isFinite(bal) ? bal : null, order: i, tax: tax, inline: !!inl });
     }
     var taxLines = foldTaxes(out, taxes);
     var openings = balanceCol >= 0 ? openingsFrom(out) : [];
     return {
-      ok: out.length > 0, rows: out, valuations: valuations, skipped: skipped, failed: failed, header: header, taxLines: taxLines, openings: openings,
+      ok: out.length > 0, rows: out, valuations: valuations, skipped: skipped, failed: failed, header: header, taxLines: taxLines, inline: inlineLines, openings: openings,
       dateCol: dateCol, amountCol: amountCol, fundCol: fundCol, unitsCol: unitsCol, typeCol: typeCol, statusCol: statusCol, folioCol: folioCol, balanceCol: balanceCol,
       words: words, dayFirst: dayFirst, dateCertain: dateCertain, example: example,
       code: out.length ? null : 'NO-ROWS', message: out.length ? null : (failed.length ? MESSAGES.allFailed : MESSAGES.ledgerNoRows)

@@ -23,6 +23,8 @@
     holdings: null, imported: null, valuations: [], switches: 0, source: '', answers: {},
     files: [],             /* the statements added, each read on its own: { id, name, sig, file, result, matched } */
     openings: [],          /* funds that start with units bought earlier: { fund, folio, units, t } */
+    noRate: false,         /* a statement that lists only some of the transactions (a Partial Transaction Listing): no yearly rate */
+    summary: null,         /* the statement's own Account Summary, merged over the files: { funds: { key: { cost, value, units, nav, t } }, total: { cost, value } | null } */
     matched: 0,            /* rows met in a second statement and counted once */
     pending: null,         /* a locked file waiting for its password: { file, sheet } */
     asking: null,          /* the file whose direction question stands open */
@@ -315,13 +317,23 @@
   /* the detailed CAS's rows and valuations, or the summary CAS's holdings, in the shape a statement's take */
   function fromCas(cas, kind) {
     if (kind === 'cas-summary') return { ok: true, kind: 'holdings', rows: cas.rows, skipped: 0, totalsDropped: 0, summary: true };
-    return { ok: true, kind: 'ledger', rows: cas.rows, valuations: cas.valuations, openings: cas.openings, problems: cas.problems, skipped: 0, failed: [], dateCertain: true, cas: true, period: cas.period, taxLines: 0 };
+    if (kind === 'listing') {
+      return { ok: true, kind: 'ledger', rows: cas.rows, valuations: cas.valuations, openings: cas.openings, problems: cas.problems, skipped: 0, failed: [], dateCertain: true, listing: true, partial: !!cas.partial,
+               accountSummary: cas.summary, period: cas.period, taxLines: 0, inline: cas.rows.filter(function (r) { return r.inline; }).length };
+    }
+    return { ok: true, kind: 'ledger', rows: cas.rows, valuations: cas.valuations, openings: cas.openings, problems: cas.problems, skipped: 0, failed: [], dateCertain: true, cas: true, period: cas.period, taxLines: 0, inline: cas.rows.filter(function (r) { return r.inline; }).length };
   }
   /* resolves once the file is added or refused; a direction question waits for its answer */
   function readEntry(entry) {
     var rows = U.rowsFrom(entry.source);
     var named = root.PRCCas ? root.PRCCas.kindOfRows(rows) : null;
     if (named) { refuse(entry.name, root.PRCCas.MESSAGES[named]); return Promise.resolve(); }
+    /* a workbook or text laid out in scheme blocks with running unit balances (listing.js): read on
+       its proof alone, or refused with the scheme that does not add up named */
+    if (root.PRCListing && !entry.isPaste) {
+      var lst = root.PRCListing.read(rows);
+      if (lst.layout) { if (!lst.ok) { refuse(entry.name, lst.message); return Promise.resolve(); } addFile(entry, fromCas(lst, 'listing')); return Promise.resolve(); }
+    }
     var r = U.portfolioFile(entry.source, entry.answers);
     if (r.ask === 'direction') {
       /* the words a reader has already answered for another file of this session need no second question */
@@ -408,7 +420,8 @@
   function rebuild() {
     var ledgers = PF.files.filter(function (f) { return f.result.kind === 'ledger'; }), holds = PF.files.filter(function (f) { return f.result.kind === 'holdings'; });
     PF.kind = null; PF.holdings = null; PF.imported = null; PF.valuations = []; PF.openings = []; PF.switches = 0; PF.matched = 0; PF.funds = [];
-    PF.ran = false; $('#pf-out').innerHTML = '';
+    PF.noRate = false; PF.summary = null;
+    PF.ran = false; $('#pf-out').innerHTML = ''; A.resultUndone('pf-calc');
     var summary = null;
     if (holds.length && !ledgers.length) {
       PF.kind = 'holdings';
@@ -417,9 +430,18 @@
       summary = { kind: 'holdings', skipped: holds.reduce(function (a, f) { return a + (f.result.skipped || 0); }, 0), totalsDropped: holds.reduce(function (a, f) { return a + (f.result.totalsDropped || 0); }, 0), summaryCas: holds.some(function (f) { return f.result.summary; }) };
     } else if (ledgers.length) {
       PF.kind = 'ledger';
-      var kept = [], failed = [], skipped = 0, taxLines = 0, problems = [], seenOpen = {}, example = null, certain = true;
+      var kept = [], failed = [], skipped = 0, taxLines = 0, inline = 0, problems = [], seenOpen = {}, example = null, certain = true;
       ledgers.forEach(function (f) {
         var r = f.result;
+        if (r.partial) PF.noRate = true;
+        inline += r.inline || 0;
+        if (r.accountSummary) {
+          PF.summary = PF.summary || { funds: {}, total: null, t: null, files: 0 };
+          PF.summary.files++;
+          r.accountSummary.funds.forEach(function (x) { if (x.read) PF.summary.funds[x.fund || ''] = { cost: x.cost, value: x.value, units: x.units, nav: x.nav, t: x.t }; if (x.t != null && (PF.summary.t == null || x.t > PF.summary.t)) PF.summary.t = x.t; });
+          if (r.accountSummary.total && PF.summary.files === 1) PF.summary.total = { cost: r.accountSummary.total.cost, value: r.accountSummary.total.value };
+          else PF.summary.total = null;   /* two statements' totals are not one total */
+        }
         var rows = r.rows.map(function (x) { var y = {}; Object.keys(x).forEach(function (k) { y[k] = x[k]; }); y.src = f.id; delete y.switch; return y; });
         var d = U.dedupe(kept, rows);
         f.matched = d.matched; PF.matched += d.matched; kept = d.kept;
@@ -432,7 +454,7 @@
       kept.sort(function (a, b) { return a.t - b.t || (a.order || 0) - (b.order || 0); });
       PF.imported = kept;
       PF.switches = U.markSwitches(PF.imported);
-      summary = { kind: 'ledger', skipped: skipped, failed: failed, dateCertain: certain, example: example, taxLines: taxLines, problems: problems, matched: PF.matched };
+      summary = { kind: 'ledger', skipped: skipped, failed: failed, dateCertain: certain, example: example, taxLines: taxLines, inline: inline, problems: problems, matched: PF.matched };
     }
     renderFiles();
     if (summary) drawRead(summary); else { $('#pf-read').hidden = true; drawFundCards(); }
@@ -444,7 +466,7 @@
     host.innerHTML = '<ul class="readlist" aria-label="Statements added">' + PF.files.map(function (f) {
       var n = f.result.rows.length;
       var what = f.result.kind === 'holdings' ? n + (n === 1 ? ' holding' : ' holdings') : n + (n === 1 ? ' line' : ' lines');
-      return '<li><span class="rl-h"><strong>' + esc(f.name) + '</strong>' + (f.sheetName ? ' · ' + esc(f.sheetName) : '') + (f.result.cas ? ' · detailed CAS' : f.result.summary ? ' · summary CAS' : '') + '</span>' +
+      return '<li><span class="rl-h"><strong>' + esc(f.name) + '</strong>' + (f.sheetName ? ' · ' + esc(f.sheetName) : '') + (f.result.cas ? ' · detailed CAS' : f.result.summary ? ' · summary CAS' : f.result.listing ? (f.result.partial ? ' · partial transaction listing' : ' · transaction statement in scheme blocks') : '') + '</span>' +
         '<div class="rl-figs"><span class="rl-fig"><span class="qsub">' + what + '</span>' + (f.matched ? ' <b>' + f.matched + ' matched another statement, counted once</b>' : '') + '</span>' +
         '<button class="link" type="button" data-remove="' + f.id + '">Remove</button></div></li>';
     }).join('') + '</ul>';
@@ -519,15 +541,18 @@
         (nPaid ? ' IDCW paid to you: ' + nPaid + (nPaid === 1 ? ' line, ' : ' lines, ') + money(paid) + ', counted as money out.' : '') +
         (nRe ? ' IDCW reinvested: ' + nRe + (nRe === 1 ? ' line, ' : ' lines, ') + money(re) + ', counted as units added, not as money in.' : '') +
         (r.taxLines ? ' ' + r.taxLines + (r.taxLines === 1 ? ' tax line' : ' tax lines') + ' (stamp duty, STT, TDS) folded into the payments they belong to.' : '') +
+        (r.inline ? ' ' + r.inline + (r.inline === 1 ? ' purchase names' : ' purchases name') + ' the gross amount and the stamp duty inside the line: money out of pocket is the gross.' : '') +
         (r.failed && r.failed.length ? ' <strong>' + r.failed.length + (r.failed.length === 1 ? ' line' : ' lines') + ' marked ' + esc(failedWords(r.failed)) + ' left out</strong>: ' + money(r.failed.reduce(function (a, f) { return a + f.amount; }, 0)) + ' that never moved.' : '') +
         (casValued.length ? ' The statement values ' + (casValued.length === 1 ? 'its fund' : 'its ' + casValued.length + ' funds') + ' at its own closing NAV on ' + fmtDate(casValued[0].t) + '; that stands as worth today unless a NAV file is loaded in step 2.' : '') + '</p>' +
         (r.problems || []).map(function (p) { return notice('bad', esc(p.message)); }).join('') +
+        (PF.noRate || PF.openings.length ? notice('warn', esc(NO_RATE_MSG)) : '') +
         PF.openings.map(function (o) { return notice('warn', '<strong>' + esc(titleOf(o.fund)) + '.</strong> ' + esc(openingSentence(o))); }).join('') +
         '<div class="stats">' + stat('Money in', money(ins) + (nIn ? ' · ' + nIn : '')) + stat('Money out', nOut ? money(outs) + ' · ' + nOut : 'none') +
         (named ? stat('Funds named', String(groups.length)) : '') + '</div>' +
         (named ? '<div class="fundcards">' + groups.map(function (g) {
+          var cost = costOf(g.name);
           return '<div class="fundcard"><div class="fc-name">' + esc(titleOf(g.name)) + '</div><div class="fc-figs">' +
-            fig('Put in', money(g.paidIn)) + fig('Taken out', g.tookOut ? money(g.tookOut) : 'none') + fig('Units left', g.hasUnits ? units3(g.units) : 'not in this file') + '</div></div>';
+            fig(cost != null ? 'Paid in within this statement' : 'Put in', money(g.paidIn)) + (cost != null ? fig('Cost value, per the statement', money(cost)) : '') + fig('Taken out', g.tookOut ? money(g.tookOut) : 'none') + fig('Units left', g.hasUnits ? units3(g.units + (openingOf(g.name) ? openingOf(g.name).units : 0)) : 'not in this file') + '</div></div>';
         }).join('') + '</div>' : '');
       list.innerHTML = PF.imported.map(function (f, i) {
         var what = f.dir === 'reinvest' ? ['IDCW reinvested · units added, not money in', money(f.amount) + (f.units != null ? ' · ' + units3(f.units) + ' units' : '')]
@@ -547,17 +572,25 @@
     });
     drawFundCards();
   }
+  /* a tax is paise: shown to the paisa, where every other figure is whole rupees */
+  function paise(n) { return (n < 0 ? '−' : '') + '₹' + Math.abs(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
   function taxWords(tax) {
     var parts = [];
-    if (tax.stamp) parts.push('stamp duty ' + money(tax.stamp) + ' inside it');
-    if (tax.stt) parts.push('STT ' + money(tax.stt) + ' taken off');
-    if (tax.tds) parts.push('TDS ' + money(tax.tds) + ' taken off');
+    if (tax.stamp) parts.push('stamp duty ' + paise(tax.stamp) + ' inside it');
+    if (tax.stt) parts.push('STT ' + paise(tax.stt) + ' taken off');
+    if (tax.tds) parts.push('TDS ' + paise(tax.tds) + ' taken off');
     return parts.join(', ');
   }
-  /* the brief's sentence for a scheme that starts with units bought earlier */
+  /* the sentence for a scheme that starts with units bought earlier; the owner's message
+     (November 2026) stands over it, for this statement and for every statement that lists only
+     some of the transactions */
   function openingSentence(o) {
-    return 'This statement starts on ' + fmtDate(o.t) + ' with ' + units3(o.units) + ' units bought earlier. For your full return, the statement must cover the period from your first investment.';
+    return 'This statement starts on ' + fmtDate(o.t) + ' with ' + units3(o.units) + ' units bought earlier.';
   }
+  var NO_RATE_MSG = root.PRCListing ? root.PRCListing.MESSAGES.partial
+    : 'This file lists only some of your transactions, so no yearly rate is shown. For your full return, download your Consolidated Account Statement (CAS) from CAMS or KFintech: choose "Detailed" and the period from your first investment.';
+  /* the statement's own cost value for a fund, where its Account Summary states one */
+  function costOf(key) { var s = PF.summary && PF.summary.funds[key || '']; return s && s.cost != null ? s.cost : null; }
   function openingOf(key) { return PF.openings.filter(function (o) { return (o.fund || '') === key; })[0] || null; }
   /* the words a statement used for the lines it did not put through: "rejected or failed" */
   function failedWords(list) {
@@ -885,6 +918,7 @@
     var st = stepsDone();
     $('#pf-actions').hidden = !PF.mode;
     $('#pf-calc').hidden = !(st.one && st.two);
+    if ($('#pf-calc').hidden || !PF.ran) A.resultUndone('pf-calc');
     var s1 = $('#pf-step1'), s2 = $('#pf-step2'), s3 = $('#pf-step3');
     s1.dataset.done = st.one ? 'yes' : 'no';
     s2.hidden = !(PF.mode && st.one && !st.holdings);
@@ -961,23 +995,27 @@
   }
 
   /* ================================================================ results */
-  function calcPortfolio() {
-    var out = $('#pf-out');
-    if (PF.mode === 'file' && PF.kind === 'holdings') { PF.ran = true; out.innerHTML = holdingsAnswer(); return; }
+  /* pressed: the reader pressed the button (a tick, the sound, the scroll); a result redrawn by
+     itself when a file or a chip changes keeps its tick and moves nothing */
+  function calcPortfolio(ev) {
+    var out = $('#pf-out'), pressed = !!(ev && ev.type === 'click');
+    function shown() { A.resultDone('pf-calc', 'pf-out', pressed); }
+    function notShown() { A.resultUndone('pf-calc'); }
+    if (PF.mode === 'file' && PF.kind === 'holdings') { PF.ran = true; out.innerHTML = holdingsAnswer(); shown(); return; }
     var g = gather();
-    if (g.problems.length) { out.innerHTML = notice('bad', g.problems.slice(0, 4).map(esc).join('<br>')); return; }
-    if (PF.mode === 'file' && PF.openings.length) { PF.ran = true; out.innerHTML = openingAnswer(g); return; }
-    if (g.flat) { out.innerHTML = notice('bad', esc(P.flatCopy(g.flat.report && g.flat.report.headers))); return; }
+    if (g.problems.length) { out.innerHTML = notice('bad', g.problems.slice(0, 4).map(esc).join('<br>')); notShown(); return; }
+    if (PF.mode === 'file' && (PF.openings.length || PF.noRate)) { PF.ran = true; out.innerHTML = noRateAnswer(g); shown(); return; }
+    if (g.flat) { out.innerHTML = notice('bad', esc(P.flatCopy(g.flat.report && g.flat.report.headers))); notShown(); return; }
     if (g.odd.length) {
       out.innerHTML = notice('bad', '<strong>No result yet.</strong> Check the value of <strong>' + g.odd.map(esc).join('</strong>, <strong>') + '</strong> in step 2: it is far from what went in, which is what a NAV typed as a value looks like.');
-      return;
+      notShown(); return;
     }
     if (g.missing.length) {
       out.innerHTML = notice('bad', '<strong>No portfolio figure yet.</strong> ' + (g.missing.length === 1 ? 'One fund is' : g.missing.length + ' funds are') +
         ' not valued: <strong>' + g.missing.map(esc).join('</strong>, <strong>') + '</strong>. A rate worked out without ' + (g.missing.length === 1 ? 'it' : 'them') +
         ' would be wrong, not approximate, so nothing is printed until every fund has a value, or its NAV file.') +
         partialAnswer(g.invested, g.withdrawn, 0);
-      return;
+      notShown(); return;
     }
     var res = E.xirr(g.flows);
     if (!res.ok) {
@@ -985,7 +1023,7 @@
         ? (PF.mode === 'file' ? ' Give each fund its value today in step 2, or load its NAV file.' : ' Add a last row with today’s date, <strong>Worth today</strong>, and what the holding is worth now, or load the fund’s NAV file in step 2.')
         : '';
       out.innerHTML = notice('bad', esc(res.message) + extra) + partialAnswer(g.invested, g.withdrawn, g.current);
-      return;
+      notShown(); return;
     }
     PF.ran = true;
     var name = g.names.length === 1 ? titleOf(g.names[0]) : 'your portfolio';
@@ -998,6 +1036,7 @@
       { key: 'fund', label: 'Against the fund', html: withNav.length ? againstFundTab(g, res, info) : null },
       { key: 'all', label: 'All the numbers', html: allNumbersTab(g, res, info) }
     ]) + A.pdfFoot('portfolio', name);
+    shown();
     wireRealReturn(res.rate);
   }
 
@@ -1369,23 +1408,50 @@
       '<p class="hint">Share is each holding’s part of what the whole is worth now.</p></div>';
     return html + A.pdfFoot('portfolio', 'My holdings');
   }
-  /* A statement for a period that starts with units bought earlier: the money
-     inside the period is known, the units today are valued, but a rate from the
-     two would price units bought before the statement as if they were bought on
-     its first day. So no yearly rate, for the scheme or for the whole; what the
-     figures do say is shown, and each such scheme is named with the sentence. */
-  function openingAnswer(g) {
+  /* A statement that lists only some of the transactions (a Partial Transaction
+     Listing, or any statement for a period that starts with units bought
+     earlier): the money inside it is known and the units today are valued, but
+     a rate from the two would price units bought before it as if they were
+     bought on its first day. So no yearly rate, for any scheme or for the whole
+     (the owner's word, November 2026); what the statement can honestly give is
+     shown: money put in (its cost value, where its Account Summary states one),
+     value today, and the gain or loss so far, for each fund and in total. */
+  function noRateAnswer(g) {
     var html = '<div class="result"><div class="label">No yearly rate from this statement</div>' +
-      '<div class="sub">' + PF.openings.map(function (o) { return '<p class="cardtext"><strong>' + esc(titleOf(o.fund)) + '.</strong> ' + esc(openingSentence(o)) + '</p>'; }).join('') + '</div></div>';
-    html += partialAnswer(g.invested, g.withdrawn, g.current);
-    var whole = g.names.filter(function (k) { return !openingOf(k); });
-    if (whole.length) {
-      html += '<div class="card"><h2>Funds this statement covers from their first purchase</h2><div class="fundcards">' + whole.map(function (k) {
-        var flows = g.flows.filter(function (f) { return (f.label || '') === k; }), r = E.xirr(flows);
-        var put = 0, took = 0, worth = 0; flows.forEach(function (f) { if (f.kind === 'in') put += -f.amount; else if (f.kind === 'out') took += f.amount; else worth += f.amount; });
-        return '<div class="fundcard"><div class="fc-name">' + esc(titleOf(k)) + '</div><div class="fc-figs">' + fig('Yearly rate (XIRR)', r.ok ? esc(A.signedPct(r.rate)) : 'not known') + fig('Put in', money(put)) + fig('Taken out', took ? money(took) : 'none') + fig('Worth now', money(worth)) + '</div></div>';
-      }).join('') + '</div><p class="hint">Each of these funds has every payment from its first purchase inside this statement, so its own rate stands. The whole portfolio’s rate waits for a statement that covers every fund from the start.</p></div>';
-    }
+      '<div class="sub"><p class="cardtext">' + esc(NO_RATE_MSG) + '</p></div></div>';
+    var S = PF.summary, cards = [], tCost = 0, tValue = 0, tPut = 0, tTook = 0, costAll = true, valueAll = true;
+    g.names.forEach(function (k) {
+      var f = fundOf(k), v = valueOf(k), op = openingOf(k), cost = costOf(k);
+      var put = f && f.g ? f.g.paidIn : 0, took = f && f.g ? f.g.tookOut : 0, worth = v ? v.amount : null;
+      /* the basis of the gain: the statement's own cost value; else, for a fund it covers from
+         the start, the money paid in; a fund that starts with units bought earlier has no basis */
+      var basis = cost != null ? cost : (op ? null : put);
+      var gain = basis != null && worth != null ? worth + (cost != null ? 0 : took) - basis : null;
+      if (cost != null) tCost += cost; else if (!op) tCost += put; else costAll = false;
+      if (worth != null) tValue += worth; else valueAll = false;
+      tPut += put; tTook += took;
+      var units = f && f.g && f.g.hasUnits ? f.g.units + (op ? op.units : 0) : null;
+      /* the statement's own printed figures stand to the paisa; the tool's own sums to the rupee */
+      var exact = cost != null && v && v.from === 'cas';
+      var m$ = exact ? paise : money, sm$ = exact ? function (n) { return (n >= 0 ? '+' : '') + paise(n); } : A.signedMoney;
+      cards.push('<div class="fundcard"><div class="fc-name">' + esc(titleOf(k)) + '</div><div class="fc-figs">' +
+        fig('Money put in' + (cost != null ? ' (cost value)' : ''), cost != null ? m$(cost) : op ? 'not known: the cost of the units bought earlier is not in this statement' : money(put)) +
+        fig('Paid in within this statement', money(put)) + (took ? fig('Taken out', money(took)) : '') +
+        fig('Value today', worth != null ? m$(worth) + (v && v.t ? ' on ' + fmtDate(v.t) : '') : 'not valued') +
+        fig('Gain or loss so far', gain == null ? 'not known' : esc(sm$(gain)) + (basis > 0 ? ' · ' + esc(A.signedPct(gain / basis)) : '')) +
+        (units != null ? fig('Units today', units3(units)) : '') + (op ? fig('Starts with', units3(op.units) + ' units bought earlier, on ' + fmtDate(op.t)) : '') + '</div></div>');
+    });
+    var total = S && S.total && S.total.cost != null && S.total.value != null ? { cost: S.total.cost, value: S.total.value } : (costAll && valueAll ? { cost: tCost, value: tValue } : null);
+    var gainT = total ? total.value - total.cost : null, exactT = !!(S && total);
+    var t$ = exactT ? paise : money, st$ = exactT ? function (n) { return (n >= 0 ? '+' : '') + paise(n); } : A.signedMoney;
+    html += '<div class="card"><h2>What this statement does say</h2><div class="stats">' +
+      stat('Money put in' + (S ? ' (cost value)' : ''), total ? t$(total.cost) : costAll ? money(tCost) : 'not known') +
+      stat('Value today', valueAll ? t$(tValue) : 'not fully valued') +
+      stat('Gain or loss so far', gainT == null ? 'not known' : st$(gainT)) +
+      stat('Paid in within this statement', money(tPut) + (tTook ? ' · ' + money(tTook) + ' taken out' : '')) + '</div>' +
+      '<p class="hint">' + (S ? 'Cost value and market value as the statement’s own Account Summary states them' + (S.t != null ? ', on ' + fmtDate(S.t) : '') + '. ' : '') +
+      (gainT != null && total && total.cost > 0 ? 'That is ' + esc(A.signedPct(gainT / total.cost)) + ' in total. ' : '') + 'It has no clock in it: the yearly rate needs every transaction from your first investment.</p>' +
+      '<div class="fundcards">' + cards.join('') + '</div></div>';
     return html + A.pdfFoot('portfolio', 'My portfolio');
   }
   function partialAnswer(invested, withdrawn, current) {
@@ -1467,7 +1533,7 @@
     $('#pf-mode-prompt').hidden = !!mode;
     $('#pf-filemode').hidden = mode !== 'file';
     $('#pf-typedmode').hidden = mode !== 'typed';
-    $('#pf-out').innerHTML = ''; PF.ran = false;
+    $('#pf-out').innerHTML = ''; PF.ran = false; A.resultUndone('pf-calc');
     $('#pf-values').innerHTML = ''; PF.navDoors = {}; PF.nav = {}; PF.confirmed = {};
     if (mode === 'typed') {
       if (!$$('#pf-rows .entry').length) blankRows(); else afterTyped();
@@ -1499,7 +1565,7 @@
     $('#sip-add').addEventListener('click', addSipRows);
     $('#sip-cancel').addEventListener('click', function () { toggleSip(false); });
     $('#pf-demo').addEventListener('click', fillExample);
-    $('#pf-clear').addEventListener('click', function () { blankRows(); $('#pf-out').innerHTML = ''; PF.ran = false; });
+    $('#pf-clear').addEventListener('click', function () { blankRows(); $('#pf-out').innerHTML = ''; PF.ran = false; A.resultUndone('pf-calc'); });
     $('#pf-export').addEventListener('click', exportRows);
     $('#pf-import-file').addEventListener('change', function (e) { var f = e.target.files && e.target.files[0]; e.target.value = ''; if (f) importRows(f); });
     $('#pf-calc').addEventListener('click', calcPortfolio);
@@ -1509,7 +1575,7 @@
     var rowsHost = $('#pf-rows');
     rowsHost.addEventListener('input', function (e) {
       if (PF.mode !== 'typed') return;
-      if (PF.ran) PF.ran = false;
+      if (PF.ran) { PF.ran = false; A.resultUndone('pf-calc'); }
       if (e.target && e.target.classList && e.target.classList.contains('in-tag')) return;   /* a name is settled on change */
       afterTyped();
     });

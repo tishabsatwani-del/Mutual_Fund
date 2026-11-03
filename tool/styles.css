@@ -353,6 +353,14 @@ button.primary:disabled, button.primary:disabled:hover {
   border-color: var(--line-strong); box-shadow: none; opacity: 1;
 }
 button.primary:hover:not(:disabled), .btn:hover { box-shadow: 0 0 30px -4px rgba(0, 242, 254, .7); }
+/* The result is shown (November 2026): a clear tick on the button that showed
+   it, in the button's own ink on a small disc, until the entries change. */
+button.primary[data-done="yes"]::before {
+  content: '✓'; display: inline-flex; align-items: center; justify-content: center;
+  width: 1.35em; height: 1.35em; border-radius: 50%; flex: none;
+  background: var(--accent-ink); color: var(--accent);
+  font-size: .95em; font-weight: 700; line-height: 1;
+}
 button.primary:active, .btn:active { transform: translateY(1px); filter: brightness(.95); }
 button.secondary {
   min-height: 44px; padding: .5rem .9rem;

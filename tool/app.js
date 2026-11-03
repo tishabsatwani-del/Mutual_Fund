@@ -69,28 +69,62 @@
   var audio = null;
   function wakeAudio(ev) {
     var t = ev && ev.target;
-    if (!t || !t.closest || !t.closest('.filebox, .filewrap, .pastebox, .pastebtn, .picker')) return;
+    if (!t || !t.closest || !t.closest('.filebox, .filewrap, .pastebox, .pastebtn, .picker, button.primary')) return;
     try {
       if (!audio) { var AC = root.AudioContext || root.webkitAudioContext; if (!AC) return; audio = new AC(); }
       if (audio.state === 'suspended' && audio.resume) audio.resume().catch(function () {});
     } catch (err) { audio = null; }
   }
   if (root.addEventListener) ['pointerdown', 'touchend', 'click', 'keydown'].forEach(function (t) { root.addEventListener(t, wakeAudio, { capture: true, passive: true }); });
+  /* accepted: two soft rising notes; refused: two gentle falling ones; a
+     result shown (November 2026): three soft rising notes of the same family,
+     a little longer and no louder, so the three are told apart by ear */
+  var NOTES = { ok: [[659.25, 0, 0.09], [880, 0.08, 0.12]], no: [[392, 0, 0.12], [329.63, 0.1, 0.16]], done: [[659.25, 0, 0.08], [783.99, 0.07, 0.08], [1046.5, 0.14, 0.14]] };
+  function play(kind) {
+    var ok = kind !== 'no', t0 = audio.currentTime + 0.01;
+    (NOTES[kind] || NOTES.ok).forEach(function (n) {
+      var osc = audio.createOscillator(), gain = audio.createGain(), at = t0 + n[1];
+      osc.type = 'sine'; osc.frequency.setValueAtTime(n[0], at);
+      gain.gain.setValueAtTime(0.0001, at);
+      gain.gain.exponentialRampToValueAtTime(ok ? 0.05 : 0.035, at + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.0001, at + n[2]);
+      osc.connect(gain); gain.connect(audio.destination);
+      osc.start(at); osc.stop(at + n[2] + 0.02);
+    });
+  }
   function chime(kind) {
     try {
-      if (!audio || audio.state !== 'running') return;
-      var ok = kind === 'ok', t0 = audio.currentTime + 0.01;
-      /* accepted: two soft rising notes; refused: two gentle falling ones */
-      (ok ? [[659.25, 0, 0.09], [880, 0.08, 0.12]] : [[392, 0, 0.12], [329.63, 0.1, 0.16]]).forEach(function (n) {
-        var osc = audio.createOscillator(), gain = audio.createGain(), at = t0 + n[1];
-        osc.type = 'sine'; osc.frequency.setValueAtTime(n[0], at);
-        gain.gain.setValueAtTime(0.0001, at);
-        gain.gain.exponentialRampToValueAtTime(ok ? 0.05 : 0.035, at + 0.015);
-        gain.gain.exponentialRampToValueAtTime(0.0001, at + n[2]);
-        osc.connect(gain); gain.connect(audio.destination);
-        osc.start(at); osc.stop(at + n[2] + 0.02);
-      });
+      if (!audio) return;
+      /* woken by the touch that asked for this, the context may still be waking: the
+         sound waits for it, never the page */
+      if (audio.state !== 'running') { if (audio.state === 'suspended' && audio.resume) audio.resume().then(function () { try { if (audio.state === 'running') play(kind); } catch (e) { /* silent */ } }).catch(function () {}); return; }
+      play(kind);
     } catch (err) { /* a sound is never worth an error */ }
+  }
+  /* ------------------------------------------------- the result button
+     When a result appears after the reader presses the button (the owner's
+     word, November 2026): a clear tick on the button, the result sound, and a
+     smooth scroll that puts the top of the result just under the page header,
+     where the answer begins; a jump instead where the device asks for reduced
+     motion. A result redrawn by itself (a NAV file added, a chip changed) keeps
+     its tick and moves nothing. A result that cannot be shown clears the tick. */
+  function resultDone(btnId, outId, pressed) {
+    var btn = document.getElementById(btnId), out = document.getElementById(outId);
+    if (btn) btn.dataset.done = 'yes';
+    if (!pressed) return;
+    (root.PRCApp && root.PRCApp.chime ? root.PRCApp.chime : chime)('done');
+    scrollToResult(out);
+  }
+  function resultUndone(btnId) { var btn = document.getElementById(btnId); if (btn && btn.dataset.done) delete btn.dataset.done; }
+  function scrollToResult(out) {
+    if (!out) return;
+    try {
+      var head = document.querySelector('.topbar'), above = head ? head.getBoundingClientRect().height : 0;
+      var y = Math.max(0, Math.round(out.getBoundingClientRect().top + (window.scrollY || window.pageYOffset || 0) - above - 6));
+      var reduce = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+      if (!reduce && 'scrollBehavior' in document.documentElement.style) window.scrollTo({ top: y, behavior: 'smooth' });
+      else window.scrollTo(0, y);
+    } catch (err) { /* a scroll is never worth an error */ }
   }
 
   /* --------------------------------------------------------------- DOM help */
@@ -268,6 +302,7 @@
      a statement goes in step 1 with its password */
   var LOCKED_PRICE_COPY = 'This file is locked with a password. A locked file is a statement, and a statement is read in step 1 of Check my portfolio, where you type its password. This slot takes a history of dates and values, which is never locked.';
   var CAS_PRICE_COPY = 'This looks like a statement of your own payments: a consolidated account statement. It is not a price history. Your statement goes in step 1 of Check my portfolio.';
+  var LISTING_PRICE_COPY = 'This looks like a statement of your own payments: a transaction statement laid out scheme by scheme. It is not a price history. Your statement goes in step 1 of Check my portfolio.';
   /* A NAV or index file becomes a series here; every refusal carries the rows
      so the caller can say what is actually wrong with the file. */
   function readFile(file, onSeries, onError, onProgress, opts) {
@@ -305,10 +340,13 @@
          nothing. A consolidated account statement is named as a statement; a
          locked PDF is named as locked, and sent to step 1 */
       pdf = true; ropts.strict = true; ropts.doubtCopy = P.PDF_COPY;
-      root.PRCPdfRows.read(file, { lines: true }).then(function (pages) {
+      root.PRCPdfRows.read(file, { pages: true }).then(function (pdfPages) {
+        var pages = root.PRCPdfRows.linesFromPages(pdfPages);
         var kind = root.PRCCas ? root.PRCCas.kind(pages) : null;
         if (kind) { onError(CAS_PRICE_COPY, { locked: false, statement: true }); return null; }
-        return root.PRCPdfRows.read(file).then(function (rows) {
+        /* a fund house's statement in scheme blocks (listing.js) is a statement too */
+        if (root.PRCListing && root.PRCListing.read(root.PRCPdfRows.placedRows(pdfPages)).layout) { onError(LISTING_PRICE_COPY, { locked: false, statement: true }); return null; }
+        return Promise.resolve().then(function () { return root.PRCPdfRows.rowsFromPages(pdfPages); }).then(function (rows) {
           var res = P.rowsToSeries(rows, ropts);
           if (!res.ok && res.code !== 'MANY_SCHEMES') { onError(pdfWhy(rows, res)); return; }
           finish(res, rows);
@@ -446,18 +484,29 @@
   function statementError(msg) { var e = new Error(msg); e.statement = true; return e; }
   function readStatementPdf(file, password) {
     if (!root.PRCPdfRows) return Promise.reject(statementError(P.NOT_TABULAR_COPY));
-    var CAS = root.PRCCas;
-    return root.PRCPdfRows.read(file, { lines: true, password: password }).then(function (pages) {
+    var CAS = root.PRCCas, R = root.PRCPdfRows, LST = root.PRCListing;
+    /* the PDF's words are read once; the lines, the scheme blocks and the plain table are three
+       readings of the same pages */
+    return R.read(file, { pages: true, password: password }).then(function (pdfPages) {
+      var pages = R.linesFromPages(pdfPages);
       var kind = CAS ? CAS.kind(pages) : null;
       if (kind === 'detailed') { var cas = CAS.readDetailed(pages); if (!cas.ok) throw statementError(cas.message); return { cas: cas, kind: 'cas', sheets: null }; }
       if (kind === 'summary') { var sum = CAS.readSummary(pages); if (!sum.ok) throw statementError(sum.message); return { cas: sum, kind: 'cas-summary', sheets: null }; }
       if (kind && kind !== 'cas-plain' && CAS.MESSAGES[kind]) throw statementError(CAS.MESSAGES[kind]);
-      /* not a CAS in the registrars' layout: one plain table of text, as before. A statement that
-         merely calls itself a consolidated statement but is laid out as one plain table with its
-         scheme on every line is still read as that table; one that is not is refused as a CAS in
-         another layout. */
       var other = kind === 'cas-plain';
-      return root.PRCPdfRows.read(file, { statement: true, password: password }).then(function (rows) {
+      /* a fund house's or registrar's own statement laid out in scheme blocks, each with its
+         running unit balances (listing.js, November 2026): read only on its proof that every
+         scheme adds up; a statement in that layout that does not add up is refused with the
+         scheme named, never read another way */
+      if (LST && !other) {
+        var lst = LST.read(R.placedRows(pdfPages));
+        if (lst.layout) { if (!lst.ok) throw statementError(lst.message); return { cas: lst, kind: 'listing', sheets: null }; }
+      }
+      /* not a CAS in the registrars' layout and not in scheme blocks: one plain table of text, as
+         before. A statement that merely calls itself a consolidated statement but is laid out as
+         one plain table with its scheme on every line is still read as that table; one that is
+         not is refused as a CAS in another layout. */
+      return Promise.resolve().then(function () { return R.rowsFromPages(pdfPages, { statement: true }); }).then(function (rows) {
         if (rows.tables && rows.tables > 1) throw statementError(other ? CAS.MESSAGES['cas-other'] : PDF_STATEMENT_TABLES);
         /* a consolidated statement read as a plain table must name the scheme on every line: one
            whose schemes stand as headings between its tables cannot attribute a payment with
@@ -625,7 +674,7 @@
   root.PRCApp = {
     E: E, P: P, F: F, HORIZONS: HORIZONS,
     money: money, moneyLong: moneyLong, moneyWords: moneyWords, short: short, signedMoney: signedMoney, count: count,
-    pct: pct, signedPct: signedPct, share: share, shortName: shortName, chime: chime, echo: F.echo, checkInput: F.checkInput,
+    pct: pct, signedPct: signedPct, share: share, shortName: shortName, chime: chime, resultDone: resultDone, resultUndone: resultUndone, scrollToResult: scrollToResult, echo: F.echo, checkInput: F.checkInput,
     fmtDate: fmtDate, fmtYears: fmtYears, months: months, monthsText: monthsText,
     todayTs: todayTs, isoToday: isoToday, isoOf: isoOf, isoToTs: isoToTs,
     $: $, $$: $$, el: el, esc: esc, notice: notice, term: term, stat: stat, trow: trow, fold: fold, means: means, tabs: tabs, pdfFoot: pdfFoot,

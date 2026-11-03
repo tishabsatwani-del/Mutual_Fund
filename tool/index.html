@@ -6,7 +6,7 @@
 <title>Where You Stand</title>
 <meta name="description" content="Measure what your own money actually earned, see what every number means, and work out what it would take to reach your goal. Runs entirely in your browser.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231f4e5f'/%3E%3Cpath d='M7 22.5 13 15l4.5 4.5L25 9.5' fill='none' stroke='%23ffffff' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="styles.css?v=17">
+<link rel="stylesheet" href="styles.css?v=19">
 </head>
 <body data-view="home">
 <a class="skip" href="#main">Skip to content</a>
@@ -331,8 +331,9 @@
       <li>Weekly and monthly start frequencies thin the start dates only; every window is still measured first value to last.</li>
       <li>Percentiles use linear interpolation between neighbours, the spreadsheet PERCENTILE rule. Where your own stretch sits among a fund&rsquo;s stretches of the same length is the share of those stretches that returned less than the fund did over your dates, ties counted half.</li>
       <li>The same rupees in the index: each payment buys index units at the index value on that date, or the next value on or after it, the same rule as a fund&rsquo;s units; withdrawals sell units the same way; the units left are valued on the valuation date. The index carries no costs, so no stamp duty is taken from it.</li>
-      <li>Units from a NAV file: the amount less stamp duty, divided by the NAV on the payment date, or the next NAV on or after it. Stamp duty is 0.005 percent of every purchase from 1 July 2020, rounded to the paisa; a purchase before that date carries none. Where a statement prints its own units, they are used exactly and never recalculated.</li>
-      <li>A statement: money out of pocket for a purchase is the amount plus its stamp duty line; money received on a redemption is the amount less its STT and TDS lines. An IDCW payout is money received; an IDCW reinvestment adds units and no money. A scheme whose opening units plus every transaction do not equal its closing units is not read. A statement that starts with units bought earlier shows no yearly rate.</li>
+      <li>Units from a NAV file: the amount less stamp duty, divided by the NAV on the payment date, or the next NAV on or after it. Stamp duty is 0.005 percent of every purchase from 1 July 2020, rounded down to the paisa (&#8377;0.07 on &#8377;1,500, as the registrars charge it); a purchase before that date carries none. Where a statement prints its own units, they are used exactly and never recalculated.</li>
+      <li>A statement: money out of pocket for a purchase is the amount plus its stamp duty line; money received on a redemption is the amount less its STT and TDS lines. An IDCW payout is money received; an IDCW reinvestment adds units and no money. Where a purchase line names its gross amount and stamp duty in its own words, the gross is the money out of pocket. A scheme whose opening units plus every transaction do not equal its closing units is not read. A statement that starts with units bought earlier, or that lists only some of the transactions (a Partial Transaction Listing), shows no yearly rate: it shows the cost value, the value today and the gain or loss so far that its own summary states.</li>
+      <li>A fund house&rsquo;s or registrar&rsquo;s own statement laid out in scheme blocks (a scheme line, then its dated transactions with amount, NAV, units and running balance, then its market value, then an account summary) is read, as a PDF, a workbook or text, only on one proof: for every scheme, the opening units plus every transaction&rsquo;s units equal its closing units exactly, and every running balance follows from the line before. A scheme that does not add up is named and shows no figure.</li>
       <li>Volatility is the standard deviation of day-to-day log returns times the square root of the observations per year in the file.</li>
       <li>Capture ratios use month-end values. The information ratio uses daily arithmetic returns and the standard deviation of daily excess returns, the basis SEBI set in circular SEBI/HO/IMD/IMD-PoD-2/P/CIR/2025/6 of 17 January 2025.</li>
       <li>Dates are read day first; a file whose dates only make sense month first is read month first; a file that reads both ways says so.</li>
@@ -365,24 +366,25 @@
 
 </main>
 
-<script src="format.js?v=17"></script>
-<script src="workbook.js?v=17"></script>
-<script src="xls.js?v=17"></script>
-<script src="engine.js?v=17"></script>
-<script src="parse.js?v=17"></script>
-<script src="locked.js?v=18"></script>
-<script src="pdfrows.js?v=17"></script>
-<script src="cas.js?v=18"></script>
-<script src="upload.js?v=17"></script>
-<script src="app.js?v=17"></script>
-<script src="dates.js?v=17"></script>
-<script src="pdf.js?v=17"></script>
-<script src="charts.js?v=17"></script>
-<script src="pieces.js?v=17"></script>
-<script src="doors.js?v=17"></script>
-<script src="portfolio.js?v=17"></script>
-<script src="goal.js?v=17"></script>
-<script src="rolling.js?v=17"></script>
-<script src="boot.js?v=17"></script>
+<script src="format.js?v=19"></script>
+<script src="workbook.js?v=19"></script>
+<script src="xls.js?v=19"></script>
+<script src="engine.js?v=19"></script>
+<script src="parse.js?v=19"></script>
+<script src="locked.js?v=19"></script>
+<script src="pdfrows.js?v=19"></script>
+<script src="cas.js?v=19"></script>
+<script src="listing.js?v=19"></script>
+<script src="upload.js?v=19"></script>
+<script src="app.js?v=19"></script>
+<script src="dates.js?v=19"></script>
+<script src="pdf.js?v=19"></script>
+<script src="charts.js?v=19"></script>
+<script src="pieces.js?v=19"></script>
+<script src="doors.js?v=19"></script>
+<script src="portfolio.js?v=19"></script>
+<script src="goal.js?v=19"></script>
+<script src="rolling.js?v=19"></script>
+<script src="boot.js?v=19"></script>
 </body>
 </html>

@@ -12,6 +12,8 @@
  *
  *   PRCPdfRows.read(file) -> Promise<rows>        (rejects when there is nothing to read)
  *   PRCPdfRows.rowsFromPages(pages) -> rows       pages: [[{ str, x, y, w, h }]]
+ *   PRCPdfRows.placedRows(pages) -> rows          every line placed under the headings above it
+ *                                                 (a statement laid out in scheme blocks, listing.js)
  */
 (function (root) {
   'use strict';
@@ -56,12 +58,17 @@
   /* opts.password: the reader's password for a locked PDF, handed to pdf.js once
      and kept nowhere. A locked PDF without one rejects with an error marked
      .locked; a wrong password with one marked .wrong. opts.lines: the pages as
-     lines of text (for a statement read line by line, cas.js) instead of rows. */
+     lines of text (for a statement read line by line, cas.js) instead of rows.
+     opts.pages: the pages themselves (every word with its place), read once,
+     for a caller that will look at them more than one way. */
   function read(file, opts) {
     var o = opts || {};
     return file.arrayBuffer().then(function (buf) {
       return lib().then(function (pdfjs) { return pagesOf(new Uint8Array(buf), pdfjs, o.password); });
-    }).then(function (pages) { return o.lines ? linesFromPages(pages) : rowsFromPages(pages, opts); }, function (err) {
+    }).then(function (pages) {
+      if (o.pages) { if (!pages.some(function (items) { return items.length > 0; })) { var sc = new Error('no words in this PDF'); sc.scanned = true; throw sc; } return pages; }
+      return o.lines ? linesFromPages(pages) : rowsFromPages(pages, opts);
+    }, function (err) {
       if (err && (err.scanned || err.locked || err.wrong)) throw err;
       /* pdf.js names a locked file (code 1: no password; code 2: the wrong one);
          anything else is not a PDF that can be opened */
@@ -223,7 +230,44 @@
     return rows;
   }
 
-  var api = { read: read, rowsFromPages: rowsFromPages, linesFromPages: linesFromPages, itemsOf: itemsOf, linesOf: linesOf };
+  /* Every line placed under the headings that stand above it, for a statement
+     laid out in scheme blocks (listing.js): a heading line sets the columns,
+     and every line after it, dated or not, is cut into those columns, so a
+     description that wraps onto the next line, a stamp duty figure printed on
+     a line of its own under the Amount column, and a scheme's closing figures
+     each land in their column. A line before any heading is one cell. A
+     heading line is recognised as rowsFromPages does for a statement. */
+  /* a heading cut in two by a currency glyph the text layer does not carry
+     ("Amount (" and ")") is one heading: a piece with no letter or digit in it
+     joins the heading before it */
+  function wholeHeadings(line) {
+    var segs = [];
+    line.segs.forEach(function (s) {
+      var last = segs[segs.length - 1];
+      if (last && !/[A-Za-z0-9]/.test(s.text)) { last = { text: last.text + ' ' + s.text, x0: last.x0, x1: Math.max(last.x1, s.x1) }; last.c = (last.x0 + last.x1) / 2; segs[segs.length - 1] = last; }
+      else segs.push({ text: s.text, x0: s.x0, x1: s.x1, c: s.c });
+    });
+    return { y: line.y, h: line.h, items: line.items, segs: segs };
+  }
+  function placedRows(pages) {
+    var rows = [], layout = null, words = 0;
+    (pages || []).forEach(function (items) {
+      var lines = linesOf(items);
+      words += lines.length;
+      lines.forEach(function (line) {
+        if (headerLine(line, true)) { var head = wholeHeadings(line); layout = columnsOf(head); rows.push(place(head.segs, layout)); return; }
+        if (!layout) { rows.push(joined(line)); return; }
+        var segs = [];
+        line.segs.forEach(function (s) { tokensOf(s).forEach(function (x) { segs.push(x); }); });
+        rows.push(place(segs, layout));
+      });
+      rows.push([]);   /* a page ends: nothing wraps across it */
+    });
+    if (!words) { var scanned = new Error('no words in this PDF'); scanned.scanned = true; throw scanned; }
+    return rows;
+  }
+
+  var api = { read: read, rowsFromPages: rowsFromPages, linesFromPages: linesFromPages, placedRows: placedRows, itemsOf: itemsOf, linesOf: linesOf };
   if (typeof module === 'object' && module.exports) module.exports = api;
   root.PRCPdfRows = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

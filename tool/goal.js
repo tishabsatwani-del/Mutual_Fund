@@ -77,17 +77,19 @@
     });
   }
 
-  function calcGoal() {
-    var out = $('#g-out');
+  /* pressed: the reader pressed the button (a tick on it, the result sound, the scroll to the
+     result); a result redrawn when a history file arrives keeps its tick and moves nothing */
+  function calcGoal(ev) {
+    var out = $('#g-out'), pressed = !!(ev && ev.type === 'click');
     var broken = outOfRange();
-    if (broken.length) { out.innerHTML = notice('bad', esc(broken[0]) + (broken.length > 1 ? ' And ' + (broken.length - 1) + ' other field' + (broken.length > 2 ? 's are' : ' is') + ' out of range.' : '')); return; }
+    if (broken.length) { out.innerHTML = notice('bad', esc(broken[0]) + (broken.length > 1 ? ' And ' + (broken.length - 1) + ' other field' + (broken.length > 2 ? 's are' : ' is') + ' out of range.' : '')); A.resultUndone('g-calc'); return; }
     var input = {
       currentValue: parseFloat($('#g-current').value), monthlySip: parseFloat($('#g-sip').value), years: parseFloat($('#g-years').value),
       annualRate: parseFloat($('#g-rate').value) / 100, annualStepUpRate: parseFloat($('#g-step').value) / 100, target: parseFloat($('#g-target').value)
     };
     var infl = $('#g-infl').value.trim() === '' ? null : parseFloat($('#g-infl').value) / 100;
     var plan = E.projectGoal(input);
-    if (!plan.ok) { out.innerHTML = notice('bad', esc(plan.message)); return; }
+    if (!plan.ok) { out.innerHTML = notice('bad', esc(plan.message)); A.resultUndone('g-calc'); return; }
     G.ran = true; G.last = input;
     var name = $('#g-name').value.trim() || 'this goal';
     var main = '', market = '', numbers = '';
@@ -171,6 +173,7 @@
     ]) + A.pdfFoot('goal', name);
     out.innerHTML = html;
     wireScenario(input);
+    A.resultDone('g-calc', 'g-out', pressed);
   }
   /* Reading your plan together: what is the reader's own money and what the
      return must supply, what the goal is worth today, and the questions only
@@ -232,8 +235,8 @@
       gate: function (rows) { var v = A.P.checkSchema(rows); return v.ok ? null : notice('bad', esc(v.message)); },
       onLoaded: function (res) { G.history = res; if (G.ran) calcGoal(); }
     });
-    FIELDS.forEach(function (f) { $('#' + f.id).addEventListener('input', outOfRange); });
-    $('#g-infl').addEventListener('input', outOfRange);
+    FIELDS.forEach(function (f) { $('#' + f.id).addEventListener('input', function () { outOfRange(); A.resultUndone('g-calc'); }); });
+    $('#g-infl').addEventListener('input', function () { outOfRange(); A.resultUndone('g-calc'); });
     $('#g-calc').addEventListener('click', calcGoal);
   }
   root.PRCGoal = { init: init, calc: calcGoal, state: G };

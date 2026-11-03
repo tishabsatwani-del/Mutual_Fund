@@ -69,6 +69,7 @@
   /* ------------------------------------------------- which statement is this?
      By its title, in its first lines (a PDF) or its first cells (a workbook or
      CSV). Each kind the brief lists is named, and told what to download instead. */
+  var NO_RATE = 'This file lists only some of your transactions, so no yearly rate is shown. For your full return, download your Consolidated Account Statement (CAS) from CAMS or KFintech: choose "Detailed" and the period from your first investment.';
   var DOWNLOAD = ' Download the detailed Consolidated Account Statement (CAS) from CAMS or KFintech, or the full Transaction Details statement, covering the period from your first investment to today, and load that here.';
   var MESSAGES = {
     'single-folio': 'This is a Single Folio Account Statement. CAMS limits it to the last five transactions, so it is not your complete history and a return worked out from it would be wrong.' + DOWNLOAD,
@@ -85,8 +86,9 @@
     units: function (name, expected, closing) {
       return name + ' could not be read with certainty: its opening units plus every transaction come to ' + fmtUnits(expected) + ', but the statement closes it at ' + fmtUnits(closing) + '. No figure is shown for this scheme.';
     },
+    /* a scheme that starts with units bought earlier: the fact, then the owner's message (November 2026) */
     opening: function (name, when, units) {
-      return 'This statement starts on ' + when + ' with ' + fmtUnits(units) + ' units bought earlier. For your full return, the statement must cover the period from your first investment.';
+      return 'This statement starts on ' + when + ' with ' + fmtUnits(units) + ' units bought earlier. ' + NO_RATE;
     }
   };
   function fmtUnits(u) { return Number(u).toLocaleString('en-IN', { minimumFractionDigits: 3, maximumFractionDigits: 3 }); }
@@ -152,6 +154,17 @@
     return t.replace(/\s*\(Advisor\s*:[^)]*\)\s*$/i, '').replace(/\s+/g, ' ').trim();
   }
   function isIdcwDesc(d) { return /\bidcw\b|\bdividend\b|\bincome\s+distribution\b/i.test(d); }
+  /* "Gross Amount: Rs.1500/-; Stamp Duty 0.07 charges Levied" inside a line's own words (November
+     2026): the gross is the money out of pocket, the duty is kept on the row; a stamp duty line of
+     its own for the same transaction is not counted twice */
+  var INLINE_GROSS = /\bgross\s+amount\s*:?\s*(?:INR|Rs\.?|₹)?\s*([\d,]*\.?\d+)\s*(?:\/-)?/i;
+  var INLINE_STAMP = /\bstamp\s+duty\s*(?:charges?)?\s*:?\s*(?:of\s+)?(?:INR|Rs\.?|₹)?\s*([\d,]*\.?\d+)/i;
+  function inlineStamp(desc) {
+    var g = INLINE_GROSS.exec(desc || ''), s = INLINE_STAMP.exec(desc || '');
+    var gross = g ? num(g[1]) : NaN, stamp = s ? num(s[1]) : NaN;
+    if (!isFinite(gross) && !isFinite(stamp)) return null;
+    return { gross: isFinite(gross) ? gross : null, stamp: isFinite(stamp) ? stamp : null };
+  }
 
   function readDetailed(pages) {
     var lines = flat(pages), schemes = [], cur = null, folio = '', amc = '', period = null, i;
@@ -235,9 +248,12 @@
         var gross = Math.abs(r.amount), units = Math.abs(r.units), cash;
         if (reinvest) { ledger.push({ t: r.t, amount: gross, gross: gross, dir: 'reinvest', units: units, idcw: 'reinvest', fund: sc.name, folio: sc.folio, isin: sc.isin, line: r.line, desc: r.desc, nav: r.nav, tax: { stamp: stamp, stt: stt, tds: tds } }); return; }
         if (payout) { ledger.push({ t: r.t, amount: Math.max(0, gross - tds - stt), gross: gross, dir: 'out', units: null, idcw: 'payout', fund: sc.name, folio: sc.folio, isin: sc.isin, line: r.line, desc: r.desc, nav: r.nav, tax: { stamp: stamp, stt: stt, tds: tds } }); return; }
+        var inl = !out ? inlineStamp(r.desc) : null;
+        if (inl && inl.stamp != null && !stamp) stamp += inl.stamp;
         if (out) cash = Math.max(0, gross - stt - tds);
+        else if (inl && inl.gross != null && inl.gross >= gross) cash = inl.gross;
         else cash = gross + stamp;
-        ledger.push({ t: r.t, amount: cash, gross: gross, dir: out ? 'out' : 'in', units: units > 0 ? units : null, idcw: null, fund: sc.name, folio: sc.folio, isin: sc.isin, line: r.line, desc: r.desc, nav: r.nav, tax: { stamp: stamp, stt: stt, tds: tds } });
+        ledger.push({ t: r.t, amount: Math.round(cash * 100) / 100, gross: gross, dir: out ? 'out' : 'in', units: units > 0 ? units : null, idcw: null, fund: sc.name, folio: sc.folio, isin: sc.isin, line: r.line, desc: r.desc, nav: r.nav, tax: { stamp: stamp, stt: stt, tds: tds }, inline: !!(inl && inl.gross != null) });
       });
       if (sc.closing > 0.0005 && sc.nav != null && sc.navDate != null) {
         valuations.push({ fund: sc.name, folio: sc.folio, units: sc.closing, nav: sc.nav, t: sc.valueDate != null ? sc.valueDate : sc.navDate,
@@ -265,7 +281,7 @@
     return { ok: out.length > 0, kind: 'holdings', summary: true, rows: out, skipped: 0, totalsDropped: 0, message: out.length ? null : MESSAGES['cas-other'] };
   }
 
-  var api = { kind: kind, kindOfText: kindOfText, kindOfRows: kindOfRows, readDetailed: readDetailed, readSummary: readSummary, MESSAGES: MESSAGES, ts: ts, num: num, schemeName: schemeName };
+  var api = { kind: kind, kindOfText: kindOfText, kindOfRows: kindOfRows, readDetailed: readDetailed, readSummary: readSummary, inlineStamp: inlineStamp, MESSAGES: MESSAGES, ts: ts, num: num, schemeName: schemeName };
   if (typeof module === 'object' && module.exports) module.exports = api;
   root.PRCCas = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

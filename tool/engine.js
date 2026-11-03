@@ -72,15 +72,20 @@
 
   /* ---------------------------------------------------------- stamp duty
    * Every mutual fund purchase from 1 July 2020 carries stamp duty of 0.005%,
-   * and the units are allotted on the amount less the duty, rounded to the
-   * paisa. Where the tool itself works out units from a NAV file (typed rows,
-   * or a statement that prints no units) it takes the duty off first; where a
-   * statement prints its units, they stand. An index carries no costs, so the
-   * same rupees in the index take none. */
+   * and the units are allotted on the amount less the duty, rounded DOWN to
+   * the paisa: a real statement (November 2026) charges ₹0.07 on ₹1,500,
+   * where 0.005% is ₹0.075, so the registrar drops the half paisa rather
+   * than rounding it up. Where the tool itself works out units from a NAV
+   * file (typed rows, or a statement that prints no units) it takes the duty
+   * off first; where a statement prints its units, they stand. An index
+   * carries no costs, so the same rupees in the index take none. */
   var STAMP_DUTY_FROM = utc(2020, 7, 1), STAMP_DUTY_RATE = 0.00005;
   function stampDuty(amount, t) {
     if (!(amount > 0) || !isValidDate(t) || t < STAMP_DUTY_FROM) return 0;
-    return Math.round(amount * 5 / 1000) / 100;   /* 0.005% as 5 per 1,000 of 100ths: exact for whole paise */
+    /* 0.005% as 5 per 1,000 of 100ths, exact for whole paise; the tiny
+       allowance keeps a figure that is a whole paisa in rupees (12.000000001)
+       from losing one to floating-point noise */
+    return Math.floor(amount * 5 / 1000 + 1e-7) / 100;
   }
   function unitsBought(amount, nav, t) {
     if (!(amount > 0) || !(nav > 0)) return NaN;

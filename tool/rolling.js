@@ -272,29 +272,32 @@
   }
 
   /* ================================================================== run */
-  function runRolling() {
-    var out = $('#r-out');
-    if (!R.a) { out.innerHTML = ''; return; }
-    if (R.years === null) { out.innerHTML = R.blockMessage || ''; holdError('Please select a holding period to continue'); return; }
+  /* pressed: the reader pressed the button (a tick on it, the result sound, the scroll to the
+     result); a result redrawn when a date or a chip changes keeps its tick and moves nothing */
+  function runRolling(ev) {
+    var out = $('#r-out'), pressed = !!(ev && ev.type === 'click');
+    function notShown() { A.resultUndone('r-run'); }
+    if (!R.a) { out.innerHTML = ''; notShown(); return; }
+    if (R.years === null) { out.innerHTML = R.blockMessage || ''; holdError('Please select a holding period to continue'); notShown(); return; }
     holdError(null);
     var from = A.isoToTs($('#r-start').value), to = A.isoToTs($('#r-end').value);
-    if (isNaN(from) || isNaN(to)) { out.innerHTML = notice('bad', 'Enter both a start date and an end date.'); return; }
-    if (from >= to) { out.innerHTML = notice('bad', 'The end date must be after the start date.'); return; }
+    if (isNaN(from) || isNaN(to)) { out.innerHTML = notice('bad', 'Enter both a start date and an end date.'); notShown(); return; }
+    if (from >= to) { out.innerHTML = notice('bad', 'The end date must be after the start date.'); notShown(); return; }
     var series = P.sliceSeries(R.a.series, from, to);
-    if (series.length < 2) { out.innerHTML = notice('bad', 'There is no data between those two dates.'); return; }
+    if (series.length < 2) { out.innerHTML = notice('bad', 'There is no data between those two dates.'); notShown(); return; }
     var chosenSpan = (to - from) / (365.2425 * 86400000);
     if (chosenSpan < R.years) {
       out.innerHTML = notice('bad', '<strong>This stretch is shorter than the holding period.</strong> The dates in step 2 cover ' + chosenSpan.toFixed(1) + ' years and you asked for ' + R.years + '-year windows, so not one full period fits. Choose a shorter holding period in step 3, or widen the dates in step 2.');
-      return;
+      notShown(); return;
     }
     var usedFrom = series[0].t, usedTo = series[series.length - 1].t;
-    if (E.spanYearsOf(series) < R.years) { out.innerHTML = notice('bad', 'That leaves ' + E.spanYearsOf(series).toFixed(1) + ' years of history, and each holding period is ' + R.years + ' years long. Widen the dates, or choose a shorter holding period.'); return; }
+    if (E.spanYearsOf(series) < R.years) { out.innerHTML = notice('bad', 'That leaves ' + E.spanYearsOf(series).toFixed(1) + ' years of history, and each holding period is ' + R.years + ' years long. Widen the dates, or choose a shorter holding period.'); notShown(); return; }
     var cmp = R.b ? P.sliceSeries(R.b.series, from, to) : null;
     var warning = '';
     if (R.b && cmp.length < 2) { cmp = null; warning = notice('bad', esc(R.b.name) + ' has no data between those dates, so no comparison is shown. Widen the dates, or load a different file.'); }
     R.ran = true;
     out.innerHTML = '<p class="pastnote"><strong>Already happened, not a forecast.</strong></p>' + warning + D.idcwNote(R.a) + (cmp ? D.idcwNote(R.b) : '') + render(series, cmp, from, to, usedFrom, usedTo);
-    out.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    A.resultDone('r-run', 'r-out', pressed);
   }
 
   function render(series, cmp, from, to, usedFrom, usedTo) {
@@ -651,7 +654,7 @@
     });
     $('#r-run').addEventListener('click', runRolling);
     $('#r-reset').addEventListener('click', function () {
-      R.ran = false; R.years = DEFAULT_YEARS; R.frequency = 'daily'; R.datesTouched = false; R.a = null; R.b = null; R.bKind = null;
+      R.ran = false; A.resultUndone('r-run'); R.years = DEFAULT_YEARS; R.frequency = 'daily'; R.datesTouched = false; R.a = null; R.b = null; R.bKind = null;
       R.doorA.clear(); R.doorB.clear(); drawKind(); yearChips(); freqChips(); clearLoaded();
     });
   }
