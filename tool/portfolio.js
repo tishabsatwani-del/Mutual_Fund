@@ -358,11 +358,14 @@
     (r.problems || []).forEach(function (p) { msgs.push(notice('bad', esc(p.message))); });
     say('pf-door-out', '', msgs.join(''));
   }
+  /* the owner's line (November 2026): every refusal at step 1 ends with the two ways on */
+  var WAYS_ON = 'You can still type your payments in, or try the detailed CAS PDF.';
   function refuse(name, message) {
     PF.pending = null; PF.asking = null;
     if (PF.batch) { PF.batch.push({ name: name, message: message }); return; }
     card('refused', name); A.chime('no');
-    say('pf-door-out', '', notice('bad', esc(message)) + (PF.files.length ? '<p class="hint">' + (PF.files.length === 1 ? 'The statement already added stays as it was.' : 'The ' + PF.files.length + ' statements already added stay as they were.') + '</p>' : ''));
+    say('pf-door-out', '', notice('bad', esc(message)) + (PF.files.length ? '<p class="hint">' + (PF.files.length === 1 ? 'The statement already added stays as it was.' : 'The ' + PF.files.length + ' statements already added stay as they were.') + '</p>' : '') +
+      '<p class="hint">' + WAYS_ON + '</p>');
     refreshGate();
   }
   function removeFile(id) {
